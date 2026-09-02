@@ -460,7 +460,7 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("OIDC 인증 세션");
+    expect(container.textContent).toContain("Keyverse SSO 인증 세션");
     expect(container.textContent).toContain("Issuer");
     expect(container.textContent).toContain("Client");
     expect(container.textContent).toContain("설정됨");
@@ -470,7 +470,7 @@ describe("SettingsLayout", () => {
     expect(container.textContent).not.toContain("naruon-web");
     expect(container.textContent).not.toContain("alice / org-acme / workspace-org-acme");
 
-    const loginButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "OIDC 로그인");
+    const loginButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Keyverse SSO로 로그인");
     const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
     expect(loginButton).toBeTruthy();
     expect(logoutButton).toBeTruthy();

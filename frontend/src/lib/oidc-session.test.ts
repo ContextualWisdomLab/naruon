@@ -53,7 +53,7 @@ describe('oidc-session', () => {
     });
   });
 
-  it('requests a server-side PKCE authorization URL without browser-readable storage', async () => {
+  it('falls back to a top-level redirect when the login popup is blocked', async () => {
     const assignedUrls: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(input).toBe('/auth/oidc/login');
@@ -71,10 +71,13 @@ describe('oidc-session', () => {
       });
     }));
 
-    await startOidcLogin({
+    // A blocked popup (returns null), matching how real browsers behave.
+    void startOidcLogin({
       returnTo: '/settings',
+      openPopup: () => null,
       navigate: (url) => assignedUrls.push(url),
     });
+    await vi.waitFor(() => expect(assignedUrls).toHaveLength(1));
 
     expect(sessionStorage.getItem('naruon_oidc_state')).toBeNull();
     expect(sessionStorage.getItem('naruon_oidc_pkce_verifier')).toBeNull();
@@ -82,6 +85,59 @@ describe('oidc-session', () => {
     const authorizationUrl = new URL(assignedUrls[0]);
     expect(authorizationUrl.origin).toBe('https://login.example.com');
     expect(authorizationUrl.searchParams.get('state')).toBe('server-state');
+  });
+
+  it('opens the authorization URL in a popup and resolves once it posts back success', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      authorization_url: 'https://login.example.com/realms/naruon/protocol/openid-connect/auth?state=server-state',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const fakePopup = { closed: false, focus: vi.fn() } as unknown as Window;
+    const openedUrls: string[] = [];
+
+    const loginPromise = startOidcLogin({
+      returnTo: '/settings',
+      openPopup: (url) => {
+        openedUrls.push(url);
+        return fakePopup;
+      },
+    });
+
+    await vi.waitFor(() => expect(openedUrls).toHaveLength(1));
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: window.location.origin,
+      source: fakePopup,
+      data: { source: 'naruon-oidc', status: 'success', returnTo: '/security' },
+    }));
+
+    await expect(loginPromise).resolves.toEqual({ returnTo: '/security' });
+  });
+
+  it('rejects when the login popup is closed before it posts back a result', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      authorization_url: 'https://login.example.com/realms/naruon/protocol/openid-connect/auth',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const fakePopup = { closed: false, focus: vi.fn() } as unknown as Window;
+    const loginPromise = startOidcLogin({
+      returnTo: '/settings',
+      openPopup: () => fakePopup,
+    });
+
+    // Attach the rejection assertion before advancing timers so the promise
+    // is never briefly unhandled once the popup-closed poll fires.
+    const assertion = expect(loginPromise).rejects.toThrow('OIDC login window was closed before completing');
+    (fakePopup as { closed: boolean }).closed = true;
+    await vi.advanceTimersByTimeAsync(500);
+    await assertion;
+    vi.useRealTimers();
   });
 
   it('completes OIDC callback through the server-side cookie exchange route', async () => {

@@ -10,7 +10,22 @@ export interface OidcBrowserConfig {
 
 export interface OidcLoginOptions {
   returnTo?: string;
+  /** Fallback top-level navigation, used only when a popup cannot be opened. */
   navigate?: (url: string) => void;
+  /**
+   * Opens the Keycloak authorization URL. Defaults to a small `window.open`
+   * popup so the user's naruon tab never navigates away; return `null` (as a
+   * popup-blocked browser would) to fall back to `navigate`.
+   */
+  openPopup?: (url: string) => Window | null;
+}
+
+/** postMessage payload the popup's `/auth/callback` page sends back to the opener. */
+export interface OidcPopupResultMessage {
+  source: 'naruon-oidc';
+  status: 'success' | 'error';
+  returnTo?: string;
+  message?: string;
 }
 
 export interface OidcLogoutOptions {
@@ -144,7 +159,51 @@ export async function buildOidcAuthorizationUrl(config: OidcBrowserConfig, state
   return authorizationUrl.toString();
 }
 
-export async function startOidcLogin(options: OidcLoginOptions = {}) {
+function defaultOpenPopup(url: string): Window | null {
+  if (typeof window.open !== 'function') return null;
+  try {
+    return window.open(url, 'naruon-oidc-login', 'width=460,height=680,noopener=false');
+  } catch {
+    return null;
+  }
+}
+
+/** Resolves once the popup posts back a result, or rejects if it's closed first. */
+function waitForPopupCompletion(popup: Window): Promise<{ returnTo: string }> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      window.clearInterval(closedPoll);
+      window.removeEventListener('message', onMessage);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.source !== popup) return;
+      const data = event.data as Partial<OidcPopupResultMessage> | null;
+      if (!data || data.source !== 'naruon-oidc') return;
+      cleanup();
+      if (data.status === 'success') {
+        resolve({ returnTo: typeof data.returnTo === 'string' && data.returnTo ? data.returnTo : '/' });
+      } else {
+        reject(new OidcSessionError(data.message ?? 'OIDC login failed'));
+      }
+    };
+    const closedPoll = window.setInterval(() => {
+      if (popup.closed) {
+        cleanup();
+        reject(new OidcSessionError('OIDC login window was closed before completing'));
+      }
+    }, 500);
+    window.addEventListener('message', onMessage);
+  });
+}
+
+/**
+ * Starts an OIDC login. By default this opens Keycloak's authorization URL in
+ * a popup so naruon's own tab/page never navigates away — only the credential
+ * ceremony itself runs on Keyverse's origin, which WebAuthn requires anyway.
+ * If the popup is blocked, this falls back to the previous full top-level
+ * redirect (and the returned promise never resolves, since the page unloads).
+ */
+export async function startOidcLogin(options: OidcLoginOptions = {}): Promise<{ returnTo: string }> {
   requireBrowserStorage();
   if (!getOidcBrowserConfig()) {
     throw new OidcSessionError('OIDC browser configuration is missing');
@@ -153,8 +212,17 @@ export async function startOidcLogin(options: OidcLoginOptions = {}) {
   const authorizationUrl = await requestServerOidcLogin(
     options.returnTo ?? window.location.pathname,
   );
-  const navigate = options.navigate ?? ((url: string) => window.location.assign(url));
-  navigate(authorizationUrl);
+  const openPopup = options.openPopup ?? defaultOpenPopup;
+  const popup = openPopup(authorizationUrl);
+  if (!popup) {
+    const navigate = options.navigate ?? ((url: string) => window.location.assign(url));
+    navigate(authorizationUrl);
+    return new Promise(() => {
+      // Top-level navigation is about to unload this page; nothing left to resolve.
+    });
+  }
+  popup.focus();
+  return waitForPopupCompletion(popup);
 }
 
 export async function completeOidcRedirect(search = window.location.search) {

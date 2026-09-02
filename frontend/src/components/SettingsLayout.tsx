@@ -526,6 +526,9 @@ export function SettingsLayout() {
   const [embeddingSaving, setEmbeddingSaving] = useState(false);
   const [oidcSessionClaims, setOidcSessionClaims] = useState<SessionClaims>(EMPTY_SESSION_CLAIMS);
   const [oidcActionError, setOidcActionError] = useState<string | null>(null);
+  const [passwordLoginForm, setPasswordLoginForm] = useState({ email: '', password: '' });
+  const [passwordLoginSubmitting, setPasswordLoginSubmitting] = useState(false);
+  const [passwordLoginError, setPasswordLoginError] = useState<string | null>(null);
   const smtpPasswordInputRef = useRef<HTMLInputElement>(null);
   const imapPasswordInputRef = useRef<HTMLInputElement>(null);
   const pop3PasswordInputRef = useRef<HTMLInputElement>(null);
@@ -589,10 +592,52 @@ export function SettingsLayout() {
     clearInputValue(oauthClientSecretInputRef);
   };
 
+  const refreshOidcSessionClaims = async () => {
+    try {
+      setOidcSessionClaims(await apiClient.getServerSessionClaims());
+    } catch {
+      setOidcSessionClaims(EMPTY_SESSION_CLAIMS);
+    }
+  };
+
+  const handlePasswordLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordLoginError(null);
+    setPasswordLoginSubmitting(true);
+    try {
+      // Naruon's own form talks to naruon's own backend, which exchanges the
+      // credentials against Keyverse's token endpoint server-side (Direct
+      // Access Grants). No Keycloak page is ever rendered or navigated to.
+      const response = await fetch('/auth/password/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          username: passwordLoginForm.email,
+          password: passwordLoginForm.password,
+          return_to: window.location.pathname,
+        }),
+      });
+      if (!response.ok) {
+        setPasswordLoginError('이메일 또는 비밀번호가 올바르지 않습니다.');
+        return;
+      }
+      setPasswordLoginForm({ email: '', password: '' });
+      await refreshOidcSessionClaims();
+    } catch {
+      setPasswordLoginError('로그인 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setPasswordLoginSubmitting(false);
+    }
+  };
+
   const handleOidcLogin = async () => {
     setOidcActionError(null);
     try {
+      // Resolves once the naruon-branded login popup posts back completion;
+      // the naruon tab itself never navigates away.
       await startOidcLogin({ returnTo: window.location.pathname });
+      await refreshOidcSessionClaims();
     } catch (error) {
       setOidcActionError(error instanceof Error ? error.message : 'OIDC login failed');
     }
@@ -730,6 +775,8 @@ export function SettingsLayout() {
       .catch(() => {
         if (!cancelled) setOidcSessionClaims(EMPTY_SESSION_CLAIMS);
       });
+    // (refreshOidcSessionClaims mirrors this fetch for the post-login refresh below;
+    // kept separate so this mount effect's cleanup/cancellation stays local.)
 
     void apiClient
       .get<RunnerConfig>('/api/runner-config')
@@ -1602,15 +1649,64 @@ export function SettingsLayout() {
                   ) : null}
                 </section>
 
-                <section aria-label="OIDC 인증 세션" className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section aria-label="Naruon 계정으로 로그인" className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Shield className="size-5 text-blue-500" />
+                    <h3 className="font-bold text-lg">Naruon 계정으로 로그인</h3>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    이메일과 비밀번호는 이 화면(naruon)에서만 입력합니다. naruon 서버가 자격 증명을
+                    Keyverse에 직접 전달해 검증하며, Keyverse가 발급한 세션만 저장합니다 — 다른 화면으로
+                    이동하지 않습니다.
+                  </p>
+                  <form onSubmit={handlePasswordLogin} className="mt-4 grid gap-3 sm:max-w-sm">
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground" htmlFor="naruon-password-login-email">
+                      이메일
+                    </label>
+                    <input
+                      id="naruon-password-login-email"
+                      type="email"
+                      required
+                      autoComplete="username"
+                      value={passwordLoginForm.email}
+                      onChange={(event) => setPasswordLoginForm((current) => ({ ...current, email: event.target.value }))}
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    />
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground" htmlFor="naruon-password-login-password">
+                      비밀번호
+                    </label>
+                    <input
+                      id="naruon-password-login-password"
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                      value={passwordLoginForm.password}
+                      onChange={(event) => setPasswordLoginForm((current) => ({ ...current, password: event.target.value }))}
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    />
+                    {passwordLoginError ? (
+                      <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{passwordLoginError}</p>
+                    ) : null}
+                    <button
+                      type="submit"
+                      disabled={passwordLoginSubmitting}
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {passwordLoginSubmitting ? '로그인 중…' : '로그인'}
+                    </button>
+                  </form>
+                </section>
+
+                <section aria-label="Keyverse SSO 인증 세션" className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Shield className="size-5 text-blue-500" />
-                        <h3 className="font-bold text-lg">OIDC 인증 세션</h3>
+                        <h3 className="font-bold text-lg">Keyverse SSO 인증 세션</h3>
                       </div>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        Keycloak/Casdoor OIDC 토큰을 브라우저 bearer 세션으로 연결합니다.
+                        회사 ADFS 등 연동된 외부 IdP로 로그인합니다. Keyverse가 호스팅하는 로그인 화면으로
+                        이동합니다 — 위의 naruon 계정 로그인과는 별개입니다.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1618,10 +1714,10 @@ export function SettingsLayout() {
                         type="button"
                         onClick={handleOidcLogin}
                         disabled={!oidcBrowserConfig}
-                        title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
+                        title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "Keyverse SSO로 로그인"}
                         className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        OIDC 로그인
+                        Keyverse SSO로 로그인
                       </button>
                       <button
                         type="button"
