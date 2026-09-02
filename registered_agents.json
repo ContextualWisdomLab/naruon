@@ -15,7 +15,7 @@
       "calendar.conflict_check",
       "calendar.writeback"
     ],
-    "provider_source": "runtime_llm_provider",
+    "provider_source": "contextual_orchestrator_gateway",
     "writeback": {
       "opt_in": true,
       "audit_logged": true

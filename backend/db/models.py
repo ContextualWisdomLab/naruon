@@ -1382,6 +1382,22 @@ class TenantConfig(Base):
     batch_attribution_group: Mapped[str | None] = mapped_column(String, nullable=True)
     batch_attribution_company: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Noema general-agent routing via contextual-orchestrator. All config here
+    # lives in the Fernet DB, never in os.getenv. The general-purpose Noema
+    # workspace agent (services/noema_agent.py) sends every chat-completion
+    # call through this gateway using this per-tenant credential -- never a
+    # direct tenant LLM-provider key, and never the separate credential
+    # ContextualWisdomLab/.github's central review-pipeline Noema uses. The
+    # bearer token is a secret so it is stored EncryptedString (Fernet at
+    # rest); the base URL is not a secret but is SSRF-guarded + allowlisted at
+    # call time, same as batch_orchestrator_base_url above.
+    noema_orchestrator_base_url: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    noema_orchestrator_token: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
+
     def __repr__(self) -> str:
         return (
             f"<TenantConfig(id={self.id}, user_id='{self.user_id}', "

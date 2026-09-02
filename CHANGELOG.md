@@ -59,6 +59,96 @@
   (`test_reparse_that_lands_on_parsed_indexes_the_content_graph`,
   blank-content 스킵, non-parsed 스킵). 검증: 전체 백엔드 스위트 1908
   passed/40 skipped, ruff clean.
+- **(Devin 리뷰 대응, 🔴 실제 결함, `backend/services/attachment_reparse_worker.py:346-352`)
+  커서보다 낮은 id(또는 document의 경우 더 이른 `(created_at, document_id)`)를 가진
+  행이 나중에 외부에서 다시 pending 상태로 되돌려지면, 커서+재시도-집합 설계로는
+  이를 절대 재발견할 수 없었습니다 — 재시도 집합은 이 워커 자신이 이미 보고
+  미해결로 판단한 행만 추적하기 때문입니다.** 실제로 이런 외부 되돌림 경로가
+  존재함을 코드에서 직접 확인: `POST /attachments/{uid}/reparse-intent`와
+  `POST /documents/{id}/pdf-dom-recognition-intent`(둘 다 `backend/api/data.py`)가
+  임의의 기존 행을 다시 pending으로 표시할 수 있습니다(newsdom 첨부 sweep에
+  대해서는 이런 되돌림을 유발하는 살아있는 트리거를 찾지 못했지만, 동일한
+  설계 결함이므로 이 PR에서 이미 다뤄온 대칭적 수정 패턴에 따라 세 sweep
+  메서드 모두에 동일하게 적용했습니다). 수정: 매 `FULL_RESCAN_EVERY_N_SWEEPS`(20)번째
+  sweep마다 커서를 `None`으로 강제 리셋해 전체 재스캔을 수행합니다 — `parse_status`/
+  `document_status` 필터가 이미 실제로 해결된 행을 모두 제외하므로, 어떤 주기로
+  실행하든 항상 안전합니다(결과 집합이 넓어질 뿐 틀려지지 않음). 이 수정 과정에서
+  발견한 잠재 버그: `_pending_attachment_statement`/`_pending_document_statement`가
+  커서가 `None`인데(첫 sweep 또는 이번 강제 재스캔) `retry_ids`가 비어있지 않으면
+  조건을 `retry_ids`로만 좁혀버려 나머지 pending 행을 모두 놓치는 경우가 있었습니다
+  (지금까지는 최초 sweep에서 `retry_ids`가 항상 비어있어 발현되지 않았을 뿐) —
+  `retry_ids` 조건이 커서 조건 안에 중첩되어야만 의미가 있도록 고쳤습니다. 검증:
+  RED(id/커서를 이미 지난 행을 외부에서 pending으로 되돌려도 20 sweep 동안
+  재발견되지 않음을 실제 재현) → GREEN(정확히 20번째 sweep에서 재발견).
+  `PYTHONPATH=. python -m pytest tests/test_newsdom_worker.py
+  tests/test_attachment_reparse_worker.py -q` → 34 passed, 23 passed.
+- **(Devin 리뷰 대응, 🟡 실제 결함) `backend/api/tenant_config.py`의 `TenantConfigCreate`/
+  `TenantConfigResponse`가 `noema_orchestrator_base_url`/`noema_orchestrator_token`을
+  선언하지 않아, `services/orchestrator_gateway.py`가 요구하는 이 게이트웨이
+  자격증명을 지원되는 어떤 API 호출로도 설정할 수 없었습니다(기능이 사실상
+  도달 불가능).** 두 필드를 두 Pydantic 모델에 추가하고, `noema_orchestrator_token`을
+  다른 자격증명(`openai_api_key` 등)과 동일하게 `SECRET_FIELDS`에 등록해 조회
+  시 마스킹되도록 했습니다(생성/수정 로직은 이미 필드-무관 `setattr` 루프라
+  추가 배선이 필요 없었습니다). 동일한 선행 패턴인
+  `batch_orchestrator_base_url`/`batch_orchestrator_token`에도 같은 배선 공백이
+  있음을 확인했으나, 이 PR이 추가한 필드만 범위로 좁혔습니다. 검증: RED(POST 후
+  GET에서 `KeyError`로 필드 부재 확인) → GREEN. `PYTHONPATH=. python -m pytest
+  tests/test_tenant_config_api.py -q` → 29 passed, 1 skipped.
+- **(Devin 리뷰 대응, 🔴 실제 결함, `backend/services/newsdom_worker.py:707-710`)
+  `Document.document_id`는 `db/models.py`에서 `f"doc_{uuid.uuid4().hex}"`로
+  무작위 생성되어 삽입 순서와 전혀 무관한데, 문서 sweep의 커서가 이
+  `document_id`만으로 전진 여부를 판단하고 있었습니다 — 커서가 전진한 뒤에
+  삽입된 새 문서가 우연히 더 작게 정렬되는 id를 받으면, 한 번도 본 적 없어
+  재시도 집합에도 없고 "id > cursor" 조건도 만족하지 못해 영원히 pending으로
+  남을 수 있었습니다(바로 위 항목의 커서-고정 수정보다 더 심각 — 이미 본 행을
+  지연시키는 게 아니라 전혀 새로운 행을 완전히 놓칠 수 있음).** 커서를
+  `document_id` 단일 값 대신 `(created_at, document_id)` 튜플로 바꿔
+  `created_at`(삽입 시점에 Python 쪽에서 설정되는, 실제로 삽입 순서와 일치하는
+  타임스탬프)을 1차 정렬 키로, `document_id`는 동일 순간 충돌 시의 tie-breaker로만
+  사용하도록 수정했습니다. 수정 과정에서 발견한 관련 버그: 커서를
+  bulk-loaded `rows` 목록에서 직접 계산하면(`document.created_at`) 이전 항목의
+  rollback으로 이미 expire된 인스턴스의 속성을 읽을 위험이 있어(기존
+  `_ExpiredDocument`류 회귀 테스트가 정확히 이를 검출), 매 반복에서 새로
+  re-fetch한 인스턴스에서 즉시 캡처한 `(created_at, document_id)` 쌍만 사용하도록
+  고쳤습니다. 검증: RED(무작위 UUID가 낮게 정렬되지만 늦게 생성된 문서가
+  다음 sweep에서도 계속 pending으로 남음을 실제 재현) → GREEN(같은 시나리오가
+  이제 처리됨). `PYTHONPATH=. python -m pytest tests/test_newsdom_worker.py -q`
+  → 32 passed.
+- **(Devin 리뷰 대응, 🔴 실제 결함, `backend/services/newsdom_worker.py:531-533`) 한 PDF의
+  organization에 provider가 설정되어 있지 않으면 `_sweep_attachments`가 매 pass마다 그
+  행 앞에서 커서를 다시 고정해, 그 배치보다 뒤에 있는 PDF들이 무기한 pending으로
+  남을 수 있었습니다.** 먼저 실제로 재현해 검증: 300건 중 영구히 막힌 행 1건만 있는
+  경우는 (상태 필터가 이미 해결된 행을 자연히 제외하므로) 결국 수렴하지만,
+  batch_limit(50)보다 많은 60건이 연속으로 영구 pending 상태가 되면 매 sweep이 항상
+  같은 첫 50건만 재선택해 나머지 60건이 14 sweep이 지나도 전혀 처리되지 않음을
+  확인했습니다(한 organization이 provider를 설정하기 전에 PDF를 대량으로 import하는
+  경우 등으로 batch_limit을 넘는 연속 pending 행이 실제로 발생할 수 있음). 근본
+  수정: 커서를 "첫 미해결 행 직전"에 고정하는 대신, 커서(`_attachment_cursor`)는
+  본 적 있는 가장 큰 id로 단조 증가만 시키고, 아직 미해결인 행의 id는 별도의
+  영속적인 재시도 집합(`_attachment_retry_ids`)에 담아 커서와 무관하게 매 sweep
+  `id IN (...)` 조건으로 재시도합니다. 두 조건을 단순히 OR로 묶으면(정렬이
+  id 오름차순이라) 재시도 집합이 batch_limit만큼 쌓였을 때 오히려 재시도 행들이
+  매번 전체 슬롯을 차지해 신규 전진(forward) 행을 다시 굶길 수 있어, 두 조건이
+  모두 있을 때는 CASE 버킷으로 forward 행을 항상 retry 행보다 먼저 정렬되도록
+  했습니다(신규 전진이 충분하지 않을 때만 재시도 행이 남은 슬롯을 채움 — 지속적으로
+  포화 상태인 forward 부하 아래서는 재시도 행이 더 오래 기다릴 수 있다는 트레이드오프를
+  의도적으로 받아들였는데, 이는 파이프라인 전체가 멈추는 이전 실패 모드보다 명백히
+  낫습니다). `_sweep_documents`(문자열 키 `document_id`, 사전식 최대값)에도 동일한
+  근본 원인이 있어 동일하게 수정했습니다. `services/attachment_reparse_worker.py`의
+  `_sweep_attachments`도 (재사용 가능한) 동일한 커서-고정 패턴을 상속하고 있어(이전에
+  CodeRabbit이 지적해 도입된 "첫 실패에서 고정" 수정 자체가 이 취약점의 원인이었음),
+  동일한 원인·수정을 적용했습니다. 더 이상 쿼리가 0건을 반환할 때 커서를 `None`으로
+  되돌려 전체를 재스캔하는 방식(계속 새 행이 커서 뒤에 들어오는 한 절대 발동하지
+  않음)에 의존하지 않으므로, 두 워커의 `_load_pending_attachments`/
+  `_load_reparse_pending_attachments`에서 wrap-to-None 분기를 제거했습니다. 검증:
+  RED로 두 워커 모두에서 정확히 이 실패(60건 연속 pending, batch_limit=50, 14
+  sweep 후에도 미수렴)를 먼저 재현한 뒤, 수정 후 동일 테스트가 6~7 sweep 안에
+  수렴함을 확인. 기존 커서-고정 계약을 전제로 작성된 6개 테스트(`test_newsdom_worker.py`
+  5개, `test_attachment_reparse_worker.py` 1개)를 새 계약(커서는 항상 전진, 재시도는
+  별도 집합)에 맞게 재작성했습니다. `PYTHONPATH=. python -m pytest
+  tests/test_newsdom_worker.py tests/test_attachment_reparse_worker.py -q` → 31 +
+  22 passed; 전체 백엔드 스위트 `PYTHONWARNINGS=error DISABLE_BACKGROUND_WORKERS=1
+  python -m pytest -q` → 1911 passed, 39 skipped, ruff clean.
 - **(Devin 리뷰 대응, 🟡 실제 결함 2건) stacked-PR 트리거 수정(`a4e01191`)이 4개 워크플로의
   `pull_request:` 트리거에서 `branches:` 제한을 제거하면서, 그 값(`release/**`, `develop`)을
   리터럴로 assert하던 기존 계약 테스트 2개(`test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushes`,
@@ -628,10 +718,34 @@
   기존 commitment 행은 건너뛰고 전체 판단을 막지 않습니다. `.github`의
   중앙 리뷰 에이전트(Noema OIDC 브로커)와 이름은 같지만 서로 다른 개별
   에이전트임을 `registered_agents.json`/`task_agent_mapping.json`에 명확히
-  했습니다: Noema는 `.github`에서는 CI 리뷰 에이전트, naruon에서는 테넌트가
-  구성한 자체 LLM provider로 동작하는 워크스페이스 전반의 범용 어시스턴트입니다.
+  했습니다: Noema는 `.github`에서는 CI 리뷰 에이전트, naruon에서는 워크스페이스
+  전반(메일·콘텐츠 그래프·태스크·일정)을 다루는 범용 어시스턴트입니다.
   검증: `PYTHONPATH=. python -m pytest backend/tests/test_noema_agent.py -q`
   (21 passed), 전체 백엔드 스위트 `python -m pytest -q` (1808 passed, 32 skipped).
+  **(2026-09-02 정정)** 이 항목이 처음 쓰인 시점에는 naruon Noema가 "테넌트가
+  구성한 자체 LLM provider"로 직접 동작한다고 기술했으나, 이는 잘못된 경계
+  설정이었습니다 — 아래 "owner 아키텍처 지적 반영" 항목에서 이를
+  contextual-orchestrator 게이트웨이 경유로 교정했습니다. naruon이 두 번째
+  provider 라우팅 권한이 되는 것은 아닙니다.
+  **(2026-09-02 두 번째 정정, owner 코멘트 반영)** 위 "서로 다른 개별
+  에이전트임을... 명확히 했다"는 서술과, 아래 "owner 아키텍처 지적 반영"
+  항목의 "naruon Noema 도메인 로직 vs `.github` 리뷰 Noema 도메인 로직"이라는
+  분리 서술 모두 owner가 직접 정정했습니다: `ContextualWisdomLab/.github`의
+  `docs/CWL-MASTER-CONTEXT.md`는 Noema를 naruon·`.github` CI 리뷰
+  에이전트·wardnet AI SOC 격리 샌드박스가 함께 소비하는 **단일 공유 에이전트
+  런타임**(Pydantic-AI/Codex-Python)으로 명시적으로 정의하고 있으며, 이는
+  이름만 같은 우연이 아니라 처음부터 의도된 설계였다고 owner가 직접
+  확인했습니다. naruon#1527이 자신의 `docs/adr/0006-noema-bounded-context-separation.md`
+  (해당 PR 자신의 브랜치에만 존재하며, 병합 전인 이 브랜치에서는 아직 로컬
+  경로로 열람할 수 없음)에서 "영구적으로 분리 유지" 결론을
+  superseded-on-arrival로 갱신했습니다 — 코드 수준 조사(각 저장소가 현재
+  실제로 무엇을 하는지) 자체는 유효하지만, "그러므로 영구히 분리한다"는
+  결론은 철회되었습니다. 이 파일의
+  `noema_orchestrator_base_url`/`noema_orchestrator_token`을 `.github`의
+  CI 리뷰 자격증명과 별도로 두는 것은 여전히 유효한 이 모듈의 보안 스코핑
+  선택이지만, 두 배포가 영구히 분리되어 있거나 이름 외에 아무것도 공유하지
+  않는다는 주장은 아닙니다. 실제 공유 런타임 설계는 이 ADR로 확정되지 않은
+  별도의 후속 과제로 남습니다.
 - (Devin review 반영, G-06 증분) `calendar_conflict_judgment_service.py`에 대한 5건의 지적을
   반영했습니다: (1) `apply_correction`이 대상 judgment 행을 `SELECT ... FOR UPDATE`로 잠가
   동시 정정 요청이 같은 이전 상태를 읽고 감사 기록이 서로를 덮어쓰는 경쟁을 막습니다. (2)
@@ -672,6 +786,45 @@
   잘라내지 않고 `calendar_existing_batch_exceeded` 오류로 fail closed하도록 수정했습니다.
   상한 이후에 실존하는 충돌이 잘려나가 `available`로 오판되는 것을 막습니다(REST
   엔드포인트의 동일 상한 처리와 일치). 검증: `test_noema_agent.py` 22 passed.
+- **(owner 아키텍처 지적 반영, 🔴 실제 경계 위반) `noema_agent.py`가 여전히
+  `resolve_runtime_llm_provider`를 import해 테넌트의 직접 LLM provider
+  `base_url`/`api_key`로 `AsyncOpenAI`를 구성하고 있었습니다 — 이는 naruon의
+  "provider 라우팅 권한이 아니라 Noema 도구/인가/컨텍스트만 소유한다"는 현재
+  경계와 충돌합니다.** 프로덕션 LLM 라우팅은 전적으로
+  `ContextualWisdomLab/contextual-orchestrator`가 소유합니다. 오래된 Cursor PR
+  #1384가 의도된 계약(테넌트 스코프 orchestrator 자격증명, orchestrator 전용
+  모델 별칭, 업스트림 provider로의 fallback 없음)을 담고 있었으나 head/base가
+  stale해 그대로 이식하지 않고, 계약만 현재 소스에 재구현했습니다. 먼저 RED로
+  `run_noema_agent`가 `resolve_runtime_llm_provider`/직접 provider 구성에 도달할
+  수 없음을 증명(수정 전 코드에서 실제 실패 확인)한 뒤: 새
+  `services/orchestrator_gateway.py`(`resolve_orchestrator_gateway` +
+  `OrchestratorGateway` — `tenant_configs.noema_orchestrator_base_url`/
+  `noema_orchestrator_token`을 SSRF 허용목록 검증까지 마쳐 해석, 모델 별칭은
+  항상 고정된 `ORCHESTRATOR_MODEL_ALIAS`)을 추가하고, Alembic
+  `0022_noema_orchestrator_gateway`로 두 컬럼을 `tenant_configs`에 추가했습니다
+  (기존 `batch_orchestrator_base_url`/`batch_orchestrator_token`
+  패턴(migration `0012`)을 그대로 미러링). `noema_agent.py`는 이제 게이트웨이가
+  없거나 무효면 업스트림 provider로 폴백하지 않고 구조화된
+  `status="unavailable"`/`error_code="orchestrator_gateway_unavailable"`로
+  즉시 abstain합니다. naruon의 이 게이트웨이 자격증명은 `.github`의 CI 리뷰
+  자격증명 경로와 별도로 스코핑되어 있어 이 경로로 워크스페이스 데이터가
+  흘러가지 않습니다 — 다만 이것이 naruon Noema와 `.github` 리뷰 Noema가
+  영구히 분리된 별개 에이전트라는 뜻은 아닙니다. **(2026-09-02 owner 코멘트로
+  정정)** `docs/CWL-MASTER-CONTEXT.md`에 따르면 Noema는 naruon·`.github` CI
+  리뷰 에이전트·wardnet AI SOC 격리 샌드박스가 공유하는 단일 에이전트
+  런타임이며, 실제 공유 런타임 설계는 naruon#1527(자신의
+  `docs/adr/0006-noema-bounded-context-separation.md`에서, 병합 전에는 그
+  PR 자신의 브랜치에만 존재)이 확정하지 않은 별도 후속 과제입니다.
+  검증: RED(패치 전 `resolve_runtime_llm_provider` 참조가 실제로 존재함을
+  spy로 확인) → GREEN(픽스 후 같은 스파이는 `AttributeError`로 실패 —
+  `resolve_runtime_llm_provider`가 모듈에서 완전히 사라졌다는 가장 강한
+  증거이므로, 테스트를 `assert not hasattr(noema_agent,
+  "resolve_runtime_llm_provider")`로 재작성); 로컬에 pydantic-ai-slim[openai]
+  2.9.0(`backend/requirements-agent.txt` 고정 버전)을 실제로 설치해 실 `AsyncOpenAI`
+  구성 경로까지 스킵 없이 검증. `PYTHONPATH=. python -m pytest
+  backend/tests/test_noema_agent.py -q` → 22 passed, 0 skipped; 전체 백엔드
+  스위트 `PYTHONWARNINGS=error DISABLE_BACKGROUND_WORKERS=1 python -m pytest -q`
+  → 1908 passed, 39 skipped, ruff clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 

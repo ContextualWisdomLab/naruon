@@ -506,13 +506,18 @@ class _FakeEngine:
 
 
 @pytest.mark.asyncio
-async def test_sweep_caps_the_cursor_at_the_first_failure_not_the_last_row(
+async def test_sweep_advances_the_cursor_and_retries_the_failed_row(
     monkeypatch,
 ):
-    # Reproduces the starvation CodeRabbit flagged: if the cursor advanced to
-    # rows[-1].id unconditionally, a mid-batch failure would be skipped by
-    # every future sweep (its id falls below the cursor) until the whole
-    # forward queue happened to drain to empty.
+    # An earlier version (CodeRabbit-flagged) capped the cursor at the first
+    # failure instead of advancing it, to keep that one failing row
+    # selectable later. That pinned the whole batch window behind it once
+    # more than batch_limit rows failed at once -- nothing past them was
+    # ever reached (same class of bug fixed in
+    # services.newsdom_worker.NewsdomRecognitionWorker._sweep_attachments;
+    # see its docstring). The cursor now always advances to the batch's
+    # last row; the failed row is retried instead via the independent
+    # _attachment_retry_ids set.
     first = _reparse_pending_attachment(
         content_type="application/pdf",
         payload=b"\x89PNG\r\n\x1a\n" + b"png",
@@ -528,31 +533,41 @@ async def test_sweep_caps_the_cursor_at_the_first_failure_not_the_last_row(
         payload=b"\x89PNG\r\n\x1a\n" + b"png",
         attachment_id=3,
     )
-    session = _SequenceSession([[first, second, third]])
+    session = _SequenceSession([[first, second, third], [second]])
 
     real_process = attachment_reparse_worker_module.process_reparse_pending_attachment
+    failed_once = set()
 
-    def fail_only_the_middle_item(*, attachment):
-        if attachment.id == 2:
+    def fail_the_middle_item_once(*, attachment):
+        if attachment.id == 2 and attachment.id not in failed_once:
+            failed_once.add(attachment.id)
             raise RuntimeError("classification blew up")
         return real_process(attachment=attachment)
 
     monkeypatch.setattr(
         attachment_reparse_worker_module,
         "process_reparse_pending_attachment",
-        fail_only_the_middle_item,
+        fail_the_middle_item_once,
     )
     worker = AttachmentReparseWorker()
     await worker._sweep_attachments(session)
 
-    # The cursor stops just before the failed row (id 2), not at the batch's
-    # last row (id 3), so the next sweep's "id > cursor" filter still
-    # reselects the still-pending row 2.
-    assert worker._attachment_cursor == 1
+    assert worker._attachment_cursor == 3
+    assert worker._attachment_retry_ids == {2}
     assert first.parse_status == _QUARANTINED_STATUS
+    assert second.parse_status == ATTACHMENT_REPARSE_PENDING_STATUS
     assert third.parse_status == _QUARANTINED_STATUS
     assert session.commit_count == 2
     assert session.rollback_count == 1
+
+    # The next sweep reselects row 2 via the retry set, not the cursor
+    # (which stays at 3, well past it).
+    await worker._sweep_attachments(session)
+
+    assert worker._attachment_cursor == 3
+    assert worker._attachment_retry_ids == set()
+    assert second.parse_status == _QUARANTINED_STATUS
+    assert session.commit_count == 3
 
 
 @pytest.mark.asyncio
@@ -588,24 +603,28 @@ async def test_sweep_advances_the_cursor_across_batches():
 
 
 @pytest.mark.asyncio
-async def test_sweep_cursor_wraps_and_empty_batches_are_stable():
-    wrapped = _reparse_pending_attachment(
+async def test_load_reparse_pending_attachments_queries_forward_cursor_and_retry_ids():
+    # No more wraparound: a persistently-failing row is retried via an
+    # explicit "id IN retry_ids" filter, independent of the forward cursor,
+    # instead of relying on the query going empty to trigger a rescan (which
+    # never happens once new reparse-intent rows keep landing past the
+    # cursor).
+    row = _reparse_pending_attachment(
         content_type="application/pdf",
         payload=b"\x89PNG\r\n\x1a\n" + b"png",
-        attachment_id=1,
+        attachment_id=5,
     )
-    session = _SequenceSession([[], [wrapped], []])
+    session = _SequenceSession([[row]])
     worker = AttachmentReparseWorker(batch_limit=10)
-    worker._attachment_cursor = 999
+    worker._attachment_cursor = 3
+    worker._attachment_retry_ids = {1}
 
     rows = await worker._load_reparse_pending_attachments(session)
-    empty_rows = await worker._load_reparse_pending_attachments(session)
 
-    assert rows == [wrapped]
-    assert empty_rows == []
-    assert worker._attachment_cursor is None
-    assert "email_attachments.id >" in str(session.statements[0])
-    assert "email_attachments.id >" not in str(session.statements[1])
+    assert rows == [row]
+    compiled = str(session.statements[0].compile())
+    assert "email_attachments.id >" in compiled
+    assert "IN" in compiled.upper()
 
 
 @pytest.mark.asyncio
@@ -689,6 +708,135 @@ async def test_sweep_never_processes_the_bulk_loaded_instance_directly():
     assert second.parse_status == _QUARANTINED_STATUS
     assert session.commit_count == 2
     assert session.rollback_count == 0
+
+
+class _LiveReparsePendingSession:
+    """Mirrors ``AttachmentReparseWorker._reparse_pending_statement`` for
+    real, across many sweeps -- see
+    ``tests.test_newsdom_worker._LivePendingAttachmentSession`` (identical
+    fake, same reason: proving a multi-sweep scheduling claim needs a fake
+    that reflects the worker's own (cursor, retry_ids) state, not a
+    pre-scripted batch sequence).
+    """
+
+    def __init__(self, worker, attachments):
+        self._worker = worker
+        self._table = {attachment.id: attachment for attachment in attachments}
+        self.commit_count = 0
+        self.rollback_count = 0
+
+    async def execute(self, _statement):
+        cursor = self._worker._attachment_cursor
+        retry_ids = self._worker._attachment_retry_ids
+        pending = [
+            row
+            for row in self._table.values()
+            if row.parse_status == ATTACHMENT_REPARSE_PENDING_STATUS
+            and (cursor is None or row.id > cursor or row.id in retry_ids)
+        ]
+        pending.sort(key=lambda row: (0 if (cursor is None or row.id > cursor) else 1, row.id))
+        return _RowsResult(pending[: self._worker.batch_limit])
+
+    async def get(self, _model, attachment_id):
+        return self._table.get(attachment_id)
+
+    async def commit(self):
+        self.commit_count += 1
+
+    async def rollback(self):
+        self.rollback_count += 1
+
+
+@pytest.mark.asyncio
+async def test_sweep_does_not_starve_rows_behind_many_failing_rows(monkeypatch):
+    # Same starvation class fixed on the NewsDOM worker (see
+    # test_newsdom_worker.test_attachment_sweep_does_not_starve_rows_behind_many_stuck_rows):
+    # a systematic classification bug affecting a burst of simultaneous
+    # reparse-intent requests could put more than batch_limit consecutive
+    # rows into a permanent-failure state at once.
+    failing = [
+        _reparse_pending_attachment(
+            content_type="application/pdf",
+            payload=b"\x89PNG\r\n\x1a\n" + b"png",
+            attachment_id=index,
+        )
+        for index in range(1, 61)
+    ]
+    healthy = [
+        _reparse_pending_attachment(
+            content_type="application/pdf",
+            payload=b"\x89PNG\r\n\x1a\n" + b"png",
+            attachment_id=index,
+        )
+        for index in range(61, 121)
+    ]
+    all_attachments = failing + healthy
+    failing_ids = {attachment.id for attachment in failing}
+
+    real_process = attachment_reparse_worker_module.process_reparse_pending_attachment
+
+    def fail_the_first_burst(*, attachment):
+        if attachment.id in failing_ids:
+            raise RuntimeError("classification blew up")
+        return real_process(attachment=attachment)
+
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "process_reparse_pending_attachment",
+        fail_the_first_burst,
+    )
+    worker = AttachmentReparseWorker(batch_limit=50)
+    session = _LiveReparsePendingSession(worker, all_attachments)
+
+    for _ in range(10):
+        await worker._sweep_attachments(session)
+        if all(a.parse_status == _QUARANTINED_STATUS for a in healthy):
+            break
+
+    assert all(a.parse_status == _QUARANTINED_STATUS for a in healthy)
+    assert all(
+        a.parse_status == ATTACHMENT_REPARSE_PENDING_STATUS for a in failing
+    )
+    assert worker._attachment_retry_ids == failing_ids
+
+
+@pytest.mark.asyncio
+async def test_sweep_rediscovers_a_row_reverted_to_pending_behind_the_cursor():
+    # POST .../reparse-intent can re-mark ANY existing attachment
+    # reparse_pending, including one whose id is already behind the forward
+    # cursor. Devin Review flagged that the cursor+retry-id design alone can
+    # never discover that: retry_ids only tracks rows this worker itself
+    # already saw and found unresolved -- it has no way to learn about a
+    # brand-new external transition on an old, already-resolved row. A
+    # periodic full rescan (every FULL_RESCAN_EVERY_N_SWEEPS sweeps) bounds
+    # how long such a row can stay invisible.
+    reverted = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=1,
+    )
+    worker = AttachmentReparseWorker()
+    session = _LiveReparsePendingSession(worker, [reverted])
+
+    await worker._sweep_attachments(session)
+    assert reverted.parse_status == _QUARANTINED_STATUS
+    assert worker._attachment_cursor == 1
+
+    # Simulate an operator re-triggering reparse via POST .../reparse-intent
+    # on this now-old attachment -- its id is already behind the cursor.
+    reverted.parse_status = ATTACHMENT_REPARSE_PENDING_STATUS
+
+    rediscovered_at = None
+    for sweep_number in range(
+        2, attachment_reparse_worker_module.FULL_RESCAN_EVERY_N_SWEEPS + 1
+    ):
+        await worker._sweep_attachments(session)
+        if reverted.parse_status != ATTACHMENT_REPARSE_PENDING_STATUS:
+            rediscovered_at = sweep_number
+            break
+
+    assert rediscovered_at == attachment_reparse_worker_module.FULL_RESCAN_EVERY_N_SWEEPS
+    assert reverted.parse_status == _QUARANTINED_STATUS
 
 
 @pytest.mark.asyncio

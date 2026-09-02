@@ -1,10 +1,26 @@
 """Noema general agent.
 
 A general-purpose `Pydantic-AI <https://ai.pydantic.dev>`_ (MIT) agent that
-reasons over the naruon workspace. It runs on the tenant's configured LLM
-provider — resolved through :func:`resolve_runtime_llm_provider` from the
-Fernet-encrypted provider records, never from ``os.getenv`` — and it is given a
-small set of tools that plug into the existing service and runner seams:
+reasons over the naruon workspace. Every chat-completion call is routed
+through ``ContextualWisdomLab/contextual-orchestrator`` — resolved through
+:func:`services.orchestrator_gateway.resolve_orchestrator_gateway` from the
+tenant's own Fernet-encrypted gateway credential, never ``os.getenv`` and
+never a direct tenant LLM-provider key. Production LLM routing belongs to
+contextual-orchestrator; naruon owns the Noema tools/authorization/context,
+not a second provider-routing authority. This is a distinct, tenant-scoped
+credential from the one ``ContextualWisdomLab/.github``'s central
+review-pipeline Noema uses (``scripts/ci/noema_review_gate.py``); naruon's
+workspace data is never sent through that CI credential path. Per
+``docs/CWL-MASTER-CONTEXT.md`` (``ContextualWisdomLab/.github``), Noema is
+actually one shared agent runtime (Pydantic-AI/Codex-Python) consumed by
+naruon, the ``.github`` CI review agent, and wardnet's AI SOC quarantine
+sandbox — the per-deployment credential scoping here is a security choice
+for this module, not a claim that the deployments are permanently separate
+or share nothing beyond a name; see ``ContextualWisdomLab/naruon#1527`` for
+the corrected reasoning (its ``docs/adr/0006-noema-bounded-context-separation.md``
+lives on that PR's own branch, not this one — this docstring cannot resolve
+it as a local path until that PR merges). It is given a small set of tools
+that plug into the existing service and runner seams:
 
 * **read/search mail** and **content-graph queries** are workspace-scoped SQL reads.
 * **task actions** update ``TicketTask`` rows and are audit-logged.
@@ -41,11 +57,11 @@ from services.calendar_conflict_policy import (
     CalendarCommitment,
     CalendarPolicyValidationError,
 )
-from services.llm_provider_selection import (
-    RuntimeLLMProvider,
-    resolve_runtime_llm_provider,
-)
 from services.llm_provider_urls import build_llm_provider_http_client
+from services.orchestrator_gateway import (
+    OrchestratorGateway,
+    resolve_orchestrator_gateway,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pydantic_ai import Agent
@@ -109,6 +125,7 @@ class NoemaAgentResult:
     notice: str | None = None
     provider_name: str | None = None
     tool_calls: tuple[str, ...] = ()
+    error_code: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -542,12 +559,15 @@ def _load_pydantic_ai() -> Any | None:
 
 
 async def build_noema_agent(
-    provider: RuntimeLLMProvider,
+    gateway: OrchestratorGateway,
 ) -> tuple["Agent | None", Callable[[], Awaitable[None]]]:
-    """Build the pydantic-ai agent for a resolved provider.
+    """Build the pydantic-ai agent for a resolved contextual-orchestrator gateway.
 
     Returns ``(agent, closer)``. ``agent`` is ``None`` when pydantic-ai is not
-    installed; ``closer`` always closes any opened HTTP client.
+    installed, or when the gateway's ``base_url`` fails SSRF/allowlist
+    validation (a stored credential can still be malformed); ``closer``
+    always closes any opened HTTP client. Never falls back to a direct
+    tenant LLM-provider client on either condition.
     """
     from openai import AsyncOpenAI
 
@@ -559,10 +579,14 @@ async def build_noema_agent(
         return None, _noop_closer
 
     validated_base_url, http_client = await build_llm_provider_http_client(
-        provider.base_url
+        gateway.base_url
     )
+    if validated_base_url is None:
+        await http_client.aclose()
+        return None, _noop_closer
+
     openai_client = AsyncOpenAI(
-        api_key=provider.api_key,
+        api_key=gateway.inference_token,
         base_url=validated_base_url,
         http_client=http_client,
     )
@@ -571,7 +595,7 @@ async def build_noema_agent(
         await openai_client.close()
 
     model = modules["OpenAIChatModel"](
-        provider.chat_model,
+        gateway.model_alias,
         provider=modules["OpenAIProvider"](openai_client=openai_client),
     )
     agent = modules["Agent"](
@@ -671,21 +695,25 @@ async def run_noema_agent(
 
     This is the entrypoint referenced by ``registered_agents.json``.
     """
-    provider = await resolve_runtime_llm_provider(
+    gateway = await resolve_orchestrator_gateway(
         session, user_id=user_id, organization_id=organization_id
     )
-    if provider is None:
+    if gateway is None:
         return NoemaAgentResult(
             status="unavailable",
-            notice="No LLM provider is configured for this workspace.",
+            notice=(
+                "The contextual-orchestrator gateway is not configured for "
+                "this workspace."
+            ),
+            error_code="orchestrator_gateway_unavailable",
         )
 
-    agent, closer = await build_noema_agent(provider)
+    agent, closer = await build_noema_agent(gateway)
     if agent is None:
         return NoemaAgentResult(
             status="unavailable",
             notice="The pydantic-ai runtime is not installed; agent is disabled.",
-            provider_name=provider.provider_name,
+            provider_name=gateway.model_alias,
         )
 
     deps = NoemaAgentDeps(
@@ -701,7 +729,7 @@ async def run_noema_agent(
         return NoemaAgentResult(
             status="ok",
             output=str(getattr(result, "output", "")),
-            provider_name=provider.provider_name,
+            provider_name=gateway.model_alias,
             tool_calls=tuple(deps.tool_calls),
         )
     except Exception as exc:  # noqa: BLE001 - degrade gracefully, never propagate
@@ -709,7 +737,7 @@ async def run_noema_agent(
         return NoemaAgentResult(
             status="error",
             notice="The agent run could not be completed.",
-            provider_name=provider.provider_name,
+            provider_name=gateway.model_alias,
             tool_calls=tuple(deps.tool_calls),
         )
     finally:
