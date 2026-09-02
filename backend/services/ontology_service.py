@@ -16,10 +16,6 @@ class RelationshipClassificationUnavailable(RuntimeError):
     """Raised when sender relationship type/confidence lacks validated evidence."""
 
 
-class RelationshipActionPolicyUnavailable(RuntimeError):
-    """Raised when a relationship label lacks a governed action-selection policy."""
-
-
 @dataclass
 class RelationshipData:
     user_email: str
@@ -38,11 +34,11 @@ class OntologyService:
         self.relationships = {}
 
     def next_action_for_relationship(self, relationship_type: str) -> Dict[str, str]:
-        """Fail closed until relationship-to-action routing has governed evidence."""
-        raise RelationshipActionPolicyUnavailable(
-            "relationship next-action routing is disabled until an explicit, "
-            "validated policy with executable provenance is available"
-        )
+        """Expose absence of a governed action policy without choosing a route."""
+        return {
+            "next_action": "unavailable",
+            "action_reason": "No validated relationship action policy is configured.",
+        }
 
     def analyze_sender_relationship(
         self, user_email: str, sender_email: str, email_content: str
