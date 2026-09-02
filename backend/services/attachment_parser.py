@@ -5,7 +5,6 @@ import binascii
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
 
 from .text_safety import strip_html_markup
 
@@ -17,7 +16,6 @@ _GENERIC_CONTENT_TYPES = {
 }
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
 MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
-MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS = 3
 
 
 @dataclass(frozen=True)
@@ -267,19 +265,14 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 
 def _safe_filename(filename: str | None) -> str:
-    """Return a basename-only attachment display filename."""
-    display_filename = filename or "attachment"
-    for _ in range(MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS):
-        decoded_filename = unquote(display_filename)
-        if decoded_filename == display_filename:
-            break
-        display_filename = decoded_filename
-    # Entity-encoded percent escapes (for example ``&#37;2e``) only become
-    # literal ``%`` sequences during markup decoding, so the residual-encoding
-    # guard must run after ``strip_html_markup`` to stay fail-closed.
-    display_filename = strip_html_markup(_sanitize_nul(display_filename))
-    if unquote(display_filename) != display_filename:
-        return "attachment"
+    """Return a basename-only attachment display filename without URL decoding.
+
+    MIME filename parameters are already decoded by the email parser and are not
+    URL paths. Percent-decoding them here can change a literal filename extension
+    and therefore select a different attachment parser. Strip markup/NULs and
+    literal path separators only; preserve percent text as attachment identity.
+    """
+    display_filename = strip_html_markup(_sanitize_nul(filename or "attachment"))
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
