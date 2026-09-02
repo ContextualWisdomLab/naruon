@@ -32,6 +32,23 @@ describe("NetworkGraph constant-time selection lookup contract", () => {
     expect(nodeSelection).not.toContain(".find(");
   });
 
+  it("bounds nodeLabels, relationshipOptions, and nodeOptions with early exit to limit iterations", () => {
+    const nodeLabelsSource = sourceBetween("const nodeLabels = useMemo(() => {", "}, [nodes]);");
+    expect(nodeLabelsSource).toContain("break;");
+    expect(nodeLabelsSource).toContain(">= 5");
+    expect(nodeLabelsSource).not.toContain(".slice(0, 5)");
+
+    const relationshipOptionsSource = sourceBetween("const relationshipOptions = useMemo(() => {", "}, [edgeMap, nodeMap]);");
+    expect(relationshipOptionsSource).toContain("break;");
+    expect(relationshipOptionsSource).toContain(">= 5");
+    expect(relationshipOptionsSource).not.toContain(".slice(0, 5)");
+
+    const nodeOptionsSource = sourceBetween("const nodeOptions = useMemo(() => {", "}, [nodeInstanceMap]);");
+    expect(nodeOptionsSource).toContain("break;");
+    expect(nodeOptionsSource).toContain(">= 8");
+    expect(nodeOptionsSource).not.toContain(".slice(0, 8)");
+  });
+
   it("keeps select controls on memoized maps without rescanning nodes or edges", () => {
     const graphNodeSelection = sourceBetween(
       "const selectGraphNode =",
