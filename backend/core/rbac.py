@@ -1,7 +1,10 @@
 import enum
-from typing import Dict, Any
-from pydantic import BaseModel
+from typing import Any, Dict
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from api.auth import RoleName
+
 
 class ResourceAction(str, enum.Enum):
     READ = "read"
@@ -9,11 +12,27 @@ class ResourceAction(str, enum.Enum):
     DELETE = "delete"
     ADMIN = "admin"
 
+
 class AbacPolicy(BaseModel):
+    """Attribute-based access policy with semantic internal identifiers."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
     policy_id: str
     resource_type: str
-    action: ResourceAction
-    conditions: Dict[str, Any]  # e.g. {"department": "sales", "clearance": "high"}
+    resource_action: ResourceAction = Field(alias="action")
+    access_conditions: Dict[str, Any] = Field(alias="conditions")
+
+    @property
+    def action(self) -> ResourceAction:
+        """Compatibility adapter for the historical public attribute name."""
+        return self.resource_action
+
+    @property
+    def conditions(self) -> Dict[str, Any]:
+        """Compatibility adapter for the historical public attribute name."""
+        return self.access_conditions
+
 
 def check_tenant_access(user_role: RoleName, required_role: RoleName) -> bool:
     """
@@ -31,19 +50,20 @@ def check_tenant_access(user_role: RoleName, required_role: RoleName) -> bool:
         "tenant_admin": 2,
         "organization_admin": 2,
         "system_admin": 3,
-        "platform_admin": 3
+        "platform_admin": 3,
     }
-    
+
     if user_role not in hierarchy or required_role not in hierarchy:
         return False
-        
+
     return hierarchy[user_role] >= hierarchy[required_role]
 
-def evaluate_abac_policy(user_attributes: Dict[str, Any], policy: AbacPolicy) -> bool:
-    """
-    Evaluate Attribute-Based Access Control policies.
-    """
-    for key, expected_value in policy.conditions.items():
+
+def evaluate_abac_policy(
+    user_attributes: Dict[str, Any], abac_policy: AbacPolicy
+) -> bool:
+    """Evaluate Attribute-Based Access Control policy conditions."""
+    for key, expected_value in abac_policy.access_conditions.items():
         if user_attributes.get(key) != expected_value:
             return False
     return True
