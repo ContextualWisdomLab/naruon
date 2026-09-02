@@ -575,10 +575,25 @@
   **(2026-09-02 정정)** 이 항목이 처음 쓰인 시점에는 naruon Noema가 "테넌트가
   구성한 자체 LLM provider"로 직접 동작한다고 기술했으나, 이는 잘못된 경계
   설정이었습니다 — 아래 "owner 아키텍처 지적 반영" 항목에서 이를
-  contextual-orchestrator 게이트웨이 경유로 교정했습니다. 올바른 분리는
-  "naruon Noema 도메인 로직 vs `.github` 리뷰 Noema 도메인 로직"이며, 두
-  에이전트 모두 contextual-orchestrator를 서로 별도로 인가된 스코프로
-  소비합니다 — naruon이 두 번째 provider 라우팅 권한이 되는 것이 아닙니다.
+  contextual-orchestrator 게이트웨이 경유로 교정했습니다. naruon이 두 번째
+  provider 라우팅 권한이 되는 것은 아닙니다.
+  **(2026-09-02 두 번째 정정, owner 코멘트 반영)** 위 "서로 다른 개별
+  에이전트임을... 명확히 했다"는 서술과, 아래 "owner 아키텍처 지적 반영"
+  항목의 "naruon Noema 도메인 로직 vs `.github` 리뷰 Noema 도메인 로직"이라는
+  분리 서술 모두 owner가 직접 정정했습니다: `ContextualWisdomLab/.github`의
+  `docs/CWL-MASTER-CONTEXT.md`는 Noema를 naruon·`.github` CI 리뷰
+  에이전트·wardnet AI SOC 격리 샌드박스가 함께 소비하는 **단일 공유 에이전트
+  런타임**(Pydantic-AI/Codex-Python)으로 명시적으로 정의하고 있으며, 이는
+  이름만 같은 우연이 아니라 처음부터 의도된 설계였다고 owner가 직접
+  확인했습니다. `docs/adr/0006-noema-bounded-context-separation.md`
+  (naruon#1527)가 "영구적으로 분리 유지" 결론을 superseded-on-arrival로
+  갱신했습니다 — 코드 수준 조사(각 저장소가 현재 실제로 무엇을 하는지) 자체는
+  유효하지만, "그러므로 영구히 분리한다"는 결론은 철회되었습니다. 이 파일의
+  `noema_orchestrator_base_url`/`noema_orchestrator_token`을 `.github`의
+  CI 리뷰 자격증명과 별도로 두는 것은 여전히 유효한 이 모듈의 보안 스코핑
+  선택이지만, 두 배포가 영구히 분리되어 있거나 이름 외에 아무것도 공유하지
+  않는다는 주장은 아닙니다. 실제 공유 런타임 설계는 이 ADR로 확정되지 않은
+  별도의 후속 과제로 남습니다.
 - (Devin review 반영, G-06 증분) `calendar_conflict_judgment_service.py`에 대한 5건의 지적을
   반영했습니다: (1) `apply_correction`이 대상 judgment 행을 `SELECT ... FOR UPDATE`로 잠가
   동시 정정 요청이 같은 이전 상태를 읽고 감사 기록이 서로를 덮어쓰는 경쟁을 막습니다. (2)
@@ -639,10 +654,14 @@
   패턴(migration `0012`)을 그대로 미러링). `noema_agent.py`는 이제 게이트웨이가
   없거나 무효면 업스트림 provider로 폴백하지 않고 구조화된
   `status="unavailable"`/`error_code="orchestrator_gateway_unavailable"`로
-  즉시 abstain합니다. 올바른 경계 분리는 "naruon Noema 도메인 로직 vs
-  `.github` 리뷰 Noema 도메인 로직"이며, 둘 다 contextual-orchestrator를 서로
-  별도로 인가된 스코프로 소비합니다 — `.github`의 CI 리뷰 자격증명 경로와는
-  절대 공유하지 않고, 이 경로로 워크스페이스 데이터가 흘러가지도 않습니다.
+  즉시 abstain합니다. naruon의 이 게이트웨이 자격증명은 `.github`의 CI 리뷰
+  자격증명 경로와 별도로 스코핑되어 있어 이 경로로 워크스페이스 데이터가
+  흘러가지 않습니다 — 다만 이것이 naruon Noema와 `.github` 리뷰 Noema가
+  영구히 분리된 별개 에이전트라는 뜻은 아닙니다. **(2026-09-02 owner 코멘트로
+  정정)** `docs/CWL-MASTER-CONTEXT.md`에 따르면 Noema는 naruon·`.github` CI
+  리뷰 에이전트·wardnet AI SOC 격리 샌드박스가 공유하는 단일 에이전트
+  런타임이며, 실제 공유 런타임 설계는 `docs/adr/0006-noema-bounded-context-separation.md`
+  (naruon#1527)가 확정하지 않은 별도 후속 과제입니다.
   검증: RED(패치 전 `resolve_runtime_llm_provider` 참조가 실제로 존재함을
   spy로 확인) → GREEN(픽스 후 같은 스파이는 `AttributeError`로 실패 —
   `resolve_runtime_llm_provider`가 모듈에서 완전히 사라졌다는 가장 강한

@@ -13,10 +13,17 @@ is always :data:`ORCHESTRATOR_MODEL_ALIAS`.
 This keeps two separately-authorized scopes distinct: naruon's tenant-scoped
 Noema gateway credential resolved here, versus ``ContextualWisdomLab/.github``'s
 central review-pipeline credential used by the org's CI Noema reviewer
-(``scripts/ci/noema_review_gate.py``). The two Noemas share only a name and
-must never share a credential path -- this module never reads or writes
+(``scripts/ci/noema_review_gate.py``). This module never reads or writes
 anything under that CI credential, and nothing here ever sends workspace data
 through it.
+
+Per ``docs/CWL-MASTER-CONTEXT.md`` (``ContextualWisdomLab/.github``), Noema is
+actually one shared agent runtime (Pydantic-AI/Codex-Python) consumed by
+naruon, the ``.github`` CI review agent, and wardnet's AI SOC quarantine
+sandbox -- the credential scoping above is a security choice for this module,
+not a claim that the deployments are permanently separate or share nothing
+beyond a name; see ``docs/adr/0006-noema-bounded-context-separation.md``
+(``ContextualWisdomLab/naruon#1527``) for the corrected reasoning.
 """
 
 from __future__ import annotations
