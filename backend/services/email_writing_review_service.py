@@ -28,6 +28,7 @@ from services.email_writing_candidate_review import (
     EmailWritingCandidateError,
     EmailWritingCandidateReviewResult,
     EmailWritingCandidateReviewer,
+    _validate_candidate_selectors_and_evidence,
 )
 from services.email_writing_context_service import (
     EmailWritingContextBundle,
@@ -57,6 +58,7 @@ from services.email_writing_policy import (
 EMAIL_WRITING_REVIEW_RETENTION_DAYS = 30
 EMAIL_WRITING_REVIEW_DEFAULT_MAXIMUM_CANDIDATES = 16
 EMAIL_WRITING_REVIEW_DEFAULT_TOTAL_WALL_SECONDS = 45.0
+EMAIL_WRITING_REVIEW_TIMEOUT_EVIDENCE_SECONDS = 1.0
 _EMPTY_PROMPT_HASH = "sha256:" + hashlib.sha256(b"").hexdigest()
 
 
@@ -283,13 +285,15 @@ def _validate_context_binding(
 
 def _validate_candidate_result_binding(
     request: EmailWritingReviewRequest,
+    bundle: EmailWritingContextBundle,
     result: EmailWritingCandidateReviewResult,
 ) -> None:
-    """Reject Candidate metadata inconsistent with the explicit review request."""
+    """Revalidate injected Candidate metadata, spans, and evidence before Judge use."""
     if result.orchestration_mode != _expected_orchestration_mode(request):
         raise EmailWritingReviewServiceError("candidate_orchestration_mode_invalid")
     if result.output.review_language != request.language_tag:
         raise EmailWritingReviewServiceError("candidate_language_mismatch")
+    _validate_candidate_selectors_and_evidence(result.output, bundle)
 
 
 def _validate_confidence(value: object) -> float:
@@ -373,16 +377,26 @@ class EmailWritingReviewService:
         except TimeoutError:
             if bundle is None:
                 raise EmailWritingReviewServiceError("review_timeout") from None
-            return await self._finalize_non_admitted(
-                session,
-                auth_context,
-                request,
-                bundle=bundle,
-                candidate_result=None,
-                review_status="unavailable",
-                reason_code="review_timeout",
-                diagnostics=(),
+            evidence_seconds = min(
+                EMAIL_WRITING_REVIEW_TIMEOUT_EVIDENCE_SECONDS,
+                float(self._runtime_profile.total_wall_seconds),
             )
+            try:
+                async with asyncio.timeout(evidence_seconds):
+                    return await self._finalize_non_admitted(
+                        session,
+                        auth_context,
+                        request,
+                        bundle=bundle,
+                        candidate_result=None,
+                        review_status="unavailable",
+                        reason_code="review_timeout",
+                        diagnostics=(),
+                    )
+            except TimeoutError:
+                raise EmailWritingReviewServiceError(
+                    "review_evidence_unavailable"
+                ) from None
         except EmailWritingContextError as error:
             if error.code == "email_unavailable":
                 raise EmailWritingReviewServiceError("email_unavailable") from None
@@ -417,7 +431,7 @@ class EmailWritingReviewService:
         """Run Candidate -> Judge -> policy after server authority is established."""
         try:
             candidate_result = await self._candidate_reviewer.review(bundle)
-            _validate_candidate_result_binding(request, candidate_result)
+            _validate_candidate_result_binding(request, bundle, candidate_result)
         except EmailWritingCandidateError as error:
             status: ReviewStatus = (
                 "rejected"
