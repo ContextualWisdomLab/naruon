@@ -1223,4 +1223,13 @@ def test_pr_governance_concurrency_serializes_non_sync_events_and_cancels_only_s
     assert expected_group(42, "pull_request_review", "submitted") == expected_group(42, "workflow_run")
     assert expected_group(42, "check_run") == expected_group(42, "workflow_dispatch")
     assert expected_group(42, "pull_request_target", "synchronize") != expected_group(43, "pull_request_target", "synchronize")
-    assert True  # synchronize is the only suffix with cancel-in-progress enabled
+
+    def expected_cancel(event_name: str, action: str = "") -> bool:
+        """Model the workflow's cancellation predicate."""
+        return event_name == "pull_request_target" and action == "synchronize"
+
+    assert expected_cancel("pull_request_target", "synchronize") is True
+    assert expected_cancel("pull_request_review", "submitted") is False
+    assert expected_cancel("workflow_run") is False
+    assert expected_cancel("check_run") is False
+    assert expected_cancel("workflow_dispatch") is False
