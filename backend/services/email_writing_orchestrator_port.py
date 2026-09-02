@@ -13,13 +13,18 @@ import asyncio
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 import threading
-from typing import ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeAlias, TypeVar
 
-from services.contextual_orchestrator_client import (
-    ChatMessage,
-    ContextualOrchestratorClient,
-    OrchestrationMode,
-)
+if TYPE_CHECKING:
+    from services.contextual_orchestrator_client import (
+        ChatMessage,
+        ContextualOrchestratorClient,
+        OrchestrationMode,
+    )
+else:
+    ChatMessage: TypeAlias = Any
+    ContextualOrchestratorClient: TypeAlias = Any
+    OrchestrationMode: TypeAlias = Any
 
 P = ParamSpec("P")
 R = TypeVar("R")
