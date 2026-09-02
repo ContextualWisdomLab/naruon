@@ -91,10 +91,6 @@ class KgExtractorContext:
     model: str | None = None
     orchestrator_base_url: str | None = None
 
-    @property
-    def has_llm_credentials(self) -> bool:
-        return bool(self.api_key and self.model)
-
 
 @runtime_checkable
 class KgExtractor(Protocol):
@@ -187,10 +183,18 @@ class LlmGroundedExtractor:
         *,
         context: KgExtractorContext,
     ) -> ProjectSemanticExtractionResult:
-        if not context.has_llm_credentials:
+        if not context.api_key:
             raise ExtractorUnavailableError("LLM provider credentials are not resolved")
         base_url = self._resolve_base_url(context)
         model = self._resolve_model(context)
+        if model is None:
+            # Only reachable in direct-provider mode: orchestrator mode's
+            # _resolve_model always returns the fixed ORCHESTRATOR_POOL_MODEL,
+            # never context.model, so an unset context.model must not gate
+            # orchestrator-routed requests -- only the direct-provider model
+            # setting they'd otherwise silently fall back to keyword
+            # extraction for.
+            raise ExtractorUnavailableError("LLM provider credentials are not resolved")
         return await extract_project_semantics_llm(
             segments,
             api_key=context.api_key,

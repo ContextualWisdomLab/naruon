@@ -83,6 +83,23 @@ since KG extraction runs over real customer email content, not code.
    the model they configured), and it does not touch
    `services/batch_embedding_service.py::_run_orchestrator_batch` (see
    Consequences).
+4. **Revision (same PR, pre-merge):** `extract()`'s original availability
+   check, `KgExtractorContext.has_llm_credentials` (`bool(self.api_key and
+   self.model)`), required `context.model` unconditionally — including for
+   orchestrator-routed requests, where `_resolve_model()` never reads
+   `context.model` at all. That meant a fully valid orchestrator request
+   (api key present, orchestrator endpoint configured) would still raise
+   `ExtractorUnavailableError` and silently degrade to the deterministic
+   keyword extractor whenever `context.model` (naruon's *unrelated*
+   direct-provider model setting) happened to be unset — the same class of
+   bug §Context describes, just one layer deeper. Devin Review caught this in
+   review of this ADR's own PR (ContextualWisdomLab/naruon#1525) before merge.
+   Fixed by removing `has_llm_credentials` and having `extract()` check
+   `context.api_key` directly, then treat a `None` result from
+   `_resolve_model()` (only reachable in direct-provider mode; orchestrator
+   mode always returns the fixed `ORCHESTRATOR_POOL_MODEL`) as the
+   unavailable case instead. `orchestrator_base_url` unavailability is still
+   caught by `_resolve_base_url()`, unchanged.
 
 ## Alternatives rejected
 
@@ -120,6 +137,12 @@ ZDR-first" guarantee is the correct default absent a documented reason to widen 
   `test_orchestrator_routing_targets_the_orchestrator_base_url`) and
   `test_direct_llm_routing_uses_provider_base_url`'s extended model assertion in
   `backend/tests/test_project_graph_extractor_registry.py` cover both branches.
+- Decision point 4's availability-gating fix is covered by
+  `test_orchestrator_routing_succeeds_without_context_model` (orchestrator
+  routing proceeds and still sends `orchestrator/free` with `context.model`
+  unset) and `test_direct_llm_routing_requires_model_even_with_api_key`
+  (direct-provider mode still fails closed without a model, confirming the
+  gating narrowed correctly rather than being removed).
 - **Open follow-up, deliberately out of this ADR's scope:**
   `services/batch_embedding_service.py::_run_orchestrator_batch` sends a
   separate, tenant-configurable `settings.model` (`BatchEmbeddingSettings.model`,

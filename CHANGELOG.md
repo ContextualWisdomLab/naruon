@@ -10,8 +10,16 @@
   경로로 흘러가지 않도록 했습니다. `docs/adr/0005-kg-extraction-orchestrator-free-pool-pin.md`에
   결정 근거를 기록했습니다. `batch_embedding_service.py`의 별도 orchestrator
   batch-embedding 경로(다른 modality, 테넌트별 설정)는 이번 수정 범위 밖이며
-  후속 과제로 남겼습니다. 검증: `backend/tests/test_project_graph_extractor_registry.py`
-  전체 통과(22개, 신규 model-pin assertion 포함), 전체 backend suite 1806
+  후속 과제로 남겼습니다.
+- 같은 PR(#1525) 리뷰에서 Devin Review가 지적한 후속 버그도 함께 고쳤습니다:
+  `LlmGroundedExtractor.extract`의 가용성 검사(`has_llm_credentials`)가
+  `context.model`을 무조건 요구해, `_resolve_model`이 고정 `orchestrator/free`를
+  이미 공급하는 orchestrator 경로에서도 `context.model`(직접 공급자용 설정)이
+  비어 있으면 조용히 keyword 추출로 강등되는 문제가 있었습니다.
+  `has_llm_credentials` 프로퍼티를 제거하고 `extract()`가 `context.api_key`와
+  실제로 라우팅 모드에 맞게 해석된 `model`(`_resolve_model()` 결과)만 검사하도록
+  바꿨습니다. 검증: `backend/tests/test_project_graph_extractor_registry.py`
+  전체 통과(24개, 신규 회귀 테스트 2개 포함), 전체 backend suite 1808
   passed/33 skipped, `ruff check` clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.

@@ -307,6 +307,44 @@ async def test_orchestrator_extractor_requires_endpoint():
         )
 
 
+@pytest.mark.asyncio
+async def test_orchestrator_routing_succeeds_without_context_model(monkeypatch):
+    """Orchestrator routing must not require context.model.
+
+    _resolve_model always supplies the fixed ORCHESTRATOR_POOL_MODEL for
+    orchestrator-routed requests, regardless of context.model. Gating
+    availability on context.model (as the extractor previously did via
+    ``has_llm_credentials``) made an otherwise-valid orchestrator request
+    unavailable -- and silently degrade to keyword extraction -- whenever the
+    unrelated direct-provider model setting was unconfigured.
+    """
+    sentinel = object()
+    llm_mock = AsyncMock(return_value=sentinel)
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
+
+    context = KgExtractorContext(
+        api_key="key",
+        orchestrator_base_url="https://orchestrator.example/v1",
+    )
+    result = await run_extraction(
+        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
+    )
+
+    assert result is sentinel
+    llm_mock.assert_awaited_once()
+    assert llm_mock.await_args.kwargs["model"] == "orchestrator/free"
+
+
+@pytest.mark.asyncio
+async def test_direct_llm_routing_requires_model_even_with_api_key():
+    # Direct-provider mode still fails closed on a missing model: unlike
+    # orchestrator mode, _resolve_model returns context.model verbatim here,
+    # so an api_key alone is not sufficient.
+    extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
+    with pytest.raises(ExtractorUnavailableError):
+        await extractor.extract([_segment()], context=KgExtractorContext(api_key="key"))
+
+
 def test_custom_extractor_can_register_into_the_seam():
     """A plugin/extractor registers by selector without editing core ingest."""
 
