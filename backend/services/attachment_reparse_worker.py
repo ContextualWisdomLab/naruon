@@ -37,6 +37,15 @@ DEFAULT_ATTACHMENT_REPARSE_INTERVAL_SECONDS = 60
 DEFAULT_ATTACHMENT_REPARSE_BATCH_LIMIT = 10
 ATTACHMENT_REPARSE_SWEEP_LOCK_NAMESPACE = "naruon-attachment-reparse-sweep"
 MAX_STARTUP_JITTER_SECONDS = 30
+# POST .../reparse-intent can re-mark ANY existing attachment reparse_pending,
+# including one whose id is already behind the forward cursor -- the
+# cursor+retry-id design alone can never discover that (retry_ids only
+# tracks rows this worker itself already saw and found unresolved). Forcing
+# a full rescan (cursor -> None) on this cadence bounds how stale such a row
+# can get; always safe regardless of cadence, since the parse_status filter
+# already excludes every row that's actually resolved. See _sweep_attachments
+# (mirrors services.newsdom_worker.NewsdomRecognitionWorker's identical fix).
+FULL_RESCAN_EVERY_N_SWEEPS = 20
 
 # Mirrors api.data.ATTACHMENT_REPARSE_PENDING_STATUS. Duplicated as a literal
 # (not imported) to avoid a services -> api import: api already imports from
@@ -194,6 +203,7 @@ class AttachmentReparseWorker:
         # id filter, independent of the forward cursor -- see
         # _sweep_attachments.
         self._attachment_retry_ids: set[int] = set()
+        self._attachment_sweep_count = 0
 
     async def start(self) -> None:
         """Start the reparse loop once."""
@@ -284,7 +294,18 @@ class AttachmentReparseWorker:
         simultaneous reparse-intent requests) -- nothing past them would
         ever be reached. Decoupling retry tracking from the forward cursor
         fixes that.
+
+        Neither piece of state can discover a row explicitly re-marked
+        ``reparse_pending`` after the cursor already passed it --
+        ``POST .../reparse-intent`` can retarget any existing attachment,
+        including an old one this worker already resolved. Every
+        ``FULL_RESCAN_EVERY_N_SWEEPS``-th sweep forces a full rescan
+        (cursor reset to ``None``) to bound how stale such a row can get;
+        see ``services.newsdom_worker`` for why this is always safe.
         """
+        self._attachment_sweep_count += 1
+        if self._attachment_sweep_count % FULL_RESCAN_EVERY_N_SWEEPS == 0:
+            self._attachment_cursor = None
         rows = await self._load_reparse_pending_attachments(session)
         processed_ids: set[int] = set()
         unresolved_ids: set[int] = set()
@@ -342,12 +363,15 @@ class AttachmentReparseWorker:
         statement = select(Attachment).where(
             Attachment.parse_status == ATTACHMENT_REPARSE_PENDING_STATUS
         )
-        conditions = []
+        # retry_ids only narrows the result when there's a cursor to narrow
+        # *against* -- with no cursor yet (after_id is None, including a
+        # forced full rescan), every pending row already qualifies, and
+        # restricting to just retry_ids here would incorrectly hide
+        # everything else that's pending.
         if after_id is not None:
-            conditions.append(Attachment.id > after_id)
-        if retry_ids:
-            conditions.append(Attachment.id.in_(retry_ids))
-        if conditions:
+            conditions = [Attachment.id > after_id]
+            if retry_ids:
+                conditions.append(Attachment.id.in_(retry_ids))
             statement = statement.where(
                 conditions[0] if len(conditions) == 1 else or_(*conditions)
             )

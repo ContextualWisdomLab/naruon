@@ -522,6 +522,45 @@ async def test_sweep_does_not_starve_rows_behind_many_failing_rows(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_sweep_rediscovers_a_row_reverted_to_pending_behind_the_cursor():
+    # POST .../reparse-intent can re-mark ANY existing attachment
+    # reparse_pending, including one whose id is already behind the forward
+    # cursor. Devin Review flagged that the cursor+retry-id design alone can
+    # never discover that: retry_ids only tracks rows this worker itself
+    # already saw and found unresolved -- it has no way to learn about a
+    # brand-new external transition on an old, already-resolved row. A
+    # periodic full rescan (every FULL_RESCAN_EVERY_N_SWEEPS sweeps) bounds
+    # how long such a row can stay invisible.
+    reverted = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=1,
+    )
+    worker = AttachmentReparseWorker()
+    session = _LiveReparsePendingSession(worker, [reverted])
+
+    await worker._sweep_attachments(session)
+    assert reverted.parse_status == _QUARANTINED_STATUS
+    assert worker._attachment_cursor == 1
+
+    # Simulate an operator re-triggering reparse via POST .../reparse-intent
+    # on this now-old attachment -- its id is already behind the cursor.
+    reverted.parse_status = ATTACHMENT_REPARSE_PENDING_STATUS
+
+    rediscovered_at = None
+    for sweep_number in range(
+        2, attachment_reparse_worker_module.FULL_RESCAN_EVERY_N_SWEEPS + 1
+    ):
+        await worker._sweep_attachments(session)
+        if reverted.parse_status != ATTACHMENT_REPARSE_PENDING_STATUS:
+            rediscovered_at = sweep_number
+            break
+
+    assert rediscovered_at == attachment_reparse_worker_module.FULL_RESCAN_EVERY_N_SWEEPS
+    assert reverted.parse_status == _QUARANTINED_STATUS
+
+
+@pytest.mark.asyncio
 async def test_sweep_isolates_one_items_failure_from_the_next_items_refetch(
     monkeypatch,
 ):

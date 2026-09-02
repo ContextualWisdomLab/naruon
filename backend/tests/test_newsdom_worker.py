@@ -724,6 +724,45 @@ async def test_attachment_sweep_does_not_starve_rows_behind_many_stuck_rows():
     assert worker._attachment_retry_ids == {a.id for a in blocked}
 
 
+@pytest.mark.asyncio
+async def test_attachment_sweep_rediscovers_a_row_reverted_to_pending_behind_the_cursor():
+    # An already-recognized attachment can, in principle, be explicitly
+    # re-marked pending again later (the same class of external transition
+    # Devin Review flagged for the reparse worker's reparse-intent endpoint,
+    # and for documents' pdf-dom-recognition-intent endpoint) -- its id is
+    # then already behind the forward cursor, and it was never seen as
+    # unresolved so it isn't in the retry set either. A periodic full
+    # rescan (every FULL_RESCAN_EVERY_N_SWEEPS sweeps) bounds how long such
+    # a row can stay invisible.
+    reverted = _pending_attachment(attachment_id=1, organization_id="org-ready")
+
+    async def config_resolver(_session, _organization_id):
+        return _config()
+
+    async def request_fn(**_kwargs):
+        return _canned_response()
+
+    worker = NewsdomRecognitionWorker(
+        config_resolver=config_resolver, request_fn=request_fn
+    )
+    session = _LivePendingAttachmentSession(worker, [reverted])
+
+    await worker._sweep_attachments(session)
+    assert reverted.parse_status == "parsed"
+    assert worker._attachment_cursor == 1
+
+    reverted.parse_status = PDF_DOM_RECOGNITION_PENDING_STATUS
+
+    rediscovered_at = None
+    for sweep_number in range(2, newsdom_worker_module.FULL_RESCAN_EVERY_N_SWEEPS + 1):
+        await worker._sweep_attachments(session)
+        if reverted.parse_status != PDF_DOM_RECOGNITION_PENDING_STATUS:
+            rediscovered_at = sweep_number
+            break
+
+    assert rediscovered_at == newsdom_worker_module.FULL_RESCAN_EVERY_N_SWEEPS
+
+
 class _LivePendingDocumentSession:
     """Document counterpart of ``_LivePendingAttachmentSession`` -- mirrors
     ``NewsdomRecognitionWorker._pending_document_statement`` for real,
@@ -816,6 +855,45 @@ async def test_document_sweep_cursor_uses_created_at_not_document_id_ordering():
     await worker._sweep_documents(session)
 
     assert new_arrival.document_status == "parsed"
+
+
+@pytest.mark.asyncio
+async def test_document_sweep_rediscovers_a_row_reverted_to_pending_behind_the_cursor():
+    # POST .../pdf-dom-recognition-intent (backend/api/data.py) can
+    # explicitly re-trigger recognition on ANY existing document, including
+    # one whose (created_at, document_id) is already behind the forward
+    # cursor. Neither the cursor nor the retry set can discover that on its
+    # own; a periodic full rescan bounds how long it can stay invisible.
+    reverted = _pending_document("doc-001", organization_id="org-ready")
+
+    async def config_resolver(_session, _organization_id):
+        return _config()
+
+    async def request_fn(**_kwargs):
+        return _canned_response()
+
+    worker = NewsdomRecognitionWorker(
+        config_resolver=config_resolver, request_fn=request_fn
+    )
+    session = _LivePendingDocumentSession(worker, [reverted])
+
+    await worker._sweep_documents(session)
+    assert reverted.document_status == "parsed"
+    cursor_after_first_sweep = worker._document_cursor
+
+    # Simulate an operator re-triggering recognition on this now-old
+    # document -- its (created_at, document_id) is already behind the cursor.
+    reverted.document_status = PDF_DOM_RECOGNITION_PENDING_STATUS
+
+    rediscovered_at = None
+    for sweep_number in range(2, newsdom_worker_module.FULL_RESCAN_EVERY_N_SWEEPS + 1):
+        await worker._sweep_documents(session)
+        if reverted.document_status != PDF_DOM_RECOGNITION_PENDING_STATUS:
+            rediscovered_at = sweep_number
+            break
+
+    assert rediscovered_at == newsdom_worker_module.FULL_RESCAN_EVERY_N_SWEEPS
+    assert cursor_after_first_sweep == (reverted.created_at, "doc-001")
 
 
 @pytest.mark.asyncio

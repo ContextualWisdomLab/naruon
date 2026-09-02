@@ -1,4 +1,27 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🔴 실제 결함, `backend/services/attachment_reparse_worker.py:346-352`)
+  커서보다 낮은 id(또는 document의 경우 더 이른 `(created_at, document_id)`)를 가진
+  행이 나중에 외부에서 다시 pending 상태로 되돌려지면, 커서+재시도-집합 설계로는
+  이를 절대 재발견할 수 없었습니다 — 재시도 집합은 이 워커 자신이 이미 보고
+  미해결로 판단한 행만 추적하기 때문입니다.** 실제로 이런 외부 되돌림 경로가
+  존재함을 코드에서 직접 확인: `POST /attachments/{uid}/reparse-intent`와
+  `POST /documents/{id}/pdf-dom-recognition-intent`(둘 다 `backend/api/data.py`)가
+  임의의 기존 행을 다시 pending으로 표시할 수 있습니다(newsdom 첨부 sweep에
+  대해서는 이런 되돌림을 유발하는 살아있는 트리거를 찾지 못했지만, 동일한
+  설계 결함이므로 이 PR에서 이미 다뤄온 대칭적 수정 패턴에 따라 세 sweep
+  메서드 모두에 동일하게 적용했습니다). 수정: 매 `FULL_RESCAN_EVERY_N_SWEEPS`(20)번째
+  sweep마다 커서를 `None`으로 강제 리셋해 전체 재스캔을 수행합니다 — `parse_status`/
+  `document_status` 필터가 이미 실제로 해결된 행을 모두 제외하므로, 어떤 주기로
+  실행하든 항상 안전합니다(결과 집합이 넓어질 뿐 틀려지지 않음). 이 수정 과정에서
+  발견한 잠재 버그: `_pending_attachment_statement`/`_pending_document_statement`가
+  커서가 `None`인데(첫 sweep 또는 이번 강제 재스캔) `retry_ids`가 비어있지 않으면
+  조건을 `retry_ids`로만 좁혀버려 나머지 pending 행을 모두 놓치는 경우가 있었습니다
+  (지금까지는 최초 sweep에서 `retry_ids`가 항상 비어있어 발현되지 않았을 뿐) —
+  `retry_ids` 조건이 커서 조건 안에 중첩되어야만 의미가 있도록 고쳤습니다. 검증:
+  RED(id/커서를 이미 지난 행을 외부에서 pending으로 되돌려도 20 sweep 동안
+  재발견되지 않음을 실제 재현) → GREEN(정확히 20번째 sweep에서 재발견).
+  `PYTHONPATH=. python -m pytest tests/test_newsdom_worker.py
+  tests/test_attachment_reparse_worker.py -q` → 34 passed, 23 passed.
 - **(Devin 리뷰 대응, 🟡 실제 결함) `backend/api/tenant_config.py`의 `TenantConfigCreate`/
   `TenantConfigResponse`가 `noema_orchestrator_base_url`/`noema_orchestrator_token`을
   선언하지 않아, `services/orchestrator_gateway.py`가 요구하는 이 게이트웨이

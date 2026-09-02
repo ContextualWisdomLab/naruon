@@ -187,6 +187,16 @@ DEFAULT_NEWSDOM_INTERVAL_SECONDS = 60
 DEFAULT_NEWSDOM_BATCH_LIMIT = 10
 NEWSDOM_SWEEP_LOCK_NAMESPACE = "naruon-newsdom-recognition-sweep"
 MAX_STARTUP_JITTER_SECONDS = 30
+# A row already past the forward cursor can still be explicitly re-marked
+# pending later (e.g. POST .../pdf-dom-recognition-intent re-triggering an
+# already-resolved document) -- the cursor+retry-id design alone can never
+# discover that, since retry_ids only tracks rows this worker itself has
+# already seen and found unresolved. Forcing a full rescan (cursor -> None)
+# on this cadence bounds how stale such a row can get; it's always safe
+# regardless of cadence, since the parse_status/document_status filter
+# already excludes every row that's actually resolved, so a full rescan
+# only ever costs a wider (not wrong) result set. See _sweep_attachments.
+FULL_RESCAN_EVERY_N_SWEEPS = 20
 
 # Per-item processing outcomes.
 RESULT_RECOGNIZED = "recognized"
@@ -417,6 +427,8 @@ class NewsdomRecognitionWorker:
         # independent of the forward cursor below -- see _sweep_attachments.
         self._attachment_retry_ids: set[int] = set()
         self._document_retry_ids: set[str] = set()
+        self._attachment_sweep_count = 0
+        self._document_sweep_count = 0
 
     async def start(self) -> None:
         """Start the recognition loop once."""
@@ -527,7 +539,21 @@ class NewsdomRecognitionWorker:
         instance from an earlier item's failure would raise on that read
         instead of just isolating the one failure. Mirrors
         ``services.attachment_reparse_worker.AttachmentReparseWorker._sweep_attachments``.
+
+        Neither piece of state can discover a row that gets explicitly
+        re-marked pending *after* the cursor already passed it -- e.g. an
+        already-recognized attachment whose organization requests it be
+        looked at again. It was never seen as unresolved by this worker (so
+        it's not in the retry set) and its id no longer satisfies
+        ``id > cursor``. Every ``FULL_RESCAN_EVERY_N_SWEEPS``-th sweep forces
+        a full rescan (cursor reset to ``None``) to bound how stale such a
+        row can get; this is always safe regardless of cadence, since the
+        ``parse_status`` filter already excludes every row that's actually
+        resolved, so a full rescan only ever widens the candidate set.
         """
+        self._attachment_sweep_count += 1
+        if self._attachment_sweep_count % FULL_RESCAN_EVERY_N_SWEEPS == 0:
+            self._attachment_cursor = None
         rows = await self._load_pending_attachments(session)
         processed_ids: set[int] = set()
         unresolved_ids: set[int] = set()
@@ -597,12 +623,15 @@ class NewsdomRecognitionWorker:
         statement = select(Attachment).where(
             Attachment.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
         )
-        conditions = []
+        # retry_ids only narrows the result when there's a cursor to narrow
+        # *against* -- with no cursor yet (after_id is None, including a
+        # forced full rescan), every pending row already qualifies, and
+        # restricting to just retry_ids here would incorrectly hide
+        # everything else that's pending.
         if after_id is not None:
-            conditions.append(Attachment.id > after_id)
-        if retry_ids:
-            conditions.append(Attachment.id.in_(retry_ids))
-        if conditions:
+            conditions = [Attachment.id > after_id]
+            if retry_ids:
+                conditions.append(Attachment.id.in_(retry_ids))
             statement = statement.where(
                 conditions[0] if len(conditions) == 1 else or_(*conditions)
             )
@@ -655,7 +684,18 @@ class NewsdomRecognitionWorker:
         tuple: ``created_at`` (a Python-side timestamp set at insert time)
         is genuinely monotonic with insertion order, and ``document_id``
         only breaks ties between rows inserted in the same instant.
+
+        Neither the cursor nor the retry set can discover a document
+        explicitly re-marked pending after the cursor already passed it --
+        e.g. ``POST .../pdf-dom-recognition-intent`` re-triggering
+        recognition on an already-resolved document. Every
+        ``FULL_RESCAN_EVERY_N_SWEEPS``-th sweep forces a full rescan
+        (cursor reset to ``None``) to bound how stale such a row can get;
+        see ``_sweep_attachments`` for why this is always safe.
         """
+        self._document_sweep_count += 1
+        if self._document_sweep_count % FULL_RESCAN_EVERY_N_SWEEPS == 0:
+            self._document_cursor = None
         rows = await self._load_pending_documents(session)
         processed_ids: set[str] = set()
         unresolved_ids: set[str] = set()
@@ -733,12 +773,13 @@ class NewsdomRecognitionWorker:
                     Document.document_id > after_document_id,
                 ),
             )
-        conditions = []
+        # retry_ids only narrows the result when there's a cursor to narrow
+        # *against* -- see _pending_attachment_statement for why (identical
+        # reasoning, shared between both sweeps).
         if forward_condition is not None:
-            conditions.append(forward_condition)
-        if retry_ids:
-            conditions.append(Document.document_id.in_(retry_ids))
-        if conditions:
+            conditions = [forward_condition]
+            if retry_ids:
+                conditions.append(Document.document_id.in_(retry_ids))
             statement = statement.where(
                 conditions[0] if len(conditions) == 1 else or_(*conditions)
             )
