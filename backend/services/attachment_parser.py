@@ -146,9 +146,10 @@ def parse_email_attachment(
 ) -> AttachmentParseResult:
     """Classify and normalize one attachment without running heavy parsers."""
     safe_filename = _safe_filename(filename)
+    parser_filename = _parser_authority_filename(filename)
     normalized_content_type = _normalize_content_type(content_type)
     parse_content_type = _parse_content_type_for(
-        safe_filename,
+        parser_filename,
         normalized_content_type,
     )
 
@@ -265,28 +266,45 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 
 def _safe_filename(filename: str | None) -> str:
-    """Return a basename-only MIME filename without semantic re-decoding.
+    """Return a basename-only filename projection safe for display and storage.
 
-    MIME filename parameters reach this boundary as filename identity, not HTML
-    or URL text. Re-decoding percent escapes or character references can change
-    a literal suffix and therefore select a different parser for a generic MIME
-    type. Reject NUL-bearing or markup-looking names, remove literal path
-    segments, and preserve all other filename text exactly.
+    Display sanitization is intentionally separate from parser selection. Known
+    markup is stripped so active HTML cannot reach UI-facing attachment fields,
+    while unknown raw angle-bracket labels and NUL-bearing names fail closed.
+    Percent and character-reference text that is not markup remains literal.
     """
     raw_filename = filename or "attachment"
     if "\x00" in raw_filename:
         return "attachment"
-    display_filename = raw_filename
-    if (
-        "<" in display_filename
-        or ">" in display_filename
-        or contains_html_markup(display_filename)
-    ):
+    if contains_html_markup(raw_filename):
+        display_filename = strip_html_markup(raw_filename)
+    elif "<" in raw_filename or ">" in raw_filename:
         return "attachment"
+    else:
+        display_filename = raw_filename
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
     return display_filename
+
+
+def _parser_authority_filename(filename: str | None) -> str:
+    """Return the literal basename eligible to select a parser by extension.
+
+    MIME filename identity is neither HTML nor URL source. Parser authority must
+    therefore use the pre-display representation: semantic decoding, markup
+    stripping, NUL deletion, or whitespace trimming must never manufacture a
+    recognized suffix for a generic MIME type.
+    """
+    raw_filename = filename or "attachment"
+    if "\x00" in raw_filename:
+        return "attachment"
+    if "<" in raw_filename or ">" in raw_filename or contains_html_markup(raw_filename):
+        return "attachment"
+    authority_filename = Path(raw_filename.replace("\\", "/")).name
+    if authority_filename in {"", ".", ".."}:
+        return "attachment"
+    return authority_filename
 
 
 def _coerce_deferred_payload_bytes(raw_content: Any) -> bytes:
