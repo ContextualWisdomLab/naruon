@@ -27,6 +27,7 @@ OWNER="${GITHUB_REPOSITORY%/*}"
 REPO="${GITHUB_REPOSITORY#*/}"
 BLOCKERS=()
 WAITING=()
+OPENCODE_FALLBACK_APPROVED=0
 PR_CHECKS_ERROR_FILE="$(mktemp)"
 ISSUE_COMMENTS_ERROR_FILE="$(mktemp)"
 REVIEW_COMMENTS_ERROR_FILE="$(mktemp)"
@@ -258,7 +259,7 @@ IS_DRAFT="$(printf '%s' "$PR_JSON" | jq -r '.isDraft')"
 REVIEW_DECISION="$(printf '%s' "$PR_JSON" | jq -r '.reviewDecision // ""')"
 
 if [ "$IS_DRAFT" = "true" ]; then
-  add_blocker 'Draft PR: merge automation is paused.'
+  add_waiting 'Draft PR: merge automation is paused.'
 fi
 
 if [ "$MERGE_STATE" = "BEHIND" ]; then
@@ -341,6 +342,7 @@ CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potent
 CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
 CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|changes requested|request changes'
 CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
+CODERABBIT_APPROVAL_PENDING_PATTERN='CodeRabbit has no unresolved comments, but it has not reviewed the latest commit'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 COMMIT_STATUS_JSON='{"statuses":[]}'
 if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
@@ -386,6 +388,7 @@ if [ "$CODERABBIT_COUNT" = "0" ]; then
     if [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
       add_waiting "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval on ${HEAD_REF_OID}."
     else
+      OPENCODE_FALLBACK_APPROVED=1
       printf 'CodeRabbit check is absent; accepted current-head OpenCode App adversarial approval on %s.\n' "$HEAD_REF_OID"
     fi
   fi
@@ -435,13 +438,17 @@ else
     --arg head_sha "$HEAD_SHA" \
     --arg pattern "$CODERABBIT_ISSUE_BLOCKING_PATTERN" \
     --arg substantive_pattern "$CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN" \
-    --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" '
+    --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" \
+    --arg approval_pending_pattern "$CODERABBIT_APPROVAL_PENDING_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select(
           (.body // "") as $body
           | ($body | split("<details>")[0]) as $summary
-          | ($body | test($pattern; "i"))
+          | (($body | contains("<!-- approval_notice_start -->"))
+             and ($body | test($approval_pending_pattern; "i"))
+             | not)
+            and ($body | test($pattern; "i"))
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))
@@ -450,8 +457,20 @@ else
       | select((.body // "") | contains($head_sha))]
     | length'
   )"
+  CODERABBIT_APPROVAL_PENDING_COUNT="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s \
+    --arg head_sha "$HEAD_SHA" \
+    --arg approval_pending_pattern "$CODERABBIT_APPROVAL_PENDING_PATTERN" '
+    [.[][]
+      | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
+      | select((.body // "") | contains("<!-- approval_notice_start -->"))
+      | select((.body // "") | test($approval_pending_pattern; "i"))
+      | select((.body // "") | contains($head_sha))]
+    | length'
+  )"
   if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then
     add_blocker "Current-head CodeRabbit issue comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
+  elif [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ] && [ "$OPENCODE_FALLBACK_APPROVED" != "1" ]; then
+    add_waiting "Waiting for CodeRabbit to review the latest commit on ${HEAD_REF_OID}."
   fi
 fi
 
