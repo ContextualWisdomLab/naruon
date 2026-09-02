@@ -373,18 +373,26 @@ class EmailWritingReviewService:
                 )
         except asyncio.CancelledError:
             if bundle is not None:
-                await asyncio.shield(
-                    self._persist_terminal_review(
-                        session,
-                        auth_context,
-                        request,
-                        bundle=bundle,
-                        candidate_result=None,
-                        review_status="abstained",
-                        reason_code="review_cancelled",
-                        diagnostics=(),
-                    )
+                evidence_seconds = min(
+                    EMAIL_WRITING_REVIEW_TIMEOUT_EVIDENCE_SECONDS,
+                    float(self._runtime_profile.total_wall_seconds),
                 )
+                try:
+                    await asyncio.wait_for(
+                        self._persist_terminal_review(
+                            session,
+                            auth_context,
+                            request,
+                            bundle=bundle,
+                            candidate_result=None,
+                            review_status="abstained",
+                            reason_code="review_cancelled",
+                            diagnostics=(),
+                        ),
+                        timeout=evidence_seconds,
+                    )
+                except Exception:
+                    pass
             raise
         except TimeoutError:
             if bundle is None:
