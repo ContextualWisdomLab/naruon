@@ -19,6 +19,16 @@ def test_merge_gate_guidance_matches_live_one_approval_ruleset() -> None:
         assert "do not lower" in guidance.lower()
 
 
+def test_live_last_push_approval_rule_is_explicit() -> None:
+    """Current guidance must preserve the repository's post-last-push approval rule."""
+    policy = MERGE_GATE_POLICY.read_text(encoding="utf-8")
+    skill = ROBOT_REVIEW_SKILL.read_text(encoding="utf-8")
+
+    for guidance in (policy, skill):
+        assert "require_last_push_approval=true" in guidance
+        assert "after the last push" in guidance.lower()
+
+
 def test_robot_evidence_is_not_substituted_for_required_approval() -> None:
     """Robot evidence and the live GitHub approval requirement remain distinct gates."""
     policy = MERGE_GATE_POLICY.read_text(encoding="utf-8")
