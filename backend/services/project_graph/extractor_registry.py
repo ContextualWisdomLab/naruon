@@ -16,6 +16,17 @@ seam:
   keyword extractor** — encoding "rule-based extraction is fallback/reference
   only" structurally rather than in an ad-hoc branch.
 
+**The** ``orchestrator`` **selector is not operational yet.** Configuring
+``context.orchestrator_base_url`` alone is not sufficient to route a request
+through it: as of this module's last revision,
+``ContextualWisdomLab/contextual-orchestrator`` has published no release, so
+no caller can also resolve a legitimate ``context.orchestrator_model``, and
+every orchestrator-routed request fails closed to the deterministic keyword
+extractor as a result (see :func:`LlmGroundedExtractor.extract` and ADR-0005
+Revision 7). Configuring the endpoint now is still useful groundwork — it is
+the transport half of a two-part precondition — but it does not by itself
+enable extraction.
+
 Routing LLM extraction through **contextual-orchestrator** is modelled as a
 transport concern only: the orchestrator is an OpenAI-compatible gateway, so
 the ``orchestrator`` selector reuses the same grounded LLM extractor but
@@ -27,12 +38,10 @@ provider config, read only by :data:`SELECTOR_LLM`) or ``context.
 orchestrator_model`` (a contextual-orchestrator consumer contract's
 resolved value, read only by :data:`SELECTOR_ORCHESTRATOR` — the two fields
 are kept separate precisely so a direct-provider setting can never leak into
-an orchestrator-routed request as a substitute model id). As of this
-module's last revision, ``ContextualWisdomLab/contextual-orchestrator`` has
-published no release, so no caller populates ``orchestrator_model`` and the
-extractor correctly stays unavailable. If the endpoint is unset, the
-resolved model is blank, or the provider credentials are missing, the
-extractor raises :class:`ExtractorUnavailableError` and the runner fails
+an orchestrator-routed request as a substitute model id). If the endpoint is
+unset, the resolved model is blank, or the provider credentials are
+missing, the extractor raises :class:`ExtractorUnavailableError` and the
+runner fails
 closed to the deterministic reference extractor — the projection is
 best-effort and never lost.
 """
@@ -211,16 +220,26 @@ class LlmGroundedExtractor:
         base_url = self._resolve_base_url(context)
         model = self._resolve_model(context)
         if not model or not model.strip():
-            # Applies uniformly to both modes: an unset, blank, or
-            # whitespace-only model must fail closed rather than be sent as
-            # an invalid model id (only discovered after a network
-            # round-trip) or silently substituted with a hardcoded value.
-            # For orchestrator mode specifically, this is presently *always*
-            # the outcome -- contextual-orchestrator has no released
-            # consumer contract yet (0 GitHub Releases as of ADR-0005
-            # Revision 7), so context.orchestrator_model is never populated,
-            # and this extractor has no authority to invent a value for it.
-            raise ExtractorUnavailableError("LLM provider credentials are not resolved")
+            # An unset, blank, or whitespace-only model must fail closed
+            # rather than be sent as an invalid model id (only discovered
+            # after a network round-trip) or silently substituted with a
+            # hardcoded value -- but the two modes fail for genuinely
+            # different reasons, so the message says which, truthfully
+            # (Devin Review flagged the previous shared "credentials are not
+            # resolved" message as misleading here: api_key can easily be
+            # present while only the model is unresolved). For orchestrator
+            # mode this is presently *always* the outcome -- contextual-
+            # orchestrator has no released consumer contract yet (0 GitHub
+            # Releases as of ADR-0005 Revision 7), so no caller populates
+            # context.orchestrator_model, and this extractor has no
+            # authority to invent a value for it.
+            if self.routed_via_orchestrator:
+                raise ExtractorUnavailableError(
+                    "contextual-orchestrator has published no consumer "
+                    "release yet, so no orchestrator_model is available to "
+                    "route this request (see ADR-0005 Revision 7)"
+                )
+            raise ExtractorUnavailableError("LLM provider model is not configured")
         return await extract_project_semantics_llm(
             segments,
             api_key=context.api_key,
