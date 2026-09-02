@@ -1,0 +1,161 @@
+# ADR-0005: Pin orchestrator-routed KG extraction to the `orchestrator/free` pool
+
+**Status:** Accepted (Naruon-local policy)
+**Date:** 2026-09-02
+**Decision owner:** Naruon maintainers
+**Scope:** `services/project_graph/extractor_registry.py::LlmGroundedExtractor` when
+`routed_via_orchestrator=True` (the `PROJECT_GRAPH_EXTRACTOR=orchestrator` selector).
+This ADR does not change the direct-provider `PROJECT_GRAPH_EXTRACTOR=llm` path, and
+it does not cover `services/batch_embedding_service.py`'s separate orchestrator
+batch-embedding call site (see Consequences).
+
+## Context
+
+Naruon can route project-graph KG extraction through the
+[`contextual-orchestrator`](https://github.com/ContextualWisdomLab/contextual-orchestrator)
+gateway instead of a direct LLM provider: `LlmGroundedExtractor._resolve_base_url`
+already swaps the HTTP target to `context.orchestrator_base_url` when
+`routed_via_orchestrator` is set, keeping the request otherwise identical
+(same OpenAI-compatible client, same grounded extraction core).
+
+What that swap did **not** do, before this ADR, is change which `model` string the
+request carries. `extract()` always sent `context.model`, which
+`services/email_import_service.py::_extract_project_semantics_for_import` sets to
+`settings.OPENAI_MODEL` — naruon's general-purpose direct-provider model setting —
+for both the direct and orchestrator-routed cases alike, because `KgExtractorContext`
+is built once per import and handed to `run_extraction()` regardless of which
+selector ends up choosing it.
+
+That is a real product gap, not a hypothetical: `ContextualWisdomLab/.github`'s
+[ADR-0003](https://github.com/ContextualWisdomLab/.github/blob/main/docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md)
+establishes that the orchestrator gateway does not treat every `model` value as a
+literal pass-through provider id. It also recognizes a small set of fixed
+**virtual pool ids** — `orchestrator/free` and `orchestrator/auto` — that it
+resolves itself, at request time, to a concrete discovered provider route chosen
+by its own governed policy (zero-cost-first, Zero Data Retention (ZDR)-prioritized
+for `free`; a wider evidence-tiered catalog for `auto`, restricted to callers with
+an accepted price-attestation exception). Sending a literal provider model id
+instead of one of these pool ids does not "opt out" of pool governance safely — it
+asks the gateway to proxy that specific model directly, bypassing the free/ZDR
+policy entirely, with no code-level signal that the bypass happened. Naruon's own
+`docs/adr/` had no decision governing this at all before this ADR: an audit of
+`backend/` found zero occurrences of a pool id, a `CONTEXTUAL_ORCHESTRATOR_POOL`-style
+setting, or any orchestration-mode parameter anywhere in the runtime code — every
+orchestrator-routed call implicitly inherited whatever `settings.OPENAI_MODEL`
+happened to be configured as for the unrelated direct-provider path.
+
+The org's own operating directive (`ContextualWisdomLab/.github`
+`docs/product-goal-directive.md`, §8) already commits every LLM-routing
+consumer in the ecosystem to auto-discovery through `contextual-orchestrator`,
+and ADR-0003's 2026-08-30 amendment already moved all three central CI review
+consumers (OpenCode, Noema, and — reversing that ADR's original `orchestrator/auto`
+choice — Strix) onto the fixed `orchestrator/free` id specifically so that CI
+review traffic cannot silently drift onto a paid or non-ZDR route through a
+misconfigured setting. Naruon's own product traffic through the same gateway had
+no equivalent guarantee. Given naruon's foundational data-sovereignty commitment
+(`docs/CWL-MASTER-CONTEXT.md` §2: "stores only metadata + AI-extracted intent +
+task state" over customer-owned data), a ZDR-first routing guarantee for
+orchestrator-routed KG extraction is at least as important for naruon's own
+production traffic as it is for CI review of source code — arguably more so,
+since KG extraction runs over real customer email content, not code.
+
+## Decision
+
+1. `LlmGroundedExtractor` gains a `_resolve_model()` method, symmetric to its
+   existing `_resolve_base_url()`: when `routed_via_orchestrator` is `True`, it
+   returns the fixed constant `ORCHESTRATOR_POOL_MODEL = "orchestrator/free"`
+   instead of `context.model`. The direct-provider path (`routed_via_orchestrator
+   = False`) is unchanged and keeps using `context.model` exactly as before.
+2. `ORCHESTRATOR_POOL_MODEL` is a module-level constant in
+   `extractor_registry.py`, not a `Settings` field. This mirrors
+   `.github/workflows/strix.yml`'s own hardcoded
+   `CONTEXTUAL_ORCHESTRATOR_POOL: free` (ADR-0003's 2026-08-30 amendment):
+   the whole point of pinning is that an operator cannot accidentally route
+   production KG-extraction traffic onto a non-free, non-ZDR-guaranteed pool
+   by misconfiguring (or omitting) an environment variable. If a future,
+   evidence-backed need for `orchestrator/auto` (or a priced fallback) emerges
+   for naruon's own traffic, it needs its own ADR amendment, the same way
+   Strix's `orchestrator/auto` choice needed ADR-0003 §"2026-08-30 amendment"
+   to change — not a silent settings-default change.
+3. This ADR only fixes the KG-extraction call site. It does not touch the
+   direct-provider `PROJECT_GRAPH_EXTRACTOR=llm` selector (customers who point
+   naruon straight at their own OpenAI-compatible endpoint keep full control of
+   the model they configured), and it does not touch
+   `services/batch_embedding_service.py::_run_orchestrator_batch` (see
+   Consequences).
+
+## Alternatives rejected
+
+### Leave the model configurable via a new settings field, defaulted to `orchestrator/free`
+
+Rejected. A configurable-with-a-safe-default field can still be misconfigured
+away from the safe default, and nothing in the request path would catch that —
+exactly the failure mode ADR-0003's Strix amendment already rejected for CI
+review traffic ("fails closed on any other value"). A hardcoded constant is the
+only design where the pin cannot silently regress.
+
+### Keep sending `context.model` (status quo)
+
+Rejected — this is the bug this ADR fixes, not a real alternative: it sends
+naruon's direct-provider model id to a gateway that does not treat arbitrary
+model strings as literal routing directives for orchestrator-mode requests
+the way the direct-provider client does, defeating the reason to route through
+the orchestrator at all.
+
+### Pin to `orchestrator/auto` instead of `orchestrator/free`
+
+Rejected. ADR-0003 restricts `orchestrator/auto` admission to callers with an
+explicit, evidence-tiered price-attestation exception (Strix's security-analysis
+use case, decided and documented there). Naruon's KG-extraction path has no such
+exception, no price-attestation evidence collection, and no security-analysis
+justification for admitting priced routes — `orchestrator/free`'s "zero-cost,
+ZDR-first" guarantee is the correct default absent a documented reason to widen it.
+
+## Consequences
+
+- `PROJECT_GRAPH_EXTRACTOR=orchestrator` now actually invokes contextual-orchestrator's
+  governed free/ZDR pool selection instead of silently attempting to proxy a
+  literal provider model id through it. Tests:
+  `test_orchestrator_routing_pins_the_free_pool_model` (implicit in the extended
+  `test_orchestrator_routing_targets_the_orchestrator_base_url`) and
+  `test_direct_llm_routing_uses_provider_base_url`'s extended model assertion in
+  `backend/tests/test_project_graph_extractor_registry.py` cover both branches.
+- **Open follow-up, deliberately out of this ADR's scope:**
+  `services/batch_embedding_service.py::_run_orchestrator_batch` sends a
+  separate, tenant-configurable `settings.model` (`BatchEmbeddingSettings.model`,
+  a DB-backed per-tenant column) to the orchestrator's batch-submission endpoint
+  for embeddings, not chat completions. Whether contextual-orchestrator exposes
+  an analogous fixed pool id for the embedding modality — and whether pinning
+  it the same way is correct for a tenant-configurable batch-embedding setting —
+  is not established by any evidence this ADR has access to (no
+  `contextual-orchestrator` source is in this session's repository scope). Do
+  not assume the same fix applies there without first confirming the gateway's
+  embedding-request contract; track as a separate, evidence-gated follow-up
+  before extending this pin to that call site.
+- If contextual-orchestrator's `orchestrator/free` catalog is ever empty (no
+  admitted zero-cost route available), the gateway itself fails closed
+  (`400 invalid_model`, per ADR-0003 §2) rather than naruon silently falling
+  back to a paid route — `LlmGroundedExtractor`'s existing fallback-to-keyword-
+  extractor behavior on any extraction failure already covers this: the KG
+  projection degrades to the deterministic extractor, exactly as it already
+  does for a missing credential or an unconfigured orchestrator endpoint.
+
+## References (APA 7th)
+
+ContextualWisdomLab. (2026). *ADR-0003: Vendored contextual-orchestrator review
+sidecar with governed gateway pools* [ADR, amended 2026-08-30].
+`ContextualWisdomLab/.github` `docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md`.
+https://github.com/ContextualWisdomLab/.github/blob/main/docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md
+
+OpenRouter. (n.d.). *Data policy: Zero data retention*. Retrieved 2026-09-02,
+from https://openrouter.ai/docs/features/privacy-and-logging
+The zero-retention definition ADR-0003 §3 adopts ("a provider will not store
+your data for any period of time; zero retention also implies no training")
+and that this ADR inherits without redefining.
+
+National Institute of Standards and Technology. (2023). *Artificial intelligence
+risk management framework (AI RMF 1.0)* (NIST AI 100-1). U.S. Department of
+Commerce. https://doi.org/10.6028/NIST.AI.100-1
+Governs the data-minimization and provenance rationale for preferring a
+zero-retention route for KG extraction over customer email content, consistent
+with `docs/CWL-MASTER-CONTEXT.md`'s data-sovereignty commitment.

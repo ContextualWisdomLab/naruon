@@ -228,6 +228,14 @@ async def test_orchestrator_routing_targets_the_orchestrator_base_url(monkeypatc
     # provider base URL — this is what "route LLM extraction through
     # contextual-orchestrator" means at the transport seam.
     assert llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
+    # The model sent must be the fixed virtual pool id, never the caller's
+    # direct-provider model string — the orchestrator gateway resolves
+    # "orchestrator/free" itself to a zero-cost/ZDR route; forwarding a
+    # literal provider model would bypass that governed pool selection
+    # entirely (ContextualWisdomLab/.github docs/adr/
+    # 0003-contextual-orchestrator-vendored-free-zdr.md).
+    assert llm_mock.await_args.kwargs["model"] == "orchestrator/free"
+    assert llm_mock.await_args.kwargs["model"] != context.model
 
 
 @pytest.mark.asyncio
@@ -262,8 +270,10 @@ async def test_direct_llm_routing_uses_provider_base_url(monkeypatch):
     )
     await run_extraction([_segment()], selector=SELECTOR_LLM, context=context)
 
-    # The non-orchestrator LLM selector keeps hitting the raw provider base URL.
+    # The non-orchestrator LLM selector keeps hitting the raw provider base URL
+    # and its own configured model — the pool-id pin is orchestrator-only.
     assert llm_mock.await_args.kwargs["base_url"] == "https://direct-provider.example"
+    assert llm_mock.await_args.kwargs["model"] == "gpt-test"
 
 
 # --- Extractor units --------------------------------------------------------

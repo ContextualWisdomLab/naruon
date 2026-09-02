@@ -51,6 +51,17 @@ SELECTOR_KEYWORD = "keyword"
 SELECTOR_LLM = "llm"
 SELECTOR_ORCHESTRATOR = "orchestrator"
 
+# The contextual-orchestrator gateway resolves this fixed virtual model id to
+# a zero-cost, ZDR-first provider route at request time (ContextualWisdomLab/
+# .github docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md); it is
+# not a literal provider model name. Every orchestrator-routed caller in the
+# org (Strix/OpenCode/Noema CI review, per that ADR's 2026-08-30 amendment)
+# is pinned to this same id rather than left operator-configurable, because
+# the whole point is that production/CI traffic cannot silently drift onto a
+# non-ZDR or paid route through a misconfigured setting. Hardcoded, not a
+# settings field, for the same fail-closed reason.
+ORCHESTRATOR_POOL_MODEL = "orchestrator/free"
+
 
 class ExtractorUnavailableError(RuntimeError):
     """An extractor cannot run in the current context.
@@ -159,6 +170,17 @@ class LlmGroundedExtractor:
             return context.orchestrator_base_url
         return context.base_url
 
+    def _resolve_model(self, context: KgExtractorContext) -> str | None:
+        # Orchestrator-routed requests must name the fixed virtual pool id,
+        # never the direct-provider model the context otherwise carries: the
+        # orchestrator gateway resolves ``ORCHESTRATOR_POOL_MODEL`` itself to
+        # a zero-cost/ZDR route, and forwarding a literal provider model id
+        # instead would ask it to proxy that specific model directly,
+        # bypassing the governed pool selection entirely.
+        if self.routed_via_orchestrator:
+            return ORCHESTRATOR_POOL_MODEL
+        return context.model
+
     async def extract(
         self,
         segments: list[ProjectSourceSegment],
@@ -168,11 +190,12 @@ class LlmGroundedExtractor:
         if not context.has_llm_credentials:
             raise ExtractorUnavailableError("LLM provider credentials are not resolved")
         base_url = self._resolve_base_url(context)
+        model = self._resolve_model(context)
         return await extract_project_semantics_llm(
             segments,
             api_key=context.api_key,
             base_url=base_url,
-            model=context.model,
+            model=model,
         )
 
 

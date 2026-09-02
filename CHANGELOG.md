@@ -1,4 +1,18 @@
 ## [Unreleased]
+- `PROJECT_GRAPH_EXTRACTOR=orchestrator`로 KG 추출을 contextual-orchestrator에
+  라우팅할 때, 요청 `model`이 직접 공급자용 설정(`settings.OPENAI_MODEL`)을
+  그대로 전달하던 버그를 고쳤습니다. 이 값은 게이트웨이가 provider passthrough로
+  해석해 무료/ZDR 풀 선택을 완전히 우회시켰습니다. `LlmGroundedExtractor`가
+  orchestrator 경로에서는 고정 가상 모델 id `orchestrator/free`를 보내도록
+  분리했습니다(직접 공급자 경로는 기존 `context.model` 그대로 유지). 이 상수는
+  `.github`의 Strix `CONTEXTUAL_ORCHESTRATOR_POOL: free`(ADR-0003)와 동일하게
+  설정 필드가 아닌 하드코딩으로 두어, 운영자 설정 오류로 조용히 비-ZDR·유료
+  경로로 흘러가지 않도록 했습니다. `docs/adr/0005-kg-extraction-orchestrator-free-pool-pin.md`에
+  결정 근거를 기록했습니다. `batch_embedding_service.py`의 별도 orchestrator
+  batch-embedding 경로(다른 modality, 테넌트별 설정)는 이번 수정 범위 밖이며
+  후속 과제로 남겼습니다. 검증: `backend/tests/test_project_graph_extractor_registry.py`
+  전체 통과(22개, 신규 model-pin assertion 포함), 전체 backend suite 1806
+  passed/33 skipped, `ruff check` clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
