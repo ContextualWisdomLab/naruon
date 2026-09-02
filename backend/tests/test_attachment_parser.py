@@ -271,22 +271,26 @@ def test_literal_percent_escape_does_not_change_attachment_parser():
     assert result.parse_status == "unsupported_content_type"
 
 
-def test_safe_filename_handles_windows_path_traversal():
+def test_safe_filename_strips_literal_path_segments_without_percent_decoding():
     assert _safe_filename("..\\..\\upload.txt") == "upload.txt"
     assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"
-    assert _safe_filename("%5c%2e%2e%5csecret.txt") == "secret.txt"
-    assert _safe_filename("%252e%252e%252fsecret.txt") == "secret.txt"
-    assert _safe_filename("%252525252e%252525252e%252525252fsecret.txt") == "attachment"
+    assert _safe_filename("%5c%2e%2e%5csecret.txt") == "%5c%2e%2e%5csecret.txt"
+    assert _safe_filename("%252e%252e%252fsecret.txt") == (
+        "%252e%252e%252fsecret.txt"
+    )
+    assert _safe_filename("%252525252e%252525252e%252525252fsecret.txt") == (
+        "%252525252e%252525252e%252525252fsecret.txt"
+    )
 
 
-def test_safe_filename_fails_closed_after_entity_decoding():
-    """Entity-encoded percent escapes must trip the residual guard post-decode."""
-    assert _safe_filename("&#37;2e&#37;2e&#37;2fsecret.txt") == "attachment"
+def test_safe_filename_preserves_entity_decoded_percent_text():
+    """HTML entities may normalize, but URL escapes stay literal filename text."""
+    assert _safe_filename("&#37;2e&#37;2e&#37;2fsecret.txt") == "%2e%2e%2fsecret.txt"
 
 
-def test_safe_filename_plain_percent_encoded_traversal_still_decodes_to_basename():
-    """Single percent-encoded traversal still decodes in-round to its basename."""
-    assert _safe_filename("%2e%2e%2fsecret.txt") == "secret.txt"
+def test_safe_filename_preserves_plain_percent_encoded_text():
+    """MIME filenames are not URL paths and must not be percent-decoded again."""
+    assert _safe_filename("%2e%2e%2fsecret.txt") == "%2e%2e%2fsecret.txt"
 
 
 def test_safe_filename_benign_name_survives_unchanged():
