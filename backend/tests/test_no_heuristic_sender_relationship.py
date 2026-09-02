@@ -2,11 +2,7 @@
 
 import pytest
 
-from services.ontology_service import (
-    OntologyService,
-    RelationshipActionPolicyUnavailable,
-    RelationshipClassificationUnavailable,
-)
+from services.ontology_service import OntologyService, RelationshipClassificationUnavailable
 
 
 def test_content_and_sender_names_cannot_synthesize_relationship_type_or_confidence() -> None:
@@ -31,5 +27,9 @@ def test_same_domain_is_not_relationship_ground_truth() -> None:
 
 def test_relationship_label_cannot_trigger_local_priority_action_policy() -> None:
     service = OntologyService()
-    with pytest.raises(RelationshipActionPolicyUnavailable):
-        service.next_action_for_relationship("Newsletter")
+    newsletter = service.next_action_for_relationship("Newsletter")
+    vendor = service.next_action_for_relationship("Vendor")
+    assert newsletter == vendor == {
+        "next_action": "unavailable",
+        "action_reason": "No validated relationship action policy is configured.",
+    }
