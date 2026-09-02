@@ -666,6 +666,31 @@ async def test_hmac_session_rejects_admin_role_claim(admin_role: str):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "padded_admin_role",
+    (
+        " system_admin",
+        "platform_admin ",
+        "\ttenant_admin",
+        "organization_admin\n",
+    ),
+)
+async def test_hmac_session_rejects_whitespace_padded_admin_role_claim(
+    padded_admin_role: str,
+):
+    """A signed role must not gain admin meaning after whitespace is stripped."""
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+    token = _signed_session_token(
+        _valid_session_payload(role=padded_admin_role, org="org-acme")
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await get_auth_context(authorization=f"Bearer {token}")
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("role_claim", (["system_admin"], 123, True, None))
 async def test_hmac_session_rejects_non_string_role_claim(role_claim: object):
     settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
@@ -1187,10 +1212,17 @@ async def test_oidc_rejects_key_id_that_does_not_match_verified_key(monkeypatch)
         key = "trusted_public_key"
 
     monkeypatch.setattr("api.auth.jwks_client", object())
-    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (MockKey(),))
+    class DecoyKey:
+        key_id = "decoy-key"
+        key = "decoy_public_key"
+
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (MockKey(), DecoyKey()))
+
+    decode_called = False
 
     def mock_jwt_decode(token, key, **kwargs):
-        assert key == "trusted_public_key"
+        nonlocal decode_called
+        decode_called = True
         return {
             "iss": "https://login.example.test/realms/naruon",
             "aud": "naruon-api",
@@ -1217,6 +1249,7 @@ async def test_oidc_rejects_key_id_that_does_not_match_verified_key(monkeypatch)
         settings.AUTH_SESSION_HMAC_SECRET = previous_secret
 
     assert exc.value.status_code == 401
+    assert decode_called is False
 
 
 @pytest.mark.asyncio
@@ -1296,6 +1329,60 @@ async def test_oidc_session_rejects_admin_role_claim(monkeypatch, admin_role: st
             "aud": "naruon-api",
             "sub": "operator",
             "role": admin_role,
+            "org": None,
+            "groups": [],
+            "workspace": "workspace-root",
+            "exp": int(time.time()) + 300,
+        }
+
+    monkeypatch.setattr(jwt, "decode", mock_jwt_decode)
+    token = _signed_session_token(
+        _valid_session_payload(),
+        header={"alg": "RS256", "typ": "JWT", "kid": "test-key"},
+    )
+
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await get_auth_context(authorization=f"Bearer {token}")
+    finally:
+        settings.OIDC_ISSUER_URL = previous_issuer_url
+        settings.OIDC_CLIENT_ID = previous_client_id
+        settings.AUTH_SESSION_HMAC_SECRET = previous_secret
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "padded_admin_role",
+    (" system_admin", "platform_admin ", "\ttenant_admin", "organization_admin\n"),
+)
+async def test_oidc_session_rejects_whitespace_padded_admin_role_claim(
+    monkeypatch, padded_admin_role: str
+):
+    """OIDC sessions use the same strict role boundary as HMAC sessions."""
+    import jwt
+
+    previous_issuer_url = settings.OIDC_ISSUER_URL
+    previous_client_id = settings.OIDC_CLIENT_ID
+    previous_secret = settings.AUTH_SESSION_HMAC_SECRET
+    settings.OIDC_ISSUER_URL = "https://login.example.test/realms/naruon"
+    settings.OIDC_CLIENT_ID = "naruon-api"
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+
+    class MockKey:
+        key_id = "test-key"
+        key = "public_key"
+
+    monkeypatch.setattr("api.auth.jwks_client", object())
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (MockKey(),))
+
+    def mock_jwt_decode(*args, **kwargs):
+        return {
+            "iss": "https://login.example.test/realms/naruon",
+            "aud": "naruon-api",
+            "sub": "operator",
+            "role": padded_admin_role,
             "org": None,
             "groups": [],
             "workspace": "workspace-root",
