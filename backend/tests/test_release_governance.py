@@ -1211,18 +1211,31 @@ def test_pr_governance_concurrency_serializes_non_sync_events_and_cancels_only_s
     assert "github.event_name == 'pull_request_target'" in workflow
     assert "github.event.action == 'synchronize'" in workflow
     assert "&& 'synchronize' && 'synchronize' || 'other'" in workflow
-    assert "cancel-in-progress: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }}" in workflow
+    assert (
+        "cancel-in-progress: ${{ github.event_name == 'pull_request_target' "
+        "&& github.event.action == 'synchronize' }}"
+    ) in workflow
     assert "|| github.event_name }}" not in workflow
 
     def expected_group(pr_number: int, event_name: str, action: str = "") -> str:
         """Model the two suffixes used by the workflow expression."""
-        suffix = "synchronize" if event_name == "pull_request_target" and action == "synchronize" else "other"
+        suffix = (
+            "synchronize"
+            if event_name == "pull_request_target" and action == "synchronize"
+            else "other"
+        )
         return f"pr-governance-{pr_number}-{suffix}"
 
-    assert expected_group(42, "pull_request_target", "synchronize") != expected_group(42, "pull_request_review", "submitted")
-    assert expected_group(42, "pull_request_review", "submitted") == expected_group(42, "workflow_run")
+    assert expected_group(42, "pull_request_target", "synchronize") != expected_group(
+        42, "pull_request_review", "submitted"
+    )
+    assert expected_group(42, "pull_request_review", "submitted") == expected_group(
+        42, "workflow_run"
+    )
     assert expected_group(42, "check_run") == expected_group(42, "workflow_dispatch")
-    assert expected_group(42, "pull_request_target", "synchronize") != expected_group(43, "pull_request_target", "synchronize")
+    assert expected_group(
+        42, "pull_request_target", "synchronize"
+    ) != expected_group(43, "pull_request_target", "synchronize")
 
     def expected_cancel(event_name: str, action: str = "") -> bool:
         """Model the workflow's cancellation predicate."""
