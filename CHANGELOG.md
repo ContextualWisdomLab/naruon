@@ -18,8 +18,11 @@
   비어 있으면 조용히 keyword 추출로 강등되는 문제가 있었습니다.
   `has_llm_credentials` 프로퍼티를 제거하고 `extract()`가 `context.api_key`와
   실제로 라우팅 모드에 맞게 해석된 `model`(`_resolve_model()` 결과)만 검사하도록
-  바꿨습니다. 검증: `backend/tests/test_project_graph_extractor_registry.py`
-  전체 통과(24개, 신규 회귀 테스트 2개 포함), 전체 backend suite 1808
+  바꿨습니다. 이어진 리뷰 라운드에서 Devin Review가 그 검사(`model is None`)가
+  빈 문자열(`""`)은 걸러내지 못해 직접 공급자 경로에서 잘못된 빈 model id를
+  provider에 그대로 보낼 수 있다고 다시 지적했고, `not model`로 바꿔 `None`과
+  `""` 모두 막도록 고쳤습니다. 검증: `backend/tests/test_project_graph_extractor_registry.py`
+  전체 통과(25개, 신규 회귀 테스트 3개 포함), 전체 backend suite 1809
   passed/33 skipped, `ruff check` clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.

@@ -187,12 +187,14 @@ class LlmGroundedExtractor:
             raise ExtractorUnavailableError("LLM provider credentials are not resolved")
         base_url = self._resolve_base_url(context)
         model = self._resolve_model(context)
-        if model is None:
+        if not model:
             # Only reachable in direct-provider mode: orchestrator mode's
             # _resolve_model always returns the fixed ORCHESTRATOR_POOL_MODEL,
-            # never context.model, so an unset context.model must not gate
-            # orchestrator-routed requests -- only the direct-provider model
-            # setting they'd otherwise silently fall back to keyword
+            # never context.model, so an unset or blank context.model must
+            # not gate orchestrator-routed requests -- only the
+            # direct-provider model setting they'd otherwise silently send
+            # as an empty string to the provider (and only fall back after
+            # a network round-trip fails) or fall back to keyword
             # extraction for.
             raise ExtractorUnavailableError("LLM provider credentials are not resolved")
         return await extract_project_semantics_llm(

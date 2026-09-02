@@ -100,6 +100,15 @@ since KG extraction runs over real customer email content, not code.
    mode always returns the fixed `ORCHESTRATOR_POOL_MODEL`) as the
    unavailable case instead. `orchestrator_base_url` unavailability is still
    caught by `_resolve_base_url()`, unchanged.
+5. **Revision 2 (same PR, pre-merge):** the point-4 fix initially gated on
+   `model is None`, which a blank (empty-string, non-`None`) `context.model`
+   passes straight through — sending an invalid empty-string model id to the
+   direct provider and only discovering the problem after a failed network
+   round-trip, rather than failing closed to the keyword extractor up front.
+   Devin Review caught this too, in the same PR. Fixed by checking `not
+   model` instead of `model is None`, which rejects both `None` and `""`
+   while still accepting the fixed `ORCHESTRATOR_POOL_MODEL` string
+   orchestrator mode always supplies.
 
 ## Alternatives rejected
 
@@ -143,6 +152,10 @@ ZDR-first" guarantee is the correct default absent a documented reason to widen 
   unset) and `test_direct_llm_routing_requires_model_even_with_api_key`
   (direct-provider mode still fails closed without a model, confirming the
   gating narrowed correctly rather than being removed).
+- Decision point 5's blank-model fix is covered by
+  `test_direct_llm_routing_rejects_blank_model` (an empty-string
+  `context.model` still fails closed instead of reaching the provider
+  client).
 - **Open follow-up, deliberately out of this ADR's scope:**
   `services/batch_embedding_service.py::_run_orchestrator_batch` sends a
   separate, tenant-configurable `settings.model` (`BatchEmbeddingSettings.model`,

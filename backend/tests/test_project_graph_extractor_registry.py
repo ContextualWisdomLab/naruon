@@ -345,6 +345,20 @@ async def test_direct_llm_routing_requires_model_even_with_api_key():
         await extractor.extract([_segment()], context=KgExtractorContext(api_key="key"))
 
 
+@pytest.mark.asyncio
+async def test_direct_llm_routing_rejects_blank_model():
+    # A blank (non-None) context.model must fail closed too, not be sent to
+    # the provider as an empty-string model id: `if model is None` alone
+    # would let "" through and only discover the problem after a failed
+    # network round-trip. Devin Review caught this in review of
+    # ContextualWisdomLab/naruon#1525.
+    extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
+    with pytest.raises(ExtractorUnavailableError):
+        await extractor.extract(
+            [_segment()], context=KgExtractorContext(api_key="key", model="")
+        )
+
+
 def test_custom_extractor_can_register_into_the_seam():
     """A plugin/extractor registers by selector without editing core ingest."""
 
