@@ -18,15 +18,15 @@ def test_html_entity_dot_does_not_change_generic_mime_parser() -> None:
     assert result.parse_status == "unsupported_content_type"
 
 
-def test_html_markup_filename_cannot_smuggle_generic_mime_extension() -> None:
-    """Markup-looking filename text fails closed instead of selecting a parser."""
+def test_html_display_sanitization_cannot_smuggle_generic_mime_extension() -> None:
+    """Safe display projection must not become parser-selection authority."""
     result = parse_email_attachment(
         filename="<b>quarterly</b>.json",
         content_type="application/octet-stream",
         raw_content=b'{"project":"Launch"}',
     )
 
-    assert result.filename == "attachment"
+    assert result.filename == "quarterly.json"
     assert result.parse_content_type == "application/octet-stream"
     assert result.parser_key == "unsupported_binary"
     assert result.parse_status == "unsupported_content_type"
