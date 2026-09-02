@@ -1,52 +1,23 @@
 import logging
-from dataclasses import dataclass
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any, Dict
+
 from sqlalchemy import select
+
 from db.models import Email, SenderRelationship
 from services.email_service import process_self_to_self
 from services.knowledge_extractor import extract_knowledge_from_self_sent
 
 logger = logging.getLogger(__name__)
 
-NEWSLETTER_TERMS = (
-    "unsubscribe",
-    "view in browser",
-    "manage preferences",
-    "newsletter",
-    "mailing list",
-)
-NEWSLETTER_LOCAL_PARTS = ("newsletter", "news", "updates", "digest", "noreply", "no-reply")
-VENDOR_TERMS = (
-    "invoice",
-    "receipt",
-    "payment",
-    "billing",
-    "subscription",
-    "shipment",
-    "support ticket",
-    "service renewal",
-    "purchase order",
-)
-VENDOR_LOCAL_PARTS = ("billing", "invoice", "support", "orders", "accounts", "vendor")
-CLIENT_TERMS = (
-    "proposal",
-    "contract",
-    "statement of work",
-    "sow",
-    "deliverable",
-    "pricing",
-    "renewal",
-    "budget approval",
-    "kickoff",
-)
-PERSONAL_EMAIL_DOMAINS = {
-    "gmail.com",
-    "hotmail.com",
-    "icloud.com",
-    "outlook.com",
-    "yahoo.com",
-}
+
+class RelationshipClassificationUnavailable(RuntimeError):
+    """Raised when sender relationship type/confidence lacks validated evidence."""
+
+
+class RelationshipActionPolicyUnavailable(RuntimeError):
+    """Raised when a relationship label lacks a governed action-selection policy."""
 
 
 @dataclass
@@ -61,91 +32,43 @@ class RelationshipData:
 
 
 class OntologyService:
+    """Source-backed ontology operations with fail-closed relationship decisions."""
+
     def __init__(self):
         self.relationships = {}
 
     def next_action_for_relationship(self, relationship_type: str) -> Dict[str, str]:
-        normalized_type = relationship_type.strip().lower()
-        if normalized_type == "newsletter":
-            return {
-                "next_action": "summarize_then_archive",
-                "action_reason": "Bulk sender; summarize signal before lowering priority.",
-            }
-        if normalized_type == "colleague":
-            return {
-                "next_action": "track_reply_and_tasks",
-                "action_reason": "Same-domain sender; preserve reply and task follow-up.",
-            }
-        if normalized_type in {"client", "vendor"}:
-            return {
-                "next_action": "prepare_response_draft",
-                "action_reason": "External business sender; keep response intent visible.",
-            }
-        return {
-            "next_action": "classify_sender",
-            "action_reason": "Relationship is unknown; capture more evidence first.",
-        }
+        """Fail closed until relationship-to-action routing has governed evidence."""
+        raise RelationshipActionPolicyUnavailable(
+            "relationship next-action routing is disabled until an explicit, "
+            "validated policy with executable provenance is available"
+        )
 
     def analyze_sender_relationship(
         self, user_email: str, sender_email: str, email_content: str
     ) -> Dict[str, Any]:
-        """
-        Analyze content to build the user's sender relationship graph.
-        """
-        relationship_type = "Unknown"
-        confidence = 0.5
-        signals: list[str] = []
-        content = email_content.lower()
-        user_domain = _email_domain(user_email)
-        sender_domain = _email_domain(sender_email)
-        sender_local = _email_local_part(sender_email)
+        """Refuse to infer relationship type or confidence from local heuristics.
 
-        if _contains_any(content, NEWSLETTER_TERMS) or sender_local in NEWSLETTER_LOCAL_PARTS:
-            relationship_type = "Newsletter"
-            confidence = 0.9
-            signals.append("bulk_sender")
-        elif user_domain and sender_domain and user_domain == sender_domain:
-            relationship_type = "Colleague"
-            confidence = 0.85
-            signals.append("same_domain")
-        else:
-            vendor_score = _term_score(content, VENDOR_TERMS) + int(
-                sender_local in VENDOR_LOCAL_PARTS
-            )
-            client_score = _term_score(content, CLIENT_TERMS)
-            if vendor_score > client_score and vendor_score > 0:
-                relationship_type = "Vendor"
-                confidence = min(0.95, 0.72 + (vendor_score * 0.06))
-                signals.append("vendor_commercial_terms")
-            elif client_score > 0:
-                relationship_type = "Client"
-                confidence = min(0.92, 0.7 + (client_score * 0.06))
-                signals.append("client_commercial_terms")
-            elif sender_domain and sender_domain not in PERSONAL_EMAIL_DOMAINS:
-                relationship_type = "Vendor"
-                confidence = 0.62
-                signals.append("external_business_domain")
-
-        action = self.next_action_for_relationship(relationship_type)
-        logger.info(
-            "Analyzed sender relationship %s as %s with confidence %.2f using %s",
-            sender_email,
-            relationship_type,
-            confidence,
-            ",".join(signals) or "no_signal",
+        Sender/local-part/domain identity, lexical content and term counts are
+        observations, not calibrated relationship evidence. No replacement
+        confidence or fallback class is synthesized when a validated classifier
+        is unavailable.
+        """
+        raise RelationshipClassificationUnavailable(
+            "automatic sender relationship classification is disabled until a "
+            "validated measurement/classification model is available"
         )
-        return {
-            "type": relationship_type,
-            "confidence": confidence,
-            "signals": signals,
-            **action,
-        }
 
     async def save_relationship(
         self,
         session,
         data: RelationshipData,
     ):
+        """Persist a relationship only after governed classification exists.
+
+        The current automatic classifier fails closed before any insert/update,
+        preventing heuristic type/confidence values from entering durable state.
+        """
         analysis = self.analyze_sender_relationship(
             data.user_email, data.sender_email, data.email_content
         )
@@ -187,6 +110,7 @@ class OntologyService:
         owner_addresses: Iterable[str] | None = None,
         source_email: Email | None = None,
     ):
+        """Extract source-backed self-sent knowledge without sender classification."""
         owner_address_list = _owner_address_list(owner_addresses)
         if not owner_address_list and "@" in str(user_id):
             owner_address_list = [str(user_id)]
@@ -217,24 +141,6 @@ def _owner_address_list(owner_addresses: Iterable[str] | None) -> list[str]:
     if isinstance(owner_addresses, str):
         return [owner_addresses]
     return list(owner_addresses)
-
-
-def _email_domain(address: str) -> str | None:
-    _, separator, domain = address.strip().lower().rpartition("@")
-    return domain if separator and domain else None
-
-
-def _email_local_part(address: str) -> str:
-    local_part, _, _ = address.strip().lower().partition("@")
-    return local_part
-
-
-def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
-    return any(term in text for term in terms)
-
-
-def _term_score(text: str, terms: tuple[str, ...]) -> int:
-    return sum(1 for term in terms if term in text)
 
 
 ontology_service = OntologyService()
