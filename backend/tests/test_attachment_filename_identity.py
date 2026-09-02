@@ -45,6 +45,20 @@ def test_unknown_angle_bracket_filename_cannot_select_generic_parser() -> None:
     assert result.parse_status == "unsupported_content_type"
 
 
+def test_trailing_space_cannot_create_generic_mime_extension_authority() -> None:
+    """Trimming filename identity must not fabricate a parser-recognized suffix."""
+    result = parse_email_attachment(
+        filename="quarterly.json ",
+        content_type="application/octet-stream",
+        raw_content=b'{"project":"Launch"}',
+    )
+
+    assert result.filename == "quarterly.json "
+    assert result.parse_content_type == "application/octet-stream"
+    assert result.parser_key == "unsupported_binary"
+    assert result.parse_status == "unsupported_content_type"
+
+
 def test_benign_ampersand_filename_remains_literal() -> None:
     """Ordinary filename punctuation remains unchanged."""
     assert _safe_filename("quarterly report & notes.pdf") == (
