@@ -10,11 +10,13 @@ raw prompts, model outputs, source bodies, or draft plaintext.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future
 from dataclasses import dataclass
 import hashlib
 import importlib
 import json
+from queue import Queue
+import threading
 from types import ModuleType
 from typing import Final, Literal, Protocol
 
@@ -189,6 +191,51 @@ class EmailWritingJudgeEvaluation:
     payload_hash: str
 
 
+@dataclass(frozen=True, slots=True)
+class _JudgeRunnerWorkItem:
+    """One bounded call submitted to the shared daemon Judge worker."""
+
+    future: Future[object]
+    call: Callable[[], object]
+
+
+class _DaemonJudgeRunnerExecutor:
+    """Serialize Judge calls on one daemon worker that cannot delay process exit."""
+
+    def __init__(self) -> None:
+        """Start one lazy-use worker with a bounded process-lifetime footprint."""
+        self._work_items: Queue[_JudgeRunnerWorkItem] = Queue()
+        self._worker = threading.Thread(
+            target=self._run,
+            name="email_writing_judge_call",
+            daemon=True,
+        )
+        self._worker.start()
+
+    def submit(self, call: Callable[[], object]) -> Future[object]:
+        """Queue one call and return its Future without allocating another worker."""
+        future: Future[object] = Future()
+        self._work_items.put(_JudgeRunnerWorkItem(future=future, call=call))
+        return future
+
+    def _run(self) -> None:
+        """Execute queued calls until process exit, isolating result delivery in Futures."""
+        while True:
+            work_item = self._work_items.get()
+            if not work_item.future.set_running_or_notify_cancel():
+                continue
+            try:
+                result = work_item.call()
+            except BaseException as exc:
+                work_item.future.set_exception(exc)
+            else:
+                work_item.future.set_result(result)
+
+
+_JUDGE_RUNNER_EXECUTOR: _DaemonJudgeRunnerExecutor | None = None
+_JUDGE_RUNNER_EXECUTOR_LOCK = threading.Lock()
+
+
 class _JudgeOutputModel(BaseModel):
     """Exact Judge-shaped JSON accepted for Naruon integrity validation."""
 
@@ -304,6 +351,17 @@ def _project_judge_candidate_payload(
     }
 
 
+def _get_judge_runner_executor() -> _DaemonJudgeRunnerExecutor:
+    """Return the process-shared lazy daemon executor for independent Judge calls."""
+    global _JUDGE_RUNNER_EXECUTOR
+    if _JUDGE_RUNNER_EXECUTOR is not None:
+        return _JUDGE_RUNNER_EXECUTOR
+    with _JUDGE_RUNNER_EXECUTOR_LOCK:
+        if _JUDGE_RUNNER_EXECUTOR is None:
+            _JUDGE_RUNNER_EXECUTOR = _DaemonJudgeRunnerExecutor()
+        return _JUDGE_RUNNER_EXECUTOR
+
+
 def _invoke_judge_runner(
     runner: EmailWritingJudgeRunner,
     *,
@@ -315,28 +373,25 @@ def _invoke_judge_runner(
     category_count: int,
 ) -> object:
     """Call one runner with a bounded deadline and payload-redacted failures."""
-    executor = ThreadPoolExecutor(
-        max_workers=1,
-        thread_name_prefix="email_writing_judge_call",
-    )
-    try:
-        future = executor.submit(
-            runner.judge,
+    executor = _get_judge_runner_executor()
+    future = executor.submit(
+        lambda: runner.judge(
             task=task,
             answer=answer,
             criteria=criteria,
             reference_answer=reference_answer,
             category_count=category_count,
         )
+    )
+    try:
         return future.result(timeout=deadline_seconds)
     except EmailWritingJudgeError:
         raise
     except TimeoutError:
+        future.cancel()
         raise EmailWritingJudgeError("judge_runner_failed") from None
     except Exception:
         raise EmailWritingJudgeError("judge_runner_failed") from None
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _validate_evaluation_anchors(
@@ -484,7 +539,10 @@ def parse_email_writing_judge_output(
 def _normalize_runner_source(response: object) -> str | bytes:
     """Accept only a Judge-shaped mapping or exact JSON text."""
     if isinstance(response, Mapping):
-        return _canonical_json(dict(response))
+        try:
+            return _canonical_json(dict(response))
+        except (TypeError, ValueError):
+            raise EmailWritingJudgeError("judge_payload_invalid") from None
     if isinstance(response, (str, bytes)):
         return response
     raise EmailWritingJudgeError("judge_payload_invalid")
@@ -581,16 +639,19 @@ def export_judge_response_matrix(
     *,
     n_categories: int,
     validator: EmailWritingJudgeMatrixValidator | None = None,
+    symbol_loader: Callable[[], ReleasedJudgeSymbols] | None = None,
 ) -> object:
     """Validate response rows before any calibration export.
 
     The released ``validate_irt_response_matrix`` symbol is required unless a
-    test injects an equivalent validator. This function does not fit an IRT
-    model and does not admit diagnostics.
+    test injects an equivalent validator. Package-unavailable behavior is
+    injected explicitly so tests never depend on ambient installation state.
+    This function does not fit an IRT model and does not admit diagnostics.
     """
     if validator is None:
+        loader = symbol_loader or load_released_judge_symbols
         try:
-            symbols = load_released_judge_symbols()
+            symbols = loader()
         except EmailWritingJudgeError:
             raise EmailWritingJudgeError("judge_matrix_validator_unavailable") from None
         validator = symbols.validate_irt_response_matrix
