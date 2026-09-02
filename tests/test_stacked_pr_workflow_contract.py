@@ -22,6 +22,8 @@ def test_governed_pull_request_workflows_accept_stacked_base_branches() -> None:
             workflow,
         )
         assert pull_request_trigger is not None, f"{name} must run on pull_request"
-        assert "branches:" not in pull_request_trigger.group("body"), (
-            f"{name} must not exclude stacked PR base branches"
+        body = pull_request_trigger.group("body")
+        assert "branches:" not in body, f"{name} must not exclude stacked PR base branches"
+        assert "branches-ignore:" not in body, (
+            f"{name} must not exclude stacked PR base branches via branches-ignore"
         )
