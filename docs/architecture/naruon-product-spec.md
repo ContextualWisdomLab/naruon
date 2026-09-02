@@ -15,7 +15,7 @@ The platform supports a Universal structure:
 
 ## 3. Core Features & AI Agent Ontology
 - **Thread Consolidation**: Emails imported via ZIP or forwarded across accounts are normalized into unified threads based on unique constraints and fingerprints.
-- **DAG Sender Ontology**: The system analyzes a Directed Acyclic Graph (DAG) of the sender's relationship to the user, allowing the AI to determine context and execute subsequent actions based on "what this sender means to the user."
+- **DAG Sender Ontology**: Naruon can display owner-scoped, source-backed sender relationship records and their provenance. Automatic relationship type, confidence, and next-action judgments must come from a separately validated semantic/model authority; repository-authored keyword, sender-domain, local-part, or phrase rules are not relationship evidence. Until that authority is configured, automatic source capture fails closed and persists no guessed relationship.
 - **Self-Sent Knowledge Indexing**: Emails sent to oneself are automatically parsed and structured into a connected WebDAV or Notes system.
 - **Ticket-based Tasks**: To-Do items are treated as trackable Tickets with statuses, priorities, and 2-way links to the original email threads and calendar events.
 - **Reply Tracking**: The system tracks unanswered sent emails and queues them in the Dashboard.
