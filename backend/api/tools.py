@@ -753,6 +753,83 @@ registry.register(
 )
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    encoded = text.encode("utf-8")
+    return {
+        "md5": hashlib.md5(encoded).hexdigest(),
+        "sha1": hashlib.sha1(encoded).hexdigest(),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트의 MD5, SHA-1, SHA-256 해시값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+_URL_PATTERN = re.compile(r"https?://[^\s<>\"\',]+")
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    urls = _URL_PATTERN.findall(text)
+    unique_urls = []
+    for url in urls:
+        if url not in unique_urls:
+            unique_urls.append(url)
+
+    return {"urls": unique_urls, "count": len(unique_urls)}
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 URL을 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+
+_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+_PHONE_PATTERN = re.compile(r"\b\d{2,3}-\d{3,4}-\d{4}\b|\b\d{3}-\d{4}-\d{4}\b")
+
+async def pii_anonymizer_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    anonymized = _EMAIL_PATTERN.sub("[EMAIL]", text)
+    anonymized = _PHONE_PATTERN.sub("[PHONE]", anonymized)
+
+    return {"anonymized_text": anonymized}
+
+registry.register(
+    ToolInfo(
+        code="pii_anonymizer",
+        name="개인정보 비식별화 (PII Anonymizer)",
+        description="텍스트에서 이메일 주소, 전화번호 등 개인정보를 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_anonymizer_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 

@@ -1211,3 +1211,39 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler, ANALYSIS_TEXT_MAX_CHARS
+
+    res = await hash_generator_handler({"text": "hello"})
+    assert res["md5"] == "5d41402abc4b2a76b9719d911017c592"
+    assert res["sha1"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+    assert res["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await hash_generator_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+@pytest.mark.asyncio
+async def test_url_extractor_handler():
+    from api.tools import url_extractor_handler, ANALYSIS_TEXT_MAX_CHARS
+
+    res = await url_extractor_handler({"text": "Check https://example.com and http://test.com, https://example.com"})
+    assert res["count"] == 2
+    assert "https://example.com" in res["urls"]
+    assert "http://test.com" in res["urls"]
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await url_extractor_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+@pytest.mark.asyncio
+async def test_pii_anonymizer_handler():
+    from api.tools import pii_anonymizer_handler, ANALYSIS_TEXT_MAX_CHARS
+
+    res = await pii_anonymizer_handler({"text": "Contact me at user@example.com or 010-1234-5678."})
+    assert res["anonymized_text"] == "Contact me at [EMAIL] or [PHONE]."
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await pii_anonymizer_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
