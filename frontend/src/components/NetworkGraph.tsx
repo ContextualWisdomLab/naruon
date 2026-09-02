@@ -78,7 +78,7 @@ function escapeVisNetworkLabels<T extends Node | Edge>(items: T[]): T[] {
       ...item,
       label: escapeGraphLabel(item.label),
     };
-  }
+  });
 }
 
 function isGraphId(value: unknown): value is number | string {
@@ -159,7 +159,7 @@ import { apiClient } from '@/lib/api-client';
 
 // 🎯 Why: Re-renders of NetworkGraph when the parent components (like WorkspaceHome) re-render can cause performance issues.
 // 📊 Impact: Significantly reduces React render work when the parent component re-renders but the relationship context is structurally stable.
-export default function NetworkGraph() {
+export default memo(function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const unavailableRelationshipDescriptionId = useId();

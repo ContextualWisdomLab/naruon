@@ -560,22 +560,15 @@ describe("NetworkGraph", () => {
 
     it("preserves memoization and skips React render work on parent rerender", async () => {
       vi.spyOn((await import('@/lib/api-client')).apiClient, 'get').mockResolvedValue({ nodes: [], edges: [] });
-      let renderCount = 0;
 
-      const MemoizedGraph = React.memo((props: any) => {
-        renderCount++;
-        return <NetworkGraph {...props} />;
-      });
+
 
       // We will render a parent that has state
       function Parent() {
-        const [count, setCount] = React.useState(0);
+        const [, setCount] = React.useState(0);
         return (
           <div>
             <button onClick={() => setCount(c => c + 1)}>Update</button>
-            {/* The PR implements memo inside NetworkGraph, but we can verify it by mocking a function inside or simply observing that the memo boundary works.
-                Actually, since we exported default memo(NetworkGraph), rendering NetworkGraph inside a stateful parent should not cause NetworkGraph's internal useEffects to run or re-render.
-            */}
             <NetworkGraph />
           </div>
         );
@@ -592,13 +585,13 @@ describe("NetworkGraph", () => {
 
       const updateButton = parentContainer.querySelector("button")!;
 
-      const beforeCalls = (Network as any).mock.calls.length;
+      const beforeCalls = (Network as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
 
       await act(async () => {
         updateButton.click();
       });
 
-      const afterCalls = (Network as any).mock.calls.length;
+      const afterCalls = (Network as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
       expect(afterCalls).toBe(beforeCalls); // vis-network should not be re-instantiated
 
       await act(async () => { parentRoot.unmount(); });
