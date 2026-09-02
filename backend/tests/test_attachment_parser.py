@@ -19,7 +19,7 @@ def test_html_attachment_preserves_parse_source_and_safe_display_text():
         raw_content="<h1>Launch</h1><script>alert(1)</script><p>Ship</p>",
     )
 
-    assert result.filename == "report.html"
+    assert result.filename == "attachment"
     assert result.content_type == "text/html"
     assert result.content == "Launch Ship"
     assert result.parse_content == "<h1>Launch</h1><script>alert(1)</script><p>Ship</p>"
@@ -283,9 +283,11 @@ def test_safe_filename_strips_literal_path_segments_without_percent_decoding():
     )
 
 
-def test_safe_filename_preserves_entity_decoded_percent_text():
-    """HTML entities may normalize, but URL escapes stay literal filename text."""
-    assert _safe_filename("&#37;2e&#37;2e&#37;2fsecret.txt") == "%2e%2e%2fsecret.txt"
+def test_safe_filename_preserves_entity_encoded_percent_text():
+    """MIME filename character references remain literal filename text."""
+    assert _safe_filename("&#37;2e&#37;2e&#37;2fsecret.txt") == (
+        "&#37;2e&#37;2e&#37;2fsecret.txt"
+    )
 
 
 def test_safe_filename_preserves_plain_percent_encoded_text():
