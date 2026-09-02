@@ -89,9 +89,9 @@ this procedure.
 
 - Equating CodeRabbit or OpenCode status/check evidence with a GitHub approval:
   inspect the submitted review object and live approval rule separately.
-- Following historical `required_approving_review_count=0` guidance after the
-  organization ruleset changed: live ruleset evidence wins; update stale docs
-  instead of weakening the rule.
+- Following historical zero-approval guidance after the organization ruleset
+  changed: live ruleset evidence wins; update stale docs instead of weakening
+  the rule.
 - Treating a queued hosted runner as a product defect: distinguish runner
   acquisition/startup failure from executed test failure and advance the
   canonical CI owner path while other safe Naruon lanes continue.
