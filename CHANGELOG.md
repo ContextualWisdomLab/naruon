@@ -4,28 +4,18 @@
   고쳤습니다.** `.github/workflows/app-ci.yml`의 `backend` job에 `pgvector/pgvector:pg16`
   서비스 컨테이너(`test`/`test`/`test_db`, `pg_isready` 헬스체크)를 추가하고 `DATABASE_URL`을
   같은 자격증명으로 설정해, `tests/conftest.py`의 기본값과 그대로 맞물리도록 했습니다. 실제로
-  CI 환경과 동일하게(로컬 PostgreSQL 16 + pgvector) 처음 돌려보자 다음 3개의 실재 결함이 추가로
-  드러났습니다.
-  1. **`0001_initial_control_plane`뿐 아니라 `0011_email_read_state`도 완전히 새 데이터베이스에
-     대한 `alembic upgrade head`를 깨뜨렸다.** `backend/scripts/bootstrap_db.py`의
-     `ix_emails_owner_date` 인덱스 생성문(레거시 `emails` 테이블 대상)을 식별자로 삼아 건너뛰는
-     `execute_schema_backfill()`을 추가해 0001에서 쓰도록 했지만, `0011_email_read_state.py`가
-     같은 레거시 `emails` 테이블에 `op.add_column("emails", "is_read", ...)`을 직접 실행해
-     `relation "emails" does not exist`로 여전히 실패했습니다 — `email_records`(현재 ORM
-     모델)에는 `is_read`가 이미 있으므로, 신선한 설치에서는 이 마이그레이션이 전혀 필요하지
-     않습니다. `sa.inspect(op.get_bind()).has_table("emails")`가 거짓이면 no-op하도록 가드.
-     두 수정 모두 완전히 새 데이터베이스에 대해 실제로 `alembic upgrade head`를 실행해 진짜
-     RED(각각 `relation "emails" does not exist`)를 확인한 뒤 고쳤습니다(진짜 GREEN, 단일 head
-     `0017_merge_newsdom_carddav_heads`까지 재현).
-  2. **`tests/test_bootstrap_db.py`와 `tests/test_data_api.py`의 raw SQL `INSERT INTO
-     email_records`가 `is_read`(ORM 쪽 Python-side `default=True`, DB 서버측 default 없음)를
-     빠뜨려 real Postgres에서 `NotNullViolationError`로 하드 실패했습니다.** 두 파일의 4개
-     INSERT문 모두에 `is_read`를 명시적으로 채우도록 수정. `test_bootstrap_db.py`의 로컬 헬퍼
-     `_execute_schema_backfill`이 가드 없는 예전 루프를 그대로 복제하고 있던 것도
-     `scripts.bootstrap_db.execute_schema_backfill`을 위임 호출하도록 정리.
-  3. 새 구현에 맞춰 `tests/test_alembic_migrations.py`의 prose contract test
-     (`test_initial_alembic_revision_records_current_schema_path`)가 `schema_backfill_sql`
-     대신 `execute_schema_backfill`을 검증하도록 갱신.
+  CI 환경과 동일하게(로컬 PostgreSQL 16 + pgvector) 처음 돌려보자, 완전히 새 데이터베이스에 대한
+  `alembic upgrade head`가 `0011_email_read_state`에서 레거시 `emails` 테이블을 직접 대상으로
+  해 `relation "emails" does not exist`로 깨지는 결함과, `tests/test_bootstrap_db.py`/
+  `tests/test_data_api.py`의 raw SQL `INSERT INTO email_records`가 `is_read`(ORM 쪽
+  Python-side `default=True`뿐, DB 서버측 default 없음)를 빠뜨려 real Postgres에서
+  `NotNullViolationError`로 하드 실패하는 결함이 함께 드러났습니다. `#1503`이 동일한 근본
+  원인을 독립적으로 재현·수정(현재 `email_records`/레거시 `emails` 양쪽을 컬럼 존재 여부로
+  가드)했기에, 서로 다른 두 구현이 충돌하지 않도록 `0011_email_read_state.py`와
+  `backend/scripts/bootstrap_db.py`는 `#1503`의 구현으로 수렴시켰습니다 — 이 PR은 CI
+  service-container 추가와 그것이 처음으로 드러낸 `is_read` raw-SQL 시딩 결함 수정만
+  담당하는 의존성 루트 슬라이스로 범위를 좁혔습니다(owner 요청, 2026-09-02). PR-governance/
+  stacked-PR 트리거 관련 무관한 변경은 `#1531`로 분리했습니다.
   전체 백엔드 스위트를 실제 PostgreSQL 16(+pgvector)로 검증: **1837 passed, 2 skipped**
   (남은 2개는 `LIVE_BASE_URL` 미설정에 따른 무관한 live-API smoke skip), `ruff check` clean.
   `CLAUDE.md`/`AGENTS.md`에 이 job이 이제 real-Postgres 테스트를 하드 게이트로 실행한다는 것과
