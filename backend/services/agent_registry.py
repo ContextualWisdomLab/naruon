@@ -146,21 +146,29 @@ def _agent_from_entry(
     )
 
 
-def _load_json_object(path: Path) -> dict[str, Any]:
+def _load_json_object(registration_path: Path) -> dict[str, Any]:
     """Load one JSON object from a registration document path."""
     try:
-        registration_text = path.read_text(encoding="utf-8")
+        registration_text = registration_path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        logger.debug("Registration file not found: %s", path)
+        logger.debug("Registration file not found: %s", registration_path)
         return {}
     except OSError:
-        logger.debug("Could not read registration file: %s", path, exc_info=True)
+        logger.debug(
+            "Could not read registration file: %s",
+            registration_path,
+            exc_info=True,
+        )
         return {}
 
     try:
         parsed_document = json.loads(registration_text or "{}")
     except json.JSONDecodeError:
-        logger.debug("Malformed registration file: %s", path, exc_info=True)
+        logger.debug(
+            "Malformed registration file: %s",
+            registration_path,
+            exc_info=True,
+        )
         return {}
 
     return parsed_document if isinstance(parsed_document, dict) else {}
