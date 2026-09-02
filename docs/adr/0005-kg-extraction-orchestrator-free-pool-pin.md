@@ -109,6 +109,15 @@ since KG extraction runs over real customer email content, not code.
    model` instead of `model is None`, which rejects both `None` and `""`
    while still accepting the fixed `ORCHESTRATOR_POOL_MODEL` string
    orchestrator mode always supplies.
+6. **Revision 3 (same PR, pre-merge):** revision 2's `not model` gate still
+   let a whitespace-only `context.model` (`"   "`) through, since a
+   non-empty string of only spaces is truthy — sending that as an invalid
+   model id to the direct provider and only discovering the problem after a
+   failed network round-trip, the same failure mode revision 2 fixed for
+   the empty-string case. Devin Review caught this too, one round after the
+   blank-string fix. Fixed by checking `not model or not model.strip()`,
+   which rejects `None`, `""`, and whitespace-only strings alike while
+   still accepting `ORCHESTRATOR_POOL_MODEL` (a non-whitespace literal).
 
 ## Alternatives rejected
 
@@ -156,6 +165,9 @@ ZDR-first" guarantee is the correct default absent a documented reason to widen 
   `test_direct_llm_routing_rejects_blank_model` (an empty-string
   `context.model` still fails closed instead of reaching the provider
   client).
+- Decision point 6's whitespace-model fix is covered by
+  `test_direct_llm_routing_rejects_whitespace_only_model` (a
+  whitespace-only `context.model` still fails closed).
 - **Open follow-up, deliberately out of this ADR's scope:**
   `services/batch_embedding_service.py::_run_orchestrator_batch` sends a
   separate, tenant-configurable `settings.model` (`BatchEmbeddingSettings.model`,

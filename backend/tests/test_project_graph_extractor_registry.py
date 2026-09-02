@@ -359,6 +359,19 @@ async def test_direct_llm_routing_rejects_blank_model():
         )
 
 
+@pytest.mark.asyncio
+async def test_direct_llm_routing_rejects_whitespace_only_model():
+    # A whitespace-only context.model ("   ") is truthy so `if not model`
+    # alone lets it through as an invalid model id sent straight to the
+    # provider, only failing after a network round-trip. Devin Review
+    # caught this in the same PR, one round after the blank-string fix.
+    extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
+    with pytest.raises(ExtractorUnavailableError):
+        await extractor.extract(
+            [_segment()], context=KgExtractorContext(api_key="key", model="   ")
+        )
+
+
 def test_custom_extractor_can_register_into_the_seam():
     """A plugin/extractor registers by selector without editing core ingest."""
 
