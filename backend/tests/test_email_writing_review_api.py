@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import AsyncIterator
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -15,7 +15,6 @@ from api.email_writing_review import get_email_writing_review_service, router
 from db.session import get_db
 from services.email_writing_contracts import (
     EmailWritingDocumentGuidance,
-    EmailWritingDocumentRevision,
     EmailWritingProvenance,
     EmailWritingReviewRequest,
     EmailWritingReviewResponse,
@@ -102,7 +101,7 @@ def review_service() -> _ReviewService:
 
 
 @pytest.fixture
-def client(review_service: _ReviewService) -> AsyncIterator[TestClient]:
+def client(review_service: _ReviewService) -> Iterator[TestClient]:
     application = FastAPI()
     application.include_router(router, dependencies=[Depends(get_auth_context)])
     session = _Session()
@@ -212,3 +211,11 @@ def test_review_api_rejects_invalid_transport_before_service_call(
 
     assert response.status_code == 422
     assert review_service.calls == []
+
+
+def test_production_application_registers_the_review_route() -> None:
+    from main import app as production_app
+
+    matching_routes = [route for route in production_app.routes if route.path == _ROUTE]
+    assert len(matching_routes) == 1
+    assert "POST" in matching_routes[0].methods
