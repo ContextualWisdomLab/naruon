@@ -596,6 +596,9 @@ def evaluate_policy_admission(
     ):
         return "adjudicate"
 
+    if candidate_kind not in _CANDIDATE_KINDS:
+        raise EmailWritingPolicyError("candidate_kind_invalid")
+
     required_criterion_ids = tuple(
         policy.required_criteria_by_candidate_kind[candidate_kind]
     )
