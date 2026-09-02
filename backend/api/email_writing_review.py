@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Literal, cast
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context
@@ -15,6 +18,33 @@ from services.email_writing_review_service import (
 )
 
 router = APIRouter(prefix="/api/email-writing", tags=["email-writing"])
+
+PublicReviewErrorCode = Literal[
+    "email_unavailable",
+    "review_owner_scope_unavailable",
+    "review_evidence_unavailable",
+    "review_timeout",
+    "provider_unavailable",
+    "review_runtime_unavailable",
+    "review_unavailable",
+]
+_PUBLIC_SERVICE_ERROR_CODES = frozenset(
+    {
+        "email_unavailable",
+        "review_owner_scope_unavailable",
+        "review_evidence_unavailable",
+        "review_timeout",
+        "provider_unavailable",
+    }
+)
+
+
+class EmailWritingReviewErrorResponse(BaseModel):
+    """Bounded public error envelope that never carries causal service text."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    error_code: PublicReviewErrorCode
 
 
 def get_email_writing_review_service() -> EmailWritingReviewService | None:
@@ -28,21 +58,41 @@ def get_email_writing_review_service() -> EmailWritingReviewService | None:
     return None
 
 
+def _error_response(
+    *,
+    status_code: int,
+    error_code: PublicReviewErrorCode,
+) -> JSONResponse:
+    """Serialize one validated public error envelope without internal exception data."""
+    payload = EmailWritingReviewErrorResponse(error_code=error_code)
+    return JSONResponse(status_code=status_code, content=payload.model_dump())
+
+
 def _service_error_response(error: EmailWritingReviewServiceError) -> JSONResponse:
-    """Map redacted service codes to bounded HTTP states without causal payloads."""
+    """Map only allowlisted service codes to public responses and mask everything else."""
     if error.code == "email_unavailable":
         status_code = 404
     elif error.code == "review_owner_scope_unavailable":
         status_code = 403
     else:
         status_code = 503
-    return JSONResponse(
-        status_code=status_code,
-        content={"error_code": error.code},
-    )
+
+    if error.code in _PUBLIC_SERVICE_ERROR_CODES:
+        public_code = cast(PublicReviewErrorCode, error.code)
+    else:
+        public_code = "review_unavailable"
+    return _error_response(status_code=status_code, error_code=public_code)
 
 
-@router.post("/review", response_model=EmailWritingReviewResponse)
+@router.post(
+    "/review",
+    response_model=EmailWritingReviewResponse,
+    responses={
+        403: {"model": EmailWritingReviewErrorResponse},
+        404: {"model": EmailWritingReviewErrorResponse},
+        503: {"model": EmailWritingReviewErrorResponse},
+    },
+)
 async def review_email_writing(
     request: EmailWritingReviewRequest,
     db: AsyncSession = Depends(get_db),
@@ -53,9 +103,9 @@ async def review_email_writing(
 ) -> EmailWritingReviewResponse | JSONResponse:
     """Run one advisory review without gaining authority to mutate or send mail."""
     if review_service is None:
-        return JSONResponse(
+        return _error_response(
             status_code=503,
-            content={"error_code": "review_runtime_unavailable"},
+            error_code="review_runtime_unavailable",
         )
     try:
         return await review_service.review(db, auth_context, request)
