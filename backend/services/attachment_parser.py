@@ -270,10 +270,13 @@ def _safe_filename(filename: str | None) -> str:
     MIME filename parameters reach this boundary as filename identity, not HTML
     or URL text. Re-decoding percent escapes or character references can change
     a literal suffix and therefore select a different parser for a generic MIME
-    type. Reject markup-looking names, remove only NULs and literal path
+    type. Reject NUL-bearing or markup-looking names, remove literal path
     segments, and preserve all other filename text exactly.
     """
-    display_filename = _sanitize_nul(filename or "attachment")
+    raw_filename = filename or "attachment"
+    if "\x00" in raw_filename:
+        return "attachment"
+    display_filename = raw_filename
     if (
         "<" in display_filename
         or ">" in display_filename
