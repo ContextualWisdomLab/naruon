@@ -753,8 +753,8 @@ registry.register(
 )
 
 
-
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Generate compatibility fingerprints plus a SHA-256 security hash."""
     text = params["text"]
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
@@ -778,13 +778,14 @@ registry.register(
 )
 
 
-
-
-
 _EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-_PHONE_PATTERN = re.compile(r"\b\d{2,3}-\d{3,4}-\d{4}\b|\b\d{3}-\d{4}-\d{4}\b")
+_PHONE_PATTERN = re.compile(
+    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}|\d{2,3}-\d{3,4}-\d{4})(?!\d)"
+)
+
 
 async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Mask ASCII email and selected domestic or +82 Korean phone formats."""
     text = params["text"]
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
@@ -820,7 +821,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
