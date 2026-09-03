@@ -49,7 +49,7 @@ RUN pnpm run build
 # Stage 3: Combined image (Python + Node.js)
 # backend-runtime ends with USER appuser (non-root). Stage 3 inherits that
 # non-root context, so no root elevation is needed here.
-FROM backend-runtime
+FROM backend-runtime AS combined-runtime
 
 ARG OCI_IMAGE_CREATED=""
 ARG OCI_IMAGE_AUTHORS="Seongho Bae"
