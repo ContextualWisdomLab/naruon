@@ -1,4 +1,13 @@
 ## [Unreleased]
+- **(Semgrep 오탐 대응, naruon#1486) `backend/alembic/versions/0011_email_read_state.py`의
+  `op.execute(_UPGRADE_SQL)`/`op.execute(_DOWNGRADE_SQL)` 두 호출에 `nosemgrep` 억제 주석을
+  추가했습니다.** Semgrep OSS의 `sqlalchemy-execute-raw-query`/`formatted-sql-query` 규칙이
+  두 호출을 모두 오류로 표시했지만, 실제로는 오탐입니다 — 두 SQL 상수는 고정된 모듈 수준
+  리터럴 `_IS_READ_PROVENANCE_MARKER`만 보간하며, 외부 입력이나 식별자를 전혀 보간하지
+  않습니다(이미 모듈 docstring과 기존 `# nosec B608` 주석에 이 근거가 상세히 기록돼
+  있음). Semgrep 규칙은 "f-string을 인자로 받는 `op.execute()` 호출" 패턴만 매칭하고 보간되는
+  값이 상수인지는 판별하지 못해 오탐이 발생했습니다. 코드 자체는 변경하지 않았습니다(실제
+  SQL 인젝션 위험이 없으므로).
 - **(CodeRabbit 리뷰 대응, naruon#1501) 첨부파일 reparse content-graph 색인 후속(바로 아래 항목)의
   전체 리뷰에서 실제 결함 2건이 나와 모두 고쳤습니다.** (1) reparse 임베딩 재생성이
   resolved parse 소스 텍스트 대신 `attachment.content`에서 값을 읽고 있었습니다.

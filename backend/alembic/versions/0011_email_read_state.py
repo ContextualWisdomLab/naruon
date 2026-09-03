@@ -108,9 +108,14 @@ END $$;
 """  # nosec B608
 
 
+# False positive on both calls below: _UPGRADE_SQL/_DOWNGRADE_SQL interpolate only the
+# fixed module-level literal _IS_READ_PROVENANCE_MARKER (see the module docstring above),
+# never external input or an identifier -- the same safety property a parameterized query
+# would have. Semgrep's raw-query/formatted-sql-query rules pattern-match on
+# "op.execute(f-string)" and cannot see that the interpolated value is a constant.
 def upgrade() -> None:
-    op.execute(_UPGRADE_SQL)
+    op.execute(_UPGRADE_SQL)  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query,python.lang.security.audit.formatted-sql-query.formatted-sql-query
 
 
 def downgrade() -> None:
-    op.execute(_DOWNGRADE_SQL)
+    op.execute(_DOWNGRADE_SQL)  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query,python.lang.security.audit.formatted-sql-query.formatted-sql-query
