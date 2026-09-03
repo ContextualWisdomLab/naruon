@@ -2,6 +2,7 @@
 
 from dataclasses import fields
 import inspect
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -15,6 +16,8 @@ from services.project_graph.extractor_registry import (
     run_extraction,
 )
 from services.project_graph.models import ProjectSourceSegment
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _segment() -> ProjectSourceSegment:
@@ -31,14 +34,28 @@ def _segment() -> ProjectSourceSegment:
 
 def test_project_graph_context_carries_no_provider_or_raw_transport_authority():
     assert tuple(field.name for field in fields(KgExtractorContext)) == ()
-    context = KgExtractorContext(
-        api_key="secret",
-        orchestrator_base_url="https://orchestrator.example/v1",
-        orchestrator_model="provider/model",
-    )
+    assert tuple(inspect.signature(KgExtractorContext).parameters) == ()
+    context = KgExtractorContext()
     assert not hasattr(context, "api_key")
     assert not hasattr(context, "orchestrator_base_url")
     assert not hasattr(context, "orchestrator_model")
+    assert not hasattr(context, "_legacy_endpoint_configured")
+
+
+def test_project_graph_runtime_has_no_legacy_orchestrator_configuration_seam():
+    config_source = (_BACKEND_ROOT / "core" / "config.py").read_text(encoding="utf-8")
+    import_source = (
+        _BACKEND_ROOT / "services" / "email_import_service.py"
+    ).read_text(encoding="utf-8")
+
+    assert "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL" not in config_source
+    function_start = import_source.index("async def _extract_project_semantics_for_import")
+    function_end = import_source.index(
+        "\n\nasync def _persist_project_graph_projection", function_start
+    )
+    function_source = import_source[function_start:function_end]
+    assert "embedding_provider" not in function_source
+    assert "KgExtractorContext()" in function_source
 
 
 @pytest.mark.asyncio
