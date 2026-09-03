@@ -188,6 +188,9 @@ export async function registerAccountWithPassword(
   } catch {
     throw new AccountUnificationError("account_unification_unreachable", 502);
   }
+  if (response.status >= 300 && response.status < 400) {
+    throw new AccountUnificationError("account_unification_unreachable", 502);
+  }
   let parsed: unknown = null;
   try {
     parsed = await response.json();
