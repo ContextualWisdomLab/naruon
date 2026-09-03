@@ -1,536 +1,233 @@
 # ADR-0005: Pin orchestrator-routed KG extraction to the `orchestrator/free` pool
 
-**Status:** Proposed — Revisions 7 through 9 (below) reverse and then extend this ADR's
-original point-1/2 mechanism. The title and file identity are kept stable for
-cross-reference (naruon `extractor_registry.py`, `ContextualWisdomLab/contextual-orchestrator`
-ADR-0007, and `ContextualWisdomLab/.github`'s gap-baseline all cite this path); read
-Revisions 7 through 9 before treating anything in Context/Decision points 1–3 as current
-behavior. This PR (naruon#1525) has not merged, so this ADR was never more than a
-same-PR proposal — "Accepted" here before Revision 7 was itself a premature status
-marking, corrected per `ContextualWisdomLab/.github` `docs/product-goal-directive.md`'s
-repair-not-close PR-lifecycle policy.
-**Date:** 2026-09-02
-**Decision owner:** Naruon maintainers
-**Scope:** `backend/services/project_graph/extractor_registry.py::LlmGroundedExtractor`
-in both modes as of Revision 8 (`routed_via_orchestrator=True`, the
-`PROJECT_GRAPH_EXTRACTOR=orchestrator` selector, not yet operational; and
-`routed_via_orchestrator=False`, the `PROJECT_GRAPH_EXTRACTOR=llm` selector, now
-policy-disabled — see Revision 8). It does not cover `backend/services/
-batch_embedding_service.py`'s separate orchestrator batch-embedding call site (see
-Consequences).
+> The filename and title are retained for stable cross-references. The original
+> pinning decision was reversed before merge. The current decision is **not** to
+> pin or select any contextual-orchestrator provider/model/group/pool in Naruon.
 
-## Context
+**Status:** Proposed  
+**Date:** 2026-09-02  
+**Last revised:** 2026-09-04 (Revision 10)  
+**Decision owner:** Naruon maintainers  
+**Scope:** `backend/services/project_graph/extractor_registry.py`, the email-import
+project-graph caller, and project-graph-specific runtime configuration. The separate
+batch-embedding path is outside this ADR.
 
-Naruon can route project-graph KG extraction through the
-[`contextual-orchestrator`](https://github.com/ContextualWisdomLab/contextual-orchestrator)
-gateway instead of a direct LLM provider: `LlmGroundedExtractor._resolve_base_url`
-already swaps the HTTP target to `context.orchestrator_base_url` when
-`routed_via_orchestrator` is set, keeping the request otherwise identical
-(same OpenAI-compatible client, same grounded extraction core).
+## Problem
 
-What that swap did **not** do, before this ADR, is change which `model` string the
-request carries. `extract()` always sent `context.model`, which
-`backend/services/email_import_service.py::_extract_project_semantics_for_import` sets to
-`settings.OPENAI_MODEL` — naruon's general-purpose direct-provider model setting —
-for both the direct and orchestrator-routed cases alike, because `KgExtractorContext`
-is built once per import and handed to `run_extraction()` regardless of which
-selector ends up choosing it.
+Naruon's project-graph extraction seam originally allowed two LLM-backed routes:
+a direct-provider selector and a contextual-orchestrator selector. The latter reused
+Naruon's local OpenAI-compatible transport, tenant provider credential, raw gateway
+URL, and model input. Early versions of this ADR attempted to make that route safer
+by hardcoding `orchestrator/free`.
 
-That is a real product gap, not a hypothetical: `ContextualWisdomLab/.github`'s
-[ADR-0003](https://github.com/ContextualWisdomLab/.github/blob/main/docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md)
-establishes that the orchestrator gateway does not treat every `model` value as a
-literal pass-through provider id. It also recognizes a small set of fixed
-**virtual pool ids** — `orchestrator/free` and `orchestrator/auto` — that it
-resolves itself, at request time, to a concrete discovered provider route chosen
-by its own governed policy (zero-cost-first, Zero Data Retention (ZDR)-prioritized
-for `free`; a wider evidence-tiered catalog for `auto`, restricted to callers with
-an accepted price-attestation exception). Sending a literal provider model id
-instead of one of these pool ids does not "opt out" of pool governance safely — it
-asks the gateway to proxy that specific model directly, bypassing the free/ZDR
-policy entirely, with no code-level signal that the bypass happened. Naruon's own
-`docs/adr/` had no decision governing this at all before this ADR: an audit of
-`backend/` found zero occurrences of a pool id, a `CONTEXTUAL_ORCHESTRATOR_POOL`-style
-setting, or any orchestration-mode parameter anywhere in the runtime code — every
-orchestrator-routed call implicitly inherited whatever `settings.OPENAI_MODEL`
-happened to be configured as for the unrelated direct-provider path.
+That was the wrong ownership boundary. Contextual-orchestrator owns provider/model/
+group/pool discovery and routing. Naruon owns project-graph domain semantics,
+grounding, persistence, selector intent, and truthful capability availability. A
+consumer-side pool hardcode, raw gateway URL, tenant provider key, or literal model
+is not a substitute for a released contextual-orchestrator API/client/schema.
 
-The org's own operating directive (`ContextualWisdomLab/.github`
-`docs/product-goal-directive.md`, §8) already commits every LLM-routing
-consumer in the ecosystem to auto-discovery through `contextual-orchestrator`,
-and ADR-0003's 2026-08-30 amendment already moved all three central CI review
-consumers (OpenCode, Noema, and — reversing that ADR's original `orchestrator/auto`
-choice — Strix) onto the fixed `orchestrator/free` id specifically so that CI
-review traffic cannot silently drift onto a paid or non-ZDR route through a
-misconfigured setting. Naruon's own product traffic through the same gateway had
-no equivalent guarantee. Given naruon's foundational data-sovereignty commitment
-(`docs/CWL-MASTER-CONTEXT.md` §2: "stores only metadata + AI-extracted intent +
-task state" over customer-owned data), a ZDR-first routing guarantee for
-orchestrator-routed KG extraction is at least as important for naruon's own
-production traffic as it is for CI review of source code — arguably more so,
-since KG extraction runs over real customer email content, not code.
+A fresh owner check on 2026-09-04 returned an empty GitHub Release inventory for
+`ContextualWisdomLab/contextual-orchestrator`. There is therefore still no immutable
+consumer contract that this product-runtime path can pin and consume.
 
-## Decision
+A second defect compounded the ownership problem: LLM-backed selectors could fall
+through to deterministic keyword extraction. That changed the requested algorithm
+while presenting the result as a successful semantic projection. The keyword
+extractor is a valid explicit non-LLM mode, but it cannot masquerade as an LLM result.
 
-1. `LlmGroundedExtractor` gains a `_resolve_model()` method, symmetric to its
-   existing `_resolve_base_url()`: when `routed_via_orchestrator` is `True`, it
-   returns the fixed constant `ORCHESTRATOR_POOL_MODEL = "orchestrator/free"`
-   instead of `context.model`. The direct-provider path (`routed_via_orchestrator
-   = False`) is unchanged and keeps using `context.model` exactly as before.
-2. `ORCHESTRATOR_POOL_MODEL` is a module-level constant in
-   `extractor_registry.py`, not a `Settings` field. This mirrors
-   `.github/workflows/strix.yml`'s own hardcoded
-   `CONTEXTUAL_ORCHESTRATOR_POOL: free` (ADR-0003's 2026-08-30 amendment):
-   the whole point of pinning is that an operator cannot accidentally route
-   production KG-extraction traffic onto a non-free, non-ZDR-guaranteed pool
-   by misconfiguring (or omitting) an environment variable. If a future,
-   evidence-backed need for `orchestrator/auto` (or a priced fallback) emerges
-   for naruon's own traffic, it needs its own ADR amendment, the same way
-   Strix's `orchestrator/auto` choice needed ADR-0003 §"2026-08-30 amendment"
-   to change — not a silent settings-default change.
-3. This ADR only fixes the KG-extraction call site. It does not touch the
-   direct-provider `PROJECT_GRAPH_EXTRACTOR=llm` selector (customers who point
-   naruon straight at their own OpenAI-compatible endpoint keep full control of
-   the model they configured), and it does not touch
-   `backend/services/batch_embedding_service.py::_run_orchestrator_batch` (see
-   Consequences).
-4. **Revision (same PR, pre-merge):** `extract()`'s original availability
-   check, `KgExtractorContext.has_llm_credentials` (`bool(self.api_key and
-   self.model)`), required `context.model` unconditionally — including for
-   orchestrator-routed requests, where `_resolve_model()` never reads
-   `context.model` at all. That meant a fully valid orchestrator request
-   (api key present, orchestrator endpoint configured) would still raise
-   `ExtractorUnavailableError` and silently degrade to the deterministic
-   keyword extractor whenever `context.model` (naruon's *unrelated*
-   direct-provider model setting) happened to be unset — the same class of
-   bug §Context describes, just one layer deeper. Devin Review caught this in
-   review of this ADR's own PR (ContextualWisdomLab/naruon#1525) before merge.
-   Fixed by removing `has_llm_credentials` and having `extract()` check
-   `context.api_key` directly, then treat a `None` result from
-   `_resolve_model()` (only reachable in direct-provider mode; orchestrator
-   mode always returns the fixed `ORCHESTRATOR_POOL_MODEL`) as the
-   unavailable case instead. `orchestrator_base_url` unavailability is still
-   caught by `_resolve_base_url()`, unchanged.
-5. **Revision 2 (same PR, pre-merge):** the point-4 fix initially gated on
-   `model is None`, which a blank (empty-string, non-`None`) `context.model`
-   passes straight through — sending an invalid empty-string model id to the
-   direct provider and only discovering the problem after a failed network
-   round-trip, rather than failing closed to the keyword extractor up front.
-   Devin Review caught this too, in the same PR. Fixed by checking `not
-   model` instead of `model is None`, which rejects both `None` and `""`
-   while still accepting the fixed `ORCHESTRATOR_POOL_MODEL` string
-   orchestrator mode always supplies.
-6. **Revision 3 (same PR, pre-merge):** revision 2's `not model` gate still
-   let a whitespace-only `context.model` (`"   "`) through, since a
-   non-empty string of only spaces is truthy — sending that as an invalid
-   model id to the direct provider and only discovering the problem after a
-   failed network round-trip, the same failure mode revision 2 fixed for
-   the empty-string case. Devin Review caught this too, one round after the
-   blank-string fix. Fixed by checking `not model or not model.strip()`,
-   which rejects `None`, `""`, and whitespace-only strings alike while
-   still accepting `ORCHESTRATOR_POOL_MODEL` (a non-whitespace literal).
-7. **Revision 7 (2026-09-02, owner-directed correction) — reverses points 1–2.**
-   The org owner reviewed this PR's exact head (`badf985e`) directly and
-   identified that decision points 1–2 above are themselves a boundary
-   violation, not a fix: hardcoding `ORCHESTRATOR_POOL_MODEL =
-   "orchestrator/free"` inside naruon's own `LlmGroundedExtractor` gives
-   naruon product-runtime code the same provider/model/pool selection
-   authority `ContextualWisdomLab/.github`
-   `docs/product-goal-directive.md` §8 explicitly reserves for
-   contextual-orchestrator's released API/client/schema — "LLM Provider
-   group 이름을 코드·설정·테스트·라우팅 조건에 하드코딩하지 않는다." The
-   `.github` ADR-0003 precedent this ADR's Context/point-2 cited as
-   justification governs a different boundary: it pins **GitHub Actions
-   model-backed CI workflows** (Strix/OpenCode/Noema), which
-   `docs/product-goal-directive.md`'s own item 10 scopes explicitly to
-   "GitHub Actions Workflow 이용" — it was never a license for a product
-   **runtime** service to make the same hardcoded choice on its own
-   consumers' behalf. Naruon's role per the directive's Core-foundation map
-   is a **consumer** of contextual-orchestrator, not a co-owner of its
-   routing policy; a consumer's job is to pass capability/privacy/ZDR
-   requirements to the owner's released contract and fail closed if the
-   owner is immature or the capability is unsupported, never to duplicate
-   the owner's selection logic locally (§9).
+## Constraints
 
-   That immaturity is not hypothetical here: as of 2026-09-02, `GET
-   /repos/ContextualWisdomLab/contextual-orchestrator/releases` returns an
-   empty list — there is no immutable released consumer contract for
-   naruon to conform to yet, for `orchestrator/free` or any other pool
-   value. Per the directive's boundary rule ("guard the boundary with
-   ports/ACL/feature-flags/test-doubles and never read the owner's
-   source/DB/temp branches directly" until a release exists), the correct
-   interim state is that orchestrator-routed KG extraction stays
-   unavailable, not that it "succeeds" against a value naruon invented.
+- Naruon remains the canonical owner of project-graph domain truth and grounding.
+- Contextual-orchestrator remains the canonical owner of LLM provider/model/group/
+  pool routing.
+- Product runtime may consume only a released, immutable owner contract; mutable
+  branches, raw URLs, or copied source are not contracts.
+- `PROJECT_GRAPH_EXTRACTOR=keyword` is an explicit deterministic product mode.
+- `llm` and `orchestrator` selectors must fail closed when the requested LLM
+  capability cannot execute; they must not substitute keyword output.
+- Email import is allowed to succeed when best-effort graph projection is absent.
+- Existing standalone grounded-extractor tests may remain as pure transformation
+  tests; production selector routing must not reach that raw transport.
 
-   **Corrected decision:** `ORCHESTRATOR_POOL_MODEL` is removed entirely —
-   no hardcoded pool id exists anywhere in `extractor_registry.py`.
-   `KgExtractorContext` gains a new field, `orchestrator_model`, kept
-   strictly separate from the pre-existing `model` field (which is, and
-   remains, `email_import_service.py`'s tenant direct-provider setting,
-   `settings.OPENAI_MODEL` — populated unconditionally regardless of
-   selector, so it must never be forwarded to the orchestrator gateway as
-   a substitute). `LlmGroundedExtractor._resolve_model()` now reads
-   `context.model` in direct-provider mode and `context.orchestrator_model`
-   in orchestrator mode, forwarding whichever verbatim — the extractor
-   itself picks nothing. No caller populates `orchestrator_model` today,
-   so orchestrator-routed extraction correctly and unconditionally fails
-   closed to the deterministic keyword fallback, exactly like a missing
-   credential does. This is not a regression from points 1–2's
-   "`orchestrator/free` always succeeds" behavior; that behavior was the
-   defect. When contextual-orchestrator ships its first release defining a
-   real consumer contract, the follow-up work is entirely in
-   `email_import_service.py` (resolve `orchestrator_model` from that
-   contract) — `extractor_registry.py` needs no further change, because it
-   was never supposed to own this decision.
-8. **Revision 8 (2026-09-02, owner-directed correction) — extends Revision 7
-   to two more findings on the same exact head (`bb889797`).** A fresh
-   owner review found that Revision 7's fix, while removing the hardcoded
-   pool id, did not go far enough:
-   - `run_extraction`'s chain-resolution design (pre-dating this ADR)
-     unconditionally appends the deterministic keyword extractor behind
-     every non-keyword selector, and catches both
-     `ExtractorUnavailableError` and arbitrary extraction exceptions to
-     advance to it. Consequently the "no released consumer contract" state
-     Revision 7 achieves did **not** fail closed in the sense the org's
-     LLM-routing policy requires: a request for LLM semantic KG extraction
-     silently changed algorithms and returned keyword-derived output
-     instead of reporting the requested capability as unavailable. Per
-     `ContextualWisdomLab/.github` `docs/product-goal-directive.md` §8,
-     every LLM task must cross a released contextual-orchestrator API/
-     client/schema boundary, missing/incompatible/unreleased capability
-     must fail closed, and a deterministic semantic substitute must not
-     masquerade as successful LLM work.
-   - `PROJECT_GRAPH_EXTRACTOR=llm` (direct-provider mode,
-     `routed_via_orchestrator=False`) remained a second, Naruon-owned LLM
-     routing path entirely outside the contextual-orchestrator boundary —
-     not something Revision 7 touched, since it scoped itself to the
-     orchestrator-routed path only (see the original Scope line above,
-     corrected in this revision).
+## Current decision
 
-   **Corrected decision:**
-   - `LlmGroundedExtractor` gains a class attribute,
-     `requires_llm_capability = True`, and `KgExtractorRegistry.
-     resolve_chain()` now appends the deterministic keyword fallback only
-     behind an extractor that does *not* set it. Both `SELECTOR_LLM` and
-     `SELECTOR_ORCHESTRATOR` resolve to a single-element chain as a result:
-     an unavailable or failed request propagates through `run_extraction`
-     instead of resolving to a keyword-derived result.
-     `DeterministicKeywordExtractor` sets `requires_llm_capability = False`
-     explicitly. A plugin extractor that does not set the attribute keeps
-     the fallback by default (`getattr(..., False)`) — opting out of
-     degrade-to-keyword is a choice an LLM-backed extractor makes, not the
-     registry's default for everything.
-   - `run_extraction`'s generic-exception branch now also records the
-     original exception as `last_error` (previously only the
-     `ExtractorUnavailableError` branch did), so a chain that ends without
-     a successful result raises the *real* failure reason, not the generic
-     "no extractor produced a project graph result" placeholder.
-   - `SELECTOR_KEYWORD` is unaffected and remains an intentional, always-
-     available, non-LLM product mode — not merely a rescue path for a
-     failed LLM selector; this distinction is now structural
-     (`requires_llm_capability`), not incidental.
-   - `PROJECT_GRAPH_EXTRACTOR=llm` (direct-provider mode) is **disabled**,
-     not removed: `LlmGroundedExtractor.extract()` raises
-     `ExtractorUnavailableError` unconditionally when
-     `routed_via_orchestrator` is `False`, before looking at any
-     credential or model field, with a message stating this is a policy
-     disable. The selector stays registered (so an operator's existing
-     `PROJECT_GRAPH_EXTRACTOR=llm` configuration gets a clear, truthful
-     "disabled" error rather than an unrelated credential complaint or a
-     silent no-op), but it can never succeed. Disable, not delete, was
-     chosen over physically removing the class/tests: it keeps the
-     capability's structure intact and reversible if the product later
-     adds a `migrate`-style path, while still fully satisfying "Naruon
-     holds no production LLM provider/model authority outside the released
-     CO boundary" today.
-   - `KgExtractorContext.base_url` and `.model` (the direct-provider-only
-     fields) are removed from the dataclass entirely, not merely
-     unread: with direct-provider mode's `extract()` raising before ever
-     calling `_resolve_base_url`/`_resolve_model`, both fields' non-
-     orchestrator branches became 100% unreachable, and per this
-     ecosystem's own no-dead-code convention, unreachable configuration
-     fields are removed rather than left as misleading surface area.
-     `email_import_service.py::_extract_project_semantics_for_import` no
-     longer passes `base_url=`/`model=` when constructing
-     `KgExtractorContext` (it still passes `api_key` and
-     `orchestrator_base_url`); `settings.OPENAI_MODEL` remains used
-     elsewhere in the codebase (`rag_service.py`, `llm_service.py`,
-     `llm_provider_selection.py`, `api/prompts.py`) and is untouched there.
-   - **Blast-radius check performed before implementing:**
-     `_persist_project_graph_projection` (the sole caller) already wraps
-     `_extract_project_semantics_for_import` in a `try/except Exception`
-     documented as "Best-effort projection... any failure is logged and
-     rolled back so it never fails the email import." This revision's
-     propagate-instead-of-degrade change is therefore safe at the email-
-     import layer: any tenant currently configured with
-     `PROJECT_GRAPH_EXTRACTOR=llm` or `orchestrator` keeps importing email
-     successfully; they simply stop receiving a keyword-derived project
-     graph for those emails until contextual-orchestrator ships a release
-     (or, for `llm`, until a future product decision re-enables or
-     migrates the direct-provider path). This is a real, visible product
-     behavior change (fewer graph nodes persisted in the currently-
-     unavailable-LLM case) but not a crash, data-loss, or import-failure
-     risk.
-9. **Revision 9 (2026-09-02, Devin Review on the Revision 8 commit) — closes
-   two gaps Revision 8 left in the same masquerading problem.**
-   - An unrecognized `PROJECT_GRAPH_EXTRACTOR` value (a typo, most
-     plausibly) still silently resolved to keyword extraction —
-     `KgExtractorRegistry.resolve_chain()` treated "not a registered
-     selector" the same as "explicit keyword request." That is the same
-     masquerading Revision 8 closes for `llm`/`orchestrator`, left open for
-     misconfiguration. `resolve_chain()` now raises
-     `ExtractorUnavailableError` for a selector it does not recognize,
-     distinct from the pre-existing `KeyError` raised when the registry
-     itself lacks a keyword extractor at all. Only an explicit
-     `SELECTOR_KEYWORD` resolves to the deterministic extractor now.
-   - `requires_llm_capability` lived only on `LlmGroundedExtractor`, not on
-     the `KgExtractor` Protocol — a future LLM-backed plugin author could
-     easily not discover the attribute and silently keep the dangerous
-     fallback. Added it to the Protocol with no default. **A follow-up
-     Devin Review on this exact fix then caught that the enforcement was
-     still incomplete**: `resolve_chain()` read the attribute via
-     `getattr(primary, "requires_llm_capability", False)`, so a
-     non-conforming extractor still silently inherited the unsafe default
-     despite the Protocol declaring it required. Changed to direct
-     attribute access (`primary.requires_llm_capability`): a plugin that
-     omits the attribute now raises `AttributeError` at resolution time
-     instead of silently keeping the fallback. This is the same "explicit
-     over implicit, no getattr default that reintroduces the exact risk
-     just closed" pattern this ADR's own Revision 8 alternatives section
-     already applied to `context.orchestrator_model` vs. a settings-field
-     default — the lesson generalizes to attribute lookups, not just
-     configuration fields.
-   - Also corrected two now-stale documentation surfaces Devin flagged in
-     the same round: `core/config.py`'s `PROJECT_GRAPH_EXTRACTOR` /
-     `PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` field comments still described
-     "every selection falls back to keyword" and "unset routing fails
-     closed to the deterministic keyword extractor" — both rewritten to
-     match Revision 8's actual behavior.
-   - Tests: `test_unknown_selector_raises_instead_of_defaulting_to_keyword`,
-     `test_llm_backed_custom_extractor_also_gets_no_fallback` (a
-     third-party plugin gets the same guarantee as the built-ins), and
-     `test_non_conforming_plugin_fails_loudly_instead_of_inheriting_unsafe_default`
-     (proves the `getattr` gap is closed) in
-     `backend/tests/test_project_graph_extractor_registry.py`.
+### 1. Keep explicit selector identities
+
+`PROJECT_GRAPH_EXTRACTOR` recognizes:
+
+- `keyword`: deterministic non-LLM extraction;
+- `llm`: retained for configuration compatibility but policy-disabled;
+- `orchestrator`: retained as the future contextual-orchestrator capability seam,
+  currently unavailable pending a released owner contract.
+
+Unknown selectors raise `ExtractorUnavailableError`; they never default to keyword.
+
+### 2. Make LLM fallback semantics structural
+
+`KgExtractor.requires_llm_capability` is mandatory. LLM-backed extractors set it to
+`True`, so their resolution chain contains only the requested extractor. A failed or
+unavailable LLM request therefore propagates its real failure instead of falling
+through to keyword extraction. Non-conforming plugins fail loudly rather than
+inheriting a permissive default.
+
+### 3. Remove Naruon-owned LLM routing authority from this seam
+
+`KgExtractorContext` is fieldless. It has no provider credential, raw
+contextual-orchestrator URL, provider/model id, group, pool, or legacy endpoint
+signal. Its constructor accepts no predecessor compatibility arguments.
+
+`LlmGroundedExtractor.extract()` does not invoke the local
+`extract_project_semantics_llm(...)` transport. Direct-provider mode raises a
+policy-disabled error. Orchestrator mode raises a released-contract-unavailable
+error until a real owner release can be consumed.
+
+`backend/services/email_import_service.py` constructs `KgExtractorContext()` with no
+embedding-provider data. The project-graph projection call no longer accepts or
+forwards `EmailImportEmbeddingProvider` solely for semantic-extractor routing.
+Email embedding generation remains a separate path and is not changed by this ADR.
+
+`backend/core/config.py` no longer defines
+`PROJECT_GRAPH_ORCHESTRATOR_BASE_URL`. A project-specific raw gateway setting would
+recreate the transport authority this ADR removes.
+
+### 4. Future enablement requires an immutable owner contract
+
+When contextual-orchestrator publishes a suitable immutable release, a separate
+consumer change must:
+
+1. pin the released API/client/schema version;
+2. adapt request/response data through a Naruon ACL while preserving project-graph
+   grounding and provenance;
+3. pass capability/privacy/price/latency requirements rather than choosing a
+   provider/model/group/pool locally;
+4. generate exact-head API-schema, behavioral, security, SBOM/provenance, and E2E
+   evidence;
+5. keep absence/incompatibility fail-closed.
+
+No mutable owner head, hardcoded `orchestrator/free`, raw provider model, or manual
+URL setting is an acceptable interim implementation.
+
+## Revision history
+
+The revisions below occurred within the still-open PR and are preserved as decision
+history, not as current runtime instructions.
+
+- **Original through Revision 3:** attempted to route the orchestrator selector
+  through Naruon's raw OpenAI-compatible transport and hardcode
+  `orchestrator/free`; review iterations fixed missing/blank/whitespace model gates.
+- **Revision 7 (2026-09-02):** identified the consumer-side pool hardcode as an
+  ownership violation and removed `ORCHESTRATOR_POOL_MODEL`; introduced a distinct
+  orchestrator-model concept while awaiting an owner release.
+- **Revision 8 (2026-09-02):** stopped LLM-backed selectors from silently degrading
+  to keyword output and policy-disabled direct-provider project-graph routing.
+- **Revision 9 (2026-09-02):** made unknown selectors fail closed and made
+  `requires_llm_capability` an enforced extractor protocol requirement rather than
+  an optional registry convention.
+- **Revision 10 (2026-09-04):** completed the boundary repair. A RED regression at
+  `8ff3e35a2a0fffce460e7bc400d6a12585feb3d1` required a zero-argument,
+  authority-free context and removal of the legacy raw-configuration caller seam.
+  The subsequent non-force lineage removed the compatibility constructor
+  (`f41d9ed47d45c5f645f6da767e9862b35aa07404`), removed the raw project-graph
+  orchestrator URL setting (`040e6c0f5107a2fbfc2350999b9d5dca95e3eee0`), severed
+  embedding credentials from semantic extraction routing
+  (`645f8acb83330a21adc6500ecc5a7efa6220e110`), and aligned import-selector tests
+  (`67d83c34c2aad296f6c8276fe9c19484fbf4e025`).
 
 ## Alternatives rejected
 
-**The three entries immediately below predate Revision 7 and evaluate the
-original (now-reversed) "hardcode `orchestrator/free` in naruon" design; kept
-as historical record, not current guidance. Revision 7's own alternatives
-follow in a separate subsection.**
+### Hardcode `orchestrator/free` in Naruon
 
-### Leave the model configurable via a new settings field, defaulted to `orchestrator/free`
+Rejected. The virtual pool is routing policy owned by contextual-orchestrator. The
+fact that centrally governed GitHub Actions workflows may use an explicitly
+specified free route does not grant product-runtime consumers authority to duplicate
+that policy.
 
-Rejected. A configurable-with-a-safe-default field can still be misconfigured
-away from the safe default, and nothing in the request path would catch that —
-exactly the failure mode ADR-0003's Strix amendment already rejected for CI
-review traffic ("fails closed on any other value"). A hardcoded constant is the
-only design where the pin cannot silently regress.
+### Make a Naruon setting default to `orchestrator/free`
 
-### Keep sending `context.model` (status quo)
+Rejected. A configurable default still duplicates owner policy and can drift. It
+also turns an unreleased dependency into a local configuration convention.
 
-Rejected — this is the bug this ADR fixes, not a real alternative: it sends
-naruon's direct-provider model id to a gateway that does not treat arbitrary
-model strings as literal routing directives for orchestrator-mode requests
-the way the direct-provider client does, defeating the reason to route through
-the orchestrator at all.
+### Reuse `OPENAI_MODEL` or an embedding-provider model
 
-### Pin to `orchestrator/auto` instead of `orchestrator/free`
+Rejected. Those values belong to different Naruon/provider boundaries. Forwarding
+them into contextual-orchestrator as a route selector would silently reintroduce
+provider/model authority and couple unrelated capabilities.
 
-Rejected. ADR-0003 restricts `orchestrator/auto` admission to callers with an
-explicit, evidence-tiered price-attestation exception (Strix's security-analysis
-use case, decided and documented there). Naruon's KG-extraction path has no such
-exception, no price-attestation evidence collection, and no security-analysis
-justification for admitting priced routes — `orchestrator/free`'s "zero-cost,
-ZDR-first" guarantee is the correct default absent a documented reason to widen it.
+### Keep a raw contextual-orchestrator URL only for transport
 
-### Revision 7 alternatives
+Rejected for the current unreleased state. Without a versioned owner client/schema,
+a raw URL necessarily couples Naruon to an unversioned OpenAI-compatible transport
+shape and invites credentials/model fields back into the context. Future transport
+configuration must come from the released consumer contract's supported mechanism.
 
-#### Keep the `orchestrator/free` hardcode, just relabel it as "temporary"
+### Keep the legacy constructor but discard its values
 
-Rejected. A hardcoded pool id in naruon's own code is a boundary violation
-regardless of how it is labeled or how long it is meant to last — the
-directive's core-foundation ownership model (`docs/CWL-MASTER-CONTEXT.md`
-§9) does not have a "temporary exception" carve-out for a consumer
-duplicating an owner's routing authority, and a "temporary" hardcode has no
-forcing function to actually get removed once contextual-orchestrator ships.
+Rejected in Revision 10. Although discarding values prevented immediate routing,
+the callable surface still advertised credentials/URL/model as legitimate inputs and
+left callers/configuration in place. Dead compatibility surface is a future
+regression path, not a stable boundary.
 
-#### Reuse `context.model` for orchestrator mode instead of adding `orchestrator_model`
+### Remove the `orchestrator` selector entirely
 
-Rejected. `context.model` is unconditionally `settings.OPENAI_MODEL` at
-naruon's only call site (`email_import_service.py`), regardless of which
-selector is active — reusing it would silently forward a tenant's
-direct-provider model id to the orchestrator gateway as a pool/model
-substitute, the exact bypass this ADR's original §Context already
-identified as unsafe (§Context: "asks the gateway to proxy that specific
-model directly, bypassing the free/ZDR policy entirely"). A dedicated field
-is the only design where the two concerns cannot collide.
+Rejected as unnecessarily destructive. The selector is a stable capability identity
+and can truthfully report unavailable while the owner contract is absent. Keeping the
+identity avoids conflating "unknown selector" with "known but unavailable
+capability."
 
-#### Remove the `orchestrator` selector entirely until contextual-orchestrator ships a release
+### Degrade failed LLM extraction to keyword and only log a warning
 
-Rejected as unnecessarily destructive. The registry's own architecture
-(`build_default_registry`) is designed as a stable seam precisely so a
-selector can exist and be structurally correct — registered, protocol-
-conformant — before it is operationally complete. Removing the selector
-would require re-adding it later with no functional difference from simply
-leaving it in its current, correctly-fails-closed state now. **[Revision 8
-note: "falling back to keyword extraction like any other unavailable
-extractor" no longer describes this selector's behavior — see Revision 8,
-which stops that fallback for LLM-backed extractors specifically. The
-rejection itself still holds for the same reason.]**
-
-### Revision 8 alternatives
-
-#### Keep degrading LLM-backed selectors to keyword, just log a louder warning
-
-Rejected. A louder log line does not change what gets *persisted*: the
-project graph would still silently contain keyword-derived semantic
-objects sourced from a request that named `llm` or `orchestrator`, with no
-signal in the data itself that LLM extraction was requested and not
-performed. `docs/product-goal-directive.md` §8's "a deterministic semantic
-substitute must not masquerade as successful LLM work" is about the
-*result*, not just observability into how it was produced.
-
-#### Physically delete `SELECTOR_LLM`, `LlmGroundedExtractor`'s direct-provider mode, and their tests
-
-Rejected in favor of disable. The owner's instruction offered "remove/
-disable or migrate" as options; disable satisfies "Naruon holds no
-production LLM provider/model authority outside the released CO boundary"
-today with the least destructive, most reversible change — an operator
-with `PROJECT_GRAPH_EXTRACTOR=llm` already configured gets a clear,
-truthful "disabled" error instead of a `KeyError`/unknown-selector
-surprise, and the class/helper structure stays available if a future
-product decision re-enables or migrates the path, without re-deriving it
-from git history.
-
-#### Add a per-selector "degrade on failure" config flag instead of a code-level `requires_llm_capability` attribute
-
-Rejected. A runtime-configurable flag would let a misconfiguration
-re-enable exactly the masquerading behavior this revision closes, the same
-class of risk ADR-0003's Strix precedent and this ADR's own Revision 7
-"Alternatives rejected" entry ("Leave the model configurable via a new
-settings field") already rejected for a different field. Whether an
-extractor may degrade to keyword is a property of what kind of work it
-does (LLM-backed vs. deterministic), not an operator preference — a class
-attribute on the extractor itself is the only design an operator cannot
-misconfigure away from correct.
+Rejected. Logging does not repair the persisted semantic misrepresentation. A
+request that selected LLM extraction must either produce LLM-backed grounded output
+or report that capability unavailable.
 
 ## Consequences
 
-**[Superseded by Revision 7 — see the addendum below for current behavior.]**
-The next two bullets describe points 1–2's reversed design and are kept as
-historical record only.
+- `PROJECT_GRAPH_EXTRACTOR=keyword` continues to work as the explicit deterministic
+  mode.
+- `PROJECT_GRAPH_EXTRACTOR=llm` always fails closed before direct-provider routing.
+- `PROJECT_GRAPH_EXTRACTOR=orchestrator` fails closed while the immutable owner
+  consumer contract is absent. It has no local URL/model/key workaround.
+- Email import itself still succeeds because `_persist_project_graph_projection`
+  treats semantic projection as best-effort and rolls back only projection work on
+  failure.
+- The project graph may therefore have no new projection for an email when an
+  unavailable LLM selector is configured. That absence is more truthful than
+  persisting keyword-derived objects under an LLM request.
+- The standalone grounded-extraction core remains unit-testable, but is not a
+  production transport path.
+- `backend/services/batch_embedding_service.py` is deliberately not changed here.
+  It is a separate embedding/batch bounded concern and requires its own owner-contract
+  evidence rather than assuming the project-graph decision applies verbatim.
 
-- ~~`PROJECT_GRAPH_EXTRACTOR=orchestrator` now actually invokes contextual-orchestrator's
-  governed free/ZDR pool selection instead of silently attempting to proxy a
-  literal provider model id through it.~~ Tests:
-  `test_orchestrator_routing_pins_the_free_pool_model` (implicit in the extended
-  `test_orchestrator_routing_targets_the_orchestrator_base_url`) and
-  `test_direct_llm_routing_uses_provider_base_url`'s extended model assertion in
-  `backend/tests/test_project_graph_extractor_registry.py` cover both branches.
-- Decision point 4's availability-gating fix, and points 5/6's blank/
-  whitespace-model fixes, are all **[superseded by Revision 8 -- see below]**:
-  they were asserted against `context.model` in direct-provider mode, a
-  field Revision 8 removes entirely. The same validation logic (`if not
-  model or not model.strip()`) survives unchanged, but is now exercised via
-  `context.orchestrator_model` in orchestrator mode instead — see
-  `test_orchestrator_routing_rejects_blank_model` and
-  `test_orchestrator_routing_rejects_whitespace_only_model` in
-  `backend/tests/test_project_graph_extractor_registry.py`.
+## Verification and traceability
 
-**[Superseded by Revision 8 -- see below.] Revision 7 consequences (as of
-that revision):**
+Required regression evidence includes:
 
-- ~~`PROJECT_GRAPH_EXTRACTOR=orchestrator` unconditionally fails closed to
-  the deterministic keyword extractor today~~ — Revision 8 stops that
-  fallback for LLM-backed extractors; it now propagates instead (see
-  below). The underlying cause described here (no caller populates
-  `context.orchestrator_model`, pending a contextual-orchestrator release)
-  is still accurate.
-- Operators must not work around the unavailable state by manually
-  populating a model for orchestrator-mode requests from an unrelated
-  direct-provider setting, by adding an `orchestrator/free`-defaulted
-  settings field, or by any other means that reintroduces points 1–2's
-  hardcode — see "Revision 7 alternatives" above.
-- **Open follow-up, deliberately out of this ADR's scope:**
-  `backend/services/batch_embedding_service.py::_run_orchestrator_batch` sends a
-  separate, tenant-configurable `settings.model` (`BatchEmbeddingSettings.model`,
-  a DB-backed per-tenant column) to the orchestrator's batch-submission endpoint
-  for embeddings, not chat completions. Whether contextual-orchestrator exposes
-  an analogous fixed pool id for the embedding modality — and whether pinning
-  it the same way is correct for a tenant-configurable batch-embedding setting —
-  is not established by any evidence this ADR has access to (no
-  `contextual-orchestrator` source is in this session's repository scope). Do
-  not assume the same fix applies there without first confirming the gateway's
-  embedding-request contract; track as a separate, evidence-gated follow-up
-  before extending this pin to that call site.
+- `backend/tests/test_project_graph_extractor_registry.py` — selector, fallback, and
+  plugin capability policy;
+- `backend/tests/test_project_graph_orchestrator_boundary.py` — zero-field context,
+  absent legacy config/caller seam, and no dormant raw LLM transport;
+- `backend/tests/test_project_graph_llm_extractor.py` — explicit keyword behavior,
+  direct-provider disable, and orchestrator fail-closed import behavior;
+- `backend/tests/test_project_graph_extractor_authority_docs.py` — root and detailed
+  architecture docs remain aligned with the authority boundary;
+- `docs/architecture/kg-extractor-seam.md` and
+  `docs/doctoring/project-graph-orchestrator-consumer-boundary.md` — code-current
+  architecture and RED→repair lineage.
 
-**Revision 8 consequences (current behavior):**
-
-- `PROJECT_GRAPH_EXTRACTOR=llm` (direct-provider mode) always raises
-  `ExtractorUnavailableError` with a message naming it a policy disable,
-  regardless of any credential or model configured. Covered by
-  `test_direct_llm_extractor_is_unconditionally_disabled`,
-  `test_run_extraction_propagates_when_direct_llm_selected`, and
-  `test_import_selection_llm_is_policy_disabled` (end-to-end, in
-  `backend/tests/test_project_graph_llm_extractor.py`).
-- `PROJECT_GRAPH_EXTRACTOR=orchestrator` still cannot complete extraction
-  (no released consumer contract exists to populate
-  `context.orchestrator_model` from) — but now *propagates* that
-  unavailability through `run_extraction` instead of resolving to a
-  keyword-derived result. Covered by
-  `test_orchestrator_routing_propagates_without_a_configured_model`,
-  `test_orchestrator_routing_propagates_when_unconfigured`, and
-  `test_import_selection_orchestrator_propagates_pending_a_co_release`
-  (end-to-end).
-- `test_llm_chain_has_no_fallback` / `test_orchestrator_chain_has_no_fallback`
-  / `test_llm_backed_selectors_never_resolve_to_the_keyword_extractor` cover
-  the structural chain-resolution change; `test_run_extraction_uses_primary_on_success`
-  and `test_orchestrator_routing_targets_the_orchestrator_base_url` confirm
-  a genuinely successful orchestrator request is unaffected (still returns
-  the LLM result, not a keyword one).
-- Explicit `PROJECT_GRAPH_EXTRACTOR=keyword` selection is unaffected by any
-  of the above — it remains a deterministic, always-available product mode.
-  Covered by `test_keyword_chain_is_deterministic_only`,
-  `test_keyword_selector_never_calls_llm`, and
-  `test_import_selection_defaults_to_keyword`.
-- A plugin extractor that does not set `requires_llm_capability` keeps the
-  pre-existing degrade-to-keyword behavior by default — this is an opt-out
-  a future LLM-backed extractor must make deliberately, not a universal
-  regression. Covered by `test_custom_extractor_can_register_into_the_seam`.
-- Blast radius: `_persist_project_graph_projection` (the sole caller,
-  `email_import_service.py`) already wraps extraction in a `try/except
-  Exception` that never fails the email import on any failure — verified by
-  reading that function before implementing this revision, not assumed. A
-  tenant currently configured with `PROJECT_GRAPH_EXTRACTOR=llm` or
-  `orchestrator` keeps importing email successfully; they simply stop
-  receiving a keyword-derived project graph for those emails. This is a
-  real, visible product behavior change but not a crash, data-loss, or
-  import-failure risk.
-- If contextual-orchestrator's `orchestrator/free` catalog is ever empty
-  once orchestrator mode is otherwise operational (an admitted-but-empty
-  free-pool state, not today's no-contract-at-all state), the gateway
-  itself fails closed (`400 invalid_model`, per `.github` ADR-0003 §2);
-  under Revision 8 that also now propagates through `run_extraction` rather
-  than degrading to keyword, consistent with every other LLM-backed
-  failure mode this ADR covers.
+Exact-head hosted CI/security/review evidence is required after every push. Review or
+check evidence from a predecessor head does not transfer.
 
 ## References (APA 7th)
 
 ContextualWisdomLab. (2026). *ADR-0003: Vendored contextual-orchestrator review
-sidecar with governed gateway pools* [ADR, amended 2026-08-30].
-`ContextualWisdomLab/.github` `docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md`.
+sidecar with governed gateway pools* [Architecture decision record, amended
+2026-08-30]. `ContextualWisdomLab/.github`.
 https://github.com/ContextualWisdomLab/.github/blob/main/docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md
-
-OpenRouter. (n.d.). *Data policy: Zero data retention*. Retrieved 2026-09-02,
-from https://openrouter.ai/docs/features/privacy-and-logging
-The zero-retention definition ADR-0003 §3 adopts ("a provider will not store
-your data for any period of time; zero retention also implies no training")
-and that this ADR inherits without redefining.
 
 National Institute of Standards and Technology. (2023). *Artificial intelligence
 risk management framework (AI RMF 1.0)* (NIST AI 100-1). U.S. Department of
 Commerce. https://doi.org/10.6028/NIST.AI.100-1
-Governs the data-minimization and provenance rationale for preferring a
-zero-retention route for KG extraction over customer email content, consistent
-with `docs/CWL-MASTER-CONTEXT.md`'s data-sovereignty commitment.
+
+OpenRouter. (n.d.). *Data policy: Zero data retention*. Retrieved September 2,
+2026, from https://openrouter.ai/docs/features/privacy-and-logging
