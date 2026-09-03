@@ -21,11 +21,7 @@ from .extractors import (
     EXTRACTOR_VERSION as DETERMINISTIC_EXTRACTOR_VERSION,
     extract_project_semantics,
 )
-from .llm_extractor import (
-    LLM_EXTRACTOR_NAME,
-    LLM_EXTRACTOR_VERSION,
-    extract_project_semantics_llm,
-)
+from .llm_extractor import LLM_EXTRACTOR_NAME, LLM_EXTRACTOR_VERSION
 from .models import ProjectSemanticExtractionResult, ProjectSourceSegment
 
 logger = logging.getLogger(__name__)
