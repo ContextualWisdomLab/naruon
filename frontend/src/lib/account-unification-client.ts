@@ -1,5 +1,5 @@
-import { request as httpRequest, type IncomingMessage, type RequestOptions } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { request as httpRequest, type IncomingMessage } from "node:http";
+import { request as httpsRequest, type RequestOptions } from "node:https";
 import { isIP } from "node:net";
 
 import { isPrivateOrLoopbackHostname, normalizeHostname } from "@/lib/host-policy";

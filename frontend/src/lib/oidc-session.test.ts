@@ -116,6 +116,17 @@ describe('oidc-session', () => {
     const flowId = windowNames[0].slice(OIDC_POPUP_WINDOW_NAME_PREFIX.length);
     expect(flowId.length).toBeGreaterThan(0);
 
+    // startOidcLogin only registers its BroadcastChannel listener (inside
+    // waitForPopupCompletion) after the async server round-trip completes --
+    // broadcasting right after openPopup fires (a race won every time here,
+    // since the fetch mock resolves on a later microtask) sends the message
+    // before anything is listening, so it's silently dropped and the test
+    // hangs until timeout. fakePopup.focus() is the last synchronous call
+    // before waitForPopupCompletion's channel is created, with no further
+    // await between them, so waiting for it is a reliable signal that the
+    // listener is now attached.
+    await vi.waitFor(() => expect(fakePopup.focus).toHaveBeenCalled());
+
     broadcastOidcPopupResult({ source: 'naruon-oidc', flowId, status: 'success', returnTo: '/security' });
 
     await expect(loginPromise).resolves.toEqual({ returnTo: '/security' });
