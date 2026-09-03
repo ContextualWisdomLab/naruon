@@ -164,7 +164,7 @@ describe("/auth/password/signup route", () => {
     expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
   });
 
-  it("forwards a validation error's detail as the error code", async () => {
+  it("keeps upstream validation detail behind Naruon's public error contract", async () => {
     const { AccountUnificationError } = await import("@/lib/account-unification-client");
     registerAccountWithPasswordMock.mockRejectedValue(
       new AccountUnificationError("account_unification_rejected", 422, "password_must_not_match_email"),
@@ -176,7 +176,7 @@ describe("/auth/password/signup route", () => {
 
     expect(response.status).toBe(422);
     await expect(response.json()).resolves.toEqual({
-      error_code: "password_must_not_match_email",
+      error_code: "password_signup_invalid",
     });
   });
 
