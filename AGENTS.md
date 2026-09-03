@@ -84,6 +84,19 @@ in this repo.
   PDF→DOM sidecar; **semantic-data-portal** = upper ontology/catalog/governance
   plane with its own graph engine.
 
+### LLM authority boundary
+
+- Naruon owns product/domain truth, tools, authorization, and context assembly;
+  it does not own provider/model routing. Production LLM capability must consume
+  an immutable released `contextual-orchestrator` API/client/schema through an
+  explicit ACL. When that immutable consumer contract is unavailable, fail closed
+  rather than bind to a mutable owner head or a direct provider.
+- The central `.github` review control plane is a separate owner path and uses
+  `orchestrator/free`; that GitHub Actions policy is not a Naruon runtime pool
+  selector. Explicit local deterministic fixtures and local model development
+  stacks may remain non-production evidence only and must never become a silent
+  production fallback.
+
 ### Research grounding (attach paper PDFs)
 
 - **Org rule:** substantive feature or process PRs should find the relevant
@@ -136,51 +149,15 @@ in this repo.
   `.github/workflows/opencode-review.yml`, `.github/workflows/strix.yml`,
   `.github/workflows/strix-selftest.yml`, or
   `.github/workflows/pr-review-merge-scheduler.yml`.
-- The central Strix Security Scan uses GitHub Models by default through
-  `STRIX_GITHUB_MODELS_TOKEN`, `STRIX_LLM=openai/gpt-5`, and
-  `LLM_API_BASE_FILE` pointing at a trusted file containing
-  `https://models.github.ai/inference`; GitHub Models scans must try the
-  configured GPT-5-or-newer model first and may fall back to the explicit
-  workflow fallback list, currently
-  `github_models/deepseek/deepseek-r1-0528` and
-  `github_models/deepseek/deepseek-v3-0324`, when GitHub Models provider
-  capacity or model availability blocks the primary run. The Strix gate must
-  route these fallback names through the GitHub Models endpoint with
-  OpenAI-compatible child model names such as
-  `openai/deepseek/deepseek-r1-0528`, not the public DeepSeek API. Do not use
-  GPT-4.1 or weaker GitHub Models fallbacks for Strix or OpenCode PR review
-  evidence. Keep the GitHub Models endpoint in a trusted input file and pass
-  the token only through
-  the provider-scoped Strix child-process key path. Legacy `STRIX_LLM` secrets
-  must not override PR, push, or scheduled Strix defaults. Vertex remains
-  available only for manual
-  `workflow_dispatch` evidence when the `strix_llm` input
-  explicitly selects `vertex_ai/gemini-3.1-pro-preview-customtools` or
-  `vertex_ai/gemini-2.5-flash` with `GCP_SA_KEY`; expose Google/Vertex
-  credentials only for Vertex provider mode. Direct OpenAI GPT-5.4-or-newer
-  scans remain supported only for manual `strix_llm` selections with
-  `STRIX_OPENAI_API_KEY`. Do not silently fall back between providers, and
-  do not treat timeout-class provider infrastructure failures as clean PR
-  evidence even when Strix printed zero vulnerabilities before failing. Disable
-  silent Vertex fallback models in the workflow unless a future PR proves a new
-  exact fallback contract with no Timeout/Fatal/Warn/Denied output. Record
-  provider evidence in the PR. Known third-party Strix/Pydantic
-  serializer warnings must be filtered narrowly inside the Strix gate child
-  process, not as a visible workflow env entry, so Warn-class logs are not
-  accepted as clean evidence and warning-filter variable names do not pollute
-  GitHub logs. Strix workflow runtime budget keys should be exported inside the
-  execution shell, not listed as visible step `env:` timeout names, so clean runs
-  do not carry stale timeout-signal strings. Keep PR-scope process budgets large
-  enough for Strix to finalize reports after the scanner emits completion
-  events; a wrapper timeout after `vulnerability_count: 0` is still failed
-  evidence, not a pass. PR evidence must present the full scannable changed-file
-  set from the PR head, plus allowlisted trusted context files, to Strix in one
-  scanner invocation; do not split changed files into separate scanner runs or
-  copy the entire PR-head repository tree by default because either breaks
-  Strix's required whole-context and bounded-input contract. Keep architecture
-  docs and reusable Strix gate tests aligned with this rule so stale
-  Vertex-default, OpenAI-only, unavailable-model, blanket-warning, or generic-key
-  examples cannot re-enter copied workflow guidance.
+- Central model-backed review workflows are owned by `ContextualWisdomLab/.github`
+  and consume the canonical `contextual-orchestrator` sidecar through the fixed
+  `orchestrator/free` capability alias. Naruon does not choose a provider, model,
+  group, or paid fallback for those lanes and must not copy central routing logic
+  into repository-local workflows. Provider discovery, capability routing,
+  fallback, pricing/latency/availability policy, and provider credentials stay in
+  `contextual-orchestrator`. If that capability is unavailable or its verdict
+  cannot be validated, the required lane fails closed and the repair belongs to
+  the canonical owner path; do not add a direct-provider escape hatch.
 - HMAC fallback sessions are local/control-plane compatibility credentials, not
   authoritative workspace-membership evidence. Sensitive tenant security posture
   surfaces must require OIDC/JWKS-backed membership or an explicit dependency
@@ -258,7 +235,7 @@ in this repo.
   keep CodeRabbit GitHub Checks integration disabled. GitHub Actions are already
   evaluated by required checks and PR Governance; letting CodeRabbit also gate
   on Actions can strand a stale GitHub `CHANGES_REQUESTED` review when an
-  external scanner such as direct-OpenAI Strix is quota-blocked after comments
+  external required scanner is infrastructure-blocked after comments
   are fixed.
 - `STARTUP_FAILURE` in required PR governance/check metadata is a hard blocker
   and should use the same idempotent metadata-gate comment path.
@@ -458,9 +435,10 @@ in this repo.
   responses must include `Referrer-Policy`, and `target="_blank"` links must
   use explicit `rel="noopener noreferrer"`.
 - When robot review cites an obsolete Strix provider policy, update the docs and
-  tests to the current GitHub Models default contract before accepting a
-  rollback suggestion; do not reintroduce generic `LLM_API_KEY` or
-  cross-provider credential forwarding while trying to satisfy old comments.
+  tests to the current canonical `contextual-orchestrator` / `orchestrator/free`
+  contract before accepting a rollback suggestion; do not reintroduce generic
+  provider keys, direct-provider routing, or cross-provider credential forwarding
+  while trying to satisfy old comments.
 - When reviews find inert navigation/dead-space controls, either wire them to an
   implemented workspace route/API or remove the control; do not leave
   high-traffic drawer/sidebar entries as permanent `준비 중` copy.
@@ -717,11 +695,3 @@ in this repo.
 - **Goal**: Actively manage tasks to ensure open PR counts converge to 0.
 
 - When the gate exhausts fallbacks after the primary model produces a finding at or above threshold and then fails with a retryable error (like `NOT_FOUND`), ensure the final output explicitly reports `Strix quick scan failed with a non-recoverable error.` to prevent downgrading the finding to pass or misleadingly reporting an unavailability error.
-
-## Code-owner review gates — disabled (on hold)
-
-As of 2026-08-04, code-owner review requirements (`require_code_owner_reviews` in branch
-protection, `require_code_owner_review` in rulesets) are disabled across the ContextualWisdomLab
-org: there is a single maintainer (solo developer), so a code-owner approval gate can never be
-satisfied. This is ON HOLD until the org has multiple maintainers — do NOT re-enable these
-settings or add CODEOWNERS-based merge gates before then.
