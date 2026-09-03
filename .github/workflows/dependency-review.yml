@@ -8,6 +8,16 @@ on:
       - "release/**"
   workflow_dispatch:
 
+# GitHub reusable workflows cannot elevate GITHUB_TOKEN permissions through
+# the call chain -- the called workflow's own permissions: block is only a
+# ceiling. Without an explicit grant here, this job runs with the repo's
+# broader default token permissions instead of the minimal read-only set
+# the central workflow actually needs (CodeQL: workflow does not contain
+# permissions).
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: dependency-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true

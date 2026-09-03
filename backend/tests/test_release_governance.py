@@ -401,31 +401,24 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "egress-policy: block" in mail_smoke_workflow
     assert "allowed-endpoints:" in mail_smoke_workflow
 
+    # dependency-review.yml is now a thin caller into the org-level central
+    # reusable workflow (see the comment above), not a standalone workflow
+    # with its own hardened action pin/env vars -- assert the caller shape
+    # instead of the old local implementation details this test previously
+    # checked, which no longer exist in this file (Devin Review).
     dependency_review_workflow = read_repo_text(
         ".github/workflows/dependency-review.yml"
     )
     assert (
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
+        "uses: ContextualWisdomLab/.github/.github/workflows/dependency-review.yml@"
         in dependency_review_workflow
     )
-    assert "BASE_REF: ${{ github.base_ref || github.ref_name }}" in (
-        dependency_review_workflow
-    )
-    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in (
-        dependency_review_workflow
-    )
-    log_dependency_review_step = dependency_review_workflow.split(
-        "- name: Log dependency review policy", 1
-    )[1].split("- name: Review dependency changes", 1)[0]
-    log_dependency_review_script = log_dependency_review_step.split("run: |", 1)[1]
-    assert "${{ github.base_ref || github.ref_name }}" not in (
-        log_dependency_review_script
-    )
-    assert "${{ github.head_ref || github.ref_name }}" not in (
-        log_dependency_review_script
-    )
-    assert "printf 'Base ref: %s\\n' \"$BASE_REF\"" in log_dependency_review_script
-    assert "printf 'Head ref: %s\\n' \"$HEAD_REF\"" in log_dependency_review_script
+    assert re.search(
+        r"dependency-review\.yml@[0-9a-f]{40}\b", dependency_review_workflow
+    ), "the reusable workflow must be pinned to a full commit SHA, not a mutable ref"
+    assert "permissions:" in dependency_review_workflow
+    assert "contents: read" in dependency_review_workflow
+    assert "pull-requests: read" in dependency_review_workflow
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
