@@ -655,32 +655,17 @@ def _patch_extractor_cores(monkeypatch, *, llm, keyword):
 
 @pytest.mark.asyncio
 async def test_import_selection_llm_is_policy_disabled(monkeypatch):
-    """PROJECT_GRAPH_EXTRACTOR=llm never reaches the provider, regardless of
-    whether the underlying LLM call would have succeeded.
-
-    A prior revision of this test asserted the opposite: that direct-provider
-    LLM selection succeeded (or fell back to keyword on failure). ADR-0005
-    Revision 8 disables the direct-provider path entirely -- Naruon holds no
-    production LLM provider/model authority outside contextual-orchestrator's
-    released consumer contract, which does not exist -- and, being LLM-backed,
-    it no longer silently degrades to a keyword-derived result either. The
-    caller (_persist_project_graph_projection) already treats project-graph
-    population as best-effort, so this raise never fails the email import
-    itself, only its graph projection for that email.
-    """
+    """The import path cannot restore direct-provider LLM routing authority."""
     llm_mock = AsyncMock(return_value="llm-result")
     keyword_mock = Mock()
     _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "llm", raising=False
     )
-    provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url=None, embedding_model="embed"
-    )
 
     with pytest.raises(extractor_registry.ExtractorUnavailableError, match="disabled"):
         await import_service._extract_project_semantics_for_import(
-            [_segment("seg1", "text")], embedding_provider=provider
+            [_segment("seg1", "text")]
         )
 
     llm_mock.assert_not_awaited()
@@ -699,7 +684,7 @@ async def test_import_selection_defaults_to_keyword(monkeypatch):
     )
 
     result = await import_service._extract_project_semantics_for_import(
-        [_segment("seg1", "text")], embedding_provider=None
+        [_segment("seg1", "text")]
     )
 
     assert result is keyword_result
@@ -710,71 +695,20 @@ async def test_import_selection_defaults_to_keyword(monkeypatch):
 async def test_import_selection_orchestrator_propagates_pending_a_co_release(
     monkeypatch,
 ):
-    """The end-to-end import path cannot yet complete an orchestrator-routed
-    extraction, even with an endpoint configured -- and, being LLM-backed,
-    no longer silently degrades to a keyword-derived result either.
-
-    A prior revision of this test asserted degradation to keyword. ADR-0005
-    Revision 7 established that this extractor has no provider/model/pool
-    selection authority, and _extract_project_semantics_for_import (below)
-    never populates KgExtractorContext.orchestrator_model -- there is no
-    released contextual-orchestrator consumer contract yet to resolve it
-    from. Revision 8 additionally stopped masking that unavailability behind
-    a keyword-derived result: the caller
-    (_persist_project_graph_projection) already treats project-graph
-    population as best-effort, so this raise never fails the email import
-    itself, only its graph projection for that email.
-    """
+    """The import path fails closed until an immutable CO contract exists."""
     llm_mock = AsyncMock(return_value="orchestrator-result")
     keyword_mock = Mock()
     _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
     )
-    monkeypatch.setattr(
-        import_service.settings,
-        "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL",
-        "https://orchestrator.example/v1",
-        raising=False,
-    )
-    provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url="https://provider.example", embedding_model="embed"
-    )
 
     with pytest.raises(
-        extractor_registry.ExtractorUnavailableError, match="no consumer release"
+        extractor_registry.ExtractorUnavailableError,
+        match="released consumer contract",
     ):
         await import_service._extract_project_semantics_for_import(
-            [_segment("seg1", "text")], embedding_provider=provider
-        )
-
-    llm_mock.assert_not_awaited()
-    keyword_mock.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_import_selection_orchestrator_propagates_when_unconfigured(monkeypatch):
-    llm_mock = AsyncMock()
-    keyword_mock = Mock()
-    _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
-    monkeypatch.setattr(
-        import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
-    )
-    monkeypatch.setattr(
-        import_service.settings,
-        "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL",
-        None,
-        raising=False,
-    )
-    provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url=None, embedding_model="embed"
-    )
-
-    with pytest.raises(
-        extractor_registry.ExtractorUnavailableError, match="endpoint is not configured"
-    ):
-        await import_service._extract_project_semantics_for_import(
-            [_segment("seg1", "text")], embedding_provider=provider
+            [_segment("seg1", "text")]
         )
 
     llm_mock.assert_not_awaited()
