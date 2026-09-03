@@ -10,10 +10,13 @@ import services.rag_service as rag_service
 async def test_call_llm_sends_openai_json_schema_response_format():
     """`_call_llm` must request OpenAI structured output for the answer shape.
 
-    The openai SDK's `.beta.chat.completions.parse()` helper turns a Pydantic
-    `response_format=` model into the standard OpenAI
-    `{"type": "json_schema", "json_schema": {...}}` request envelope, so
-    asserting the kwarg here is asserting the wire format.
+    Proves the *local* contract: `_call_llm` passes `GroundedAnswerPayload` as
+    `response_format` and the right `model`. It mocks `AsyncOpenAI` entirely,
+    so it does not exercise the SDK's own Pydantic-to-JSON-schema
+    serialization -- that is what
+    `test_grounded_answer_payload_serializes_to_the_openai_json_schema_wire_envelope`
+    below verifies directly, unmocked (Devin Review: the wire-format claim
+    this docstring previously made here was not actually proven by this test).
     """
     mock_client = MagicMock()
     mock_client.close = AsyncMock()
@@ -38,6 +41,27 @@ async def test_call_llm_sends_openai_json_schema_response_format():
     call_kwargs = mock_client.beta.chat.completions.parse.call_args.kwargs
     assert call_kwargs["response_format"] is rag_service.GroundedAnswerPayload
     assert call_kwargs["model"] == "gpt-test"
+
+
+def test_grounded_answer_payload_serializes_to_the_openai_json_schema_wire_envelope():
+    """Prove the actual wire envelope the OpenAI SDK sends, not just the local kwarg.
+
+    Calls ``openai.lib._parsing.type_to_response_format_param`` directly, with
+    no mocking, against the real ``GroundedAnswerPayload`` model -- the exact
+    function ``.beta.chat.completions.parse()`` calls internally to build the
+    request body.
+    """
+    from openai.lib._parsing import type_to_response_format_param
+
+    envelope = type_to_response_format_param(rag_service.GroundedAnswerPayload)
+
+    assert envelope["type"] == "json_schema"
+    assert envelope["json_schema"]["name"] == "GroundedAnswerPayload"
+    assert envelope["json_schema"]["strict"] is True
+    schema = envelope["json_schema"]["schema"]
+    assert schema["type"] == "object"
+    assert set(schema["properties"]) == {"answer", "cited_email_ids"}
+    assert schema["additionalProperties"] is False
 
 
 @pytest.mark.asyncio

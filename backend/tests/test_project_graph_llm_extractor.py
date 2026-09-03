@@ -183,10 +183,13 @@ async def test_empty_segments_short_circuit_without_llm_call(monkeypatch):
 async def test_call_llm_sends_openai_json_schema_response_format():
     """`_call_llm` must request OpenAI structured output for the extraction shape.
 
-    The openai SDK's `.beta.chat.completions.parse()` helper turns a Pydantic
-    `response_format=` model into the standard OpenAI
-    `{"type": "json_schema", "json_schema": {...}}` request envelope, so
-    asserting the kwarg here is asserting the wire format.
+    Proves the *local* contract: `_call_llm` passes `ExtractionPayload` as
+    `response_format` and the right `model`. It mocks `AsyncOpenAI` entirely,
+    so it does not exercise the SDK's own Pydantic-to-JSON-schema
+    serialization -- that is what
+    `test_extraction_payload_serializes_to_the_openai_json_schema_wire_envelope`
+    below verifies directly, unmocked (Devin Review: the wire-format claim
+    this docstring previously made here was not actually proven by this test).
     """
     mock_client = Mock()
     mock_client.close = AsyncMock()
@@ -210,6 +213,34 @@ async def test_call_llm_sends_openai_json_schema_response_format():
     call_kwargs = mock_client.beta.chat.completions.parse.call_args.kwargs
     assert call_kwargs["response_format"] is llm_extractor.ExtractionPayload
     assert call_kwargs["model"] == "gpt-test"
+
+
+def test_extraction_payload_serializes_to_the_openai_json_schema_wire_envelope():
+    """Prove the actual wire envelope the OpenAI SDK sends, not just the local kwarg.
+
+    ``test_call_llm_sends_openai_json_schema_response_format`` above mocks
+    ``AsyncOpenAI`` entirely, so it only proves ``_call_llm`` passes
+    ``ExtractionPayload`` as the ``response_format`` kwarg -- it never runs the
+    openai SDK's own Pydantic-model-to-JSON-schema serialization, so a bug in
+    that serialization (or in ``ExtractionPayload``'s shape triggering one)
+    would still pass every mocked test (Devin Review). This calls
+    ``openai.lib._parsing.type_to_response_format_param`` directly, with no
+    mocking, against the real ``ExtractionPayload`` model -- the exact
+    function ``.beta.chat.completions.parse()`` calls internally to build the
+    request body, so this is the actual wire format, not an approximation of
+    it.
+    """
+    from openai.lib._parsing import type_to_response_format_param
+
+    envelope = type_to_response_format_param(llm_extractor.ExtractionPayload)
+
+    assert envelope["type"] == "json_schema"
+    assert envelope["json_schema"]["name"] == "ExtractionPayload"
+    assert envelope["json_schema"]["strict"] is True
+    schema = envelope["json_schema"]["schema"]
+    assert schema["type"] == "object"
+    assert set(schema["properties"]) == {"objects", "relations"}
+    assert schema["additionalProperties"] is False
 
 
 @pytest.mark.asyncio

@@ -276,15 +276,51 @@ async def test_extract_action_items_and_summary_success(mock_openai):
         mock_openai.beta.chat.completions.parse.call_args.kwargs["model"]
         == settings.OPENAI_MODEL
     )
-    # OpenAI structured outputs: the openai SDK's `.parse()` helper converts the
-    # Pydantic `response_format=ExtractionResult` kwarg into the standard
-    # `{"type": "json_schema", "json_schema": {"name", "strict", "schema"}}`
-    # envelope before it ever reaches the wire, so passing the model class here
-    # *is* sending the correct OpenAI structured-output request shape.
+    # This proves the *local* contract only: `extract_action_items_and_summary`
+    # passes the `ExtractionResult` model class as `response_format`. It does
+    # not exercise the openai SDK's own Pydantic-to-JSON-schema serialization
+    # (AsyncOpenAI is mocked above), so it does not by itself prove the actual
+    # wire envelope -- see
+    # `test_extraction_result_serializes_to_the_openai_json_schema_wire_envelope`
+    # below for that, unmocked (Devin Review, naruon#1529: this comment
+    # previously claimed passing the model class here "is" the wire shape,
+    # which this test alone does not demonstrate).
     assert (
         mock_openai.beta.chat.completions.parse.call_args.kwargs["response_format"]
         is ExtractionResult
     )
+
+
+def test_extraction_result_serializes_to_the_openai_json_schema_wire_envelope():
+    """Prove the actual wire envelope the OpenAI SDK sends, not just the local kwarg.
+
+    Calls `openai.lib._parsing.type_to_response_format_param` directly, with
+    no mocking, against the real `ExtractionResult` model -- the exact
+    function `.beta.chat.completions.parse()` calls internally to build the
+    request body. Also confirms `confidence`'s `Field(ge=0, le=100)`
+    constraint survives into the wire schema as `minimum`/`maximum`, not just
+    that the field exists.
+    """
+    from openai.lib._parsing import type_to_response_format_param
+
+    envelope = type_to_response_format_param(ExtractionResult)
+
+    assert envelope["type"] == "json_schema"
+    assert envelope["json_schema"]["name"] == "ExtractionResult"
+    assert envelope["json_schema"]["strict"] is True
+    schema = envelope["json_schema"]["schema"]
+    assert schema["type"] == "object"
+    assert set(schema["properties"]) == {
+        "summary",
+        "action_items",
+        "provenance",
+        "confidence",
+    }
+    assert schema["additionalProperties"] is False
+    confidence_variants = schema["properties"]["confidence"]["anyOf"]
+    bounded = next(v for v in confidence_variants if v.get("type") == "integer")
+    assert bounded["minimum"] == 0
+    assert bounded["maximum"] == 100
 
 
 @pytest.mark.asyncio
