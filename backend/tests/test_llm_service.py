@@ -1,7 +1,9 @@
 import asyncio
+import json
 
 import httpx
 import pytest
+from openai import AsyncOpenAI
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.config import settings
@@ -15,6 +17,7 @@ from services.llm_service import (
     extract_action_items_and_summary,
     translate_email_body,
 )
+from tests.openai_wire_capture import CapturingTransport, chat_completion_response
 
 
 @pytest.fixture
@@ -276,6 +279,106 @@ async def test_extract_action_items_and_summary_success(mock_openai):
         mock_openai.beta.chat.completions.parse.call_args.kwargs["model"]
         == settings.OPENAI_MODEL
     )
+    # This proves the *local* contract only: `extract_action_items_and_summary`
+    # passes the `ExtractionResult` model class as `response_format`. It does
+    # not exercise the openai SDK's own Pydantic-to-JSON-schema serialization
+    # (AsyncOpenAI is mocked above), so it does not by itself prove the actual
+    # wire envelope -- see
+    # `test_extraction_result_serializes_to_the_openai_json_schema_wire_envelope`
+    # below for that, unmocked (Devin Review, naruon#1529: this comment
+    # previously claimed passing the model class here "is" the wire shape,
+    # which this test alone does not demonstrate).
+    assert (
+        mock_openai.beta.chat.completions.parse.call_args.kwargs["response_format"]
+        is ExtractionResult
+    )
+
+
+def test_extraction_result_serializes_to_the_openai_json_schema_wire_envelope():
+    """Prove the actual wire envelope the OpenAI SDK sends, not just the local kwarg.
+
+    Calls `openai.lib._parsing.type_to_response_format_param` directly, with
+    no mocking, against the real `ExtractionResult` model -- the exact
+    function `.beta.chat.completions.parse()` calls internally to build the
+    request body. Also confirms `confidence`'s `Field(ge=0, le=100)`
+    constraint survives into the wire schema as `minimum`/`maximum`, not just
+    that the field exists.
+    """
+    from openai.lib._parsing import type_to_response_format_param
+
+    envelope = type_to_response_format_param(ExtractionResult)
+
+    assert envelope["type"] == "json_schema"
+    assert envelope["json_schema"]["name"] == "ExtractionResult"
+    assert envelope["json_schema"]["strict"] is True
+    schema = envelope["json_schema"]["schema"]
+    assert schema["type"] == "object"
+    assert set(schema["properties"]) == {
+        "summary",
+        "action_items",
+        "provenance",
+        "confidence",
+    }
+    assert schema["additionalProperties"] is False
+    confidence_variants = schema["properties"]["confidence"]["anyOf"]
+    bounded = next(v for v in confidence_variants if v.get("type") == "integer")
+    assert bounded["minimum"] == 0
+    assert bounded["maximum"] == 100
+
+
+@pytest.mark.asyncio
+async def test_extract_action_items_and_summary_sends_the_actual_wire_body():
+    """Prove the real request bytes, not just a transformation function in isolation.
+
+    The previous test above proves `type_to_response_format_param` builds
+    the right envelope in isolation -- it does not prove
+    `extract_action_items_and_summary`'s real `AsyncOpenAI` client actually
+    uses that function (or its result verbatim) when constructing a genuine
+    outgoing request, through the circuit-breaker/retry wrapper this
+    function adds on top of the raw SDK call (Devin Review: "wire coverage
+    stops before transport"). This patches `AsyncOpenAI` with a *real*
+    client wired to a custom `httpx` transport instead of a mock, so the
+    SDK's entire real request-construction path runs; only the actual
+    network send is intercepted.
+    """
+    transport = CapturingTransport(
+        chat_completion_response(
+            json.dumps({"summary": "s", "action_items": [], "confidence": 50})
+        )
+    )
+    real_client = AsyncOpenAI(
+        api_key="test-key", http_client=httpx.AsyncClient(transport=transport)
+    )
+
+    with patch("services.llm_service.AsyncOpenAI", return_value=real_client):
+        result = await extract_action_items_and_summary(
+            "Test email", "test-key", model="gpt-test"
+        )
+
+    assert result.summary == "s"
+    assert transport.captured_body is not None
+    assert transport.captured_body["model"] == "gpt-test"
+    response_format = transport.captured_body["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "ExtractionResult"
+    assert response_format["json_schema"]["strict"] is True
+
+
+@pytest.mark.asyncio
+async def test_extract_action_items_and_summary_raises_on_unparsable_response(
+    mock_openai,
+):
+    """A schema-violating/empty completion must fail closed, not pass through."""
+    mock_response = MagicMock()
+    mock_message = MagicMock()
+    mock_message.parsed = None
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+    mock_response.choices = [mock_choice]
+    mock_openai.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with pytest.raises(RuntimeError, match="Failed to parse LLM response"):
+        await extract_action_items_and_summary("Test email", "test-key")
 
 
 @pytest.mark.asyncio

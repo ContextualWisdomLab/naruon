@@ -1,9 +1,133 @@
 """Tests for the grounded-answer endpoint and RAG citation enforcement."""
 
+import json
+
+import httpx
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import services.rag_service as rag_service
+from tests.openai_wire_capture import CapturingTransport, chat_completion_response
+
+
+@pytest.mark.asyncio
+async def test_call_llm_sends_openai_json_schema_response_format():
+    """`_call_llm` must request OpenAI structured output for the answer shape.
+
+    Proves the *local* contract: `_call_llm` passes `GroundedAnswerPayload` as
+    `response_format` and the right `model`. It mocks `AsyncOpenAI` entirely,
+    so it does not exercise the SDK's own Pydantic-to-JSON-schema
+    serialization -- that is what
+    `test_grounded_answer_payload_serializes_to_the_openai_json_schema_wire_envelope`
+    below verifies directly, unmocked (Devin Review: the wire-format claim
+    this docstring previously made here was not actually proven by this test).
+    """
+    mock_client = MagicMock()
+    mock_client.close = AsyncMock()
+    mock_response = MagicMock()
+    mock_message = MagicMock()
+    mock_message.parsed = rag_service.GroundedAnswerPayload(
+        answer="grounded", cited_email_ids=[1]
+    )
+    mock_response.choices = [MagicMock(message=mock_message)]
+    mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with patch("services.rag_service.AsyncOpenAI", return_value=mock_client):
+        result = await rag_service._call_llm(
+            api_key="k",
+            base_url=None,
+            model="gpt-test",
+            question="q",
+            emails_json="{}",
+        )
+
+    assert result.answer == "grounded"
+    call_kwargs = mock_client.beta.chat.completions.parse.call_args.kwargs
+    assert call_kwargs["response_format"] is rag_service.GroundedAnswerPayload
+    assert call_kwargs["model"] == "gpt-test"
+
+
+def test_grounded_answer_payload_serializes_to_the_openai_json_schema_wire_envelope():
+    """Prove the actual wire envelope the OpenAI SDK sends, not just the local kwarg.
+
+    Calls ``openai.lib._parsing.type_to_response_format_param`` directly, with
+    no mocking, against the real ``GroundedAnswerPayload`` model -- the exact
+    function ``.beta.chat.completions.parse()`` calls internally to build the
+    request body.
+    """
+    from openai.lib._parsing import type_to_response_format_param
+
+    envelope = type_to_response_format_param(rag_service.GroundedAnswerPayload)
+
+    assert envelope["type"] == "json_schema"
+    assert envelope["json_schema"]["name"] == "GroundedAnswerPayload"
+    assert envelope["json_schema"]["strict"] is True
+    schema = envelope["json_schema"]["schema"]
+    assert schema["type"] == "object"
+    assert set(schema["properties"]) == {"answer", "cited_email_ids"}
+    assert schema["additionalProperties"] is False
+
+
+@pytest.mark.asyncio
+async def test_call_llm_sends_the_actual_wire_body_through_a_real_client():
+    """Prove the real request bytes, not just a transformation function in isolation.
+
+    The previous test above proves ``type_to_response_format_param`` builds
+    the right envelope in isolation -- it does not prove ``_call_llm``'s real
+    ``AsyncOpenAI`` client actually uses that function (or its result
+    verbatim) when constructing a genuine outgoing request (Devin Review:
+    "wire coverage stops before transport"). This patches ``AsyncOpenAI``
+    with a *real* client wired to a custom ``httpx`` transport instead of a
+    mock, so the SDK's entire real request-construction path runs; only the
+    actual network send is intercepted.
+    """
+    transport = CapturingTransport(
+        chat_completion_response(
+            json.dumps({"answer": "grounded", "cited_email_ids": [1]})
+        )
+    )
+    real_client = rag_service.AsyncOpenAI(
+        api_key="test-key", http_client=httpx.AsyncClient(transport=transport)
+    )
+
+    with patch("services.rag_service.AsyncOpenAI", return_value=real_client):
+        result = await rag_service._call_llm(
+            api_key="k",
+            base_url=None,
+            model="gpt-test",
+            question="q",
+            emails_json="{}",
+        )
+
+    assert result.answer == "grounded"
+    assert transport.captured_body is not None
+    assert transport.captured_body["model"] == "gpt-test"
+    response_format = transport.captured_body["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "GroundedAnswerPayload"
+    assert response_format["json_schema"]["strict"] is True
+
+
+@pytest.mark.asyncio
+async def test_call_llm_raises_on_unparsable_response():
+    """A schema-violating completion must fail closed, not return corrupted data."""
+    mock_client = MagicMock()
+    mock_client.close = AsyncMock()
+    mock_response = MagicMock()
+    mock_message = MagicMock()
+    mock_message.parsed = None
+    mock_response.choices = [MagicMock(message=mock_message)]
+    mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with patch("services.rag_service.AsyncOpenAI", return_value=mock_client):
+        with pytest.raises(RuntimeError, match="unparsable payload"):
+            await rag_service._call_llm(
+                api_key="k",
+                base_url=None,
+                model="gpt-test",
+                question="q",
+                emails_json="{}",
+            )
 
 
 def _context(email_id: int, content: str = "body") -> dict:
