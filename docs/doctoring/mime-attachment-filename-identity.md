@@ -8,7 +8,7 @@ Naruon receives attachment filenames from Python's MIME parser and uses them for
 
 The display/storage projection may remove known active markup and literal path segments. The parser-authority projection must not be derived from that sanitized display value, because percent decoding, entity decoding, markup stripping, control deletion, or whitespace normalization can manufacture a recognized suffix that the sender did not present to the parser boundary.
 
-The current PR therefore keeps the two projections separate. Generic-MIME extension fallback uses only the literal parser-authority projection. C0, DEL, and C1 control-bearing filenames fail closed to `attachment` for both display and parser selection; percent/entity text remains literal unless the MIME parser itself has already decoded a standards-defined MIME parameter encoding.
+The current PR therefore keeps the two projections separate. Generic-MIME extension fallback uses only the literal parser-authority projection. C0, DEL, C1, and Unicode `Bidi_Control` characters fail closed to `attachment` for both display and parser selection; percent/entity text remains literal unless the MIME parser itself has already decoded a standards-defined MIME parameter encoding. Ordinary Arabic/Hebrew and other right-to-left script text remains allowed: the restriction is on explicit/implicit directional formatting controls, not on bidirectional scripts.
 
 ## Standards traceability
 
@@ -18,15 +18,19 @@ RFC 2231 extends MIME parameter values with character-set/language information a
 
 A production-ingress probe also shows why control characters need an explicit fail-closed rule. The RFC 2231 parameter `filename*=utf-8''quarterly%0A.json` is exposed by `Message.get_filename()` as `quarterly\n.json`. Without a control guard, `Path(...).suffix` still returns `.json`, allowing a generic `application/octet-stream` part to select the JSON parser while the display/storage value contains a line control. The regression contract fixes that exact MIME ingress rather than testing an artificial helper-only string.
 
+Unicode Standard Annex #9 defines the `Bidi_Control` set used to influence display ordering: ALM, LRM, RLM, LRE, RLE, LRO, RLO, PDF, LRI, RLI, FSI, and PDI. UAX #9 explicitly distinguishes logical order from visual order and notes security concerns around bidirectional text; directional overrides are to be avoided where possible because of those concerns. A MIME attachment filename is both identity-bearing input and user-facing text, so retaining invisible directional controls permits a sender to make the visible filename diverge from its logical code-point order without changing the stored string. The RFC 2231 production regression `filename*=utf-8''quarterly%E2%80%AEfdp.json` proves that U+202E RIGHT-TO-LEFT OVERRIDE reaches Naruon's filename boundary after standards-defined MIME decoding. Naruon therefore rejects the Unicode `Bidi_Control` property at this trust boundary while preserving ordinary RTL-script filenames that contain no directional formatting control.
+
 ## TDD and implementation traceability
 
 - Protected base: `develop@042b0c70531b229af3acbd0421a2f23098d848b3`.
 - Existing representation-separation causal head: `fea71c7fc2b49d7d47b0c91862786bccddd29d07`.
 - Control-character RED: `288136ef8b1a6ffd4c1d910fcd9654d25671f9d1` adds RFC 2231 newline ingress plus C0/C1 unit cases. On the predecessor implementation, control-bearing values remain display filenames and a trailing `.json` retains generic-MIME parser authority.
-- Causal fix: `92ec6151d11d9b125880a0405dab9ef59bc9293a` adds `_has_unsafe_filename_control()` and applies it before either display projection or parser-authority projection.
+- Control-character causal fix: `92ec6151d11d9b125880a0405dab9ef59bc9293a` adds `_has_unsafe_filename_control()` and applies it before either display projection or parser-authority projection.
+- Bidi-control RED: `51f45492309b40799d7a026c52688a6a999a043e` adds a real RFC 2231 U+202E ingress regression plus all twelve Unicode `Bidi_Control` code-point cases. The predecessor helper rejects only C0/DEL/C1, so it retains the controls and generic `.json` parser authority.
+- Bidi-control causal fix: `ddc11593ac5af1528c9068f3275be728e28f3dc8` adds the UAX #9 `Bidi_Control` code-point set to the same fail-closed boundary. The regression also proves that an Arabic filename without formatting controls remains valid and continues to select the JSON parser under generic MIME.
 - Product code: `backend/services/attachment_parser.py`.
-- Production-ingress regression: `backend/tests/test_attachment_filename_identity.py::test_rfc2231_control_character_filename_fails_closed`.
-- Edge regression: `backend/tests/test_attachment_filename_identity.py::test_filename_controls_fail_closed_before_display_or_parser_selection`.
+- Production-ingress regressions: `backend/tests/test_attachment_filename_identity.py::test_rfc2231_control_character_filename_fails_closed` and `::test_rfc2231_bidi_control_filename_fails_closed`.
+- Edge regressions: `backend/tests/test_attachment_filename_identity.py::test_filename_controls_fail_closed_before_display_or_parser_selection` and `::test_bidi_controls_fail_closed_without_rejecting_bidi_scripts`.
 
 No CardDAV/DAV/HTTP URL canonicalization, declared non-generic MIME type, attachment payload parser, PDF byte validation, or ordinary body-text sanitization is changed by this decision.
 
@@ -44,5 +48,7 @@ Queued, absent, startup-failed, predecessor-head, or author-only evidence is non
 ## References (APA 7th)
 
 Freed, N., & Moore, K. (1997). *MIME parameter value and encoded word extensions: Character sets, languages, and continuations* (RFC 2231). RFC Editor. https://doi.org/10.17487/RFC2231
+
+The Unicode Consortium. (2025). *Unicode Bidirectional Algorithm* (Unicode Standard Annex #9, Version 17.0.0, Revision 51). https://www.unicode.org/reports/tr9/
 
 Troost, R., Dorner, S., & Moore, K. (1997). *Communicating presentation information in Internet messages: The Content-Disposition header field* (RFC 2183). RFC Editor. https://doi.org/10.17487/RFC2183
