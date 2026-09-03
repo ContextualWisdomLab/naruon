@@ -26,3 +26,23 @@ def test_root_authority_docs_match_fail_closed_project_graph_extractor_contract(
     assert "must not silently fall back to keyword extraction" in architecture
     assert "released contextual-orchestrator consumer contract" in architecture
     assert "contextual-orchestrator released consumer contract" in claude
+
+
+def test_extractor_seam_docs_expose_no_raw_orchestrator_configuration() -> None:
+    """Detailed extractor docs must describe the same authority-free runtime seam."""
+
+    seam = _normalized_markdown(
+        _REPOSITORY_ROOT / "docs" / "architecture" / "kg-extractor-seam.md"
+    )
+    doctoring = _normalized_markdown(
+        _REPOSITORY_ROOT
+        / "docs"
+        / "doctoring"
+        / "project-graph-orchestrator-consumer-boundary.md"
+    )
+
+    assert "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL" not in seam
+    assert "KgExtractorContext` is intentionally fieldless" in seam
+    assert "no project-graph-specific contextual-orchestrator URL" in seam
+    assert "`KgExtractorContext` is now fieldless" in doctoring
+    assert "no legacy compatibility constructor" in doctoring
