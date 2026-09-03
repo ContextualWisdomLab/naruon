@@ -5,6 +5,7 @@ import {
   passwordRegistrationConfig,
   registerAccountWithPassword,
 } from "@/lib/account-unification-client";
+import { sameOriginStateChangingRequest } from "@/lib/csrf-origin";
 
 import {
   errorResponse,
@@ -60,6 +61,10 @@ function statusForAccountUnificationError(error: AccountUnificationError): {
  * abuse hardening beyond a per-peer rate limit).
  */
 export async function POST(request: NextRequest) {
+  if (!sameOriginStateChangingRequest(request)) {
+    return errorResponse("csrf_origin_rejected", 403);
+  }
+
   const oidcConfig = serverOidcConfig(request.nextUrl.origin);
   if (!oidcConfig) {
     return errorResponse("oidc_browser_configuration_missing", 503);

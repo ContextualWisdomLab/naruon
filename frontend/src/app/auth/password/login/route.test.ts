@@ -34,6 +34,7 @@ function postRequest(bodyJson: unknown) {
   return new NextRequest("https://app.example.com/auth/password/login", {
     method: "POST",
     body: JSON.stringify(bodyJson),
+    headers: { origin: "https://app.example.com" },
   });
 }
 
@@ -139,5 +140,31 @@ describe("/auth/password/login route", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("rejects a cross-site login submission before touching the OIDC exchange", async () => {
+    const request = new NextRequest("https://app.example.com/auth/password/login", {
+      method: "POST",
+      body: JSON.stringify({ username: "person@example.com", password: "correct horse" }),
+      headers: { origin: "https://attacker.example" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error_code: "csrf_origin_rejected" });
+    expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a login submission with no Origin or Referer at all", async () => {
+    const request = new NextRequest("https://app.example.com/auth/password/login", {
+      method: "POST",
+      body: JSON.stringify({ username: "person@example.com", password: "correct horse" }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error_code: "csrf_origin_rejected" });
   });
 });

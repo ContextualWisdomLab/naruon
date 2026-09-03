@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 
+import { sameOriginStateChangingRequest } from "@/lib/csrf-origin";
+
 import {
   errorResponse,
   exchangePasswordForSessionResponse,
@@ -24,6 +26,10 @@ export const fetchCache = "force-no-store";
  * passwordless-vs-password tradeoff it accepts.
  */
 export async function POST(request: NextRequest) {
+  if (!sameOriginStateChangingRequest(request)) {
+    return errorResponse("csrf_origin_rejected", 403);
+  }
+
   const config = serverOidcConfig(request.nextUrl.origin);
   if (!config) {
     return errorResponse("oidc_browser_configuration_missing", 503);

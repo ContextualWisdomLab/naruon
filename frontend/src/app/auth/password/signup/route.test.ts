@@ -51,6 +51,7 @@ function postRequest(bodyJson: unknown) {
   return new NextRequest("https://app.example.com/auth/password/signup", {
     method: "POST",
     body: JSON.stringify(bodyJson),
+    headers: { origin: "https://app.example.com" },
   });
 }
 
@@ -203,5 +204,37 @@ describe("/auth/password/signup route", () => {
     await expect(response.json()).resolves.toEqual({
       error_code: "password_signup_failed",
     });
+  });
+
+  it("rejects a cross-site signup submission before touching account-unification", async () => {
+    const request = new NextRequest("https://app.example.com/auth/password/signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "person@example.com",
+        password: "correct horse battery staple 1!",
+      }),
+      headers: { origin: "https://attacker.example" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error_code: "csrf_origin_rejected" });
+    expect(registerAccountWithPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signup submission with no Origin or Referer at all", async () => {
+    const request = new NextRequest("https://app.example.com/auth/password/signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "person@example.com",
+        password: "correct horse battery staple 1!",
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error_code: "csrf_origin_rejected" });
   });
 });
