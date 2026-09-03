@@ -173,8 +173,6 @@ export function EmailList({
       };
   const searchBusy = isSearching || loading;
 
-  // ⚡ Bolt: Wrap Email list in useMemo to prevent O(N) re-renders
-  // 🎯 Why: Mapping over potentially large lists of emails blocks the main thread during unrelated state updates.
   const emailListContent = useMemo(() => {
     return emails.map((email: EmailItem) => (
       <EmailListItemComponent
