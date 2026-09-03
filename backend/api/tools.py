@@ -756,6 +756,10 @@ registry.register(
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """
+    사용자가 제공한 일반 텍스트를 URL Safe 형식으로 인코딩하여 반환합니다.
+    이메일 템플릿의 파라미터나 외부 시스템 연동 시 안전한 텍스트 전달을 위해 필요합니다.
+    """
     text = params.get("text", "")
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(
@@ -777,6 +781,10 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """
+    URL Safe 형식으로 인코딩된 문자열을 원본 텍스트로 디코딩하여 반환합니다.
+    이메일 본문 내 암호화되거나 인코딩된 링크의 원래 의도를 파악하기 위해 필요합니다.
+    """
     encoded_url = params.get("encoded_url", "")
     if len(encoded_url) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(
@@ -798,6 +806,10 @@ registry.register(
 
 
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """
+    압축된 구조의 JSON 문자열을 보기 좋게 2칸 들여쓰기하여 포맷팅된 문자열로 반환합니다.
+    사용자가 읽기 어려운 기계 생성 JSON 데이터를 확인하고 수정할 수 있도록 돕습니다.
+    """
     json_string = params.get("json_string", "")
     if len(json_string) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(
