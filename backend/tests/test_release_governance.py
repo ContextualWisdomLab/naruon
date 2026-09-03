@@ -409,16 +409,25 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     dependency_review_workflow = read_repo_text(
         ".github/workflows/dependency-review.yml"
     )
-    assert (
-        "uses: ContextualWisdomLab/.github/.github/workflows/dependency-review.yml@"
-        in dependency_review_workflow
-    )
-    assert re.search(
-        r"dependency-review\.yml@[0-9a-f]{40}\b", dependency_review_workflow
+    # Structured equality, not substring/regex checks: a substring check for
+    # "contents: read" still passes if a "contents: write" line is added
+    # alongside it, and neither substring nor the SHA-pin regex say anything
+    # about fail_on_severity or comment_summary_in_pr regressing to weaker
+    # values (CodeRabbit, 2026-09-03).
+    dependency_review_config = yaml.safe_load(dependency_review_workflow)
+    dependency_review_job = dependency_review_config["jobs"]["dependency-review"]
+    assert re.fullmatch(
+        r"ContextualWisdomLab/\.github/\.github/workflows/dependency-review\.yml@[0-9a-f]{40}",
+        dependency_review_job["uses"],
     ), "the reusable workflow must be pinned to a full commit SHA, not a mutable ref"
-    assert "permissions:" in dependency_review_workflow
-    assert "contents: read" in dependency_review_workflow
-    assert "pull-requests: read" in dependency_review_workflow
+    assert dependency_review_config["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+    }
+    assert dependency_review_job["with"] == {
+        "fail_on_severity": "moderate",
+        "comment_summary_in_pr": "never",
+    }
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
