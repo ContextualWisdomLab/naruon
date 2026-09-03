@@ -13,11 +13,12 @@ export interface OidcLoginOptions {
   /** Fallback top-level navigation, used only when a popup cannot be opened. */
   navigate?: (url: string) => void;
   /**
-   * Opens the Keycloak authorization URL in a window named `windowName`.
-   * Defaults to a small `window.open` popup, with its `opener` immediately
-   * severed, so the user's naruon tab never navigates away and the
-   * cross-origin authorization page can never reach back into it. Return
-   * `null` (as a popup-blocked browser would) to fall back to `navigate`.
+   * Reserves the login window synchronously while the initiating browser event
+   * still carries transient user activation. The reserved window starts at
+   * `about:blank`; after server-side login initialization returns the trusted
+   * authorization URL, startOidcLogin navigates this same window to Keyverse.
+   * Return `null` (as a popup-blocked browser would) to use the top-level
+   * navigation fallback instead.
    */
   openPopup?: (url: string, windowName: string) => Window | null;
 }
@@ -225,6 +226,15 @@ function defaultOpenPopup(url: string, windowName: string): Window | null {
   }
 }
 
+/** Close a reserved login window without making cleanup failure user-visible. */
+function closeReservedPopup(popup: Window) {
+  try {
+    if (!popup.closed) popup.close();
+  } catch {
+    // Login initialization failure is the primary error; popup cleanup is best effort.
+  }
+}
+
 /** Resolves once the matching-flowId popup result arrives, or rejects if it's closed first. */
 function waitForPopupCompletion(popup: Window, flowId: string): Promise<{ returnTo: string }> {
   return new Promise((resolve, reject) => {
@@ -253,11 +263,11 @@ function waitForPopupCompletion(popup: Window, flowId: string): Promise<{ return
 }
 
 /**
- * Starts an OIDC login. By default this opens Keycloak's authorization URL in
- * a popup so naruon's own tab/page never navigates away — only the credential
- * ceremony itself runs on Keyverse's origin, which WebAuthn requires anyway.
- * If the popup is blocked, this falls back to the previous full top-level
- * redirect (and the returned promise never resolves, since the page unloads).
+ * Starts an OIDC login. The popup is reserved before any asynchronous server
+ * initialization so browser transient user activation is not lost while the
+ * authorization URL is being prepared. Once the URL arrives, the same opener-
+ * severed window is navigated to Keyverse. If popup reservation is blocked,
+ * the flow falls back to the previous full top-level redirect.
  */
 export async function startOidcLogin(options: OidcLoginOptions = {}): Promise<{ returnTo: string }> {
   requireBrowserStorage();
@@ -265,19 +275,40 @@ export async function startOidcLogin(options: OidcLoginOptions = {}): Promise<{ 
     throw new OidcSessionError('OIDC browser configuration is missing');
   }
 
-  const authorizationUrl = await requestServerOidcLogin(
-    options.returnTo ?? window.location.pathname,
-  );
+  const returnTo = options.returnTo ?? window.location.pathname;
   const flowId = randomFlowId();
   const openPopup = options.openPopup ?? defaultOpenPopup;
-  const popup = openPopup(authorizationUrl, `${OIDC_POPUP_WINDOW_NAME_PREFIX}${flowId}`);
+  const popup = openPopup('about:blank', `${OIDC_POPUP_WINDOW_NAME_PREFIX}${flowId}`);
+
   if (!popup) {
+    const authorizationUrl = await requestServerOidcLogin(returnTo);
     const navigate = options.navigate ?? ((url: string) => window.location.assign(url));
     navigate(authorizationUrl);
     return new Promise(() => {
       // Top-level navigation is about to unload this page; nothing left to resolve.
     });
   }
+
+  let authorizationUrl: string;
+  try {
+    authorizationUrl = await requestServerOidcLogin(returnTo);
+  } catch (error) {
+    closeReservedPopup(popup);
+    throw error;
+  }
+
+  try {
+    // Assigning the reserved window's Location is permitted while it is still
+    // the same-origin about:blank page. Reflect.set also keeps injected test
+    // windows lightweight without weakening the browser path.
+    if (!Reflect.set(popup, 'location', authorizationUrl)) {
+      throw new Error('window location assignment was rejected');
+    }
+  } catch {
+    closeReservedPopup(popup);
+    throw new OidcSessionError('OIDC login window could not be navigated');
+  }
+
   popup.focus();
   return waitForPopupCompletion(popup, flowId);
 }
