@@ -110,7 +110,7 @@ indexes, and auditable writeback intent. `ARCHITECTURE.md` and
 ```
 Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgvector
                             │
-                            ├──> OpenAI-compatible LLM providers (Ollama locally)
+                            ├──> contextual-orchestrator released consumer contract
                             └──> outbound-only self-hosted connector (connector/)
                                      └──> customer IMAP/POP3/SMTP + CalDAV/CardDAV/WebDAV
 ```
@@ -142,6 +142,14 @@ Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgve
   enterprise OIDC/JWKS; private `/api/*` routers register the default
   `get_auth_context` dependency. LLM `base_url` and OIDC/SMTP/IMAP/POP3 hosts
   are strict egress allowlists that resolve only to pinned global addresses.
+- Project-graph semantic extraction keeps domain truth in Naruon but does not
+  own LLM provider/model/pool routing. Explicit `PROJECT_GRAPH_EXTRACTOR=keyword`
+  is a deterministic non-LLM mode. LLM-backed selectors must not silently fall
+  back to keyword extraction; direct-provider execution is policy-disabled, and
+  the orchestrator selector remains unavailable until a released
+  contextual-orchestrator API/client/schema contract can be consumed without
+  Naruon inventing provider, model, group, or pool authority. See
+  `docs/architecture/kg-extractor-seam.md`.
 - CI (`.github/workflows/`): `app-ci.yml` (backend ruff+pytest, frontend
   test/lint/build), plus `bandit`, `codeql`, `trivy`, `scorecard`,
   `pr-governance`, `docker-publish` (GHCR on `v*` tags matching `VERSION`), and
