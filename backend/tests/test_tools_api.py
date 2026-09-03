@@ -1310,6 +1310,42 @@ def test_execute_json_formatter_oversized():
     assert "must not exceed" in data["message"]
 
 
+
+def test_execute_json_formatter_preserves_large_numbers():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "json_string": '{"large": 1e400, "precise": 1.0000000000000001}'
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "1E+400" in data["result"]["formatted_json"] or "1e400" in data["result"]["formatted_json"] or "1e+400" in data["result"]["formatted_json"]
+    assert "1.0000000000000001" in data["result"]["formatted_json"]
+
+def test_execute_json_formatter_rejects_nan_infinity():
+    for invalid in ['{"val": NaN}', '{"val": Infinity}', '{"val": -Infinity}']:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/tools/json_formatter/execute",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={
+                    "parameters": {
+                        "json_string": invalid
+                    }
+                },
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert "Invalid JSON string" in data["message"]
+
+
 def test_execute_analysis_tool_rejects_oversized_text():
     from api.tools import ANALYSIS_TEXT_MAX_CHARS
 

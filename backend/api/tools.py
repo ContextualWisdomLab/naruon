@@ -1,4 +1,5 @@
 import base64
+import decimal
 import hashlib
 import inspect
 import json
@@ -9,7 +10,6 @@ import urllib.parse
 import uuid
 from collections import Counter
 from collections.abc import Callable
-from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -707,8 +707,6 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
-
-
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -756,17 +754,12 @@ registry.register(
 )
 
 
+
+
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Percent-encode user text for transport in URL components.
-
-    Args:
-        params: Tool parameters containing the ``text`` value to encode.
-
-    Returns:
-        A mapping containing the percent-encoded value.
-
-    Raises:
-        ValueError: If the input exceeds the analysis text size limit.
+    """
+    사용자가 제공한 일반 텍스트를 URL Safe 형식으로 인코딩하여 반환합니다.
+    이메일 템플릿의 파라미터나 외부 시스템 연동 시 안전한 텍스트 전달을 위해 필요합니다.
     """
     text = params.get("text", "")
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
@@ -789,16 +782,9 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Decode a percent-encoded URL component into user-visible text.
-
-    Args:
-        params: Tool parameters containing the ``encoded_url`` value to decode.
-
-    Returns:
-        A mapping containing the decoded value.
-
-    Raises:
-        ValueError: If the input exceeds the analysis text size limit.
+    """
+    URL Safe 형식으로 인코딩된 문자열을 원본 텍스트로 디코딩하여 반환합니다.
+    이메일 본문 내 암호화되거나 인코딩된 링크의 원래 의도를 파악하기 위해 필요합니다.
     """
     encoded_url = params.get("encoded_url", "")
     if len(encoded_url) > ANALYSIS_TEXT_MAX_CHARS:
@@ -820,77 +806,48 @@ registry.register(
 )
 
 
-def _reject_non_json_constant(constant: str) -> None:
-    """Reject non-standard NaN and infinity constants accepted by Python JSON."""
-    raise ValueError(f"JSON constant is not permitted by RFC 8259: {constant}")
-
-
-def _render_json_value(value: Any, *, indent: int = 0) -> str:
-    """Render a parsed JSON value without coercing decimals to binary floats."""
-    if value is None:
-        return "null"
-    if value is True:
-        return "true"
-    if value is False:
-        return "false"
-    if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=False)
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, Decimal):
-        if not value.is_finite():
-            raise ValueError("JSON numbers must be finite")
-        return str(value)
-    if isinstance(value, list):
-        if not value:
-            return "[]"
-        child_indent = "  " * (indent + 1)
-        closing_indent = "  " * indent
-        rendered_items = [
-            f"{child_indent}{_render_json_value(item, indent=indent + 1)}"
-            for item in value
-        ]
-        return "[\n" + ",\n".join(rendered_items) + f"\n{closing_indent}]"
-    if isinstance(value, dict):
-        if not value:
-            return "{}"
-        child_indent = "  " * (indent + 1)
-        closing_indent = "  " * indent
-        rendered_items = [
-            f"{child_indent}{json.dumps(key, ensure_ascii=False)}: "
-            f"{_render_json_value(item, indent=indent + 1)}"
-            for key, item in value.items()
-        ]
-        return "{\n" + ",\n".join(rendered_items) + f"\n{closing_indent}}}"
-    raise ValueError(f"Unsupported JSON value type: {type(value).__name__}")
-
-
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Pretty-print an RFC 8259 JSON string without changing numeric values.
-
-    Args:
-        params: Tool parameters containing the ``json_string`` value to format.
-
-    Returns:
-        A mapping containing the two-space-indented JSON representation.
-
-    Raises:
-        ValueError: If the input is too large or is not RFC 8259 JSON.
+    """
+    압축된 구조의 JSON 문자열을 보기 좋게 2칸 들여쓰기하여 포맷팅된 문자열로 반환합니다.
+    사용자가 읽기 어려운 기계 생성 JSON 데이터를 확인하고 수정할 수 있도록 돕습니다.
     """
     json_string = params.get("json_string", "")
     if len(json_string) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         )
+
+    class _RawFloat:
+        def __init__(self, value: str):
+            self.value = value
+
+    class _RawFloatEncoder(json.JSONEncoder):
+        def default(self, obj: Any) -> Any:
+            if isinstance(obj, _RawFloat):
+                return {"__raw_float__": obj.value}
+            # The schema validation guarantees we only parse basic JSON types.
+            # _RawFloat is the only non-standard type we inject.
+            return super().default(obj) # pragma: no cover
+
+    def _reject_invalid_constants(constant: str) -> None:
+        raise ValueError(f"Invalid JSON string: constant {constant} is not allowed")
+
     try:
         parsed = json.loads(
             json_string,
-            parse_float=Decimal,
-            parse_constant=_reject_non_json_constant,
+            parse_float=_RawFloat,
+            parse_constant=_reject_invalid_constants
         )
-        return {"formatted_json": _render_json_value(parsed)}
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise ValueError(f"Invalid JSON string: {exc}") from exc
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False, cls=_RawFloatEncoder)
+        import re
+        formatted = re.sub(
+            r'\{\n\s*"__raw_float__": "(.*?)"\n\s*\}',
+            r'\1',
+            formatted
+        )
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
 
 
 registry.register(
@@ -919,6 +876,7 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
+
 
 
 @router.get("/tools", response_model=list[ToolInfo])
