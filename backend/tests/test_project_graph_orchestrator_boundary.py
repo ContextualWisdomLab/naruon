@@ -3,7 +3,6 @@
 from dataclasses import fields
 import inspect
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -59,12 +58,10 @@ def test_project_graph_runtime_has_no_legacy_orchestrator_configuration_seam():
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_selector_has_no_dormant_raw_llm_transport(monkeypatch):
+async def test_orchestrator_selector_has_no_dormant_raw_llm_transport():
     source = inspect.getsource(LlmGroundedExtractor.extract)
     assert "extract_project_semantics_llm" not in source
-
-    raw_transport = AsyncMock(return_value=object())
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
+    assert not hasattr(registry_module, "extract_project_semantics_llm")
 
     with pytest.raises(ExtractorUnavailableError, match="released consumer contract"):
         await run_extraction(
@@ -72,5 +69,3 @@ async def test_orchestrator_selector_has_no_dormant_raw_llm_transport(monkeypatc
             selector=SELECTOR_ORCHESTRATOR,
             context=KgExtractorContext(),
         )
-
-    raw_transport.assert_not_awaited()
