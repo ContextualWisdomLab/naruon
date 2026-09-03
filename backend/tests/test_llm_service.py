@@ -1,7 +1,9 @@
 import asyncio
+import json
 
 import httpx
 import pytest
+from openai import AsyncOpenAI
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.config import settings
@@ -15,6 +17,7 @@ from services.llm_service import (
     extract_action_items_and_summary,
     translate_email_body,
 )
+from tests.openai_wire_capture import CapturingTransport, chat_completion_response
 
 
 @pytest.fixture
@@ -321,6 +324,44 @@ def test_extraction_result_serializes_to_the_openai_json_schema_wire_envelope():
     bounded = next(v for v in confidence_variants if v.get("type") == "integer")
     assert bounded["minimum"] == 0
     assert bounded["maximum"] == 100
+
+
+@pytest.mark.asyncio
+async def test_extract_action_items_and_summary_sends_the_actual_wire_body():
+    """Prove the real request bytes, not just a transformation function in isolation.
+
+    The previous test above proves `type_to_response_format_param` builds
+    the right envelope in isolation -- it does not prove
+    `extract_action_items_and_summary`'s real `AsyncOpenAI` client actually
+    uses that function (or its result verbatim) when constructing a genuine
+    outgoing request, through the circuit-breaker/retry wrapper this
+    function adds on top of the raw SDK call (Devin Review: "wire coverage
+    stops before transport"). This patches `AsyncOpenAI` with a *real*
+    client wired to a custom `httpx` transport instead of a mock, so the
+    SDK's entire real request-construction path runs; only the actual
+    network send is intercepted.
+    """
+    transport = CapturingTransport(
+        chat_completion_response(
+            json.dumps({"summary": "s", "action_items": [], "confidence": 50})
+        )
+    )
+    real_client = AsyncOpenAI(
+        api_key="test-key", http_client=httpx.AsyncClient(transport=transport)
+    )
+
+    with patch("services.llm_service.AsyncOpenAI", return_value=real_client):
+        result = await extract_action_items_and_summary(
+            "Test email", "test-key", model="gpt-test"
+        )
+
+    assert result.summary == "s"
+    assert transport.captured_body is not None
+    assert transport.captured_body["model"] == "gpt-test"
+    response_format = transport.captured_body["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "ExtractionResult"
+    assert response_format["json_schema"]["strict"] is True
 
 
 @pytest.mark.asyncio

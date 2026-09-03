@@ -1,14 +1,18 @@
 """Tests for the LLM-grounded project extractor and its import selection."""
 
+import json
 import types
 
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
+import httpx
+
 import services.email_import_service as import_service
 import services.project_graph.extractor_registry as extractor_registry
 import services.project_graph.llm_extractor as llm_extractor
 from services.project_graph import ProjectObjectType, ProjectSourceSegment
+from tests.openai_wire_capture import CapturingTransport, chat_completion_response
 
 
 def _segment(uid: str, text: str) -> ProjectSourceSegment:
@@ -241,6 +245,47 @@ def test_extraction_payload_serializes_to_the_openai_json_schema_wire_envelope()
     assert schema["type"] == "object"
     assert set(schema["properties"]) == {"objects", "relations"}
     assert schema["additionalProperties"] is False
+
+
+@pytest.mark.asyncio
+async def test_call_llm_sends_the_actual_wire_body_through_a_real_client():
+    """Prove the real request bytes, not just a transformation function in isolation.
+
+    The previous test above proves ``type_to_response_format_param`` builds
+    the right envelope in isolation -- it does not prove ``_call_llm``'s real
+    ``AsyncOpenAI`` client actually uses that function (or its result
+    verbatim) when constructing a genuine outgoing request (Devin Review:
+    "wire coverage stops before transport" -- a changed request path could
+    leave that test green while transmitting a different body). This
+    patches ``AsyncOpenAI`` with a *real* client wired to a custom
+    ``httpx`` transport instead of a mock, so the SDK's entire real request-
+    construction path runs; only the actual network send is intercepted,
+    one layer below all of the SDK's own logic.
+    """
+    transport = CapturingTransport(
+        chat_completion_response(json.dumps({"objects": [], "relations": []}))
+    )
+    real_client = llm_extractor.AsyncOpenAI(
+        api_key="test-key", http_client=httpx.AsyncClient(transport=transport)
+    )
+
+    with patch(
+        "services.project_graph.llm_extractor.AsyncOpenAI", return_value=real_client
+    ):
+        result = await llm_extractor._call_llm(
+            api_key="key",
+            base_url=None,
+            model="gpt-test",
+            segments_json="{}",
+        )
+
+    assert result.objects == []
+    assert transport.captured_body is not None
+    assert transport.captured_body["model"] == "gpt-test"
+    response_format = transport.captured_body["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "ExtractionPayload"
+    assert response_format["json_schema"]["strict"] is True
 
 
 @pytest.mark.asyncio

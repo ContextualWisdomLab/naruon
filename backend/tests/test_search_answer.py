@@ -1,9 +1,13 @@
 """Tests for the grounded-answer endpoint and RAG citation enforcement."""
 
+import json
+
+import httpx
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import services.rag_service as rag_service
+from tests.openai_wire_capture import CapturingTransport, chat_completion_response
 
 
 @pytest.mark.asyncio
@@ -62,6 +66,46 @@ def test_grounded_answer_payload_serializes_to_the_openai_json_schema_wire_envel
     assert schema["type"] == "object"
     assert set(schema["properties"]) == {"answer", "cited_email_ids"}
     assert schema["additionalProperties"] is False
+
+
+@pytest.mark.asyncio
+async def test_call_llm_sends_the_actual_wire_body_through_a_real_client():
+    """Prove the real request bytes, not just a transformation function in isolation.
+
+    The previous test above proves ``type_to_response_format_param`` builds
+    the right envelope in isolation -- it does not prove ``_call_llm``'s real
+    ``AsyncOpenAI`` client actually uses that function (or its result
+    verbatim) when constructing a genuine outgoing request (Devin Review:
+    "wire coverage stops before transport"). This patches ``AsyncOpenAI``
+    with a *real* client wired to a custom ``httpx`` transport instead of a
+    mock, so the SDK's entire real request-construction path runs; only the
+    actual network send is intercepted.
+    """
+    transport = CapturingTransport(
+        chat_completion_response(
+            json.dumps({"answer": "grounded", "cited_email_ids": [1]})
+        )
+    )
+    real_client = rag_service.AsyncOpenAI(
+        api_key="test-key", http_client=httpx.AsyncClient(transport=transport)
+    )
+
+    with patch("services.rag_service.AsyncOpenAI", return_value=real_client):
+        result = await rag_service._call_llm(
+            api_key="k",
+            base_url=None,
+            model="gpt-test",
+            question="q",
+            emails_json="{}",
+        )
+
+    assert result.answer == "grounded"
+    assert transport.captured_body is not None
+    assert transport.captured_body["model"] == "gpt-test"
+    response_format = transport.captured_body["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "GroundedAnswerPayload"
+    assert response_format["json_schema"]["strict"] is True
 
 
 @pytest.mark.asyncio
