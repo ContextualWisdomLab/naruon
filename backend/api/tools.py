@@ -769,8 +769,8 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
 registry.register(
     ToolInfo(
         code="hash_generator",
-        name="해시 생성기 (Hash Generator)",
-        description="텍스트의 MD5, SHA-1, SHA-256 해시값을 생성합니다.",
+        name="지문/해시 생성기 (Fingerprint/Hash Generator)",
+        description="텍스트의 호환성 지문(MD5, SHA-1) 및 보안 해시(SHA-256) 값을 생성합니다.",
         category="유틸리티",
         parameters={"text": "string"},
     ),
@@ -778,31 +778,7 @@ registry.register(
 )
 
 
-_URL_PATTERN = re.compile(r"https?://[^\s<>\"\',]+")
 
-async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
-    text = params["text"]
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
-
-    urls = _URL_PATTERN.findall(text)
-    unique_urls = []
-    for url in urls:
-        if url not in unique_urls:
-            unique_urls.append(url)
-
-    return {"urls": unique_urls, "count": len(unique_urls)}
-
-registry.register(
-    ToolInfo(
-        code="url_extractor",
-        name="URL 추출기 (URL Extractor)",
-        description="텍스트 본문에서 URL을 추출합니다.",
-        category="이메일 분석",
-        parameters={"text": "string"},
-    ),
-    url_extractor_handler,
-)
 
 
 _EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
