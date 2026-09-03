@@ -117,6 +117,15 @@ _EXTENSION_CONTENT_TYPES = {
     or descriptor.parse_status in _DEFERRED_PARSE_STATUSES
     for extension in descriptor.extensions
 }
+_BIDI_FILENAME_CONTROL_CODEPOINTS = frozenset(
+    {
+        0x061C,
+        0x200E,
+        0x200F,
+        *range(0x202A, 0x202F),
+        *range(0x2066, 0x206A),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -266,9 +275,11 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 
 def _has_unsafe_filename_control(filename: str) -> bool:
-    """Return whether a MIME filename contains C0, DEL, or C1 controls."""
+    """Return whether a MIME filename contains unsafe control semantics."""
     return any(
-        ord(character) < 0x20 or 0x7F <= ord(character) <= 0x9F
+        (codepoint := ord(character)) < 0x20
+        or 0x7F <= codepoint <= 0x9F
+        or codepoint in _BIDI_FILENAME_CONTROL_CODEPOINTS
         for character in filename
     )
 
