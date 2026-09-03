@@ -26,8 +26,3 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
-
-## 2025-02-13 - Avoid Intermediate Arrays in Extracting Elements
-
-**Learning:** Extracting a small slice of items from a large Map or Set in React `useMemo` using `Array.from(iterable).slice(0, N)` creates a full `O(N)` intermediate array. This increases garbage collection pressure and blocks the main thread during high-frequency render operations.
-**Action:** Use a bounded `for...of` loop with an early `break` to maintain `O(1)` performance when slicing large iterables, preventing intermediate array allocations. And when looking up multiple items from the same short array, iterate over it once and update multiple variables instead of calling `Array.find()` multiple times for each target element.
