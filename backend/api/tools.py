@@ -9,6 +9,7 @@ import urllib.parse
 import uuid
 from collections import Counter
 from collections.abc import Callable
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -93,7 +94,7 @@ class ToolCreate(BaseModel):
     code: str = Field(..., description="도구의 고유 식별 코드")
     name: str = Field(..., description="도구의 이름")
     description: str = Field(..., description="도구에 대한 상세 설명")
-    category: str = Field(..., description="도구의 분류 (예: 이메일, 일정, 분석 등)")
+    category: str = Field(..., description="도구의 분류 (예: 이메일, 일정 등)")
     parameters: Optional[Dict[str, Any]] = Field(
         default=None, description="도구 실행에 필요한 파라미터 스키마"
     )
@@ -706,6 +707,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,12 +756,17 @@ registry.register(
 )
 
 
-
-
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """
-    사용자가 제공한 일반 텍스트를 URL Safe 형식으로 인코딩하여 반환합니다.
-    이메일 템플릿의 파라미터나 외부 시스템 연동 시 안전한 텍스트 전달을 위해 필요합니다.
+    """Percent-encode user text for transport in URL components.
+
+    Args:
+        params: Tool parameters containing the ``text`` value to encode.
+
+    Returns:
+        A mapping containing the percent-encoded value.
+
+    Raises:
+        ValueError: If the input exceeds the analysis text size limit.
     """
     text = params.get("text", "")
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
@@ -781,9 +789,16 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """
-    URL Safe 형식으로 인코딩된 문자열을 원본 텍스트로 디코딩하여 반환합니다.
-    이메일 본문 내 암호화되거나 인코딩된 링크의 원래 의도를 파악하기 위해 필요합니다.
+    """Decode a percent-encoded URL component into user-visible text.
+
+    Args:
+        params: Tool parameters containing the ``encoded_url`` value to decode.
+
+    Returns:
+        A mapping containing the decoded value.
+
+    Raises:
+        ValueError: If the input exceeds the analysis text size limit.
     """
     encoded_url = params.get("encoded_url", "")
     if len(encoded_url) > ANALYSIS_TEXT_MAX_CHARS:
@@ -805,10 +820,62 @@ registry.register(
 )
 
 
+def _reject_non_json_constant(constant: str) -> None:
+    """Reject non-standard NaN and infinity constants accepted by Python JSON."""
+    raise ValueError(f"JSON constant is not permitted by RFC 8259: {constant}")
+
+
+def _render_json_value(value: Any, *, indent: int = 0) -> str:
+    """Render a parsed JSON value without coercing decimals to binary floats."""
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise ValueError("JSON numbers must be finite")
+        return str(value)
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        child_indent = "  " * (indent + 1)
+        closing_indent = "  " * indent
+        rendered_items = [
+            f"{child_indent}{_render_json_value(item, indent=indent + 1)}"
+            for item in value
+        ]
+        return "[\n" + ",\n".join(rendered_items) + f"\n{closing_indent}]"
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        child_indent = "  " * (indent + 1)
+        closing_indent = "  " * indent
+        rendered_items = [
+            f"{child_indent}{json.dumps(key, ensure_ascii=False)}: "
+            f"{_render_json_value(item, indent=indent + 1)}"
+            for key, item in value.items()
+        ]
+        return "{\n" + ",\n".join(rendered_items) + f"\n{closing_indent}}}"
+    raise ValueError(f"Unsupported JSON value type: {type(value).__name__}")
+
+
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """
-    압축된 구조의 JSON 문자열을 보기 좋게 2칸 들여쓰기하여 포맷팅된 문자열로 반환합니다.
-    사용자가 읽기 어려운 기계 생성 JSON 데이터를 확인하고 수정할 수 있도록 돕습니다.
+    """Pretty-print an RFC 8259 JSON string without changing numeric values.
+
+    Args:
+        params: Tool parameters containing the ``json_string`` value to format.
+
+    Returns:
+        A mapping containing the two-space-indented JSON representation.
+
+    Raises:
+        ValueError: If the input is too large or is not RFC 8259 JSON.
     """
     json_string = params.get("json_string", "")
     if len(json_string) > ANALYSIS_TEXT_MAX_CHARS:
@@ -816,11 +883,14 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         )
     try:
-        parsed = json.loads(json_string)
-        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
-        return {"formatted_json": formatted}
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON string: {e}")
+        parsed = json.loads(
+            json_string,
+            parse_float=Decimal,
+            parse_constant=_reject_non_json_constant,
+        )
+        return {"formatted_json": _render_json_value(parsed)}
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"Invalid JSON string: {exc}") from exc
 
 
 registry.register(
@@ -849,7 +919,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
