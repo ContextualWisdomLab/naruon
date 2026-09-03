@@ -111,27 +111,18 @@ class Settings(BaseSettings):
     #                    non-LLM product mode in its own right,
     #   "llm"          — grounded LLM extraction; policy-disabled (raises
     #                    unconditionally) as of extractor_registry.py
-    #                    ADR-0005 Revision 8 -- Naruon holds no production
+    #                    ADR-0005 Revision 10 -- Naruon holds no production
     #                    LLM provider/model authority outside a released
     #                    contextual-orchestrator consumer contract,
-    #   "orchestrator" — the same grounded LLM extraction routed through the
-    #                    contextual-orchestrator gateway (see below); not yet
-    #                    operational pending that release.
+    #   "orchestrator" — reserved for the released contextual-orchestrator
+    #                    consumer contract; unavailable until that immutable
+    #                    API/client/schema exists.
     # Only "keyword" (or an explicit request for it) resolves to the
     # deterministic extractor. "llm"/"orchestrator" never fall back to it: an
     # unavailable or failed request propagates instead of silently
     # persisting a keyword-derived result under the request's name. An
     # unrecognized value also raises rather than defaulting to "keyword".
     PROJECT_GRAPH_EXTRACTOR: str = "keyword"
-    # OpenAI-compatible base URL of the contextual-orchestrator LLM gateway that
-    # grounded extraction is routed through when PROJECT_GRAPH_EXTRACTOR is
-    # "orchestrator". Must be HTTPS and exact-host allowlisted by
-    # ALLOWED_LLM_BASE_URL_HOSTS (enforced by build_llm_provider_http_client);
-    # unset (or any other precondition orchestrator routing needs) raises
-    # ExtractorUnavailableError rather than falling back to the deterministic
-    # keyword extractor (extractor_registry.py ADR-0005 Revision 8). The
-    # provider API key remains the tenant's Fernet-encrypted credential.
-    PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: str | None = None
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (
