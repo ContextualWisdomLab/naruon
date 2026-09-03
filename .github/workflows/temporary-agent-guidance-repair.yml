@@ -1,0 +1,105 @@
+name: Temporary agent guidance repair
+
+on:
+  push:
+    branches:
+      - docs/align-llm-owner-guidance
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, '[agent-guidance-repaired]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: docs/align-llm-owner-guidance
+          fetch-depth: 1
+
+      - name: Apply bounded guidance repair
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          agents_path = Path('AGENTS.md')
+          agents = agents_path.read_text(encoding='utf-8')
+
+          central_pattern = re.compile(
+              r"- The central Strix Security Scan uses GitHub Models by default through\n"
+              r".*?"
+              r"  examples cannot re-enter copied workflow guidance\.\n",
+              re.DOTALL,
+          )
+          central_replacement = """- Central model-backed review workflows are owned by `ContextualWisdomLab/.github`\n  and consume the canonical `contextual-orchestrator` sidecar through the fixed\n  `orchestrator/free` capability alias. Naruon does not choose a provider, model,\n  group, or paid fallback for those lanes and must not copy central routing logic\n  into repository-local workflows. Provider discovery, capability routing,\n  fallback, pricing/latency/availability policy, and provider credentials stay in\n  `contextual-orchestrator`. If that capability is unavailable or its verdict\n  cannot be validated, the required lane fails closed and the repair belongs to\n  the canonical owner path; do not add a direct-provider escape hatch.\n"""
+          agents, count = central_pattern.subn(central_replacement, agents, count=1)
+          if count != 1:
+              raise SystemExit(f'expected one stale central Strix block, replaced {count}')
+
+          agents = agents.replace(
+              "- When robot review cites an obsolete Strix provider policy, update the docs and\n"
+              "  tests to the current GitHub Models default contract before accepting a\n"
+              "  rollback suggestion; do not reintroduce generic `LLM_API_KEY` or\n"
+              "  cross-provider credential forwarding while trying to satisfy old comments.\n",
+              "- When robot review cites an obsolete Strix provider policy, update the docs and\n"
+              "  tests to the current canonical `contextual-orchestrator` / `orchestrator/free`\n"
+              "  contract before accepting a rollback suggestion; do not reintroduce generic\n"
+              "  provider keys, direct-provider routing, or cross-provider credential forwarding\n"
+              "  while trying to satisfy old comments.\n",
+          )
+          agents = agents.replace(
+              "  external scanner such as direct-OpenAI Strix is quota-blocked after comments\n",
+              "  external required scanner is infrastructure-blocked after comments\n",
+          )
+
+          authority_marker = "### Research grounding (attach paper PDFs)\n"
+          authority_block = """### LLM authority boundary\n\n- Naruon owns product/domain truth, tools, authorization, and context assembly;\n  it does not own provider/model routing. Production LLM capability must consume\n  an immutable released `contextual-orchestrator` API/client/schema through an\n  explicit ACL. When that immutable consumer contract is unavailable, fail closed\n  rather than bind to a mutable owner head or a direct provider.\n- The central `.github` review control plane is a separate owner path and uses\n  `orchestrator/free`; that GitHub Actions policy is not a Naruon runtime pool\n  selector. Explicit local deterministic fixtures and local model development\n  stacks may remain non-production evidence only and must never become a silent\n  production fallback.\n\n"""
+          if authority_block not in agents:
+              if authority_marker not in agents:
+                  raise SystemExit('LLM authority insertion marker missing')
+              agents = agents.replace(authority_marker, authority_block + authority_marker, 1)
+
+          agents_path.write_text(agents, encoding='utf-8')
+
+          claude_path = Path('CLAUDE.md')
+          claude = claude_path.read_text(encoding='utf-8')
+          old_diagram = """Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgvector\n                            │\n                            ├──> OpenAI-compatible LLM providers (Ollama locally)\n                            └──> outbound-only self-hosted connector (connector/)\n                                     └──> customer IMAP/POP3/SMTP + CalDAV/CardDAV/WebDAV\n"""
+          new_diagram = """Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgvector\n                            │\n                            ├──> contextual-orchestrator released consumer contract\n                            │      └──> provider/model routing owned by contextual-orchestrator\n                            └──> outbound-only self-hosted connector (connector/)\n                                     └──> customer IMAP/POP3/SMTP + CalDAV/CardDAV/WebDAV\n"""
+          if old_diagram not in claude:
+              raise SystemExit('stale CLAUDE architecture diagram missing')
+          claude = claude.replace(old_diagram, new_diagram, 1)
+
+          auth_old = """- Auth: signed HS256 bearer sessions (HMAC via `AUTH_SESSION_HMAC_SECRET`) or\n  enterprise OIDC/JWKS; private `/api/*` routers register the default\n  `get_auth_context` dependency. LLM `base_url` and OIDC/SMTP/IMAP/POP3 hosts\n  are strict egress allowlists that resolve only to pinned global addresses.\n"""
+          auth_new = """- Auth: signed HS256 bearer sessions (HMAC via `AUTH_SESSION_HMAC_SECRET`) or\n  enterprise OIDC/JWKS; private `/api/*` routers register the default\n  `get_auth_context` dependency. Naruon owns domain tools, authorization, and\n  context assembly; provider/model routing belongs to `contextual-orchestrator`.\n  Existing direct-provider `base_url` surfaces are legacy migration debt and must\n  not be extended as production routing authority; keep their SSRF controls until\n  they are removed. OIDC/SMTP/IMAP/POP3 hosts remain strict egress allowlists\n  that resolve only to pinned global addresses.\n"""
+          if auth_old not in claude:
+              raise SystemExit('stale CLAUDE auth/base_url block missing')
+          claude = claude.replace(auth_old, auth_new, 1)
+
+          architecture_note = """\nNaruon owns product behavior and model-call authorization, but not provider/model routing.\nProduction model work requires an immutable released `contextual-orchestrator`\nAPI/client/schema; a missing or incompatible owner contract fails closed instead\nof falling back to a direct provider. The Ollama/MLX paths in local Compose are\nexplicit non-production development fixtures. Central model-backed GitHub Actions\nare owned by `ContextualWisdomLab/.github` and use `orchestrator/free`; do not copy\nthat pool selection into Naruon runtime.\n"""
+          fence = new_diagram + "```\n"
+          if architecture_note not in claude:
+              if fence not in claude:
+                  raise SystemExit('updated CLAUDE diagram fence missing')
+              claude = claude.replace(fence, fence + architecture_note, 1)
+
+          claude_path.write_text(claude, encoding='utf-8')
+          PY
+
+          rm .github/workflows/temporary-agent-guidance-repair.yml
+          python -m pytest backend/tests/test_agent_llm_authority_docs.py -q
+          git diff --check
+
+          git config user.name "Naruon commercial writer"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AGENTS.md CLAUDE.md backend/tests/test_agent_llm_authority_docs.py .github/workflows/temporary-agent-guidance-repair.yml
+          git commit -m "docs(governance): align LLM authority guidance [agent-guidance-repaired]"
+          git push origin HEAD:docs/align-llm-owner-guidance
