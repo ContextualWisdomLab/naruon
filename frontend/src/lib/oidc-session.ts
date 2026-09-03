@@ -13,19 +13,54 @@ export interface OidcLoginOptions {
   /** Fallback top-level navigation, used only when a popup cannot be opened. */
   navigate?: (url: string) => void;
   /**
-   * Opens the Keycloak authorization URL. Defaults to a small `window.open`
-   * popup so the user's naruon tab never navigates away; return `null` (as a
-   * popup-blocked browser would) to fall back to `navigate`.
+   * Opens the Keycloak authorization URL in a window named `windowName`.
+   * Defaults to a small `window.open` popup, with its `opener` immediately
+   * severed, so the user's naruon tab never navigates away and the
+   * cross-origin authorization page can never reach back into it. Return
+   * `null` (as a popup-blocked browser would) to fall back to `navigate`.
    */
-  openPopup?: (url: string) => Window | null;
+  openPopup?: (url: string, windowName: string) => Window | null;
 }
 
-/** postMessage payload the popup's `/auth/callback` page sends back to the opener. */
+/** BroadcastChannel payload the popup's `/auth/callback` page sends back once it completes. */
 export interface OidcPopupResultMessage {
   source: 'naruon-oidc';
+  /** Identifies which startOidcLogin() call this result belongs to. */
+  flowId: string;
   status: 'success' | 'error';
   returnTo?: string;
   message?: string;
+}
+
+/**
+ * Same-origin channel used instead of window.opener/postMessage, so the
+ * popup can be opened with its opener severed (CWE-1021: an un-severed
+ * opener lets the cross-origin authorization page navigate this tab).
+ */
+const OIDC_POPUP_CHANNEL = 'naruon-oidc-popup';
+
+/**
+ * Prefix for the popup's window.open() target name. The `/auth/callback`
+ * page reads its own window.name back to learn whether it is running inside
+ * this specific popup flow -- this works even with opener severed, and
+ * (unlike a shared localStorage flag) carries no risk of two simultaneous
+ * login attempts in different tabs clobbering each other's state.
+ */
+export const OIDC_POPUP_WINDOW_NAME_PREFIX = 'naruon-oidc-login-';
+
+/** True when running inside the popup startOidcLogin opened for `flowId`. */
+export function isOidcPopupFlow(): { isPopup: boolean; flowId: string | null } {
+  if (typeof window === 'undefined' || !window.name.startsWith(OIDC_POPUP_WINDOW_NAME_PREFIX)) {
+    return { isPopup: false, flowId: null };
+  }
+  return { isPopup: true, flowId: window.name.slice(OIDC_POPUP_WINDOW_NAME_PREFIX.length) };
+}
+
+/** Sends the popup's result back to whichever tab is waiting on this flowId. */
+export function broadcastOidcPopupResult(message: OidcPopupResultMessage) {
+  const channel = new BroadcastChannel(OIDC_POPUP_CHANNEL);
+  channel.postMessage(message);
+  channel.close();
 }
 
 export interface OidcLogoutOptions {
@@ -146,6 +181,14 @@ async function pkceChallenge(verifier: string) {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
+/** Unique per-attempt id correlating a popup's result back to its starting call. */
+function randomFlowId() {
+  requireBrowserStorage();
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes);
+}
+
 export async function buildOidcAuthorizationUrl(config: OidcBrowserConfig, state: string, verifier: string) {
   const challenge = await pkceChallenge(verifier);
   const authorizationUrl = new URL(config.authorizationEndpoint);
@@ -159,26 +202,40 @@ export async function buildOidcAuthorizationUrl(config: OidcBrowserConfig, state
   return authorizationUrl.toString();
 }
 
-function defaultOpenPopup(url: string): Window | null {
+function defaultOpenPopup(url: string, windowName: string): Window | null {
   if (typeof window.open !== 'function') return null;
   try {
-    return window.open(url, 'naruon-oidc-login', 'width=460,height=680,noopener=false');
+    const popup = window.open(url, windowName, 'width=460,height=680');
+    if (popup) {
+      try {
+        // Sever the reverse-tabnabbing vector (CWE-1021): without this, the
+        // cross-origin authorization page could reach back into this tab via
+        // window.opener (e.g. opener.location = ...). Completion is signalled
+        // over BroadcastChannel below, which needs no opener relationship at
+        // all, so severing it here costs nothing.
+        popup.opener = null;
+      } catch {
+        // Best-effort; some environments restrict cross-window property
+        // writes. The popup still functions, just without this hardening.
+      }
+    }
+    return popup;
   } catch {
     return null;
   }
 }
 
-/** Resolves once the popup posts back a result, or rejects if it's closed first. */
-function waitForPopupCompletion(popup: Window): Promise<{ returnTo: string }> {
+/** Resolves once the matching-flowId popup result arrives, or rejects if it's closed first. */
+function waitForPopupCompletion(popup: Window, flowId: string): Promise<{ returnTo: string }> {
   return new Promise((resolve, reject) => {
+    const channel = new BroadcastChannel(OIDC_POPUP_CHANNEL);
     const cleanup = () => {
       window.clearInterval(closedPoll);
-      window.removeEventListener('message', onMessage);
+      channel.close();
     };
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.source !== popup) return;
+    channel.onmessage = (event: MessageEvent) => {
       const data = event.data as Partial<OidcPopupResultMessage> | null;
-      if (!data || data.source !== 'naruon-oidc') return;
+      if (!data || data.source !== 'naruon-oidc' || data.flowId !== flowId) return;
       cleanup();
       if (data.status === 'success') {
         resolve({ returnTo: typeof data.returnTo === 'string' && data.returnTo ? data.returnTo : '/' });
@@ -192,7 +249,6 @@ function waitForPopupCompletion(popup: Window): Promise<{ returnTo: string }> {
         reject(new OidcSessionError('OIDC login window was closed before completing'));
       }
     }, 500);
-    window.addEventListener('message', onMessage);
   });
 }
 
@@ -212,8 +268,9 @@ export async function startOidcLogin(options: OidcLoginOptions = {}): Promise<{ 
   const authorizationUrl = await requestServerOidcLogin(
     options.returnTo ?? window.location.pathname,
   );
+  const flowId = randomFlowId();
   const openPopup = options.openPopup ?? defaultOpenPopup;
-  const popup = openPopup(authorizationUrl);
+  const popup = openPopup(authorizationUrl, `${OIDC_POPUP_WINDOW_NAME_PREFIX}${flowId}`);
   if (!popup) {
     const navigate = options.navigate ?? ((url: string) => window.location.assign(url));
     navigate(authorizationUrl);
@@ -222,7 +279,7 @@ export async function startOidcLogin(options: OidcLoginOptions = {}): Promise<{ 
     });
   }
   popup.focus();
-  return waitForPopupCompletion(popup);
+  return waitForPopupCompletion(popup, flowId);
 }
 
 export async function completeOidcRedirect(search = window.location.search) {

@@ -1,11 +1,14 @@
 /* @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  broadcastOidcPopupResult,
   buildOidcAuthorizationUrl,
   clearOidcTransientState,
   clearOidcSession,
   completeOidcRedirect,
   getOidcBrowserConfig,
+  isOidcPopupFlow,
+  OIDC_POPUP_WINDOW_NAME_PREFIX,
   startOidcLogin,
 } from './oidc-session';
 
@@ -87,7 +90,7 @@ describe('oidc-session', () => {
     expect(authorizationUrl.searchParams.get('state')).toBe('server-state');
   });
 
-  it('opens the authorization URL in a popup and resolves once it posts back success', async () => {
+  it('opens the authorization URL in a uniquely-named popup and resolves once it broadcasts success', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       authorization_url: 'https://login.example.com/realms/naruon/protocol/openid-connect/auth?state=server-state',
     }), {
@@ -97,23 +100,71 @@ describe('oidc-session', () => {
 
     const fakePopup = { closed: false, focus: vi.fn() } as unknown as Window;
     const openedUrls: string[] = [];
+    const windowNames: string[] = [];
 
     const loginPromise = startOidcLogin({
       returnTo: '/settings',
-      openPopup: (url) => {
+      openPopup: (url, windowName) => {
         openedUrls.push(url);
+        windowNames.push(windowName);
         return fakePopup;
       },
     });
 
     await vi.waitFor(() => expect(openedUrls).toHaveLength(1));
-    window.dispatchEvent(new MessageEvent('message', {
-      origin: window.location.origin,
-      source: fakePopup,
-      data: { source: 'naruon-oidc', status: 'success', returnTo: '/security' },
-    }));
+    expect(windowNames[0]).toMatch(new RegExp(`^${OIDC_POPUP_WINDOW_NAME_PREFIX}.+`));
+    const flowId = windowNames[0].slice(OIDC_POPUP_WINDOW_NAME_PREFIX.length);
+    expect(flowId.length).toBeGreaterThan(0);
+
+    broadcastOidcPopupResult({ source: 'naruon-oidc', flowId, status: 'success', returnTo: '/security' });
 
     await expect(loginPromise).resolves.toEqual({ returnTo: '/security' });
+  });
+
+  it('ignores a broadcast result meant for a different login attempt', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      authorization_url: 'https://login.example.com/realms/naruon/protocol/openid-connect/auth',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const fakePopup = { closed: false, focus: vi.fn() } as unknown as Window;
+    const loginPromise = startOidcLogin({
+      returnTo: '/settings',
+      openPopup: () => fakePopup,
+    });
+    await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled(), { timeout: 1000 });
+
+    // A stale/unrelated flow's result must not resolve this attempt.
+    broadcastOidcPopupResult({ source: 'naruon-oidc', flowId: 'someone-elses-flow', status: 'success', returnTo: '/wrong' });
+
+    // Prove it's still waiting (not resolved by the mismatched broadcast) by
+    // driving the real closure path, which only fires if nothing else settled it.
+    const assertion = expect(loginPromise).rejects.toThrow('OIDC login window was closed before completing');
+    (fakePopup as { closed: boolean }).closed = true;
+    await vi.advanceTimersByTimeAsync(500);
+    await assertion;
+    vi.useRealTimers();
+  });
+
+  it("severs the popup's opener so the cross-origin authorization page cannot navigate the opener tab", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      authorization_url: 'https://login.example.com/realms/naruon/protocol/openid-connect/auth',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const openedWindow = { closed: false, opener: window, focus: vi.fn() } as unknown as Window;
+    const openSpy = vi.fn(() => openedWindow);
+    vi.stubGlobal('open', openSpy);
+
+    void startOidcLogin({ returnTo: '/settings' });
+    await vi.waitFor(() => expect(openSpy).toHaveBeenCalled());
+
+    expect(openedWindow.opener).toBeNull();
   });
 
   it('rejects when the login popup is closed before it posts back a result', async () => {
@@ -210,5 +261,46 @@ describe('oidc-session', () => {
     vi.stubGlobal('window', undefined);
 
     expect(() => clearOidcTransientState()).not.toThrow();
+  });
+
+  describe('isOidcPopupFlow', () => {
+    afterEach(() => {
+      window.name = '';
+    });
+
+    it('reports popup mode and extracts the flowId when window.name carries the popup prefix', () => {
+      window.name = `${OIDC_POPUP_WINDOW_NAME_PREFIX}abc123`;
+
+      expect(isOidcPopupFlow()).toEqual({ isPopup: true, flowId: 'abc123' });
+    });
+
+    it('reports non-popup mode for an ordinary tab (no window.name, or an unrelated one)', () => {
+      window.name = '';
+      expect(isOidcPopupFlow()).toEqual({ isPopup: false, flowId: null });
+
+      window.name = 'some-unrelated-window-name';
+      expect(isOidcPopupFlow()).toEqual({ isPopup: false, flowId: null });
+    });
+  });
+
+  describe('broadcastOidcPopupResult', () => {
+    it('delivers the message to a listener on the same channel', async () => {
+      const received = new Promise((resolve) => {
+        const channel = new BroadcastChannel('naruon-oidc-popup');
+        channel.onmessage = (event) => {
+          channel.close();
+          resolve(event.data);
+        };
+      });
+
+      broadcastOidcPopupResult({ source: 'naruon-oidc', flowId: 'flow-1', status: 'success', returnTo: '/security' });
+
+      await expect(received).resolves.toEqual({
+        source: 'naruon-oidc',
+        flowId: 'flow-1',
+        status: 'success',
+        returnTo: '/security',
+      });
+    });
   });
 });

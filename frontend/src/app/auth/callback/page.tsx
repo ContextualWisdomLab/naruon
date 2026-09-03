@@ -1,28 +1,23 @@
 "use client";
 
 import type { OidcPopupResultMessage } from '@/lib/oidc-session';
-import { completeOidcRedirect } from '@/lib/oidc-session';
+import { broadcastOidcPopupResult, completeOidcRedirect, isOidcPopupFlow } from '@/lib/oidc-session';
 import { useEffect, useState } from 'react';
 import { toSafeReturnTo } from './return-target';
-
-/** True when this page loaded inside the popup `startOidcLogin` opens, not a top-level redirect. */
-function isLoginPopup() {
-  return typeof window !== 'undefined' && !!window.opener && window.opener !== window;
-}
 
 export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const popup = isLoginPopup();
+    const { isPopup, flowId } = isOidcPopupFlow();
     completeOidcRedirect()
       .then(({ returnTo }) => {
         if (cancelled) return;
         const safeTarget = toSafeReturnTo(returnTo);
-        if (popup) {
-          const message: OidcPopupResultMessage = { source: 'naruon-oidc', status: 'success', returnTo: safeTarget };
-          window.opener?.postMessage(message, window.location.origin);
+        if (isPopup && flowId) {
+          const message: OidcPopupResultMessage = { source: 'naruon-oidc', flowId, status: 'success', returnTo: safeTarget };
+          broadcastOidcPopupResult(message);
           window.close();
           return;
         }
@@ -32,9 +27,9 @@ export default function AuthCallbackPage() {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'OIDC callback failed';
         setError(message);
-        if (popup) {
-          const popupMessage: OidcPopupResultMessage = { source: 'naruon-oidc', status: 'error', message };
-          window.opener?.postMessage(popupMessage, window.location.origin);
+        if (isPopup && flowId) {
+          const popupMessage: OidcPopupResultMessage = { source: 'naruon-oidc', flowId, status: 'error', message };
+          broadcastOidcPopupResult(popupMessage);
         }
       });
     return () => {

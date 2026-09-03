@@ -223,6 +223,38 @@ describe("/auth/password/signup route", () => {
     expect(registerAccountWithPasswordMock).not.toHaveBeenCalled();
   });
 
+  it("rejects (rather than silently dropping) an over-length first_name", async () => {
+    const response = await POST(
+      postRequest({
+        email: "person@example.com",
+        password: "correct horse battery staple 1!",
+        first_name: "x".repeat(101),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error_code: "password_signup_name_invalid" });
+    expect(registerAccountWithPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized request body with 413 before parsing it", async () => {
+    const request = new NextRequest("https://app.example.com/auth/password/signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "person@example.com",
+        password: "correct horse battery staple 1!",
+        first_name: "x".repeat(20_000),
+      }),
+      headers: { origin: "https://app.example.com" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({ error_code: "password_signup_request_too_large" });
+    expect(registerAccountWithPasswordMock).not.toHaveBeenCalled();
+  });
+
   it("rejects a signup submission with no Origin or Referer at all", async () => {
     const request = new NextRequest("https://app.example.com/auth/password/signup", {
       method: "POST",

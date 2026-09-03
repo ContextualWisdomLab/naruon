@@ -142,6 +142,23 @@ describe("/auth/password/login route", () => {
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
+  it("rejects an oversized request body with 413 before parsing it", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const request = new NextRequest("https://app.example.com/auth/password/login", {
+      method: "POST",
+      body: JSON.stringify({ username: "person@example.com", password: "x".repeat(20_000) }),
+      headers: { origin: "https://app.example.com" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({ error_code: "password_login_request_too_large" });
+    expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects a cross-site login submission before touching the OIDC exchange", async () => {
     const request = new NextRequest("https://app.example.com/auth/password/login", {
       method: "POST",

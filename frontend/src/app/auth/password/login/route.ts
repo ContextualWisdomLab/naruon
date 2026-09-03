@@ -6,6 +6,8 @@ import {
   errorResponse,
   exchangePasswordForSessionResponse,
   normalizeCredential,
+  readBoundedJson,
+  RequestBodyTooLargeError,
   safeReturnTo,
   serverOidcConfig,
 } from "../../oidc/shared";
@@ -37,8 +39,11 @@ export async function POST(request: NextRequest) {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return errorResponse("password_login_request_too_large", 413);
+    }
     return errorResponse("password_login_request_invalid");
   }
 

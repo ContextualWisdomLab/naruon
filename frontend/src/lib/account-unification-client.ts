@@ -96,6 +96,11 @@ export async function registerAccountWithPassword(
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      // fetch follows redirects by default, and a 307/308 preserves the POST
+      // body -- the password would otherwise be forwarded verbatim to
+      // whatever a misconfigured/compromised response's Location header
+      // names. Fail closed instead of following it.
+      redirect: "error",
     });
   } catch {
     throw new AccountUnificationError("account_unification_unreachable", 502);

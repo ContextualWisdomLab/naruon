@@ -11,6 +11,8 @@ import {
   errorResponse,
   exchangePasswordForSessionResponse,
   normalizeCredential,
+  readBoundedJson,
+  RequestBodyTooLargeError,
   safeReturnTo,
   serverOidcConfig,
 } from "../../oidc/shared";
@@ -21,11 +23,22 @@ export const fetchCache = "force-no-store";
 
 const MAX_NAME_LENGTH = 100;
 
-function normalizeOptionalName(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
+/**
+ * `undefined` means "not supplied" (a genuinely optional field); any other
+ * value must be a valid name or the request is rejected outright. An
+ * over-length name must never be silently dropped -- `JSON.stringify` omits
+ * an `undefined` field, so a caller providing a too-long name would
+ * otherwise have it quietly vanish from the registration request instead of
+ * being told to fix it.
+ */
+type NameValidation = { ok: true; value: string | undefined } | { ok: false };
+
+function validateOptionalName(value: unknown): NameValidation {
+  if (value === undefined || value === null || value === "") return { ok: true, value: undefined };
+  if (typeof value !== "string") return { ok: false };
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > MAX_NAME_LENGTH) return undefined;
-  return trimmed;
+  if (!trimmed || trimmed.length > MAX_NAME_LENGTH) return { ok: false };
+  return { ok: true, value: trimmed };
 }
 
 function statusForAccountUnificationError(error: AccountUnificationError): {
@@ -76,8 +89,11 @@ export async function POST(request: NextRequest) {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return errorResponse("password_signup_request_too_large", 413);
+    }
     return errorResponse("password_signup_request_invalid");
   }
 
@@ -88,13 +104,18 @@ export async function POST(request: NextRequest) {
   if (!email || !password) {
     return errorResponse("password_signup_credentials_invalid");
   }
+  const firstName = validateOptionalName(parsed.first_name);
+  const lastName = validateOptionalName(parsed.last_name);
+  if (!firstName.ok || !lastName.ok) {
+    return errorResponse("password_signup_name_invalid");
+  }
 
   try {
     await registerAccountWithPassword(registrationConfig, {
       email_address: email,
       password,
-      first_name: normalizeOptionalName(parsed.first_name),
-      last_name: normalizeOptionalName(parsed.last_name),
+      first_name: firstName.value,
+      last_name: lastName.value,
     });
   } catch (error) {
     if (error instanceof AccountUnificationError) {

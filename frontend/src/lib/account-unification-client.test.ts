@@ -61,6 +61,9 @@ describe("account-unification password-registration client", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://idp.internal.example/registration/accounts/password");
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer token-1");
+      // A 307/308 preserves the POST body -- fetch must not be allowed to
+      // silently forward the password to a redirect's Location.
+      expect(init?.redirect).toBe("error");
       expect(JSON.parse(String(init?.body))).toEqual({
         email_address: "person@example.com",
         password: "correct horse battery staple 1!",
@@ -103,6 +106,28 @@ describe("account-unification password-registration client", () => {
       "fetch",
       vi.fn(async () => {
         throw new Error("connection refused");
+      }),
+    );
+
+    await expect(
+      registerAccountWithPassword(
+        { baseUrl: new URL("https://idp.internal.example"), token: "token-1" },
+        { email_address: "person@example.com", password: "correct horse battery staple 1!" },
+      ),
+    ).rejects.toMatchObject({ status: 502, message: "account_unification_unreachable" });
+  });
+
+  it("fails closed instead of following a redirect response (fetch throws per redirect: 'error')", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        // This is the real contract for redirect: "error" (a TypeError,
+        // same shape as any other network failure) -- simulated here since
+        // undici/jsdom's fetch doesn't run a real redirect in this test.
+        if (init?.redirect === "error") {
+          throw new TypeError("fetch failed");
+        }
+        return Response.json({ account_id: "user-1", email_address: "person@example.com" }, { status: 201 });
       }),
     );
 
