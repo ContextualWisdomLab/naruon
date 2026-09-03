@@ -39,38 +39,16 @@ class ExtractorUnavailableError(RuntimeError):
     """The selected extractor cannot truthfully execute in this context."""
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class KgExtractorContext:
-    """Provider-authority-free per-run extractor context.
+    """Authority-free per-run extractor context.
 
-    The previous context carried ``api_key``, ``orchestrator_base_url`` and
-    ``orchestrator_model``. Those fields made Naruon a second LLM routing
-    authority and allowed a dormant raw transport to be activated by local
-    configuration before a released contextual-orchestrator consumer contract
-    existed.
-
-    The dataclass now has no authority-bearing fields. Its constructor accepts
-    the three predecessor keyword arguments only as a temporary source-
-    compatibility shim for callers and tests in this still-open PR; values are
-    discarded immediately and never stored. The only retained signal is whether
-    a predecessor caller supplied an endpoint, solely so fail-closed diagnostics
-    can distinguish "endpoint not configured" from "configured but unreleased".
-    No URL, credential, model, provider, group, or pool value is retained.
+    No provider credential, raw contextual-orchestrator URL, provider/model id,
+    group, pool, or compatibility diagnostic belongs here. A future LLM-backed
+    implementation must consume an immutable contextual-orchestrator client/
+    schema contract and add only contract-defined capability inputs at this
+    boundary.
     """
-
-    def __init__(
-        self,
-        *,
-        api_key: str | None = None,
-        orchestrator_base_url: str | None = None,
-        orchestrator_model: str | None = None,
-    ) -> None:
-        del api_key, orchestrator_model
-        object.__setattr__(
-            self,
-            "_legacy_endpoint_configured",
-            bool(orchestrator_base_url and orchestrator_base_url.strip()),
-        )
 
 
 @runtime_checkable
@@ -113,11 +91,11 @@ class LlmGroundedExtractor:
 
     ``llm`` direct-provider mode is policy-disabled. ``orchestrator`` mode is
     also unavailable while contextual-orchestrator has no immutable consumer
-    release. Importantly, this class no longer calls the local grounded LLM
-    transport or reads credentials, endpoint URLs, model ids, provider names,
+    release. Importantly, this class does not call the local grounded LLM
+    transport or read credentials, endpoint URLs, model ids, provider names,
     groups, or pool ids. A future implementation must replace this placeholder
-    with the released contextual-orchestrator API/client/schema; configuring a
-    URL or passing a tenant provider key is not a substitute for that release.
+    with the released contextual-orchestrator API/client/schema; local runtime
+    configuration is not a substitute for that release.
     """
 
     name = LLM_EXTRACTOR_NAME
@@ -133,26 +111,16 @@ class LlmGroundedExtractor:
         *,
         context: KgExtractorContext,
     ) -> ProjectSemanticExtractionResult:
-        del segments
+        del segments, context
         if not self.routed_via_orchestrator:
             raise ExtractorUnavailableError(
                 "direct-provider LLM extraction is disabled: Naruon must use "
                 "contextual-orchestrator's released consumer contract"
             )
 
-        endpoint_was_configured = bool(
-            getattr(context, "_legacy_endpoint_configured", False)
-        )
-        if not endpoint_was_configured:
-            raise ExtractorUnavailableError(
-                "contextual-orchestrator endpoint is not configured, and no "
-                "released consumer contract exists; project-graph LLM "
-                "extraction remains fail-closed"
-            )
         raise ExtractorUnavailableError(
-            "contextual-orchestrator has no consumer release; a released "
-            "consumer contract is required before project-graph LLM "
-            "extraction can execute"
+            "contextual-orchestrator released consumer contract is unavailable; "
+            "project-graph LLM extraction remains fail-closed"
         )
 
 
