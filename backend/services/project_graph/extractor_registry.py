@@ -415,15 +415,15 @@ async def run_extraction(
             return await extractor.extract(segment_list, context=context)
         except ExtractorUnavailableError as exc:
             logger.debug(
-                "Extractor %s unavailable; trying next in chain: %s",
+                "Extractor %s unavailable: %s",
                 extractor.name,
                 exc,
             )
             last_error = exc
             continue
-        except Exception as exc:  # noqa: BLE001 - degrade to the next extractor
+        except Exception as exc:  # noqa: BLE001 - chain policy decides whether another extractor exists
             logger.warning(
-                "Extractor %s failed; falling back to the next extractor",
+                "Extractor %s failed",
                 extractor.name,
                 exc_info=True,
             )
