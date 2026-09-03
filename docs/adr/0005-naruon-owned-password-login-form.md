@@ -1,206 +1,102 @@
-# ADR-0005: naruon renders its own login form; Keyverse stays the identity backend
+# ADR-0005: Naruon-owned authentication UI with Keyverse identity authority
 
-**Status:** Accepted (Naruon-local integration policy)
+**Status:** Proposed — merge blocked on standards-compliant Keyverse contract
 **Date:** 2026-09-02
-**Decision owner:** Naruon maintainers, per explicit product direction
-**Scope:** How naruon's browser-facing login form is rendered and which
-Keyverse mechanism authenticates it. Does not change Keyverse's role as
-identity backend, does not disable the existing federated-SSO redirect path,
-and does not authorize naruon to store or validate credentials on its own.
+**Last reviewed:** 2026-09-03
+**Decision owner:** Naruon maintainers for product UI; Keyverse for identity/authentication protocol
+**Scope:** Browser-facing authentication UX and the Naruon↔Keyverse boundary. Naruon does not become an identity provider and does not own credential validation.
 
-## Context
+## Problem
 
-Naruon's login previously had one entry point for Keyverse authentication:
-Settings → Security → "OIDC 로그인," which called
-`window.location.assign(authorizationUrl)` — a full top-level browser
-navigation to Keycloak's own hosted `/protocol/openid-connect/auth` page
-(standard OIDC Authorization Code + PKCE flow). Verified directly in
-`frontend/src/lib/oidc-session.ts` and
-`frontend/src/app/auth/oidc/login/route.ts` before any change was made.
+Naruon must render its own login, signup, and recovery product surfaces. Replacing Keycloak CSS or theme assets does not satisfy that requirement because Keycloak still renders the authentication page. At the same time, the mechanism behind a Naruon-rendered form must satisfy current OAuth/OIDC security requirements and must not copy Keyverse domain truth or consume a mutable Keyverse branch as a production contract.
 
-Product direction asked for naruon's own branding on that form. An initial
-Keycloak-custom-theme reskin was built and screenshot-verified working
-(theme.properties extending Keycloak's `keycloak` base theme, CSS matching
-naruon's palette, correctly rendering naruon's logo and colors on the real
-`/protocol/openid-connect/auth` page). The product owner rejected this
-approach outright on review: *"아니 그리고 누가 Naruon을 Theme 붙이겠대"*
-("who ever said [they wanted] a Theme attached to naruon"). A reskinned
-Keycloak theme is still Keycloak's own server rendering the HTML the
-browser receives — exactly what was not wanted, disguised or not. The
-re-confirmed requirement: naruon's own frontend renders 100% of the
-login/signup UI, with **zero Keycloak-rendered HTML anywhere in the loop**,
-and naruon's own backend talks to Keyverse purely as an API.
+The existing federated path is Authorization Code + PKCE and remains valid. A separate experimental password path was added to this PR using Keycloak Direct Access Grants (`grant_type=password`) because it allowed a Naruon-rendered form without Keycloak HTML. That implementation is useful evidence about the desired product boundary, but it is not an acceptable merge target.
 
-### Passwordless was investigated first, not assumed away
+## Standards finding
 
-Before choosing a password-based mechanism, whether Keyverse's WebAuthn
-passwordless capability could satisfy a naruon-owned form was checked
-directly against `keyverse`'s own repository, not assumed:
+RFC 9700 §2.4 is normative Best Current Practice and states that the Resource Owner Password Credentials grant **MUST NOT** be used. The reason is structural: the client receives the resource owner's password, expands the credential attack surface, and prevents or complicates modern multi-step and cryptographic authentication.
 
-- `keyverse/docs/passwordless-policy.md` and `keyverse/docs/adr/0002-passwordless-local-accounts.md`
-  confirm the `cwl` realm's `browserFlow` (`browser-passwordless`) has *no
-  password authenticator anywhere*, enforced in CI by
-  `keyverse/scripts/validate_realm.py`.
-- Keycloak's WebAuthn *authentication* ceremony (as opposed to registration)
-  runs inside Keycloak's own `login-actions` flow, bound to a server-side
-  `AuthenticationSessionModel` that generates the challenge and later
-  verifies the posted assertion. Keycloak does not publish a public REST
-  pair ("give me a challenge" / "here is my assertion") for that ceremony
-  outside the flow it owns. This is confirmed against Keycloak's WebAuthn
-  implementation, not a Keyverse gap: even Keyverse's own passwordless
-  *registration* path ends the same way — after
-  `POST /registration/accounts`, the emailed `execute-actions-email` link
-  lands the user on a Keycloak-hosted required-action page to run
-  `webauthn-register-passwordless`, before redirecting back to naruon's
-  `/auth/passkey-complete`. Only the redirect target is naruon's; the
-  ceremony page itself is Keycloak's.
-- Conclusion: a fully naruon-rendered WebAuthn login is not achievable
-  against Keycloak's current, unmodified architecture. It would need a
-  custom Keycloak REST resource provider reimplementing the ceremony's
-  session/challenge handling — real, separate engineering on the Keyverse
-  side, not a naruon-side or configuration-only change.
+RFC 10017 §7.3, published in August 2026 for browser-based applications, repeats that ROPC **MUST NOT** be used. For browser applications using OAuth or OpenID Connect, it requires a redirect-based flow such as Authorization Code. A local product decision or accepted-risk note cannot convert a `MUST NOT` mechanism into a conforming implementation.
 
-### Direct Access Grants is the mechanism that actually fits
+Therefore the earlier rationale that Direct Access Grants was "the mechanism that actually fits" is superseded. It fits the rendering constraint but violates the protocol/security constraint. This ADR remains Proposed until Keyverse publishes a standards-compliant, versioned headless authentication/session contract that can preserve Naruon's product-owned UI without reintroducing ROPC.
 
-Direct Access Grants (OAuth2 §4.3 Resource Owner Password Credentials) is
-the only mechanism Keycloak exposes as a plain, stateless, public REST
-endpoint (`/protocol/openid-connect/token`, `grant_type=password`) — which
-is exactly what "naruon's own form, naruon's own backend, zero Keycloak
-HTML" requires. It is also the option this ecosystem has worked hardest to
-avoid: `docs/CWL-MASTER-CONTEXT.md` states "central passwordless IdP ...
-eliminate passwords" as a binding organizational principle, and Keyverse's
-own ADR-0002 requires "explicit security/product review and migration
-evidence" to add a password path back for local accounts.
+## Current decision
 
-The product owner acknowledged this tension directly and accepted it for
-this one integration, explicitly: naruon's process may transiently hold a
-plaintext password in memory for the single request that forwards it to
-Keycloak's token endpoint, provided it is never logged, cached, or
-persisted. Keyverse's own ADR
-([keyverse#0014](https://github.com/ContextualWisdomLab/keyverse/blob/main/docs/adr/0014-naruon-owned-password-form.md))
-records the matching keyverse-side decision: `naruon-web`'s
-`directAccessGrantsEnabled` is `true`, scoped to that one client only, while
-every other/future RP stays hard-blocked by account-unification's dynamic
-registration validator.
+1. **Naruon owns the product surfaces.** Login, signup, recovery, loading, error, permission, responsive, keyboard, and accessibility states are Naruon UI responsibilities.
+2. **Keyverse remains identity authority.** Naruon must not copy Keyverse credential rules, user-store semantics, authentication-session state machines, or provider-specific domain truth.
+3. **The existing Authorization Code + PKCE federation path remains supported.** The popup variant is an interaction improvement, not a new authentication protocol. The popup is reserved before asynchronous initialization so transient browser user activation is preserved; completion uses a flow-scoped same-origin `BroadcastChannel`, and the authorization page does not retain a live `window.opener` relationship.
+4. **ROPC/password-grant code in this Draft PR is transitional evidence only.** It must not be merged or released as the GA authentication path. A product-owner exception is recorded as historical context, not as a standards waiver.
+5. **A Keyverse replacement is a prerequisite.** The canonical owner must provide and immutably release a headless authentication/session capability suitable for the Naruon-owned surface. Naruon may consume only the released contract through an ACL; an open Keyverse PR or branch head is not a production dependency.
+6. **Secrets remain behind Naruon credential infrastructure.** Runtime application secrets must not become a new `process.env` contract. Environment variables are bootstrap transport only under the repository's `AGENTS.md`; any long-lived Keyverse registration credential must be retrieved through the protected credential registry/backend boundary before this PR can become Ready.
 
-## Decision
+## Security repairs already made in this Draft
 
-1. naruon renders its own email/password login form (Settings → Security →
-   "Naruon 계정으로 로그인"). Submitting it calls naruon's own backend route,
-   never a Keycloak URL, never a redirect.
-2. `frontend/src/app/auth/password/login/route.ts` performs the grant
-   server-side: it builds `grant_type=password` + `client_id=naruon-web` +
-   the submitted credentials and POSTs it to Keycloak's token endpoint using
-   the same SSRF-hardened, DNS-pinned token client
-   (`@/lib/oidc-token-client`) and the same trusted-endpoint validation
-   (`trustedOidcTokenEndpoint`, extracted to `../oidc/shared.ts` so both the
-   authorization-code callback and this route share one hardened
-   implementation) already used for the authorization-code exchange. On
-   success it mints the same `naruon_session` HttpOnly cookie the existing
-   flow uses, after the same backend session-claims verification
-   (`backendAcceptsSessionToken`).
-3. The password is never logged. Failures are recorded through
-   `recordOidcTokenExchangeFailure`, which only ever receives a fixed reason
-   string, never request data. A wrong password, an unknown user, and a
-   client without Direct Access Grants enabled are all collapsed into one
-   generic `password_login_invalid_credentials` (HTTP 401) response, so the
-   error surface cannot be used to enumerate users or probe configuration.
-4. The existing federated-SSO redirect path (Settings → Security →
-   "Keyverse SSO로 로그인," renamed from "OIDC 로그인" for clarity now that
-   two mechanisms coexist) is **kept, not removed**. It remains the only way
-   to authenticate a federated identity (employer ADFS, other brokered
-   IdPs), which has no local password to submit via Direct Access Grants.
-   The naruon-owned popup-based redirect improvement made earlier in this
-   same effort (`startOidcLogin` opens Keycloak's page in a popup instead of
-   navigating naruon's own tab away) still applies to that path — it does
-   not, by itself, satisfy the zero-Keycloak-HTML requirement (the popup
-   still shows a Keycloak-rendered page), so it was not treated as a
-   substitute for this ADR's decision, only kept as a real, independent
-   improvement to the federation path that remains necessary.
+These repairs are independently useful and should be preserved by any successor even though they do not make ROPC acceptable:
 
-## What this does not yet deliver
+- OIDC popup reservation occurs before the first asynchronous login-initialization wait, preserving transient user activation. Popup-blocked browsers fall back to top-level navigation; a failed initialization closes the reserved blank window.
+- The authorization popup is opener-severed and result correlation is flow-specific.
+- Password signup uses same-origin CSRF checks and bounded request parsing.
+- Upstream account-unification 422 details are translated through a Naruon-owned public error taxonomy instead of leaking mutable provider strings as Naruon API contracts.
+- Account-unification registration traffic no longer relies on hostname validation followed by an unpinned `fetch`. The password-bearing request resolves the destination, rejects any non-global answer outside the explicit development-loopback exception, and pins the native HTTP(S) socket lookup to the validated address set. Redirects fail closed and responses are size bounded.
 
-**Update (2026-09-02): login and signup now both work end-to-end.** The gap
-described below — no `cwl`-realm account had a password credential, so every
-Direct Access Grants attempt failed closed — is closed by a companion
-Keyverse change,
-[keyverse#0015](https://github.com/ContextualWisdomLab/keyverse/blob/main/docs/adr/0015-naruon-password-credential-issuance.md):
-`POST /registration/accounts/password`, a scoped account-unification
-endpoint (gated by its own third bearer token, naruon-only) that creates a
-`cwl` user with an immediately usable password credential. naruon's signup
-form ("Naruon 계정 만들기") calls it through a new
-`frontend/src/app/auth/password/signup/route.ts`, then immediately reuses
-`exchangePasswordForSessionResponse` (the same exchange login uses) so
-signup ends with a signed session, not a second manual login step.
+These statements describe source changes in the Draft branch; they are not release claims until exact-head CI, security checks, browser/E2E evidence, review, and protected merge complete.
 
-What is still genuinely deferred, per keyverse#0015: email verification
-(accounts are created with `emailVerified: false` and no verification
-required action), CAPTCHA-equivalent abuse hardening beyond a per-peer rate
-limit, self-service password reset, and merging a password-created identity
-with an existing passwordless one for the same person. naruon's signup form
-copy states this plainly to the user rather than implying full production
-completeness.
+## Remaining blockers
 
-The paragraph below is kept for the historical record of what this ADR's
-first slice did and did not deliver before keyverse#0015 landed.
+### Standards-compliant authentication contract
 
-Login did not work end-to-end at first. No account in Keyverse's `cwl` realm
-had a password credential — `POST /registration/accounts` explicitly
-refuses to accept or create one, and self-service password reset stays off.
-Every Direct Access Grants attempt against the realm failed closed with a
-generic invalid-credentials error, correctly, because there was nothing to
-authenticate against — not because naruon's integration was wrong. Making
-this functional needed one more, separately-reviewable Keyverse change (a
-credential-issuance path) that keyverse#0014 explicitly deferred as its own,
-bigger, separately-reviewable follow-up — the follow-up keyverse#0015 is.
+The current password login/session exchange still uses `grant_type=password`. This is the primary architecture blocker. Keyverse must replace it with a released contract that satisfies RFC 9700 and RFC 10017 while allowing the application-owned product surface. Until that exists, the password path stays Draft and must not be enabled in production.
 
-## Alternatives rejected
+### Mutable/unreleased dependency
 
-### Keycloak custom theme (reskin, not bypass)
+The companion Keyverse work referenced by this PR is open/unreleased. Its source head cannot be consumed as a canonical production contract, and this ADR must not say the signup capability "landed" or works end-to-end in a released deployment until immutable publication evidence exists.
 
-Built and screenshot-verified working, then explicitly rejected by the
-product owner: still Keycloak's own server producing the response,
-regardless of how closely it is styled to match naruon. Not a compromise
-worth keeping as a fallback — the requirement is about which server renders
-the page, not how it looks.
+### Secret ownership
 
-### Silent/popup Keycloak redirect
+`ACCOUNT_UNIFICATION_PASSWORD_REGISTRATION_TOKEN` is still read from the frontend server runtime environment in the current Draft. This violates the Naruon repository rule that new runtime application secrets belong in the protected credential registry. Deployment documentation or an `.env` example would not repair that boundary.
 
-Improves the *feel* of the existing federated path (the naruon tab no
-longer navigates away) but does not change which server renders the login
-UI — the popup still shows Keycloak's page. Kept as an improvement to the
-federated-SSO path specifically, not treated as satisfying this decision.
+### Signup atomicity
 
-### naruon-rendered WebAuthn ceremony
+Account creation currently precedes session establishment. If account creation succeeds and the subsequent session step fails, the user can see a generic signup failure even though the account now exists, and retry can produce an email-taken conflict. The replacement Keyverse contract needs idempotent/continuation semantics or an explicit typed partial-success outcome; Naruon must not invent a compensating delete across the identity boundary.
 
-Investigated and ruled out as a structural Keycloak-architecture
-limitation, not a configuration gap — see Context.
+### Authenticated settings refresh
 
-## Consequences
+Some Settings data can fail while anonymous. A successful login currently refreshes session claims but does not necessarily re-fetch all permission-sensitive settings resources, leaving stale failure state until reload. The authenticated refresh path needs a component-level regression test and causal repair.
 
-- naruon now has two authentication paths on one client (`naruon-web`),
-  serving different account types: Direct Access Grants for naruon-native
-  local accounts, and the authorization-code redirect for federated
-  identity. Both remain visible in Settings → Security.
-- naruon's frontend/backend now transiently touches plaintext passwords —
-  an explicit, reviewed, accepted exception to this org's stated
-  passwordless direction for this one integration, not a general policy
-  change. `frontend/src/app/auth/password/login/route.ts` and
-  `frontend/src/components/SettingsLayout.tsx`'s password form are the only
-  places a raw password exists in naruon's code, and neither logs nor
-  persists it.
-- The credential-issuance gap (no password-capable registration exists yet)
-  means this slice ships real, tested, correct client code that is honestly
-  non-functional against the current Keyverse deployment until keyverse#0014's
-  follow-up lands. This is recorded here rather than papered over.
+### Verification
+
+This Draft still requires current-head unit/type/lint/build evidence, security/SAST/CodeQL evidence, browser E2E for login/signup/recovery and popup-blocked flows, locale/a11y evidence where material, resolved review threads, and the repository's independent approval/required-check gates. Hosted workflow queuing or startup failure is not GREEN evidence.
+
+## Alternatives
+
+### Keycloak theme
+
+Rejected for the product requirement. It can alter appearance but Keycloak still renders the authentication surface.
+
+### Authorization popup only
+
+Kept for federation. It preserves Naruon's primary tab and can be implemented safely, but the popup still contains authorization-server UI and therefore does not by itself satisfy the requirement for a fully Naruon-rendered local-account surface.
+
+### Direct Access Grants / ROPC
+
+Rejected as the merge architecture. It satisfies the zero-Keycloak-HTML rendering constraint but violates RFC 9700 §2.4 and RFC 10017 §7.3.
+
+### Naruon reimplementation of Keycloak/WebAuthn internals
+
+Rejected. Reimplementing Keyverse/Keycloak authentication-session or WebAuthn ceremony semantics inside Naruon would duplicate the identity bounded context and create a second security authority. The capability belongs in Keyverse behind a released contract.
+
+## Effects
+
+The desired product boundary remains unchanged: Naruon presents the user experience, while Keyverse owns identity authentication. What changes is the accepted implementation path. The Draft's password-grant mechanism is now explicitly non-releasable, and the PR cannot become Ready merely because product stakeholders accept its risk.
+
+Any successor must preserve the independent security fixes above, replace ROPC with the immutable Keyverse contract, remove the runtime-secret environment dependency, define signup partial-success semantics, rehydrate permission-sensitive settings after authentication, and then obtain exact-head evidence before merge.
 
 ## References
 
-Hardt, D. (Ed.). (2012). *The OAuth 2.0 authorization framework* (RFC 6749),
-§4.3 Resource Owner Password Credentials Grant.
-https://doi.org/10.17487/RFC6749
+Lodderstedt, T., Bradley, J., Labunets, A., & Fett, D. (2025). *Best current practice for OAuth 2.0 security* (RFC 9700, BCP 240). RFC Editor. https://doi.org/10.17487/RFC9700
 
-Hodges, J., Jones, J. C., Jones, M. B., Kumar, A., & Lundberg, E. (Eds.).
-(2021, April 8). *Web Authentication: An API for accessing Public Key
-Credentials Level 2* (W3C Recommendation), §7 WebAuthn Relying Party
-Operations. https://www.w3.org/TR/2021/REC-webauthn-2-20210408/
+Parecki, A., De Ryck, P., & Waite, D. (2026). *OAuth 2.0 for browser-based applications* (RFC 10017, BCP 212). RFC Editor. https://doi.org/10.17487/RFC10017
+
+Hardt, D. (Ed.). (2012). *The OAuth 2.0 authorization framework* (RFC 6749). RFC Editor. https://doi.org/10.17487/RFC6749
+
+World Wide Web Consortium. (2021). *Web Authentication: An API for accessing Public Key Credentials Level 2*. https://www.w3.org/TR/webauthn-2/
