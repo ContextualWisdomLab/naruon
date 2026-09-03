@@ -49,7 +49,11 @@ function statusForAccountUnificationError(error: AccountUnificationError): {
     return { errorCode: "password_signup_email_taken", status: 409 };
   }
   if (error.status === 422) {
-    return { errorCode: error.detail ?? "password_signup_invalid", status: 422 };
+    // The Keyverse/account-unification response body is an upstream contract,
+    // not Naruon's public error namespace. Keep the product API stable and do
+    // not let new validation strings or implementation details escape merely
+    // because the upstream chose HTTP 422.
+    return { errorCode: "password_signup_invalid", status: 422 };
   }
   if (error.status === 429) {
     return { errorCode: "password_signup_rate_limited", status: 429 };
