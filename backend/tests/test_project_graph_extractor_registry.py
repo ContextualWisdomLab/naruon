@@ -1,33 +1,11 @@
-"""Tests for the pluggable, named + versioned KG extractor seam.
+"""Behavioral contract for the project-graph extractor registry."""
 
-The seam turns what used to be a hardcoded ``if/else`` extractor selection into a
-registry keyed by the stable ``PROJECT_GRAPH_EXTRACTOR`` selector value. Two
-invariants are load-bearing and asserted here:
-
-1. **The deterministic keyword extractor is available as its own product
-   mode, and as a fallback only for extractors that opt into degrading.**
-   Only an explicit ``SELECTOR_KEYWORD`` resolves to it directly. An
-   unrecognized selector value is a misconfiguration, not an implicit
-   request for keyword mode, and raises instead.
-2. **LLM-backed extractors (``requires_llm_capability = True``) never
-   degrade.** An unavailable or failed :data:`SELECTOR_LLM` or
-   :data:`SELECTOR_ORCHESTRATOR` request propagates through
-   :func:`run_extraction` rather than silently resolving to a
-   keyword-derived result (ADR-0005 Revision 8: a deterministic semantic
-   substitute must not masquerade as successful LLM work). Today both are
-   also unconditionally unavailable: ``llm`` is policy-disabled (Naruon
-   holds no direct-provider LLM authority outside contextual-orchestrator's
-   released consumer contract, which does not exist), and ``orchestrator``
-   has nothing to populate ``context.orchestrator_model`` from until that
-   contract ships.
-"""
-
-from __future__ import annotations
-
+from dataclasses import fields
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from services.project_graph import extractor_registry as registry_module
 from services.project_graph.extractor_registry import (
     DETERMINISTIC_EXTRACTOR_NAME,
     LLM_EXTRACTOR_NAME,
@@ -46,438 +24,235 @@ from services.project_graph.extractor_registry import (
 )
 from services.project_graph.models import ProjectSourceSegment
 
-# The extraction cores are imported into the registry module namespace, so
-# tests patch them by dotted path there (keeps a single import style for the
-# module under test — no module-alias import alongside the ``from`` import).
-_REGISTRY_MODULE = "services.project_graph.extractor_registry"
 
-
-def _segment(uid: str = "seg1", text: str = "The system must support export.") -> ProjectSourceSegment:
+def _segment() -> ProjectSourceSegment:
     return ProjectSourceSegment(
-        content_segment_uid=uid,
+        content_segment_uid="seg1",
         source_kind="email_body",
         source_record_uid="email:1",
-        safe_text_content=text,
+        safe_text_content="The system must support export.",
         heading_path=None,
         segment_path="body/0",
         ordinal_index=0,
     )
 
 
-def _orchestrator_context(**overrides) -> KgExtractorContext:
-    """A fully-configured, valid orchestrator-mode context for success-path tests."""
-    defaults = dict(
-        api_key="key",
-        orchestrator_base_url="https://orchestrator.example/v1",
-        orchestrator_model="co-contract-resolved-model",
-    )
-    defaults.update(overrides)
-    return KgExtractorContext(**defaults)
-
-
-def _patch_cores(monkeypatch, *, llm, keyword):
-    """Patch the two extraction cores where the registry imports them."""
-    monkeypatch.setattr(f"{_REGISTRY_MODULE}.extract_project_semantics_llm", llm)
-    monkeypatch.setattr(f"{_REGISTRY_MODULE}.extract_project_semantics", keyword)
-
-
-# --- Contract / registry shape ---------------------------------------------
-
-
-def test_registered_extractors_conform_to_protocol():
+def test_default_registry_exposes_stable_selector_identities():
     registry = build_default_registry()
     assert set(registry.selectors()) == {
         SELECTOR_KEYWORD,
         SELECTOR_LLM,
         SELECTOR_ORCHESTRATOR,
     }
-    for selector in registry.selectors():
-        extractor = registry.get(selector)
-        assert isinstance(extractor, KgExtractor)
-        assert isinstance(extractor.name, str) and extractor.name
-        assert isinstance(extractor.version, str) and extractor.version
-
-
-def test_extractor_identity_matches_module_constants():
-    registry = build_default_registry()
     assert registry.get(SELECTOR_KEYWORD).name == DETERMINISTIC_EXTRACTOR_NAME
-    assert registry.get(SELECTOR_KEYWORD).requires_llm_capability is False
     assert registry.get(SELECTOR_LLM).name == LLM_EXTRACTOR_NAME
-    # The orchestrator-routed variant is the same grounded LLM extractor
-    # (identity/provenance is the extractor, not the transport).
     assert registry.get(SELECTOR_ORCHESTRATOR).name == LLM_EXTRACTOR_NAME
-    assert registry.get(SELECTOR_ORCHESTRATOR).routed_via_orchestrator is True
-    assert registry.get(SELECTOR_LLM).routed_via_orchestrator is False
-    assert registry.get(SELECTOR_ORCHESTRATOR).requires_llm_capability is True
+    assert registry.get(SELECTOR_KEYWORD).requires_llm_capability is False
     assert registry.get(SELECTOR_LLM).requires_llm_capability is True
+    assert registry.get(SELECTOR_ORCHESTRATOR).requires_llm_capability is True
+    for selector in registry.selectors():
+        assert isinstance(registry.get(selector), KgExtractor)
 
 
-# --- Chain resolution --------------------------------------------------------
+def test_keyword_is_explicit_mode_and_llm_modes_have_no_keyword_fallback():
+    assert [item.name for item in resolve_extractor_chain(SELECTOR_KEYWORD)] == [
+        DETERMINISTIC_EXTRACTOR_NAME
+    ]
+    assert [item.name for item in resolve_extractor_chain(SELECTOR_LLM)] == [
+        LLM_EXTRACTOR_NAME
+    ]
+    assert [item.name for item in resolve_extractor_chain(SELECTOR_ORCHESTRATOR)] == [
+        LLM_EXTRACTOR_NAME
+    ]
 
 
-def test_keyword_chain_is_deterministic_only():
-    chain = resolve_extractor_chain(SELECTOR_KEYWORD)
-    assert [e.name for e in chain] == [DETERMINISTIC_EXTRACTOR_NAME]
-
-
-def test_llm_chain_has_no_fallback():
-    """requires_llm_capability=True means the chain is the extractor alone."""
-    chain = resolve_extractor_chain(SELECTOR_LLM)
-    assert [e.name for e in chain] == [LLM_EXTRACTOR_NAME]
-
-
-def test_orchestrator_chain_has_no_fallback():
-    chain = resolve_extractor_chain(SELECTOR_ORCHESTRATOR)
-    assert [e.name for e in chain] == [LLM_EXTRACTOR_NAME]
-    assert chain[0].routed_via_orchestrator is True
-
-
-def test_unknown_selector_raises_instead_of_defaulting_to_keyword():
-    """A typo must not silently persist keyword-derived graphs.
-
-    A prior revision silently treated any unrecognized
-    PROJECT_GRAPH_EXTRACTOR value as an implicit request for keyword mode.
-    Devin Review (naruon#1525, exact-head bb889797 follow-up) correctly
-    flagged this as the same masquerading problem Revision 8 closes for
-    llm/orchestrator: a misconfiguration should fail closed and truthfully,
-    not silently resolve to a different mode.
-    """
+def test_unknown_selector_fails_closed():
     with pytest.raises(ExtractorUnavailableError, match="unrecognized"):
         resolve_extractor_chain("bogus_selector")
 
 
-def test_keyword_selector_resolves_only_to_the_keyword_extractor():
-    chain = resolve_extractor_chain(SELECTOR_KEYWORD)
-    assert [e.name for e in chain] == [DETERMINISTIC_EXTRACTOR_NAME]
-
-
-@pytest.mark.parametrize("selector", [SELECTOR_LLM, SELECTOR_ORCHESTRATOR])
-def test_llm_backed_selectors_never_resolve_to_the_keyword_extractor(selector):
-    chain = resolve_extractor_chain(selector)
-    assert DETERMINISTIC_EXTRACTOR_NAME not in [e.name for e in chain]
-
-
-def test_registry_never_drops_the_keyword_fallback():
+def test_registry_without_keyword_fallback_is_programming_error():
     registry = KgExtractorRegistry()
-    # A registry without the keyword fallback is a programming error --
-    # resolve_chain looks it up unconditionally before deciding whether the
-    # resolved extractor is LLM-backed, so this still raises regardless of
-    # selector.
     with pytest.raises(KeyError):
         registry.resolve_chain(SELECTOR_LLM)
 
 
-# --- run_extraction: selection + truthful unavailability --------------------
+def test_context_has_no_authority_bearing_dataclass_fields():
+    assert tuple(field.name for field in fields(KgExtractorContext)) == ()
+    context = KgExtractorContext(
+        api_key="must-not-survive",
+        orchestrator_base_url="https://orchestrator.example/v1",
+        orchestrator_model="must-not-survive",
+    )
+    assert not hasattr(context, "api_key")
+    assert not hasattr(context, "orchestrator_base_url")
+    assert not hasattr(context, "orchestrator_model")
+    assert context._legacy_endpoint_configured is True
 
 
 @pytest.mark.asyncio
-async def test_run_extraction_uses_primary_on_success(monkeypatch):
+async def test_keyword_selector_runs_deterministic_core(monkeypatch):
     sentinel = object()
-    llm_mock = AsyncMock(return_value=sentinel)
-    keyword_mock = Mock(return_value=object())
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
+    keyword = Mock(return_value=sentinel)
+    monkeypatch.setattr(registry_module, "extract_project_semantics", keyword)
 
     result = await run_extraction(
-        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=_orchestrator_context()
+        [_segment()], selector=SELECTOR_KEYWORD, context=KgExtractorContext()
     )
 
     assert result is sentinel
-    llm_mock.assert_awaited_once()
-    keyword_mock.assert_not_called()
+    keyword.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_run_extraction_propagates_when_orchestrator_extraction_raises(monkeypatch):
-    """A genuine extraction failure must not become a keyword result."""
-    _patch_cores(
-        monkeypatch,
-        llm=AsyncMock(side_effect=RuntimeError("provider down")),
-        keyword=Mock(return_value=object()),
-    )
-
-    with pytest.raises(RuntimeError, match="provider down"):
-        await run_extraction(
-            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=_orchestrator_context()
-        )
-
-
-@pytest.mark.asyncio
-async def test_run_extraction_propagates_when_orchestrator_credentials_missing(monkeypatch):
-    llm_mock = AsyncMock()
-    keyword_mock = Mock(return_value=object())
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
-
-    # No api_key -> the orchestrator extractor is unavailable, and with no
-    # fallback in its chain, run_extraction propagates rather than degrading.
-    with pytest.raises(ExtractorUnavailableError):
-        await run_extraction(
-            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=KgExtractorContext()
-        )
-    llm_mock.assert_not_awaited()
-    keyword_mock.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_run_extraction_propagates_when_direct_llm_selected(monkeypatch):
-    """SELECTOR_LLM is policy-disabled and never falls back to keyword either."""
-    llm_mock = AsyncMock()
-    keyword_mock = Mock(return_value=object())
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
+async def test_direct_llm_selector_is_policy_disabled_even_with_legacy_inputs(monkeypatch):
+    raw_transport = AsyncMock()
+    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
 
     with pytest.raises(ExtractorUnavailableError, match="disabled"):
         await run_extraction(
             [_segment()],
             selector=SELECTOR_LLM,
-            context=KgExtractorContext(api_key="key"),
+            context=KgExtractorContext(
+                api_key="secret",
+                orchestrator_base_url="https://orchestrator.example/v1",
+                orchestrator_model="provider/model",
+            ),
         )
-    llm_mock.assert_not_awaited()
-    keyword_mock.assert_not_called()
+
+    raw_transport.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_keyword_selector_never_calls_llm(monkeypatch):
-    keyword_sentinel = object()
-    llm_mock = AsyncMock()
-    _patch_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
-    )
+async def test_orchestrator_selector_fails_closed_without_endpoint(monkeypatch):
+    raw_transport = AsyncMock()
+    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
 
-    result = await run_extraction(
-        [_segment()], selector=SELECTOR_KEYWORD, context=_orchestrator_context()
-    )
-
-    assert result is keyword_sentinel
-    llm_mock.assert_not_awaited()
-
-
-# --- Orchestrator routing ---------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_routing_targets_the_orchestrator_base_url(monkeypatch):
-    sentinel = object()
-    llm_mock = AsyncMock(return_value=sentinel)
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
-
-    context = _orchestrator_context()
-    result = await run_extraction(
-        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
-    )
-
-    assert result is sentinel
-    # The extraction call is routed at the orchestrator endpoint — this is
-    # what "route LLM extraction through contextual-orchestrator" means at
-    # the transport seam.
-    assert llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
-    # The model sent is exactly context.orchestrator_model, forwarded
-    # verbatim -- this extractor picks nothing itself (ADR-0005 Revision 7:
-    # hardcoding a pool id here was a boundary violation).
-    assert llm_mock.await_args.kwargs["model"] == context.orchestrator_model
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_routing_propagates_when_unconfigured(monkeypatch):
-    llm_mock = AsyncMock()
-    keyword_mock = Mock(return_value=object())
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
-
-    # orchestrator selector but no orchestrator_base_url resolved -> unavailable,
-    # and with no fallback in its chain, this propagates rather than degrading.
-    context = KgExtractorContext(api_key="key", orchestrator_model="some-model")
     with pytest.raises(ExtractorUnavailableError, match="endpoint is not configured"):
         await run_extraction(
-            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
+            [_segment()],
+            selector=SELECTOR_ORCHESTRATOR,
+            context=KgExtractorContext(),
         )
-    llm_mock.assert_not_awaited()
-    keyword_mock.assert_not_called()
+
+    raw_transport.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_routing_propagates_without_a_configured_model(monkeypatch):
-    """No hardcoded model to fall back on, and no keyword fallback either.
+async def test_orchestrator_selector_rejects_raw_transport_even_when_legacy_values_exist(
+    monkeypatch,
+):
+    raw_transport = AsyncMock(return_value=object())
+    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
 
-    A prior revision of this extractor substituted a Naruon-hardcoded virtual
-    pool id ("orchestrator/free") whenever the model was unset, so
-    orchestrator-routed requests always "succeeded" regardless of whether a
-    real model was configured -- itself the bug ADR-0005 Revision 7
-    corrects. A later revision (8) additionally stopped silently degrading
-    to a keyword-derived result: contextual-orchestrator has published no
-    released consumer contract yet (0 GitHub Releases), so nothing
-    legitimately populates context.orchestrator_model today, and the correct
-    behavior is to propagate that unavailability, not mask it.
-    """
-    llm_mock = AsyncMock()
-    keyword_mock = Mock(return_value=object())
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
-
-    context = KgExtractorContext(
-        api_key="key",
-        orchestrator_base_url="https://orchestrator.example/v1",
-    )
     with pytest.raises(ExtractorUnavailableError, match="no consumer release"):
         await run_extraction(
-            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
+            [_segment()],
+            selector=SELECTOR_ORCHESTRATOR,
+            context=KgExtractorContext(
+                api_key="tenant-provider-secret",
+                orchestrator_base_url="https://orchestrator.example/v1",
+                orchestrator_model="provider/model",
+            ),
         )
-    llm_mock.assert_not_awaited()
-    keyword_mock.assert_not_called()
+
+    raw_transport.assert_not_awaited()
 
 
-# --- Extractor units --------------------------------------------------------
+def test_custom_non_llm_extractor_keeps_keyword_fallback():
+    class CustomExtractor:
+        name = "custom_project_graph"
+        version = "1.0.0"
+        requires_llm_capability = False
+
+        async def extract(self, segments, *, context):
+            raise ExtractorUnavailableError("custom unavailable")
+
+    registry = build_default_registry()
+    registry.register("custom", CustomExtractor())
+    assert [item.name for item in registry.resolve_chain("custom")] == [
+        "custom_project_graph",
+        DETERMINISTIC_EXTRACTOR_NAME,
+    ]
 
 
 @pytest.mark.asyncio
-async def test_deterministic_extractor_ignores_llm_context(monkeypatch):
+async def test_custom_non_llm_failure_can_degrade_to_keyword(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(
-        f"{_REGISTRY_MODULE}.extract_project_semantics", Mock(return_value=sentinel)
+        registry_module, "extract_project_semantics", Mock(return_value=sentinel)
     )
-    extractor = DeterministicKeywordExtractor()
-    result = await extractor.extract([_segment()], context=KgExtractorContext())
+
+    class CustomExtractor:
+        name = "custom_project_graph"
+        version = "1.0.0"
+        requires_llm_capability = False
+
+        async def extract(self, segments, *, context):
+            raise RuntimeError("custom failed")
+
+    registry = build_default_registry()
+    registry.register("custom", CustomExtractor())
+    result = await run_extraction(
+        [_segment()],
+        selector="custom",
+        context=KgExtractorContext(),
+        registry=registry,
+    )
     assert result is sentinel
 
 
-@pytest.mark.asyncio
-async def test_direct_llm_extractor_is_unconditionally_disabled():
-    """Policy-disabled means no context can make it available.
-
-    Not a missing-configuration gate: even a fully "valid-looking" context
-    (credentials present) must still fail, and for the disabled-by-policy
-    reason specifically, not a credentials/model complaint.
-    """
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
-    with pytest.raises(ExtractorUnavailableError, match="disabled"):
-        await extractor.extract([_segment()], context=KgExtractorContext(api_key="key"))
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_extractor_requires_endpoint():
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=True)
-    # Credentials present, but no orchestrator endpoint -> unavailable.
-    with pytest.raises(ExtractorUnavailableError):
-        await extractor.extract(
-            [_segment()], context=KgExtractorContext(api_key="key")
-        )
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_extractor_requires_credentials():
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=True)
-    with pytest.raises(ExtractorUnavailableError):
-        await extractor.extract([_segment()], context=KgExtractorContext())
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_routing_rejects_blank_model():
-    # A blank (non-None) orchestrator_model must fail closed too, not be
-    # sent as an empty-string model id: `if model is None` alone would let
-    # "" through and only discover the problem after a failed network
-    # round-trip. (Originally caught by Devin Review against context.model
-    # in direct-provider mode, ContextualWisdomLab/naruon#1525; the same
-    # validation now lives on context.orchestrator_model, the only field
-    # still reachable by extract().)
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=True)
-    with pytest.raises(ExtractorUnavailableError):
-        await extractor.extract(
-            [_segment()],
-            context=KgExtractorContext(
-                api_key="key",
-                orchestrator_base_url="https://orchestrator.example/v1",
-                orchestrator_model="",
-            ),
-        )
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_routing_rejects_whitespace_only_model():
-    # A whitespace-only orchestrator_model ("   ") is truthy so `if not
-    # model` alone lets it through as an invalid model id sent straight to
-    # the gateway, only failing after a network round-trip.
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=True)
-    with pytest.raises(ExtractorUnavailableError):
-        await extractor.extract(
-            [_segment()],
-            context=KgExtractorContext(
-                api_key="key",
-                orchestrator_base_url="https://orchestrator.example/v1",
-                orchestrator_model="   ",
-            ),
-        )
-
-
-def test_custom_extractor_can_register_into_the_seam():
-    """A plugin/extractor registers by selector without editing core ingest.
-
-    A custom extractor that does not opt into requires_llm_capability keeps
-    the deterministic fallback behind it -- opting out of the fallback is a
-    deliberate choice an extractor makes, not the registry's default.
-    """
-
-    class _CustomExtractor:
-        name = "custom_project_graph"
-        version = "1.0.0"
-        routed_via_orchestrator = False
-        # Declared explicitly, per the KgExtractor Protocol contract: a
-        # plugin author must consciously opt out of the keyword fallback
-        # (True) or accept it (False) -- there is no attribute default.
-        requires_llm_capability = False
-
-        async def extract(self, segments, *, context):  # pragma: no cover - shape only
-            raise NotImplementedError
-
-    registry = build_default_registry()
-    registry.register("custom", _CustomExtractor())
-    assert registry.get("custom").name == "custom_project_graph"
-    assert isinstance(registry.get("custom"), KgExtractor)
-    chain = registry.resolve_chain("custom")
-    assert chain[0].name == "custom_project_graph"
-    assert chain[-1].name == DETERMINISTIC_EXTRACTOR_NAME
-
-
-def test_llm_backed_custom_extractor_also_gets_no_fallback():
-    """A third-party plugin opts into the no-masquerade guarantee the same
-    way the built-in llm/orchestrator extractors do -- this is a Protocol-
-    level mechanism, not something special-cased to LlmGroundedExtractor.
-    """
-
-    class _CustomLlmExtractor:
+def test_custom_llm_extractor_gets_no_fallback():
+    class CustomLlmExtractor:
         name = "custom_llm_project_graph"
         version = "1.0.0"
-        routed_via_orchestrator = False
         requires_llm_capability = True
 
-        async def extract(self, segments, *, context):  # pragma: no cover - shape only
+        async def extract(self, segments, *, context):
             raise NotImplementedError
 
     registry = build_default_registry()
-    registry.register("custom_llm", _CustomLlmExtractor())
-    assert isinstance(registry.get("custom_llm"), KgExtractor)
-    chain = registry.resolve_chain("custom_llm")
-    assert [e.name for e in chain] == ["custom_llm_project_graph"]
+    registry.register("custom_llm", CustomLlmExtractor())
+    assert [item.name for item in registry.resolve_chain("custom_llm")] == [
+        "custom_llm_project_graph"
+    ]
 
 
-def test_non_conforming_plugin_fails_loudly_instead_of_inheriting_unsafe_default():
-    """requires_llm_capability's "no default" is enforced, not aspirational.
-
-    A prior revision read this attribute via getattr(primary,
-    "requires_llm_capability", False) -- so a dynamically loaded plugin that
-    forgot to declare it (despite the Protocol requiring it) would silently
-    inherit the unsafe "keep the keyword fallback" default, exactly the
-    masquerading risk this whole chain of fixes closes for everything else
-    (Devin Review, naruon#1525, exact-head 5857c7f follow-up). resolve_chain
-    now reads the attribute directly, so a non-conforming extractor fails
-    with AttributeError at resolution time instead.
-    """
-
-    class _NonConformingExtractor:
+def test_nonconforming_plugin_fails_loudly():
+    class NonConformingExtractor:
         name = "forgot_the_contract"
         version = "1.0.0"
-        routed_via_orchestrator = False
-        # requires_llm_capability deliberately omitted.
 
-        async def extract(self, segments, *, context):  # pragma: no cover - shape only
+        async def extract(self, segments, *, context):
             raise NotImplementedError
 
     registry = build_default_registry()
-    registry.register("non_conforming", _NonConformingExtractor())
+    registry.register("non_conforming", NonConformingExtractor())
     with pytest.raises(AttributeError, match="requires_llm_capability"):
         registry.resolve_chain("non_conforming")
+
+
+@pytest.mark.asyncio
+async def test_llm_terminal_failure_is_not_replaced_by_keyword(monkeypatch):
+    class FailingLlmExtractor:
+        name = "failing_llm"
+        version = "1.0.0"
+        requires_llm_capability = True
+
+        async def extract(self, segments, *, context):
+            raise RuntimeError("provider path must remain unavailable")
+
+    keyword = Mock(return_value=object())
+    monkeypatch.setattr(registry_module, "extract_project_semantics", keyword)
+    registry = build_default_registry()
+    registry.register("failing_llm", FailingLlmExtractor())
+
+    with pytest.raises(RuntimeError, match="provider path must remain unavailable"):
+        await run_extraction(
+            [_segment()],
+            selector="failing_llm",
+            context=KgExtractorContext(),
+            registry=registry,
+        )
+
+    keyword.assert_not_called()

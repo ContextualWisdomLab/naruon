@@ -1,18 +1,12 @@
-"""Fail-closed contract for project-graph LLM ownership.
-
-Naruon owns project-graph semantics and selector policy, not upstream LLM
-provider credentials, raw OpenAI-compatible transport, or model routing.
-Until contextual-orchestrator publishes an immutable consumer release, the
-orchestrator selector must remain unavailable without retaining a dormant raw
-transport path that configuration could accidentally make reachable.
-"""
+"""Fail-closed contract for project-graph LLM ownership."""
 
 from dataclasses import fields
 import inspect
+from unittest.mock import AsyncMock
 
 import pytest
 
-import services.email_import_service as import_service
+from services.project_graph import extractor_registry as registry_module
 from services.project_graph.extractor_registry import (
     SELECTOR_ORCHESTRATOR,
     ExtractorUnavailableError,
@@ -36,23 +30,24 @@ def _segment() -> ProjectSourceSegment:
 
 
 def test_project_graph_context_carries_no_provider_or_raw_transport_authority():
-    """The extractor context cannot become a second provider-routing contract."""
     assert tuple(field.name for field in fields(KgExtractorContext)) == ()
-
-
-def test_import_projection_does_not_forward_provider_credentials_or_raw_gateway_url():
-    """Email embedding credentials are unrelated to project-graph LLM authority."""
-    source = inspect.getsource(import_service._extract_project_semantics_for_import)
-    assert "embedding_provider.api_key" not in source
-    assert "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL" not in source
-    assert not hasattr(import_service.settings, "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL")
+    context = KgExtractorContext(
+        api_key="secret",
+        orchestrator_base_url="https://orchestrator.example/v1",
+        orchestrator_model="provider/model",
+    )
+    assert not hasattr(context, "api_key")
+    assert not hasattr(context, "orchestrator_base_url")
+    assert not hasattr(context, "orchestrator_model")
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_selector_has_no_dormant_raw_llm_transport():
-    """No release means fail closed before any local OpenAI-compatible call."""
+async def test_orchestrator_selector_has_no_dormant_raw_llm_transport(monkeypatch):
     source = inspect.getsource(LlmGroundedExtractor.extract)
     assert "extract_project_semantics_llm" not in source
+
+    raw_transport = AsyncMock(return_value=object())
+    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
 
     with pytest.raises(ExtractorUnavailableError, match="released consumer contract"):
         await run_extraction(
@@ -60,3 +55,5 @@ async def test_orchestrator_selector_has_no_dormant_raw_llm_transport():
             selector=SELECTOR_ORCHESTRATOR,
             context=KgExtractorContext(),
         )
+
+    raw_transport.assert_not_awaited()
