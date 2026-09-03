@@ -1,4 +1,12 @@
+import { request as httpRequest, type IncomingMessage, type RequestOptions } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP } from "node:net";
+
 import { isPrivateOrLoopbackHostname, normalizeHostname } from "@/lib/host-policy";
+import {
+  createPinnedOidcLookup as createPinnedServiceLookup,
+  resolveOidcTokenAddresses as resolvePinnedServiceAddresses,
+} from "@/lib/oidc-token-client";
 
 /**
  * Server-side client for Keyverse's account-unification service — currently
@@ -7,16 +15,15 @@ import { isPrivateOrLoopbackHostname, normalizeHostname } from "@/lib/host-polic
  * route so no Keycloak page is ever shown (see
  * docs/adr/0015-naruon-password-credential-issuance.md).
  *
- * ponytail: unlike oidc-token-client.ts / backend-request.ts, this uses plain
- * `fetch` rather than DNS-pinned node:https — account-unification is an
- * operator-deployed internal service naruon already trusts the same way it
- * trusts its own backend, not a boundary this slice needed to harden further.
- * Upgrade to the shared DNS-pinning machinery if that trust boundary ever
- * changes (e.g. account-unification becomes reachable across a less-trusted
- * network).
+ * The registration bearer token and submitted password cross this boundary,
+ * so hostname validation alone is insufficient: the request resolves the
+ * destination once, rejects any non-global DNS answer (except exact local
+ * development loopback), and pins the socket lookup to those validated
+ * addresses. Redirects are not followed.
  */
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const RESPONSE_MAX_BYTES = 64 * 1024;
 
 export class AccountUnificationError extends Error {
   constructor(
@@ -77,6 +84,95 @@ export interface PasswordRegistrationAccount {
   email_address: string;
 }
 
+function responseHeaders(response: IncomingMessage): Headers {
+  const headers = new Headers();
+  for (let index = 0; index < response.rawHeaders.length; index += 2) {
+    const name = response.rawHeaders[index];
+    const value = response.rawHeaders[index + 1];
+    if (name !== undefined && value !== undefined) headers.append(name, value);
+  }
+  return headers;
+}
+
+function collectPinnedResponse(
+  target: URL,
+  options: RequestOptions,
+  encodedBody: string,
+): Promise<Response> {
+  const requester = target.protocol === "http:" ? httpRequest : httpsRequest;
+  return new Promise((resolve, reject) => {
+    const request = requester(options, (response) => {
+      const status = response.statusCode ?? 0;
+      if (status < 200 || status > 599) {
+        response.destroy();
+        reject(new Error("Account-unification returned an invalid HTTP status"));
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let receivedBytes = 0;
+      let settled = false;
+      const rejectOnce = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      response.on("data", (chunk: Buffer | string) => {
+        if (settled) return;
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        receivedBytes += buffer.length;
+        if (receivedBytes > RESPONSE_MAX_BYTES) {
+          const error = new Error("Account-unification response exceeded the size limit");
+          request.destroy(error);
+          rejectOnce(error);
+          return;
+        }
+        chunks.push(buffer);
+      });
+      response.on("end", () => {
+        if (settled) return;
+        settled = true;
+        resolve(
+          new Response(Buffer.concat(chunks), {
+            headers: responseHeaders(response),
+            status,
+            statusText: response.statusMessage ?? "",
+          }),
+        );
+      });
+      response.on("error", (error) => rejectOnce(error));
+    });
+    request.once("error", (error) => reject(error));
+    request.end(encodedBody);
+  });
+}
+
+async function postPinnedRegistration(target: URL, token: string, encodedBody: string): Promise<Response> {
+  const addresses = await resolvePinnedServiceAddresses(target);
+  const hostname = normalizeHostname(target);
+  const options: RequestOptions = {
+    method: "POST",
+    agent: false,
+    protocol: target.protocol,
+    hostname,
+    port: target.port || undefined,
+    path: `${target.pathname}${target.search}`,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Content-Length": String(Buffer.byteLength(encodedBody)),
+      Host: target.host,
+    },
+    lookup: createPinnedServiceLookup(hostname, addresses),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  };
+  if (target.protocol === "https:" && isIP(hostname) === 0) {
+    options.servername = hostname;
+  }
+  return collectPinnedResponse(target, options, encodedBody);
+}
+
 /**
  * Calls account-unification's scoped password-registration endpoint.
  * Never logs the password; only a fixed reason/status surfaces on failure.
@@ -88,20 +184,7 @@ export async function registerAccountWithPassword(
   const target = new URL("/registration/accounts/password", config.baseUrl);
   let response: Response;
   try {
-    response = await fetch(target, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.token}`,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      // fetch follows redirects by default, and a 307/308 preserves the POST
-      // body -- the password would otherwise be forwarded verbatim to
-      // whatever a misconfigured/compromised response's Location header
-      // names. Fail closed instead of following it.
-      redirect: "error",
-    });
+    response = await postPinnedRegistration(target, config.token, JSON.stringify(body));
   } catch {
     throw new AccountUnificationError("account_unification_unreachable", 502);
   }
