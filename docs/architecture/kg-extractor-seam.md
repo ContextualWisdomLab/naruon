@@ -1,170 +1,120 @@
 # Semantic project-graph extractor seam
 
-Status: implemented (naruon#975, Phase 0 keystone bullet — "make the dense KG
-real *behind a stable extractor seam*"). This note records the design and its
-grounding; the runnable contract lives in
-[`backend/services/project_graph/extractor_registry.py`](../../backend/services/project_graph/extractor_registry.py).
+Status: implemented seam; LLM-backed execution is intentionally unavailable until a released contextual-orchestrator consumer contract can be consumed.
+
+The runnable contract lives in [`backend/services/project_graph/extractor_registry.py`](../../backend/services/project_graph/extractor_registry.py). This note describes the product boundary and must stay aligned with that module and ADR-0005.
 
 ## Problem
 
-The semantic project graph (`project_graph_objects` / `_edges`, cited back to
-`content_segments`) is populated by *extractors*. Two existed — a deterministic
-keyword baseline and a grounded LLM extractor — but the import pipeline chose
-between them with a hardcoded branch:
+The semantic project graph (`project_graph_objects` / `project_graph_edges`, cited back to `content_segments`) is populated by named, versioned extractors. A stable registry is useful only if selection and fallback semantics remain truthful. In particular, a request for LLM-backed extraction must not silently return keyword-derived output, and Naruon must not become a second provider/model router beside contextual-orchestrator.
 
-```python
-if settings.PROJECT_GRAPH_EXTRACTOR == "llm" and provider and provider.api_key:
-    try: return await extract_project_semantics_llm(...)
-    except Exception: ...        # fall back
-return extract_project_semantics(...)
-```
+The earlier implementation violated both constraints: LLM-backed selectors could fall through to the deterministic keyword extractor, while Naruon carried direct-provider model/base-URL authority and later attempted to choose an orchestrator pool/model itself. PR #1525 removes those authorities rather than hiding them behind configuration.
 
-The platform plan (`docs/planning/naruon-platform-plan.md`, §7.2) names a
-`kg.extractor` extension point — "register a named + versioned entity/relation
-extractor" — as one of only two seams the plugin kernel will generalize, and
-§8.2 flags "make the dense KG real behind a stable extractor seam" as the Phase 0
-keystone. A hardcoded `if/else` is not that seam: a third extractor (or a
-plugin) cannot be selected without editing core ingest, and the
-"rule-based extraction is fallback/reference only" discipline is an ad-hoc branch
-rather than a structural guarantee. naruon#975 asks specifically to *"establish
-the pluggable extractor/plugin seam and route the real LLM-based
-language-agnostic extraction through contextual-orchestrator; current rule-based
-extraction is fallback/reference only."*
+## Contract
 
-## Design
-
-### The contract
-
-`KgExtractor` is a typed, named + versioned `Protocol`:
+`KgExtractor` is a typed, named and versioned `Protocol` with an explicit capability-fallback declaration:
 
 ```python
 class KgExtractor(Protocol):
     name: str
     version: str
+    requires_llm_capability: bool
+
     async def extract(
-        self, segments: list[ProjectSourceSegment], *, context: KgExtractorContext
+        self,
+        segments: list[ProjectSourceSegment],
+        *,
+        context: KgExtractorContext,
     ) -> ProjectSemanticExtractionResult: ...
 ```
 
-`name`/`version` are recorded as per-row provenance on the objects and edges an
-extractor emits (`project_graph_objects.extractor_name` / `.extractor_version`),
-so every node in the graph is attributable to the extractor and version that
-produced it. `extract` is always awaited so pure/deterministic and LLM-backed
-extractors compose uniformly. `KgExtractorContext` is a small, provider-agnostic
-carrier (`api_key`, `base_url`, `model`, `orchestrator_base_url`) — extractors
-receive exactly the resources they need, with no ambient session/settings
-authority (mirroring the plan's plugin-context principle, §7.2).
+`name` and `version` are persisted as extractor provenance. `requires_llm_capability` is mandatory: a plugin that omits it fails loudly during chain resolution instead of inheriting an accidental fallback policy.
 
-### The registry and the fallback discipline
+`KgExtractorContext` deliberately contains only `api_key`, `orchestrator_base_url`, and `orchestrator_model`. It no longer contains direct-provider `base_url` or `model` fields. Those fields would be dead configuration while direct-provider execution is policy-disabled and would invite Naruon to regain provider/model-selection authority.
 
-`KgExtractorRegistry` maps the stable `PROJECT_GRAPH_EXTRACTOR` selector value to
-an extractor. `resolve_extractor_chain(selector)` returns an ordered chain whose
-**terminal element is always the deterministic keyword extractor**:
+## Selector and fallback semantics
 
-| selector | chain |
-| --- | --- |
-| `keyword` | `[deterministic]` |
-| `llm` | `[llm-grounded, deterministic]` |
-| `orchestrator` | `[llm-grounded (routed), deterministic]` |
-| unknown / plugin-without-fallback | `[…, deterministic]` |
+The selector contract is explicit:
 
-`run_extraction` walks the chain and returns the first success. An extractor that
-hits a *recoverable precondition* (missing LLM credentials, an unconfigured
-orchestrator endpoint) raises `ExtractorUnavailableError`; a genuine failure
-raises anything else. Both cause the runner to advance to the next extractor.
-Because the deterministic keyword extractor is pure and always produces a result,
-"rule-based extraction is fallback/reference only" is guaranteed *by
-construction* — not by remembering to write a fallback branch. The projection is
-best-effort and never lost.
+| `PROJECT_GRAPH_EXTRACTOR` | Resolution | Failure behavior |
+| --- | --- | --- |
+| `keyword` | deterministic keyword extractor only | propagates its own failure |
+| `llm` | direct-provider LLM extractor only | always unavailable by policy; no keyword substitution |
+| `orchestrator` | contextual-orchestrator-routed LLM extractor only | unavailable until all released-contract preconditions are resolved; no keyword substitution |
+| unknown value | no extractor | `ExtractorUnavailableError`; no implicit keyword mode |
 
-Adding an extractor — including a future plugin on the `kg.extractor` extension
-point — is now `registry.register("selector", MyExtractor())` plus a config
-value; core ingest is untouched.
+The deterministic keyword extractor is therefore an intentional non-LLM product mode, not a rescue path for an unavailable LLM capability. For future non-LLM plugins that explicitly set `requires_llm_capability = False`, the registry may append the deterministic extractor as a fallback. LLM-backed extractors set it to `True`, so their chain contains only the requested extractor and `run_extraction` propagates errors.
 
-### Grounding invariant (unchanged, and load-bearing)
+This distinction is load-bearing. It prevents a tenant/operator from selecting `llm` or `orchestrator` and receiving persisted keyword-derived graph objects that appear to be evidence of successful LLM extraction.
 
-Extractors do not get to weaken grounding. Every emitted object must cite
-`content_segment_uid`s that exist in the input segments
-(`ProjectSemanticObject.__post_init__`), the LLM extractor drops any object with
-unknown/absent citations and grounds each object-to-object relation in the union
-of its endpoints' cited segments (`llm_extractor._validated_objects` /
-`_relation_edges`), and the repository re-validates that every cited segment is
-in the caller's scope (`repository._validate_segment_scope`). The seam changes
-*selection*, not the citation contract.
+## LLM authority boundary
 
-### Routing LLM extraction through contextual-orchestrator
+### Direct-provider selector
 
-contextual-orchestrator is the org's LLM cost/routing hub. naruon already treats
-every LLM provider as OpenAI-compatible (it builds an `AsyncOpenAI` client against
-any provider `base_url` through the SSRF-guarded
-`build_llm_provider_http_client`). Routing extraction "through the orchestrator"
-is therefore a *transport* choice, not a new bespoke API: the `orchestrator`
-selector runs the **identical** grounded LLM extractor but points its client at
-`PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` (the orchestrator's OpenAI-compatible
-endpoint) instead of the raw provider. Constraints:
+`PROJECT_GRAPH_EXTRACTOR=llm` remains registered for configuration compatibility but is disabled by policy. `LlmGroundedExtractor.extract()` raises `ExtractorUnavailableError` before reading credentials, endpoint, or model data when `routed_via_orchestrator` is false.
 
-- The orchestrator base URL must be HTTPS and exact-host allowlisted by
-  `ALLOWED_LLM_BASE_URL_HOSTS`; the egress guard pins the resolved global address
-  (DNS-rebinding safe). An unset or rejected endpoint raises
-  `ExtractorUnavailableError` → deterministic fallback (fail closed).
-- The provider API key stays the tenant's Fernet-encrypted credential; only the
-  routing target changes.
+Naruon does not own production LLM provider/model routing. Re-enabling this path would recreate a second routing authority and requires a new accepted architecture decision; credentials or a reachable provider endpoint are not sufficient justification.
 
-This deliberately reuses the OpenAI chat/structured-output contract the merged
-`llm` extractor already speaks, so the orchestrator path is no more speculative
-than the direct path. It contrasts with the *batch embedding* path
-(`batch_embedding_service.py`), which needed a bespoke `/v1/batch/embeddings`
-contract because batching is not part of the OpenAI API; synchronous extraction
-is. Follow-up (out of scope here): a dedicated per-tenant orchestrator
-extraction endpoint + token in Fernet `tenant_configs` (mirroring the batch
-fields) if the orchestrator authenticates extraction separately from the tenant
-provider key, reconciled cross-repo the way batch routing was with
-contextual-orchestrator (see naruon#973).
+### contextual-orchestrator selector
+
+`PROJECT_GRAPH_EXTRACTOR=orchestrator` reuses the grounded extraction core but targets the contextual-orchestrator endpoint supplied by the caller. The extractor does not choose a provider, model, group, or virtual pool id.
+
+Execution currently requires all of the following:
+
+- a contextual-orchestrator endpoint resolved by the consumer boundary;
+- the credential material required by that released consumer contract;
+- a non-blank `orchestrator_model` or equivalent resolved route value supplied by that contract;
+- the existing SSRF/egress validation for the outbound endpoint.
+
+As recorded by ADR-0005 and PR #1525, no released contextual-orchestrator consumer contract is currently available for this path. No caller therefore resolves a legitimate `orchestrator_model`, so orchestrator-backed extraction fails closed. Naruon must not invent `orchestrator/free`, a provider id, or any other model/pool value to make the call appear operational.
+
+When contextual-orchestrator publishes an immutable consumer release, enabling this path requires a separate consumer change that pins that release, maps its versioned request/response schema through an ACL, regenerates exact-head contract/E2E/security evidence, and removes any now-obsolete provisional fields. A mutable branch/head is not a dependency contract.
+
+## Import behavior
+
+Failing project-graph extraction does not fail email import. `_persist_project_graph_projection` already treats projection as best-effort at the higher application layer and catches extraction failures. The truthful behavior is therefore:
+
+1. persist/import the email according to the normal mail contract;
+2. attempt only the extractor explicitly selected;
+3. if an LLM-backed capability is unavailable or fails, omit that graph projection and retain failure evidence/logging;
+4. never replace it with keyword-derived output under the LLM selector.
+
+Explicit `keyword` mode remains available for tenants/operators that intentionally choose deterministic lexical extraction.
+
+## Grounding invariant
+
+Extractor selection does not weaken grounding. Every emitted object must cite input `content_segment_uid` values; LLM extraction validates cited segments and relation grounding; persistence re-validates segment scope before storing the graph. Extractor name/version provenance remains attached to persisted objects and edges.
+
+The seam changes *which implementation may run*, not the citation or tenant-scope contract.
 
 ## Configuration
 
-- `PROJECT_GRAPH_EXTRACTION_ENABLED` (default `false`) — gates whether ingest
-  snapshots segments for projection at all.
-- `PROJECT_GRAPH_EXTRACTOR` (default `keyword`) — `keyword` | `llm` |
-  `orchestrator`.
-- `PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` (default unset) — OpenAI-compatible
-  orchestrator endpoint for `orchestrator` routing; HTTPS + allowlisted.
+- `PROJECT_GRAPH_EXTRACTION_ENABLED` — gates project-graph projection.
+- `PROJECT_GRAPH_EXTRACTOR` — explicit selector: `keyword`, `llm`, or `orchestrator`; unknown values fail closed.
+- `PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` — transport configuration only. A URL by itself does not make orchestrator extraction operational and must not grant Naruon provider/model-selection authority.
 
-## Grounding
+Direct-provider model/base-URL configuration is not part of `KgExtractorContext` after PR #1525.
 
-- **Platform plan** `docs/planning/naruon-platform-plan.md` — §7.2 (the
-  `kg.extractor` extension point; extractors emit *candidates* with confidence
-  and cited segments, the kernel commits provenance), §7.3 ("LLM-based
-  entity/relation extraction … replaces today's deterministic rule extractor;
-  deterministic rules remain as a cheap first pass / offline-deterministic test
-  fallback"), §8.2 (the Phase 0 keystone).
-- **LLM + knowledge-graph construction.** S. Pan, L. Luo, Y. Wang, C. Chen,
-  J. Wang, X. Wu, *"Unifying Large Language Models and Knowledge Graphs: A
-  Roadmap"* (arXiv:2306.08302; IEEE TKDE 2024) — the canonical survey of
-  LLM-driven KG construction (entity/relation extraction) with the human-in-the-
-  loop, provenance-carrying discipline this seam implements. (Source PDF
-  `https://arxiv.org/pdf/2306.08302`; not mirrored into `docs/papers/` here
-  because this environment's network policy denies arxiv egress — the citation
-  stands as the external reference.)
-- **Requirements extraction from natural language** — the in-repo
-  `docs/papers/nlp-in-software-requirements-engineering-slr.pdf` (Necula et al.,
-  *Electronics* 2024) grounds extracting requirements/issues/features from email
-  threads, which is what the project-graph objects are.
-- **Orchestrator-as-routing-hub** — the in-repo `docs/papers/` routing set
-  (FrugalGPT, RouteLLM, Hybrid LLM) grounds sending LLM work through a
-  cost/routing hub rather than hard-wiring a provider per caller, the pattern the
-  `orchestrator` selector extends from embeddings to extraction.
+## Verification contract
 
-## Tests
+The regression suite must prove at least these behaviors:
 
-- `backend/tests/test_project_graph_extractor_registry.py` — the contract
-  (Protocol conformance, name/version provenance), chain resolution
-  (deterministic always terminal; unknown selectors and plugin registrations
-  still fall back), `run_extraction` degradation (primary success, failure
-  fall-through, missing-credential fall-through), and orchestrator routing
-  (targets the orchestrator base URL; fails closed when unconfigured).
-- `backend/tests/test_project_graph_llm_extractor.py` — the import selector now
-  resolves through the registry (`keyword` / `llm` / `orchestrator` / fallback).
-- The grounding invariant and persistence remain covered by the existing
-  `test_project_graph_llm_extractor.py`, `test_project_graph_extractors.py`,
-  `test_project_graph_import_wiring.py`, and `test_project_graph_projection.py`.
+- explicit `keyword` selection resolves only the deterministic extractor;
+- `llm` direct-provider mode is unconditionally unavailable;
+- `orchestrator` mode fails closed when its released-contract inputs are absent or blank;
+- failures from either LLM-backed selector propagate rather than falling through to keyword extraction;
+- unknown selector values fail closed;
+- plugins must explicitly implement `requires_llm_capability`;
+- grounding/provenance invariants remain unchanged;
+- the higher-level email import survives projection failure without fabricating a substitute graph.
+
+Relevant tests are in `backend/tests/test_project_graph_extractor_registry.py`, `backend/tests/test_project_graph_llm_extractor.py`, `backend/tests/test_project_graph_extractors.py`, `backend/tests/test_project_graph_import_wiring.py`, and `backend/tests/test_project_graph_projection.py`.
+
+## Traceability and grounding
+
+- `docs/adr/0005-kg-extraction-orchestrator-free-pool-pin.md` — decision history for provider/model authority, fail-closed LLM selectors, and contextual-orchestrator release dependency.
+- `docs/planning/naruon-platform-plan.md` — `kg.extractor` extension point and the dense project-graph roadmap. The plan's historical language about deterministic fallback does not override the current truthfulness invariant for an explicitly requested LLM capability.
+- Pan, S., Luo, L., Wang, Y., Chen, C., Wang, J., & Wu, X. (2024). Unifying large language models and knowledge graphs: A roadmap. *IEEE Transactions on Knowledge and Data Engineering*. https://doi.org/10.1109/TKDE.2024.3352100 — grounding for LLM/KG construction; it does not assign provider-routing authority to Naruon.
+- Necula, S.-C., Păvăloaia, V.-D., Strîmbei, C., & Dospinescu, O. (2024). Enhancement of natural language processing approaches for requirements engineering: A systematic literature review. *Electronics, 13*(11), 2055. The redistribution-permitted in-repo reference, when present under `docs/papers/`, is supporting research rather than an executable contract.
+
+Code, ADR, this architecture note, PR metadata, and tests must agree before #1525 can be considered merge-ready. Predecessor-head review/check evidence does not transfer after a documentation commit.
