@@ -1756,6 +1756,11 @@ export function SettingsLayout() {
                       id="naruon-password-signup-name"
                       type="text"
                       autoComplete="given-name"
+                      // Matches the signup route's own MAX_NAME_LENGTH -- an
+                      // immediate client-side hint, not a substitute for the
+                      // route's own validation (which still rejects an
+                      // over-length name outright rather than trusting this).
+                      maxLength={100}
                       value={passwordSignupForm.firstName}
                       onChange={(event) => setPasswordSignupForm((current) => ({ ...current, firstName: event.target.value }))}
                       className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
