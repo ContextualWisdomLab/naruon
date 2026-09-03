@@ -41,7 +41,7 @@ uvicorn main:app --reload                    # local dev server only
 - `scripts/bootstrap_db.py` is the local/dev-only schema compatibility path;
   Alembic history under `backend/alembic` is authoritative.
 
-### Frontend (Next.js, Python, in `frontend/`, pnpm@11.5.3)
+### Frontend (Next.js, in `frontend/`, pnpm@11.5.3)
 
 ```bash
 cd frontend
