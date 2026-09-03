@@ -42,11 +42,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "bandit>=1.9.4",
   "coverage==7.15.1",
   "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
-  "pytest-cov>=7.1.0",
   "ruff==0.15.21",
-  "tomli>=2.4.1",
 ]
