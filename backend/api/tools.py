@@ -753,6 +753,76 @@ registry.register(
 )
 
 
+
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    return {"encoded_url": urllib.parse.quote(text, safe="")}
+
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="일반 텍스트를 URL Safe 형식으로 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    encoded_url = params.get("encoded_url", "")
+    if len(encoded_url) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    return {"decoded_url": urllib.parse.unquote(encoded_url)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩된 문자열을 일반 텍스트로 디코딩합니다.",
+        category="유틸리티",
+        parameters={"encoded_url": "string"},
+    ),
+    url_decoder_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    json_string = params.get("json_string", "")
+    if len(json_string) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 보기 좋게 포맷팅(들여쓰기)합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 

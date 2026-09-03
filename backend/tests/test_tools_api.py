@@ -1193,6 +1193,123 @@ async def test_keyword_extractor_handler():
     assert empty == {"keywords": [], "keyword_count": 0}
 
 
+
+def test_execute_url_encoder():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Hello World!"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["encoded_url"] == "Hello%20World%21"
+
+def test_execute_url_encoder_oversized():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "must not exceed" in data["message"]
+
+def test_execute_url_decoder():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "encoded_url": "Hello%20World%21"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["decoded_url"] == "Hello World!"
+
+def test_execute_url_decoder_oversized():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "encoded_url": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "must not exceed" in data["message"]
+
+def test_execute_json_formatter():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "json_string": '{"key":"value"}'
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "{\n  \"key\": \"value\"\n}" in data["result"]["formatted_json"]
+
+def test_execute_json_formatter_invalid():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "json_string": '{"key": "value"'
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid JSON string" in data["message"]
+
+def test_execute_json_formatter_oversized():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "json_string": '{"key": "' + "a" * (ANALYSIS_TEXT_MAX_CHARS) + '"}'
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "must not exceed" in data["message"]
+
+
 def test_execute_analysis_tool_rejects_oversized_text():
     from api.tools import ANALYSIS_TEXT_MAX_CHARS
 
