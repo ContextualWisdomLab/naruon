@@ -5,9 +5,8 @@ import binascii
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
 
-from .text_safety import strip_html_markup
+from .text_safety import contains_html_markup, strip_html_markup
 
 _GENERIC_CONTENT_TYPES = {
     "",
@@ -17,7 +16,6 @@ _GENERIC_CONTENT_TYPES = {
 }
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
 MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
-MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS = 3
 
 
 @dataclass(frozen=True)
@@ -119,6 +117,15 @@ _EXTENSION_CONTENT_TYPES = {
     or descriptor.parse_status in _DEFERRED_PARSE_STATUSES
     for extension in descriptor.extensions
 }
+_BIDI_FILENAME_CONTROL_CODEPOINTS = frozenset(
+    {
+        0x061C,
+        0x200E,
+        0x200F,
+        *range(0x202A, 0x202F),
+        *range(0x2066, 0x206A),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -148,9 +155,10 @@ def parse_email_attachment(
 ) -> AttachmentParseResult:
     """Classify and normalize one attachment without running heavy parsers."""
     safe_filename = _safe_filename(filename)
+    parser_filename = _parser_authority_filename(filename)
     normalized_content_type = _normalize_content_type(content_type)
     parse_content_type = _parse_content_type_for(
-        safe_filename,
+        parser_filename,
         normalized_content_type,
     )
 
@@ -266,24 +274,60 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
     return "unsupported_binary"
 
 
+def _has_unsafe_filename_control(filename: str) -> bool:
+    """Return whether a MIME filename contains unsafe control semantics."""
+    return any(
+        (codepoint := ord(character)) < 0x20
+        or 0x7F <= codepoint <= 0x9F
+        or codepoint in _BIDI_FILENAME_CONTROL_CODEPOINTS
+        for character in filename
+    )
+
+
 def _safe_filename(filename: str | None) -> str:
-    """Return a basename-only attachment display filename."""
-    display_filename = filename or "attachment"
-    for _ in range(MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS):
-        decoded_filename = unquote(display_filename)
-        if decoded_filename == display_filename:
-            break
-        display_filename = decoded_filename
-    # Entity-encoded percent escapes (for example ``&#37;2e``) only become
-    # literal ``%`` sequences during markup decoding, so the residual-encoding
-    # guard must run after ``strip_html_markup`` to stay fail-closed.
-    display_filename = strip_html_markup(_sanitize_nul(display_filename))
-    if unquote(display_filename) != display_filename:
+    """Return a basename-only filename projection safe for display and storage.
+
+    Display sanitization is intentionally separate from parser selection. Known
+    markup is stripped so active HTML cannot reach UI-facing attachment fields,
+    while raw angle-bracket labels and control-bearing names fail closed.
+    Percent and character-reference text that is not markup remains literal.
+    """
+    raw_filename = filename or "attachment"
+    if _has_unsafe_filename_control(raw_filename):
         return "attachment"
+    if contains_html_markup(raw_filename):
+        display_filename = strip_html_markup(raw_filename)
+    elif "<" in raw_filename or ">" in raw_filename:
+        return "attachment"
+    else:
+        display_filename = raw_filename
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
     return display_filename
+
+
+def _parser_authority_filename(filename: str | None) -> str:
+    """Return the literal basename eligible to select a parser by extension.
+
+    MIME filename identity is neither HTML nor URL source. Parser authority must
+    therefore use the pre-display representation: semantic decoding, markup
+    stripping, control deletion, or whitespace trimming must never manufacture
+    a recognized suffix for a generic MIME type.
+    """
+    raw_filename = filename or "attachment"
+    if _has_unsafe_filename_control(raw_filename):
+        return "attachment"
+    if (
+        "<" in raw_filename
+        or ">" in raw_filename
+        or contains_html_markup(raw_filename)
+    ):
+        return "attachment"
+    authority_filename = Path(raw_filename.replace("\\", "/")).name
+    if authority_filename in {"", ".", ".."}:
+        return "attachment"
+    return authority_filename
 
 
 def _coerce_deferred_payload_bytes(raw_content: Any) -> bytes:
