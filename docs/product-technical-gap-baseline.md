@@ -25,16 +25,19 @@ passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
 **Governed review evidence refresh (2026-09-04T17:03Z):** Naruon PR #1564
-(`5ff0f219291ad756dd5638a30c9b8549074959b0`) records the reusable exact-head,
+(`c261dcca612891095e98a8bf6be50f218e15a17b`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
 procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
 evidence from post-merge commit verification and names the applicable
 current-head CodeRabbit or structured OpenCode fallback contract. It also
 inherits PR #1558's unique valid delta: repository-local security-skill routing,
-review-only mutation boundaries, remote-head equality before push, fail-closed
-GitHub API handling, truthful commit attribution, NIST SSDF grounding, and safe
-independent work during gate waits. The sole predecessor review thread is
-resolved and 35 release-governance tests pass on the new head. Canonical workflow
+review-only mutation boundaries, existing-branch remote-head equality plus the
+verified absent-ref initial-push path, fail-closed GitHub API handling, truthful
+commit attribution, NIST SSDF grounding, and safe independent work during gate
+waits. Shared lifecycle skills now have direct procedural fallbacks, signing is
+tied to actual repository policy, and metadata-only PR Governance is explicitly
+excluded from canceling review concurrency. All six current-head review threads
+are resolved; fresh hosted checks remain queued. Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
 retains only allowlisted, secret-free gateway failure fields and stops creating
