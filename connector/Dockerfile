@@ -15,9 +15,7 @@ RUN PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ONLY_BINARY=
 COPY connector /app/connector
 COPY backend /app/backend
 
-RUN DATABASE_URL=postgresql+asyncpg://connector:connector@db.invalid/naruon \
-    AUTH_SESSION_HMAC_SECRET='q7V!3mZ#9Lp@2Rx$8Kd&5Hs*1Wn%6BcF4GjT0YuE' \
-    python -c "from runner.local_dav_adapters import LocalDavAdapters; from runner.local_mail_adapters import LocalMailAdapters"
+RUN python -c "import os, secrets; os.environ['DATABASE_URL'] = 'postgresql+asyncpg://connector:connector@db.invalid/naruon'; os.environ['AUTH_SESSION_HMAC_SECRET'] = secrets.token_urlsafe(48); from runner.local_dav_adapters import LocalDavAdapters; from runner.local_mail_adapters import LocalMailAdapters"
 
 RUN useradd --system --create-home --home-dir /home/connector --shell /usr/sbin/nologin connector \
     && chown -R connector:connector /app
