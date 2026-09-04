@@ -103,7 +103,11 @@ it also installs the repository-pinned `pnpm@11.5.3` before `setup-node` asks
 for the cache path. This removes the mutable `pnpm/latest` lookup that failed
 #1502's frontend job on `ECONNRESET`. An isolated Corepack probe, 39 governance
 tests, actionlint, and diff checks pass.
-PR #1500 (`8be7681416230a1bcbf3c457a47cf230f70a1936`) is likewise Draft after
+Bandit-only predecessor #1554
+(`2585126b40570c912399ca3fe49d4d803fed0ebc`) remains open for provenance;
+#1562 must merge and pass fresh tree-equivalence review before the predecessor
+can close, and no check or review evidence transfers.
+PR #1500 (`dfee7c12a535a79ca43daa14b17c9580bcbf2658`) is likewise Draft after
 repeated empty CI-trigger commits kept replacing its exact head while retaining
 tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
 (`dea8edb64d4ae492aec8815798edad8b4200c1dd`) carries the full source delta
