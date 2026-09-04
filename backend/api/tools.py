@@ -780,12 +780,14 @@ registry.register(
 
 _EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _PHONE_PATTERN = re.compile(
-    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}|\d{2,3}-\d{3,4}-\d{4})(?!\d)"
+    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
+    r"|\d{2,3}-\d{3,4}-\d{4}"
+    r"|(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4})(?!\d)"
 )
 
 
 async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Mask ASCII email and selected domestic or +82 Korean phone formats."""
+    """Mask ASCII email and selected Korean or North American phone formats."""
     text = params["text"]
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
@@ -799,7 +801,7 @@ registry.register(
     ToolInfo(
         code="email_phone_masker",
         name="이메일/전화번호 마스킹 (Email/Phone Masker)",
-        description="텍스트에서 ASCII 이메일 주소와 일부 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
+        description="텍스트에서 ASCII 이메일 주소와 일부 한국·북미 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
         category="유틸리티",
         parameters={"text": "string"},
     ),
