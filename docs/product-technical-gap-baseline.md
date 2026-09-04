@@ -23,11 +23,13 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T13:31Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T13:33Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
-(`3d9ea27d424ffabf7d9496c9085f5f4a8a172e5d`) carries the exact-head PR
-completion playbook after six review threads were resolved and 35 governance
-tests passed locally. #1538 (`71c331e1e059d22f44f605711ab230926edc1c88`)
+(`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) carries the exact-head PR
+completion playbook. It now distinguishes AI-authored commits from generated
+GitHub merge refs and permits bounded validation retries for truncated remote
+evidence; 35 governance tests pass locally. #1538
+(`71c331e1e059d22f44f605711ab230926edc1c88`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
@@ -50,12 +52,17 @@ exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
 pass. #1543 (`887d2461526d0f1c70748cf9c9f726a45b742b5e`) remains Draft: central
 scheduler main does not yet prove the structured adversarial fallback contract,
 so it is not a complete successor for #1531 and must not delete that delta yet.
+#1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
+NetworkGraph option-materialization parent. #1526
+(`aebfcd6f9304a53375cd3b616274a5263365b1a9`) is non-force restacked on that
+exact parent and retains only the memoization delta; three combined Vitest
+files (five tests), TypeScript, ESLint, and diff checks pass.
 #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
 percentage contract. Its unit and EmailDetail fixtures, pilot and full-product
 smokes, and AGENTS.md recurrence rule now share that unit; 65 focused tests,
-TypeScript, lint, and both smokes pass locally. All five remain candidate heads
+TypeScript, lint, and both smokes pass locally. These remain candidate heads
 rather than protected-branch evidence.
 
 #1485 (`796083106d46cff494836004937bb767fbb9672e`) now distinguishes 401/403
