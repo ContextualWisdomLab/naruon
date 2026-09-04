@@ -131,6 +131,15 @@ jobs:
       - name: Install Playwright Chromium
         run: cd frontend && pnpm exec playwright install --with-deps chromium
 
+      - name: Run Keyverse SSO popup browser contract
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_OIDC_ISSUER_URL: "http://127.0.0.1:18080/e2e-keyverse"
+          NEXT_PUBLIC_OIDC_CLIENT_ID: "naruon-e2e"
+          NEXT_PUBLIC_OIDC_REDIRECT_URI: "http://127.0.0.1:18080/auth/callback"
+          PLAYWRIGHT_PORT: "18080"
+        run: cd frontend && pnpm exec playwright test tests/e2e/auth-sso-popup.spec.ts --project=desktop
+
       - name: Run full product smoke
         env:
           NEXT_TELEMETRY_DISABLED: "1"
