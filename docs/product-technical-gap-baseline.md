@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.5
+**Baseline version:** 1.6
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -23,6 +23,19 @@ Contextual Orchestrator #1004
 for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
+
+**Governed review evidence refresh (2026-09-04T16:12Z):** Naruon PR #1564
+(`38b14430fdcc3769e0aee223844ff31193f7cb14`) records the reusable exact-head,
+non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
+procedure in `AGENTS.md`; 35 release-governance tests pass. Canonical workflow
+owner PR ContextualWisdomLab/.github #1850
+(`9e279ba99bcc098bdca20e724e848b0172a6e261`) repairs two evidence losses. It
+retains only allowlisted, secret-free gateway failure fields and stops creating
+a line-1 source receipt when a deletion-only or unchanged file has no real
+current-head changed-side line. The exact-line validator remains fail closed;
+167 focused owner tests pass. Both heads are mergeable but their required
+current-head checks and independent review remain pending, so neither local
+result is protected-branch evidence yet.
 
 **Exact-head execution refresh (2026-09-04T14:10Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
