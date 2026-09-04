@@ -104,7 +104,11 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     assert "protobuf==7.35.1" in backend_records
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", digest)
-        for pin in ("cryptography==50.0.0", "protobuf==7.35.1")
+        for pin in (
+            "cryptography==50.0.0",
+            "httpx2==2.5.0",
+            "protobuf==7.35.1",
+        )
         for digest in backend_records[pin]
     )
     pytest_config = read_repo_text("backend/pytest.ini")
