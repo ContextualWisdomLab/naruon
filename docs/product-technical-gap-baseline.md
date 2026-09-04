@@ -234,6 +234,17 @@ product events consume the semantic identity. Seventeen backend tests plus the
 frontend SearchLayout regression, TypeScript, ESLint, Ruff, and diff checks
 pass. Fresh hosted evidence is required because earlier failed review runs do
 not transfer to this head.
+Draft PR #1503 (`9c1851336fa04bcdc77c1c6e531afdb882583af1`)
+repairs the persisted Data workspace registry. Incremental databases that had
+already run the original bootstrap lacked `workspace_entities` and
+`workspace_documents`, while document creation did not provision the signed
+workspace foreign-key row. Structured idempotent migrations and the shared
+race-safe PostgreSQL provisioning service now cover both document creation
+paths without accepting client workspace authority. Sixty-three fast contracts
+pass with warnings as errors; eight disposable PostgreSQL 16 + pgvector tests
+also pass across empty, pre-registry, stamped-repair, and legacy document-scope
+histories. The exact head remains Draft until hosted PostgreSQL, security, and
+independent review evidence replace stale central-workflow failures.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
