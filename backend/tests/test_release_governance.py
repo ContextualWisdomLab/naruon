@@ -713,11 +713,15 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "develop" in pull_request_block
     assert "ai_email_client-backend" in workflow
     assert "ai_email_client-frontend" in workflow
-    assert workflow.count("image: naruon") == 2
+    assert len(re.findall(r"^\s+image: naruon$", workflow, re.MULTILINE)) == 2
+    assert len(
+        re.findall(r"^\s+image: naruon-connector$", workflow, re.MULTILINE)
+    ) == 2
     assert "push: false" in workflow
     assert "push: true" in workflow
     assert workflow.count("base_dockerfile: Dockerfile") == 4
     assert workflow.count("base_dockerfile: frontend/Dockerfile") == 2
+    assert workflow.count("base_dockerfile: connector/Dockerfile") == 2
     assert workflow.count('base_digest="${base_reference##*@}"') == 2
     assert workflow.count('base_name="docker.io/library/$base_reference"') == 2
     assert "Resolve pinned Ollama base manifest" in workflow

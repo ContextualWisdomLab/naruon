@@ -50,6 +50,13 @@ jobs:
             context: .
             build_args: |
               BUILDKIT_INLINE_CACHE=1
+          - component: connector
+            image: naruon-connector
+            dockerfile: connector/Dockerfile
+            base_dockerfile: connector/Dockerfile
+            context: .
+            build_args: |
+              BUILDKIT_INLINE_CACHE=1
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -113,6 +120,10 @@ jobs:
             frontend)
               title="naruon frontend"
               description="Naruon Next.js frontend runtime image"
+              ;;
+            connector)
+              title="naruon self-hosted connector"
+              description="Naruon self-hosted connector runtime image"
               ;;
             backend)
               title="naruon backend"
@@ -203,6 +214,13 @@ jobs:
             context: .
             build_args: |
               BUILDKIT_INLINE_CACHE=1
+          - component: connector
+            image: naruon-connector
+            dockerfile: connector/Dockerfile
+            base_dockerfile: connector/Dockerfile
+            context: .
+            build_args: |
+              BUILDKIT_INLINE_CACHE=1
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -264,6 +282,10 @@ jobs:
             backend)
               title="naruon backend"
               description="Naruon FastAPI backend runtime image"
+              ;;
+            connector)
+              title="naruon self-hosted connector"
+              description="Naruon self-hosted connector runtime image"
               ;;
             *)
               title="naruon"
