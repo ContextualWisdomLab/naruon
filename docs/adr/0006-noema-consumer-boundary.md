@@ -27,6 +27,11 @@ Naruon PRs #1384 and #1486 remain draft, independently active consumer lanes.
 They must not copy an owner's source, consume an owner's branch, or transfer
 review and check evidence between heads.
 
+Contextual Orchestrator PR #1004 is the active owner repair for structured
+output recovery across distinct eligible candidates. It remains an open
+candidate, so Naruon may use its contract as dependency planning evidence but
+must not treat its branch implementation as released runtime behavior.
+
 ## Decision
 
 1. Naruon retains ownership of workspace-agent prompts, tools, domain policy,
@@ -51,6 +56,8 @@ review and check evidence between heads.
   it cannot establish a second model-routing authority.
 - Noema PR #536 is upstream proposed evidence only. A later Naruon adoption PR
   must pin a released version and add contract tests at the consumer boundary.
+- Contextual Orchestrator PR #1004 must merge and publish an immutable contract
+  before Naruon claims malformed structured-output recovery through that path.
 - Earlier PR #1527 remains historical investigation evidence; this ADR replaces
   its contradictory separate-runtime/shared-runtime conclusions with the live
   owner/consumer boundary.
@@ -80,6 +87,8 @@ cannot transfer their checks or approvals to a consumer.
 - `ContextualWisdomLab/noema` PR #536, draft proposal for `noema-core`, verified
   2026-09-04.
 - `ContextualWisdomLab/naruon` PRs #1384, #1486, and #1527, verified 2026-09-04.
+- `ContextualWisdomLab/contextual-orchestrator` PR #1004, exact head
+  `6a992538b6efcc34b957f72fc599bb33ac40c152`, verified 2026-09-04.
 - Evans, E. (2003). *Domain-driven design: Tackling complexity in the heart of
   software*. Addison-Wesley.
 - Vernon, V. (2013). *Implementing domain-driven design*. Addison-Wesley.

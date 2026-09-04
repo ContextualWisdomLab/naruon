@@ -17,6 +17,11 @@ proposal, not a released dependency. Naruon #1527
 (`23680b13b443bb4eb7659b9a75073ecc1b67e133`) has no common Git history with
 current `develop` and contains mutually contradictory owner claims; ADR-0006
 therefore records the repair as Proposed rather than transferring its evidence.
+Contextual Orchestrator #1004
+(`6a992538b6efcc34b957f72fc599bb33ac40c152`) is the current owner candidate
+for distinct-provider structured-output recovery; its focused 31-test suite
+passes after a non-force merge of current `main`, while hosted current-head
+checks and independent review remain pending.
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
@@ -593,7 +598,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Canonical evidence identity | OCR/media/attachment/model slices can disagree about the same source | source segments and several deterministic admission slices exist | #1350, #1353, #1397, #1419 | one source identity/provenance chain across email, thread, document, attachment, media, model result |
 | Judgment explanation | model output without evidence/calibration is not defensible | grounded extractor seam exists; wider evidence pipeline incomplete | #1350 | evidence IDs, claim support, abstention, correction, verifier result, prompt/model/version receipt |
 | Provider-neutral route | raw provider coupling spreads credentials and failure behavior | contextual-orchestrator boundary exists; EgressWeave integration is blocked on release | #1262, #1264 | released hash-locked adapter, route/fallback evidence, no raw secret in products |
-| Noema workspace-agent boundary | buyers cannot rely on an assistant that bypasses governed routing or imports unreleased owner code | Noema protected `main` owns governed GitHub capability and delegates model routing; no released shared runtime is proven | #1384, #1486, #1527, Noema #536, ADR-0006 | tenant/workspace-authorized released orchestrator contract, fail-closed direct-provider path, Naruon-owned domain tools, immutable owner release, and consumer conformance tests |
+| Noema workspace-agent boundary | buyers cannot rely on an assistant that bypasses governed routing or imports unreleased owner code | Noema protected `main` owns governed GitHub capability and delegates model routing; no released shared runtime is proven | #1384, #1486, #1527, Noema #536, Contextual Orchestrator #1004, ADR-0006 | tenant/workspace-authorized released orchestrator contract, distinct-candidate structured-output recovery, fail-closed direct-provider path, Naruon-owned domain tools, immutable owner release, and consumer conformance tests |
 | Scientific claim discipline | keyword labels can be mistaken for topic/event measurement | architecture explicitly says no live STM | TEPP dependency path | accepted immutable TEPP artifact/API or explicit feature absence; no lexical-as-STM claim |
 
 ### P1 — Typed context and scheduling differentiation
