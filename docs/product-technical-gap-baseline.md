@@ -237,15 +237,18 @@ tests and all 39 statements/8 branches pass. All four lanes pass Ruff and diff
 checks without warning output. GitHub had not materialized Actions runs for
 these new heads at the observation time, so local results are not protected
 merge evidence and predecessor checks or reviews do not transfer.
-Draft PR #1563 (`8e4410fbe7e2dd6fca8f70536961f0fae9aee161`) repairs the prompt-provider
+Draft PR #1563 (`801c82e3ffc0ba7a80003405a70f3b9ba3a1ac22`) repairs the prompt-provider
 error boundary. Provider-controlled exception messages and tracebacks no longer
 enter application logs; operations retain only a fixed event name and exception
 class, while the signed API returns fixed actionable copy. Client cleanup
-failure cannot replace that response or leak a second exception message. The PR
+failure cannot replace that response or leak a second exception message.
+Provider URL/client setup failures now use the same fixed boundary, and an SDK
+constructor failure closes the already-created safe HTTP client. The PR
 non-force inherits and targets prerequisite #1565
 (`3a4ec5833db649994dc0042653d1d29f71010cfd`) instead of copying its dependency
 manifest. Dual-sentinel regressions plus prompt, pin, and governance suites pass
-58 tests with warnings as errors; Ruff and parent-base diff checks pass.
+58 tests with warnings as errors; the two setup regressions and full prompt
+error suite add four passing tests. Ruff and parent-base diff checks pass.
 Doctoring connects the contract to OWASP logging guidance and NIST SP 800-92;
 hosted exact-head evidence remains required.
 PR #1511 (`f78222dda6ac961fa3c1c4fb2acd9d7625e7b672`) repairs Context Search
