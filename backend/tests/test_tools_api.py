@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
-    ANALYSIS_TEXT_MAX_CHARS,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -113,7 +112,9 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
+@pytest.mark.parametrize(
+    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
+)
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1193,6 +1194,7 @@ async def test_keyword_extractor_handler():
 
 
 def test_execute_analysis_tool_rejects_oversized_text():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
 
     with TestClient(app) as client:
         response = client.post(
@@ -1248,9 +1250,12 @@ async def test_first_last_sentence_handler_one_sentence():
 
 @pytest.mark.asyncio
 async def test_first_last_sentence_handler_oversized():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
     params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
     with pytest.raises(ValueError, match="must not exceed"):
         await registry.invoke_tool("first_last_sentence", params)
+
 
 @pytest.mark.asyncio
 async def test_hash_generator_handler():
@@ -1275,6 +1280,30 @@ async def test_email_phone_masker_handler():
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
         await email_phone_masker_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_masks_complete_ascii_dot_atom_local_parts():
+    from api.tools import email_phone_masker_handler
+
+    result = await email_phone_masker_handler(
+        {"text": "Contact john&jane@example.com or customer/service@example.com."}
+    )
+
+    assert result["masked_text"] == "Contact [EMAIL] or [EMAIL]."
+
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_bounds_near_limit_malformed_email_work():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS, email_phone_masker_handler
+
+    started_at = time.perf_counter()
+    result = await email_phone_masker_handler(
+        {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS - 2) + "@x"}
+    )
+
+    assert result["masked_text"].endswith("@x")
+    assert time.perf_counter() - started_at < 1
 
 
 def test_execute_hash_generator():
