@@ -73,6 +73,21 @@ prerequisite rather than a consumer assumption.
   its contradictory separate-runtime/shared-runtime conclusions with the live
   owner/consumer boundary.
 
+## Supersession record
+
+This record carries forward PR #1527's valid observations that the existing
+Naruon agent and GitHub review gate serve different domain workflows, that PRs
+#1384 and #1486 overlap, and that draft owner code is not a released consumer
+contract. It rejects #1527's later shared-runtime conclusion because that
+conclusion treated an organization planning statement as deployed owner truth.
+
+The replacement is independently traceable: it does not depend on the
+predecessor's absent product-goal directive, does not claim that edited text is
+a verbatim copy, and pins every cross-repository architecture claim below to a
+repository, exact commit, artifact, and verification date. PR #1527 therefore
+remains open as predecessor lineage until this successor is protected-merged
+and its exact merge result is verified.
+
 ## Alternatives considered
 
 ### Treat all Noema-named code as one bounded context

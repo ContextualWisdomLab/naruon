@@ -18,6 +18,11 @@ shared-package proposal, not a released dependency. Naruon #1527
 (`23680b13b443bb4eb7659b9a75073ecc1b67e133`) has no common Git history with
 current `develop` and contains mutually contradictory owner claims; ADR-0006
 therefore records the repair as Proposed rather than transferring its evidence.
+Its supersession record preserves the predecessor's valid implementation and
+stack-overlap observations, rejects the unproven shared-runtime conclusion, and
+replaces the absent directive, edited-as-verbatim text, and mutable line-number
+references with exact owner evidence. #1527 stays open until protected merge and
+exact merge-result verification prove full-delta succession.
 Contextual Orchestrator #1004
 (`6a992538b6efcc34b957f72fc599bb33ac40c152`) is the current owner candidate
 for distinct-provider structured-output recovery; its focused 31-test suite
