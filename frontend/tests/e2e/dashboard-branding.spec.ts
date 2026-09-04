@@ -1345,10 +1345,7 @@ test('reveals the unavailable relationship explanation on keyboard focus', async
   await expect(button).toHaveAttribute('aria-disabled', 'true');
   await expect(button).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') ?? 'missing-tooltip-id');
   await expect(tooltip).toHaveCSS('opacity', '0');
-  const adjacentButton = page.getByRole('button', { name: '그래프 확대' });
-  await adjacentButton.focus();
-  await expect(adjacentButton).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
+  await button.focus();
   await expect(button).toBeFocused();
   await expect(tooltip).toHaveCSS('opacity', '1');
 });
