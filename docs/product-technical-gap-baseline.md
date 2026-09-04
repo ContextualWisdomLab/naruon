@@ -102,15 +102,18 @@ delta directly on exact parent #1522 as validated tree
 tests), TypeScript, ESLint, and diff checks pass. No predecessor gate evidence
 transfers, and #1526 may close only after #1560 merges and equivalence is
 reverified. #1560 remains Draft while non-default-base review and validation
-evidence are incomplete. Trigger repair #1562
-(`1ac1f82e1bda1ec11c0c6e325dfb7ff323eff0ad`) removes pull-request base
+evidence are incomplete. Governance owner #1531
+(`550798ccafebea4b1a9a65018e63b9661ff25a53`) retains the CodeRabbit/OpenCode
+fallback and stacked-base contract. Trigger repair #1562
+(`f20917099dced7acfc14d02224072ab558a2e40a`) is non-force restacked on that
+owner as a five-file child. It removes pull-request base
 filters from Application CI, Bandit, and image validation, scopes validation
 concurrency by workflow/repository/PR, and keeps tag publication
 non-cancellable. Its authoritative merge-gate policy now matches that behavior;
 it also installs the repository-pinned `pnpm@11.5.3` before `setup-node` asks
 for the cache path. This removes the mutable `pnpm/latest` lookup that failed
-#1502's frontend job on `ECONNRESET`. An isolated Corepack probe, 39 governance
-tests, actionlint, and diff checks pass.
+#1502's frontend job on `ECONNRESET`. The inherited governance harness, 40
+release/stacked-workflow tests, actionlint, and diff checks pass.
 Bandit-only predecessor #1554
 (`2585126b40570c912399ca3fe49d4d803fed0ebc`) remains open for provenance;
 #1562 must merge and pass fresh tree-equivalence review before the predecessor
