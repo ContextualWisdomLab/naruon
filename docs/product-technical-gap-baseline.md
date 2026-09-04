@@ -315,12 +315,24 @@ owner release, and open PRs or unreleased branches remain Proposed evidence.
 Stacked PR #1566 (`a302174bdee4120c86e15b57742f9cb7a4de6db4`)
 preserves the operating playbook and restores #1549's canonical gateway,
 released-owner, and no-shared-timeout block after conflict resolution had
-deleted it. Child PR #1567 (`f3d79a174cebf01c1e3712c7d6763d855af7ff24`)
+deleted it. Child PR #1567 (`3e3404e869ee830178fcc5e661a158b5a804ba2d`)
 now differs from #1566 only by whitespace-normalizing the same documentation
 contract; it is not a second policy writer or a full successor. Fifty-five
 focused documentation/governance contracts and diff checks pass. Fresh
 exact-head hosted Checks and independent review remain required; no predecessor
 evidence transfers.
+Contextual-orchestrator PR #911
+(`e80949188f0afa86052f10f5a9b627da1ee1ef0b`) is non-force restacked on #1068
+and repairs durable routing-observation invariants found in current-head review:
+successful batches need not invent latency, failed startup leaves no retention
+lease, embedding failover contains persistence faults, and batch quality stays
+bound to the execution-time routing context. Active unexpired leases govern
+pruning; the historical maximum-window row is compatibility/audit metadata,
+not live retention authority. One hundred ninety focused contracts and the
+exact stacked full suite (`3452 passed, 2 skipped`) pass. The five verified
+review threads are resolved, but hosted exact-head Checks and independent
+approval remain pending; this is Proposed owner evidence, not a released
+consumer contract.
 Canonical owner release PR contextual-orchestrator #1030
 (`f753f453ce4fc3dbc612bb9bdbb8db4cbfd93c16`) now implements the missing
 immutable publication mechanism: exact tag-namespace identity, annotated-tag
