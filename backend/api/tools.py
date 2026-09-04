@@ -785,6 +785,7 @@ _EMAIL_PATTERN = re.compile(
     rf"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+"
     r"[A-Za-z]{2,63}(?![A-Za-z0-9-])"
 )
+_URL_TOKEN_PATTERN = re.compile(r"\b(?:https?://|www\.)[^\s<>\"']+")
 _PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
     r"|\d{2,3}-\d{3,4}-\d{4}"
@@ -843,11 +844,23 @@ async def first_last_sentence_handler(params: Dict[str, Any]) -> Any:
         r"(?<=\d)\.(?=\d)|\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr)\.", text, re.IGNORECASE
     ):
         protected_text[match.end() - 1] = "\0"
+    for match in _EMAIL_PATTERN.finditer(text):
+        for character_index in range(match.start(), match.end()):
+            if text[character_index] == ".":
+                protected_text[character_index] = "\0"
+    for match in _URL_TOKEN_PATTERN.finditer(text):
+        token_end = match.end()
+        while token_end > match.start() and text[token_end - 1] in ".!?。！？．)]}":
+            token_end -= 1
+        for character_index in range(match.start(), token_end):
+            if text[character_index] == ".":
+                protected_text[character_index] = "\0"
 
     sentences = [
         text[match.start() : match.end()].strip()
         for match in re.finditer(
-            r"[^.!?。！？]+(?:[.!?。！？]+[\"'”’\)\]\}]*)?", "".join(protected_text)
+            r"[^.!?。！？．]+(?:[.!?。！？．]+[\"'”’\)\]\}]*)?",
+            "".join(protected_text),
         )
         if text[match.start() : match.end()].strip()
     ]

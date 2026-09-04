@@ -1222,9 +1222,9 @@ async def test_first_last_sentence_handler_success():
 
 @pytest.mark.asyncio
 async def test_first_last_sentence_handler_cjk_punctuation():
-    params = {"text": "첫 번째 문장입니다。 두 번째 문장입니다！ 세 번째 문장입니다？"}
+    params = {"text": "첫 번째 문장입니다． 두 번째 문장입니다！ 세 번째 문장입니다？"}
     result = await registry.invoke_tool("first_last_sentence", params)
-    assert result == {"excerpt": "첫 번째 문장입니다。 세 번째 문장입니다？"}
+    assert result == {"excerpt": "첫 번째 문장입니다． 세 번째 문장입니다？"}
 
 
 @pytest.mark.asyncio
@@ -1236,6 +1236,14 @@ async def test_first_last_sentence_handler_cjk_punctuation():
             "Dr. Smith approved it. Please proceed.",
         ),
         ("Version 1.2 works. Please deploy.", "Version 1.2 works. Please deploy."),
+        (
+            "Contact alice@example.com for help. Thanks.",
+            "Contact alice@example.com for help. Thanks.",
+        ),
+        (
+            "Read https://example.com/docs.html first. Done.",
+            "Read https://example.com/docs.html first. Done.",
+        ),
         ('He said "First." She said "Last."', 'He said "First." She said "Last."'),
     ],
 )
