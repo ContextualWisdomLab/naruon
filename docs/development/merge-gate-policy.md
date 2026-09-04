@@ -51,6 +51,10 @@ awaited by default.
 - Blocker comments use the idempotent
   `<!-- pr-governance:metadata-gate -->` marker and are patched in place instead
   of duplicated on repeated workflow events.
+- Synchronize evaluations may cancel only older synchronize runs. Every event
+  for the same PR publishes its check and marker comment through one shared,
+  non-cancelling job concurrency lane so an older same-head snapshot cannot
+  overwrite newer evidence.
 - GitHub rulesets must use `required_approving_review_count=0` so GitHub does
   not require a human `APPROVED` review when robot-review policy applies.
 - GitHub rulesets must keep `required_review_thread_resolution=true`.

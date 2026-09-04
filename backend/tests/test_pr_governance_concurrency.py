@@ -27,7 +27,16 @@ def test_pr_governance_concurrency_expression_matches_workflow_contract() -> Non
             "github.event.action == 'synchronize' }}"
         ),
     }
-    assert "concurrency" not in workflow_config["jobs"]["governance"]
+    assert workflow_config["jobs"]["governance"]["concurrency"] == {
+        "group": (
+            "${{ github.workflow }}-"
+            "${{ github.event.pull_request.number || "
+            "github.event.workflow_run.pull_requests[0].number || "
+            "github.event.check_run.pull_requests[0].number || "
+            "github.event.inputs.pr_number || github.run_id }}-publisher"
+        ),
+        "cancel-in-progress": False,
+    }
 
 
 def test_pr_governance_concurrency_semantics_cancel_only_superseded_pushes() -> None:
@@ -67,3 +76,22 @@ def test_pr_governance_concurrency_semantics_cancel_only_superseded_pushes() -> 
     assert expected_cancel("workflow_run") is False
     assert expected_cancel("check_run") is False
     assert expected_cancel("workflow_dispatch") is False
+
+
+def test_pr_governance_publishers_share_one_non_cancelling_pr_lane() -> None:
+    """Serialize stale and current snapshots before they mutate shared evidence."""
+
+    def publisher_group(pr_number: int) -> str:
+        return f"pr-governance-{pr_number}-publisher"
+
+    event_names = (
+        "pull_request_target",
+        "pull_request_review",
+        "workflow_run",
+        "check_run",
+        "workflow_dispatch",
+    )
+    assert {publisher_group(42) for _event_name in event_names} == {
+        "pr-governance-42-publisher"
+    }
+    assert publisher_group(42) != publisher_group(43)
