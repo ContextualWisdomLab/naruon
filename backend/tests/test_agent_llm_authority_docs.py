@@ -39,3 +39,8 @@ def test_agent_guidance_names_canonical_llm_owner_and_fail_closed_boundary() -> 
     assert "contextual-orchestrator" in claude
     assert "Naruon owns" in claude
     assert "provider/model routing" in claude
+    assert "gateway token" in agents
+    assert "provider names, model" in agents
+    assert "immutable released owner API/client/schema" in agents
+    assert "open PR or unreleased branch" in agents
+    assert "shared application/agent/gateway wall-clock timeout" in agents

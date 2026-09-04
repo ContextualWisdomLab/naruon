@@ -110,7 +110,7 @@ indexes, and auditable writeback intent. `ARCHITECTURE.md` and
 ```
 Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgvector
                             │
-                            ├──> contextual-orchestrator released consumer contract
+                            ├──> contextual-orchestrator consumer boundary
                             │      └──> provider/model routing owned by contextual-orchestrator
                             └──> outbound-only self-hosted connector (connector/)
                                      └──> customer IMAP/POP3/SMTP + CalDAV/CardDAV/WebDAV
@@ -122,7 +122,9 @@ API/client/schema; a missing or incompatible owner contract fails closed instead
 of falling back to a direct provider. The Ollama/MLX paths in local Compose are
 explicit non-production development fixtures. Central model-backed GitHub Actions
 are owned by `ContextualWisdomLab/.github` and use `orchestrator/free`; do not copy
-that pool selection into Naruon runtime.
+that pool selection into Naruon runtime. Verify protected release evidence before
+claiming the owner contract is available; an open PR or unreleased branch is only
+proposed evidence.
 
 - `backend/` — FastAPI app (`main.py`, routers in `api/`, domain logic in
   `services/`, SQLAlchemy models in `db/`, Alembic in `alembic/`). Owns
