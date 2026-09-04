@@ -146,35 +146,49 @@ function buildCompletionRate(tasks: TaskItem[]) {
   return Math.round((tasks.filter((task) => task.status === 'done').length / tasks.length) * 100);
 }
 
+type DashboardDataStatus = 'loading' | 'ready' | 'auth' | 'unavailable';
+
+function getApiErrorStatus(error: unknown) {
+  const shapedError = error as { status?: unknown; response?: { status?: unknown } } | null;
+  if (typeof shapedError?.status === 'number') return shapedError.status;
+  if (typeof shapedError?.response?.status === 'number') return shapedError.response.status;
+  return null;
+}
+
 function useDashboardData() {
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [pendingReplies, setPendingReplies] = useState<EmailItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [calendarSources, setCalendarSources] = useState<CalendarWritebackSource[]>([]);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dashboardDataStatus, setDashboardDataStatus] = useState<DashboardDataStatus>('loading');
   const [sourceEvidenceStatus, setSourceEvidenceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     let cancelled = false;
-    let pendingRequests = 2;
-    const finishRequest = () => {
-      pendingRequests -= 1;
-      if (pendingRequests === 0 && !cancelled) {
-        setLoading(false);
-      }
-    };
+    const coreReadSignal = AbortSignal.timeout(15_000);
 
     Promise.all([
-      apiClient.get<{ emails: EmailItem[] }>('/api/emails').catch(() => ({ emails: [] })),
-      apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3').catch(() => ({ emails: [] })),
-      apiClient.get<TaskItem[]>('/api/tasks').catch(() => []),
+      apiClient.get<{ emails: EmailItem[] }>('/api/emails', { signal: coreReadSignal }),
+      apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3', { signal: coreReadSignal }),
+      apiClient.get<TaskItem[]>('/api/tasks', { signal: coreReadSignal }),
     ]).then(([emailRes, pendingReplyRes, tasksRes]) => {
       if (cancelled) return;
-      setEmails(Array.isArray(emailRes.emails) ? emailRes.emails : []);
-      setPendingReplies(Array.isArray(pendingReplyRes.emails) ? pendingReplyRes.emails : []);
-      setTasks(Array.isArray(tasksRes) ? tasksRes : []);
-    }).finally(finishRequest);
+      if (!Array.isArray(emailRes.emails) || !Array.isArray(pendingReplyRes.emails) || !Array.isArray(tasksRes)) {
+        throw new Error('Invalid dashboard data response');
+      }
+      setEmails(emailRes.emails);
+      setPendingReplies(pendingReplyRes.emails);
+      setTasks(tasksRes);
+      setDashboardDataStatus('ready');
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      setEmails([]);
+      setPendingReplies([]);
+      setTasks([]);
+      const status = getApiErrorStatus(error);
+      setDashboardDataStatus(status === 401 || status === 403 ? 'auth' : 'unavailable');
+    });
 
     Promise.all([
       apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources'),
@@ -189,14 +203,14 @@ function useDashboardData() {
       setCalendarSources([]);
       setProjectFolders([]);
       setSourceEvidenceStatus('error');
-    }).finally(finishRequest);
+    });
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, loading, sourceEvidenceStatus };
+  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, loading: dashboardDataStatus === 'loading', dashboardDataStatus, sourceEvidenceStatus };
 }
 
 function formatStartupDate(value: string) {
@@ -239,7 +253,7 @@ function StartupResultList({ results }: { results: StartupSearchResult[] }) {
 }
 
 function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupView) => void }) {
-  const { emails, pendingReplies, tasks, setTasks: setDashboardTasks, calendarSources, projectFolders, loading, sourceEvidenceStatus } = useDashboardData();
+  const { emails, pendingReplies, tasks, setTasks: setDashboardTasks, calendarSources, projectFolders, loading, dashboardDataStatus, sourceEvidenceStatus } = useDashboardData();
   const calendarCandidateEvidence = useStartupSearch('일정 충돌 일정 조율 회의 후보', 3);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState('');
@@ -250,18 +264,21 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
   const completedTaskCount = tasks.filter((task) => task.status === 'done').length;
   const writableCalendarSourceCount = calendarSources.filter(isWritableCalendarSource).length;
   const taskCompletionRate = buildCompletionRate(tasks);
+  const dashboardDataUnavailable = dashboardDataStatus === 'unavailable' || dashboardDataStatus === 'auth';
+  const dashboardAuthenticationRequired = dashboardDataStatus === 'auth';
   const sourceEvidenceLoading = sourceEvidenceStatus === 'loading';
   const sourceEvidenceError = sourceEvidenceStatus === 'error';
   const dashboardStats = useMemo(() => ([
-    { title: '받은 메일', value: loading ? '-' : emails.length.toString(), diff: unreadCount > 0 ? `+${unreadCount}` : '-', diffText: '안 읽음', icon: Inbox, color: 'text-primary' },
-    { title: '답변 대기', value: loading ? '-' : pendingReplyCount.toString(), diff: pendingReplyCount > 0 ? `${pendingReplyCount}건` : '-', diffText: '보낸 메일', icon: Send, color: 'text-rose-500' },
+    { title: '받은 메일', value: dashboardDataUnavailable ? '오류' : loading ? '-' : emails.length.toString(), diff: dashboardDataUnavailable ? '확인 필요' : unreadCount > 0 ? `+${unreadCount}` : '-', diffText: '안 읽음', icon: Inbox, color: 'text-primary' },
+    { title: '답변 대기', value: dashboardDataUnavailable ? '오류' : loading ? '-' : pendingReplyCount.toString(), diff: dashboardDataUnavailable ? '확인 필요' : pendingReplyCount > 0 ? `${pendingReplyCount}건` : '-', diffText: '보낸 메일', icon: Send, color: 'text-rose-500' },
     { title: '일정 원본', value: sourceEvidenceError ? '오류' : sourceEvidenceLoading ? '-' : calendarSources.length.toString(), diff: sourceEvidenceError ? '확인 필요' : sourceEvidenceLoading ? '-' : `${writableCalendarSourceCount}개`, diffText: sourceEvidenceError ? '원본 확인' : '반영 가능', icon: CalendarDays, color: sourceEvidenceError ? 'text-red-500' : 'text-blue-500' },
-    { title: '대기 작업', value: loading ? '-' : pendingTasks.length.toString(), diff: '-', diffText: 'source-linked', icon: CheckCircle2, color: 'text-green-500' },
+    { title: '대기 작업', value: dashboardDataUnavailable ? '오류' : loading ? '-' : pendingTasks.length.toString(), diff: dashboardDataUnavailable ? '확인 필요' : '-', diffText: 'source-linked', icon: CheckCircle2, color: 'text-green-500' },
     { title: '프로젝트 원본', value: sourceEvidenceError ? '오류' : sourceEvidenceLoading ? '-' : projectFolders.length.toString(), diff: sourceEvidenceError ? '확인 필요' : sourceEvidenceLoading ? '-' : `${projectFolders.length}개`, diffText: 'WebDAV 폴더', icon: Network, color: sourceEvidenceError ? 'text-red-500' : 'text-purple-500' },
-    { title: '작업 완료율', value: loading ? '-' : `${taskCompletionRate}%`, diff: loading ? '-' : `${completedTaskCount}/${tasks.length}`, diffText: '완료', icon: CheckCircle2, color: 'text-emerald-500' },
+    { title: '작업 완료율', value: dashboardDataUnavailable ? '오류' : loading ? '-' : `${taskCompletionRate}%`, diff: dashboardDataUnavailable ? '확인 필요' : loading ? '-' : `${completedTaskCount}/${tasks.length}`, diffText: '완료', icon: CheckCircle2, color: 'text-emerald-500' },
   ]), [
     calendarSources.length,
     completedTaskCount,
+    dashboardDataUnavailable,
     emails.length,
     loading,
     pendingReplyCount,
@@ -339,6 +356,27 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
           </div>
         </div>
 
+        {dashboardDataUnavailable ? (
+          <div role="alert" aria-label="대시보드 데이터 상태" className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+            <h2 className="font-bold">{dashboardAuthenticationRequired ? '로그인이 필요합니다.' : '대시보드 데이터를 불러올 수 없습니다.'}</h2>
+            <p className="mt-1 text-sm">{dashboardAuthenticationRequired ? '세션이 만료됐거나 이 작업공간에 접근할 수 없습니다.' : '데이터 연결에 일시적인 문제가 있습니다. 잠시 후 다시 시도하세요.'}</p>
+            {dashboardAuthenticationRequired ? (
+              <a href="/settings" className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-destructive/40 px-3 py-1.5 text-sm font-bold hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                로그인 설정 열기
+              </a>
+            ) : (
+              <button
+                type="button"
+                aria-label="대시보드 데이터 다시 시도"
+                onClick={() => window.location.reload()}
+                className="mt-3 min-h-11 rounded-lg border border-destructive/40 px-3 py-1.5 text-sm font-bold hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                다시 시도
+              </button>
+            )}
+          </div>
+        ) : null}
+
         {/* KPI Cards */}
         <div aria-label="홈 지표" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {dashboardStats.map((stat) => (
@@ -362,8 +400,8 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="flex gap-4">
               <div className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-600"><Send className="size-5" /></div>
               <div>
-                <p className="break-keep font-bold">답변 대기 {loading ? '-' : pendingReplyCount}건</p>
-                <p className="text-xs text-muted-foreground mt-1">보낸 메일 중 회신 확인이 필요한 항목입니다.</p>
+                <p className="break-keep font-bold">답변 대기 {dashboardDataUnavailable ? '확인 필요' : loading ? '-' : `${pendingReplyCount}건`}</p>
+                <p className="text-xs text-muted-foreground mt-1">{dashboardDataUnavailable ? '대시보드 데이터 연결을 확인할 수 없습니다.' : '보낸 메일 중 회신 확인이 필요한 항목입니다.'}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <a href="/mail?folder=sent" className="inline-flex text-xs font-semibold text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">보낸 메일 보기</a>
                   <button
@@ -402,8 +440,8 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="flex gap-4 pt-4 md:pl-6 md:pt-0">
               <div className="grid size-10 shrink-0 place-items-center rounded-full bg-green-100 text-green-600"><CheckCircle2 className="size-5" /></div>
               <div>
-                <p className="break-keep font-bold">완료 가능 작업 {loading ? '-' : pendingTasks.length}건</p>
-                <p className="text-xs text-muted-foreground mt-1">오늘 마감 전 완료해보세요.</p>
+                <p className="break-keep font-bold">완료 가능 작업 {dashboardDataUnavailable ? '확인 필요' : loading ? '-' : `${pendingTasks.length}건`}</p>
+                <p className="text-xs text-muted-foreground mt-1">{dashboardDataUnavailable ? '대시보드 데이터 연결을 확인할 수 없습니다.' : '오늘 마감 전 완료해보세요.'}</p>
                 <a href="/tasks" className="mt-2 inline-flex rounded-sm text-xs font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">작업 바로가기</a>
               </div>
             </div>
@@ -419,7 +457,9 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             </div>
             <div className="space-y-3">
               <div className="text-xs font-bold text-muted-foreground">답변 대기 메일</div>
-              {loading ? (
+              {dashboardDataUnavailable ? (
+                <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 확인할 수 없습니다.</div>
+              ) : loading ? (
                 <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 불러오는 중...</div>
               ) : pendingReplies.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">답변 대기 중인 보낸 메일이 없습니다.</div>
@@ -448,7 +488,9 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
               <h2 className="text-base font-bold">대기 작업 {pendingTasks.length > 0 && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{pendingTasks.length}건</span>}</h2>
             </div>
             <div className="space-y-3">
-              {loading ? (
+              {dashboardDataUnavailable ? (
+                <div className="text-sm text-muted-foreground p-2">작업 데이터를 확인할 수 없습니다.</div>
+              ) : loading ? (
                 <div className="text-sm text-muted-foreground p-2">작업을 불러오는 중...</div>
               ) : pendingTasks.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">대기 작업이 없습니다.</div>
@@ -549,7 +591,9 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
               <h2 className="text-base font-bold">최근 메일 {unreadCount > 0 && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">새 메일 {unreadCount}</span>}</h2>
             </div>
             <div className="space-y-3">
-              {loading ? (
+              {dashboardDataUnavailable ? (
+                <div className="text-sm text-muted-foreground p-2">메일 데이터를 확인할 수 없습니다.</div>
+              ) : loading ? (
                 <div className="text-sm text-muted-foreground p-2">메일을 불러오는 중...</div>
               ) : emails.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">수신된 메일이 없습니다.</div>

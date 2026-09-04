@@ -55,6 +55,9 @@ now expose opaque `project_folders.folder_uid` values, scope listing by the
 signed-session `user_id` and `organization_id`, and keep sequential folder
 primary keys internal. `/dav` mutation methods fail closed until provider
 execution can enforce source, capability, credential, and ETag/If-Match checks.
+Today dashboard mail, pending-reply, and task reads fail closed as a group: a
+failed core request is rendered as unavailable with a retry action, while a
+successful empty response remains the only evidence for a zero-count state.
 The Data workspace can create scoped workspace document rows through signed
 `POST /api/data/documents` and can request reparse, embedding regeneration
 intent, and HWP conversion intent for the selected opaque `document_id`; these

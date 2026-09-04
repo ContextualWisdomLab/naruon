@@ -787,4 +787,169 @@ describe("WorkspaceHome Today dashboard", () => {
     expect(container.textContent).toContain("일정 원본 목록 응답을 확인할 수 없습니다.");
     expect(container.textContent).not.toContain("연결된 일정 원본이 없습니다.");
   });
+
+  it("shows an actionable unavailable state instead of false empty dashboard data", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("backend unavailable"))));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => Boolean(container?.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]')));
+
+    const alert = container.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]');
+    expect(alert?.textContent).toContain("대시보드 데이터를 불러올 수 없습니다.");
+    expect(alert?.textContent).toContain("데이터 연결에 일시적인 문제가 있습니다. 잠시 후 다시 시도하세요.");
+    expect(container.querySelector('button[aria-label="대시보드 데이터 다시 시도"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("수신된 메일이 없습니다.");
+    expect(container.textContent).not.toContain("대기 작업이 없습니다.");
+  });
+
+  it.each([401, 403])("shows login recovery instead of retry for a %i core response", async (status) => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status })));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("로그인이 필요합니다.") ?? false);
+
+    expect(container.textContent).toContain("세션이 만료됐거나 이 작업공간에 접근할 수 없습니다.");
+    expect(container.querySelector('a[href="/settings"]')?.textContent).toContain("로그인 설정 열기");
+    expect(container.querySelector('button[aria-label="대시보드 데이터 다시 시도"]')).toBeNull();
+  });
+
+  it("leaves loading state when a core read never returns", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails") || url.endsWith("/api/emails/pending-replies?limit=3") || url.endsWith("/api/tasks")) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "AbortError")), { once: true });
+        });
+      }
+      const sourceEvidenceResponse = emptySourceEvidenceResponse(url);
+      if (sourceEvidenceResponse) return sourceEvidenceResponse;
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await act(async () => timeoutController.abort());
+    await waitForCondition(() => container?.textContent?.includes("대시보드 데이터를 불러올 수 없습니다.") ?? false);
+
+    expect(container.textContent).not.toContain("메일을 불러오는 중...");
+    timeoutSpy.mockRestore();
+  });
+
+  it.each([
+    ["mail missing emails", "/api/emails", {}, "수신된 메일이 없습니다."],
+    ["mail", "/api/emails", { emails: "not-an-array" }, "수신된 메일이 없습니다."],
+    ["pending-reply missing emails", "/api/emails/pending-replies?limit=3", {}, "답변 대기 중인 보낸 메일이 없습니다."],
+    ["pending-reply", "/api/emails/pending-replies?limit=3", { emails: null }, "답변 대기 중인 보낸 메일이 없습니다."],
+    ["task", "/api/tasks", { tasks: "not-an-array" }, "대기 작업이 없습니다."],
+  ])("fails closed for a malformed %s response", async (_name, malformedUrl, malformedResponse, falseEmptyState) => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(malformedUrl)) {
+        return Promise.resolve({ ok: true, json: async () => malformedResponse });
+      }
+      if (url.endsWith("/api/emails")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      const sourceEvidenceResponse = emptySourceEvidenceResponse(url);
+      if (sourceEvidenceResponse) return sourceEvidenceResponse;
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => Boolean(container?.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]')));
+
+    expect(container.textContent).toContain("대시보드 데이터를 불러올 수 없습니다.");
+    expect(container.textContent).not.toContain(falseEmptyState);
+  });
+
+  it("renders core data as unavailable while source evidence remains pending", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails")) return Promise.reject(new Error("mail backend unavailable"));
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) return Promise.resolve({ ok: true, json: async () => [] });
+      if (url.endsWith("/api/calendar/writeback-sources") || url.endsWith("/api/webdav/folders")) {
+        return new Promise(() => undefined);
+      }
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => Boolean(container?.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]')));
+
+    expect(container.textContent).toContain("메일 데이터를 확인할 수 없습니다.");
+    expect(container.textContent).not.toContain("메일을 불러오는 중...");
+    expect(container.textContent).not.toContain("답변 대기 메일을 불러오는 중...");
+    expect(container.textContent).not.toContain("작업을 불러오는 중...");
+  });
 });
