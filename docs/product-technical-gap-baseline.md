@@ -3,7 +3,7 @@
 **Baseline version:** 1.2
 **Observed on:** 2026-08-26 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
-**Observed product version:** `0.14.4`  
+**Observed product version:** `0.14.4`
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
@@ -176,6 +176,20 @@ queued or in progress. PR #1436 remains at
 Strix work still running. PR #1470 has a successful current check rollup and
 one exact-head bot approval, but still lacks the second qualifying approval.
 None of these observations authorizes a bypass merge.
+
+**Live writer-ownership correction (2026-09-01T10:35+09:00):** PR #1467 was
+closed and replaced by #1505 after its Jules task-owned head branch received
+four hourly destructive “finalization” commits after reviewed repairs. Each
+rewrite was reverted through normal forward history; no force-push or review
+bypass was used. The replacement branch was cut from restored commit
+`b846acfe`, whose tree is identical to the reviewed utility-console repair at
+`94482cc9`, and is not writable by the completed Jules task. #1505 carries the
+same utility, attachment, stable-error, optional-parameter, max-length,
+accessibility, documentation, and regression surface. Its hosted checks and
+independent current-head approval remain required. This is the concrete
+application of queue-convergence rule 5: completed one-shot agent branches are
+not retained as active merge candidates when the external writer continues to
+rewrite verified source.
 
 The owning upstream sidecar `Seongho-Bae/newsdom-api` PR #682 remains at
 `585bb4e0fb719ab6a576cf46d1ef12b77872557b`. Its bounded 64 MiB source and
@@ -408,7 +422,7 @@ and defines the inventory that must be completed before GA.
 | #1450 | stray scratch/debug cleanup | all source and security Checks passed; wait for the in-progress metadata gate and current-head independent review |
 | #1465 | scoped tenant archive import hardening | portability slice now rejects duplicate identities before writes and sanitizes archive-controlled display fields; retain the bounded slice-1 query cost and require current-head hosted evidence |
 | #1466 | origin-integrity URL validation | current head rejects explicit zero/out-of-range ports; keep the signed-session and SSRF contract tied to exact-head regression evidence |
-| #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
+| #1505 (replaces closed #1467) | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface plus stable error, optional-parameter, native max-length, and accessibility contracts; the replacement branch prevents the completed Jules task from rewriting the reviewed merge candidate, while hosted exact-head evidence remains required |
 | #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; the observed Naruon Strix run failed at the provider boundary (NVIDIA NIM 429/OpenAI 404), not in this source change |
 | #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; the predecessor Strix provider failure is historical, while the current head requires fresh queued Checks and a qualifying independent approval |
 | #1448 | stacked governance regression coverage | merged normally into #1443's stack branch at `62a0d645…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures passed locally; merge-result hosted Checks remain queued and are post-merge canary evidence |
