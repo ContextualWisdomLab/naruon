@@ -126,14 +126,29 @@ async def enforce_send_email_rate_limit(
                 allowed=allowed,
                 reason="allowed" if allowed else "quota_exhausted",
             )
-            session.add(
-                _audit_event(
-                    auth_context,
-                    scope_hash=scope_hash,
-                    decision=decision,
-                    observed_at=observed_at,
+            record_decision = allowed
+            if not allowed:
+                denied_result = await session.execute(
+                    select(func.count())
+                    .select_from(SecurityAuditEvent)
+                    .where(
+                        SecurityAuditEvent.resource_uid
+                        == f"email_send_scope:{scope_hash}",
+                        SecurityAuditEvent.event_action
+                        == "email_send_rate_limit.quota_exhausted",
+                        SecurityAuditEvent.observed_at > window_started_at,
+                    )
                 )
-            )
+                record_decision = denied_result.scalar_one() == 0
+            if record_decision:
+                session.add(
+                    _audit_event(
+                        auth_context,
+                        scope_hash=scope_hash,
+                        decision=decision,
+                        observed_at=observed_at,
+                    )
+                )
             await session.commit()
             return decision
         except Exception as exc:

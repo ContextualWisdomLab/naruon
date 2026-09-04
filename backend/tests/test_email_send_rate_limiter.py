@@ -57,11 +57,16 @@ class _PostgresSession:
         if "security_audit_events" in query_text:
             values = tuple(query.compile().params.values())
             resource_uid = next(value for value in values if str(value).startswith("email_send_scope:"))
+            event_action = next(
+                value
+                for value in values
+                if str(value).startswith("email_send_rate_limit.")
+            )
             window_started_at = next(value for value in values if isinstance(value, datetime.datetime))
             return _Result(
                 sum(
                     event.resource_uid == resource_uid
-                    and event.event_action == "email_send_rate_limit.allowed"
+                    and event.event_action == event_action
                     and event.observed_at > window_started_at
                     for event in self.store.events
                 )
@@ -142,6 +147,17 @@ async def test_sliding_window_blocks_boundary_burst(monkeypatch):
         now=started_at + datetime.timedelta(seconds=61),
     )
     assert blocked.allowed is False
+    for offset_seconds in range(62, 72):
+        assert not (
+            await enforce_send_email_rate_limit(
+                _context(),
+                now=started_at + datetime.timedelta(seconds=offset_seconds),
+            )
+        ).allowed
+    assert sum(
+        event.event_action == "email_send_rate_limit.quota_exhausted"
+        for event in store.events
+    ) == 1
 
 
 @pytest.mark.asyncio
