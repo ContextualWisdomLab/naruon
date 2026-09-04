@@ -407,15 +407,18 @@ export default function NetworkGraph() {
             )}
             <button
               type="button"
+              title={!firstEdge ? "표시할 관계 데이터가 없습니다." : "첫 관계 보기"}
               onClick={handleSelectFirstRelationship}
               disabled={!firstEdge}
-              className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ${!firstEdge ? "pointer-events-none" : ""}`}
+              className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 `}
             >
               첫 관계 보기
             </button>
           </span>
           <button
             type="button"
+            title="그래프 확대"
+            aria-label="그래프 확대"
             onClick={handleZoomGraph}
             className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
@@ -423,6 +426,8 @@ export default function NetworkGraph() {
           </button>
           <button
             type="button"
+            title="전체 그래프 맞춤"
+            aria-label="전체 그래프 맞춤"
             onClick={handleFitGraph}
             className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
