@@ -241,7 +241,7 @@ export function CalendarLayout() {
       {/* Right Sidebar - Event Detail */}
       <CalendarSidebarRight
         selectedDetailEvent={selectedDetailEvent}
-        isWritebackDisabled={isWritebackActionDisabled}
+        isWritebackDisabled={isWritebackActionDisabled || selectedWritebackSource === null}
         onRequestUpdate={() => void requestWritebackIntent('update')}
       />
     </div>
