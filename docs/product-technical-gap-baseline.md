@@ -273,14 +273,14 @@ Seventy-five focused tests, Ruff, actionlint, and warning-free adapter import
 smoke pass for both platforms. Fresh hosted
 `validate connector image` and protected review evidence remain required.
 Canonical workflow-owner PR `ContextualWisdomLab/.github#1871`
-(`e4333c3`) repairs stale schedule and inactive-review test oracles against
-current protected main. Its 78 focused contracts and full 2,851-test suite
-pass, but repository-wide branch coverage initially remained 99%, so the PR
-was returned to Draft rather than presenting partial evidence as merge-ready.
-The first repair increment adds 24 fail-closed CodeQL rollout-auditor tests and
-restores that module to 100% statement/branch coverage; the remaining
-current-main scheduler, Noema, and review-admission coverage gaps stay open on
-the same owner PR.
+(`36d39630648f4559d7b6d03f37f59c10355a1bda`) repairs stale schedule and
+inactive-review test oracles against current protected main, closes Python 3.14
+HTTP-error response leaks in the Noema, GitHub policy, Pages, and sandbox
+readiness paths, and completes missing CodeQL rollout, admission, scheduler,
+and direct-import contracts. The warning-fatal full suite passes with 2,900
+tests, one skip, and 21 subtests; all 13,115 production statements and 5,294
+branches are covered with no missing or partial branch. The PR remains Draft
+until fresh hosted checks and exact-current-head independent review complete.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
