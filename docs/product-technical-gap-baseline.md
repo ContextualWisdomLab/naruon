@@ -333,6 +333,16 @@ exact stacked full suite (`3452 passed, 2 skipped`) pass. The five verified
 review threads are resolved, but hosted exact-head Checks and independent
 approval remain pending; this is Proposed owner evidence, not a released
 consumer contract.
+Naruon PR #1553 (`4643e3404e01a3c860cdbddb225000493357bb07`)
+keeps product-owned structured payloads fail closed for unknown fields,
+implicit scalar coercion, and non-finite or out-of-range project-graph
+confidence. A later OpenAI SDK namespace migration and private serializer test
+were removed because transport selection belongs to the released
+contextual-orchestrator consumer contract, not this six-file payload slice.
+Seventy-one focused contracts and the full backend suite (`1820 passed, 33
+skipped`) pass. The PR remains Draft while current-head hosted Checks and
+independent approval are pending; existing direct SDK seams remain explicit
+migration debt rather than an approved owner-boundary exception.
 Canonical owner release PR contextual-orchestrator #1030
 (`f753f453ce4fc3dbc612bb9bdbb8db4cbfd93c16`) now implements the missing
 immutable publication mechanism: exact tag-namespace identity, annotated-tag
