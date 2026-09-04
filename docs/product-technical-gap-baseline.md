@@ -305,17 +305,19 @@ answer. CodeGraph confirms the serving path from orchestrated completion through
 the exact stacked full suite (`3426 passed, 2 skipped`) pass. The six-file delta
 remains Proposed while current-head CodeRabbit and hosted Checks are pending;
 it is not protected-main, release, or buyer-quality evidence.
-Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
-provider/model-specific routing policy from Naruon's agent guidance. Central
-model-backed Actions now name only the `.github`-owned `orchestrator/free`
-gateway boundary; provider discovery, capability routing, free-pool membership,
-and fallback remain with `contextual-orchestrator`. Consumer adoption requires
-an immutable protected owner release, and open PRs or unreleased branches remain
-Proposed evidence. The owner implementation was inspected at local exact head
-`2af17386a8ae3c0f0879cf48c5a1a05cdaa63bab`: the logical pool and routing
-surface exist, while its changelog still marks the versions Unreleased. Two
-focused documentation contracts, Ruff, and diff checks pass; hosted exact-head
-checks and independent review remain required.
+Reopened foundation PR #1549
+(`c249658908c8cf4dccc5122b47e1ab2a4e56474d`) removes direct provider/model
+routing from Naruon guidance and OpenCode configuration. Central workflows pass
+only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
+discovery, capability routing, free-pool membership, and fallback remain with
+the canonical owner. Consumer adoption still requires an immutable protected
+owner release, and open PRs or unreleased branches remain Proposed evidence.
+Successor PR #1567 (`c5dc35d192fcdcf16089c646c3065b988684e7fb`)
+preserves the full AGENTS/CLAUDE/config/test delta after #1566 could not emit
+new check suites, including the external-MCP confidentiality and no-shared-
+timeout contracts. Fifty-five focused documentation/governance contracts and
+diff checks pass. Fresh exact-head hosted Checks and independent review remain
+required; no predecessor evidence transfers.
 Canonical owner release PR contextual-orchestrator #1030
 (`f753f453ce4fc3dbc612bb9bdbb8db4cbfd93c16`) now implements the missing
 immutable publication mechanism: exact tag-namespace identity, annotated-tag
