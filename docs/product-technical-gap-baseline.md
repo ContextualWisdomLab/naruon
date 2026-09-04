@@ -311,6 +311,10 @@ regression across the focused and full contract suites. The warning-fatal full s
 tests, one skip, and 21 subtests; all 13,115 production statements and 5,294
 branches are covered with no missing or partial branch. The PR remains Draft
 until fresh hosted checks and exact-current-head independent review complete.
+Attempts 1 and 2 of eleven current-head workflows were each cancelled in a
+single timestamp cluster without a source-failure log; on attempt 2 the current
+head coalescer itself remained queued. No third rerun or cancellation-cause
+claim is made until authoritative runner or cancellation audit evidence exists.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
