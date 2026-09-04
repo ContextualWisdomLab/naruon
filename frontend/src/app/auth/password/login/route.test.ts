@@ -1,185 +1,62 @@
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { createFetchBackedNodeRequest } from "@/test/fetch-backed-node-request";
+import { describe, expect, it } from "vitest";
 
 import { POST } from "./route";
 
-const { postOidcTokenRequestMock } = vi.hoisted(() => ({
-  postOidcTokenRequestMock: vi.fn<
-    (endpoint: URL, body: URLSearchParams) => Promise<{ access_token?: unknown }>
-  >(),
-}));
-
-const { backendDnsLookupMock, httpsRequestMock } = vi.hoisted(() => ({
-  backendDnsLookupMock: vi.fn(),
-  httpsRequestMock: vi.fn(),
-}));
-
-vi.mock("@/lib/oidc-token-client", () => ({
-  postOidcTokenRequest: postOidcTokenRequestMock,
-}));
-
-vi.mock("node:dns/promises", () => ({
-  lookup: backendDnsLookupMock,
-}));
-
-vi.mock("node:https", () => ({
-  request: httpsRequestMock,
-}));
-
-const ORIGINAL_ENV = { ...process.env };
-
-function postRequest(bodyJson: unknown) {
+function request(body: BodyInit, origin?: string) {
+  const headers = new Headers();
+  if (origin) headers.set("origin", origin);
   return new NextRequest("https://app.example.com/auth/password/login", {
     method: "POST",
-    body: JSON.stringify(bodyJson),
-    headers: { origin: "https://app.example.com" },
+    body,
+    headers,
   });
 }
 
 describe("/auth/password/login route", () => {
-  beforeEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    process.env = { ...ORIGINAL_ENV };
-    vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
-    vi.stubEnv("NEXT_PUBLIC_OIDC_ISSUER_URL", "https://login.example.com/realms/naruon/");
-    vi.stubEnv("NEXT_PUBLIC_OIDC_CLIENT_ID", "naruon-web");
-    backendDnsLookupMock.mockReset();
-    backendDnsLookupMock.mockResolvedValue([{ address: "8.8.8.8", family: 4 }]);
-    httpsRequestMock.mockReset();
-    httpsRequestMock.mockImplementation(createFetchBackedNodeRequest());
-    postOidcTokenRequestMock.mockReset();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    process.env = { ...ORIGINAL_ENV };
-  });
-
-  it("exchanges a username/password for a Direct Access Grants token and sets only an HttpOnly session cookie", async () => {
-    postOidcTokenRequestMock.mockResolvedValue({
-      access_token: "test-header.test-payload.test-signature",
-    });
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe("https://api.naruon.net/api/auth/session");
-      return Response.json({
-        user_id: "user-1",
-        organization_id: "org-acme",
-        workspace_id: "workspace-acme",
-      });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
+  it("fails closed without establishing a session while the Keyverse headless contract is unavailable", async () => {
     const response = await POST(
-      postRequest({ username: "person@example.com", password: "correct horse", return_to: "/settings" }),
+      request(
+        JSON.stringify({
+          username: "person@example.com",
+          password: "correct horse battery staple",
+        }),
+        "https://app.example.com",
+      ),
     );
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ return_to: "/settings" });
-    const setCookie = response.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("naruon_session=");
-    expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).toContain("Secure");
-    expect(setCookie).not.toContain("correct horse");
-
-    expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);
-    const [tokenEndpoint, tokenBody] = postOidcTokenRequestMock.mock.calls[0];
-    expect(tokenEndpoint.href).toBe(
-      "https://login.example.com/realms/naruon/protocol/openid-connect/token",
-    );
-    expect(tokenBody.get("grant_type")).toBe("password");
-    expect(tokenBody.get("client_id")).toBe("naruon-web");
-    expect(tokenBody.get("username")).toBe("person@example.com");
-    expect(tokenBody.get("password")).toBe("correct horse");
-  });
-
-  it("rejects a missing username or password before contacting Keycloak", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const response = await POST(postRequest({ username: "person@example.com" }));
-
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      error_code: "password_login_credentials_invalid",
+      error_code: "password_login_unavailable",
     });
-    expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("collapses a wrong password, unknown user, and a disabled grant into one generic error", async () => {
-    postOidcTokenRequestMock.mockRejectedValue(new Error("OIDC token endpoint returned HTTP 401"));
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const response = await POST(
-      postRequest({ username: "person@example.com", password: "wrong-password" }),
-    );
-
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({
-      error_code: "password_login_invalid_credentials",
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("never persists a session cookie when the backend rejects the minted token", async () => {
-    postOidcTokenRequestMock.mockResolvedValue({
-      access_token: "test-header.test-payload.test-signature",
-    });
-    const fetchMock = vi.fn(async () => new Response("", { status: 401 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const response = await POST(
-      postRequest({ username: "person@example.com", password: "correct horse" }),
-    );
-
-    expect(response.status).toBe(401);
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
-  it("rejects an oversized request body with 413 before parsing it", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    const request = new NextRequest("https://app.example.com/auth/password/login", {
-      method: "POST",
-      body: JSON.stringify({ username: "person@example.com", password: "x".repeat(20_000) }),
-      headers: { origin: "https://app.example.com" },
+  it("does not parse credential bodies while the capability is unavailable", async () => {
+    const response = await POST(request("{not-json", "https://app.example.com"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error_code: "password_login_unavailable",
     });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(413);
-    await expect(response.json()).resolves.toEqual({ error_code: "password_login_request_too_large" });
-    expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a cross-site login submission before touching the OIDC exchange", async () => {
-    const request = new NextRequest("https://app.example.com/auth/password/login", {
-      method: "POST",
-      body: JSON.stringify({ username: "person@example.com", password: "correct horse" }),
-      headers: { origin: "https://attacker.example" },
-    });
-
-    const response = await POST(request);
+  it("rejects a cross-site submission before capability evaluation", async () => {
+    const response = await POST(
+      request(
+        JSON.stringify({ username: "person@example.com", password: "secret" }),
+        "https://attacker.example",
+      ),
+    );
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error_code: "csrf_origin_rejected" });
-    expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a login submission with no Origin or Referer at all", async () => {
-    const request = new NextRequest("https://app.example.com/auth/password/login", {
-      method: "POST",
-      body: JSON.stringify({ username: "person@example.com", password: "correct horse" }),
-    });
-
-    const response = await POST(request);
+  it("rejects a submission with neither Origin nor Referer", async () => {
+    const response = await POST(
+      request(JSON.stringify({ username: "person@example.com", password: "secret" })),
+    );
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error_code: "csrf_origin_rejected" });
