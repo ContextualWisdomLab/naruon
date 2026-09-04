@@ -157,6 +157,8 @@ function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
 
 import { apiClient } from '@/lib/api-client';
 
+// 🎯 Why: Re-renders of NetworkGraph when the parent components (like WorkspaceHome) re-render can cause performance issues.
+// 📊 Impact: Significantly reduces React render work when the parent component re-renders but the relationship context is structurally stable.
 export default memo(function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
