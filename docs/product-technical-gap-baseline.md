@@ -24,7 +24,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T13:59Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T14:05Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) carries the exact-head PR
 completion playbook. It now distinguishes AI-authored commits from generated
@@ -40,8 +40,14 @@ and 78 focused tests pass. #1555
 owner head and now carries only the truthful first/last-sentence extractor. Its
 boundary logic preserves CJK terminators including U+FF0E, decimal points,
 common title abbreviations, email and URL periods, and trailing quotation or
-bracket punctuation. Ruff and all 81
-tool API tests pass, and its GitHub base resolves to parent `71c331e1`. #1502
+bracket punctuation. Ruff and all 81 tool API tests pass, and its GitHub base
+resolves to parent `71c331e1`.
+PR #1512 (`029b6190d22c407147ff03c18966ed27b21e264f`) is a Draft child on the
+same exact #1538 owner head. It removes its permissive duplicate email regex,
+consumes the bounded canonical matcher, rejects empty domain labels and trailing
+ellipses, and records its intentional RFC 5322 ASCII subset. Its effective
+child delta is four files; 81 tool/privacy tests, Ruff, and diff checks pass.
+No predecessor gate evidence transfers after the base/head change. PR #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
 PR #1530 (`fbf32aaf67e53fcb00e640e48df62c22b2eb4f41`) remains a Draft Task-8
