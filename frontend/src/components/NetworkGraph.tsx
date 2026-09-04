@@ -157,8 +157,6 @@ function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
 
 import { apiClient } from '@/lib/api-client';
 
-// 🎯 Why: Re-renders of NetworkGraph when the parent components (like WorkspaceHome) re-render can cause performance issues.
-// 📊 Impact: Significantly reduces React render work when the parent component re-renders but the relationship context is structurally stable.
 export default memo(function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -280,27 +278,44 @@ export default memo(function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    return nodes
-      .map((node) => String(node.label ?? node.id))
-      .filter(Boolean)
-      .slice(0, 5);
+    const labels = [];
+    for (const node of nodes) {
+      if (labels.length >= 5) break;
+      const label = String(node.label ?? node.id);
+      if (label) labels.push(label);
+    }
+    return labels;
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
-      edge,
-      id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
+    const options = [];
+    let index = 0;
+    for (const edge of edgeMap.values()) {
+      if (index >= 5) break;
+      options.push({
+        edge,
+        id: String(edge.id),
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+      });
+      index++;
+    }
+    return options;
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
-      id: String(node.id),
-      label: `노드: ${String(node.label ?? node.id)}`,
-      node,
-    }));
+    const options = [];
+    let count = 0;
+    for (const node of nodeInstanceMap.values()) {
+      if (count >= 8) break;
+      options.push({
+        id: String(node.id),
+        label: `노드: ${String(node.label ?? node.id)}`,
+        node,
+      });
+      count++;
+    }
+    return options;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
