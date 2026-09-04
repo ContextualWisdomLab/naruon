@@ -1211,6 +1211,11 @@ async def test_email_address_extractor_handler():
     empty = await email_address_extractor_handler({"text": "No emails here."})
     assert empty == {"emails": [], "count": 0}
 
+    malformed = await email_address_extractor_handler(
+        {"text": "Reject a@b..com but keep support@example.com..."}
+    )
+    assert malformed == {"emails": ["support@example.com"], "count": 1}
+
 def test_execute_email_address_extractor_envelope():
     with TestClient(app) as client:
         response = client.post(
@@ -1263,3 +1268,79 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler, ANALYSIS_TEXT_MAX_CHARS
+
+    res = await hash_generator_handler({"text": "hello"})
+    assert res["md5"] == "5d41402abc4b2a76b9719d911017c592"
+    assert res["sha1"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+    assert res["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await hash_generator_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_handler():
+    from api.tools import email_phone_masker_handler, ANALYSIS_TEXT_MAX_CHARS
+
+    res = await email_phone_masker_handler({"text": "Contact me at user@example.com or 010-1234-5678."})
+    assert res["masked_text"] == "Contact me at [EMAIL] or [PHONE]."
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await email_phone_masker_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_masks_complete_ascii_dot_atom_local_parts():
+    from api.tools import email_phone_masker_handler
+
+    result = await email_phone_masker_handler(
+        {"text": "Contact john&jane@example.com or customer/service@example.com."}
+    )
+
+    assert result["masked_text"] == "Contact [EMAIL] or [EMAIL]."
+
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_bounds_near_limit_malformed_email_work():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS, email_phone_masker_handler
+
+    started_at = time.perf_counter()
+    result = await email_phone_masker_handler(
+        {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS - 2) + "@x"}
+    )
+
+    assert result["masked_text"].endswith("@x")
+    assert time.perf_counter() - started_at < 1
+
+
+def test_execute_hash_generator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["md5"] == "5d41402abc4b2a76b9719d911017c592"
+    assert data["result"]["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+def test_execute_email_phone_masker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_phone_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "My email is test@example.com and phone is 010-1234-5678, but 1234 is not."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["masked_text"] == "My email is [EMAIL] and phone is [PHONE], but 1234 is not."

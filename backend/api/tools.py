@@ -753,46 +753,97 @@ registry.register(
 )
 
 
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Generate compatibility fingerprints plus a SHA-256 security hash."""
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
 
-EMAIL_PATTERN = re.compile(
-    r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
+    encoded = text.encode("utf-8")
+    return {
+        "md5": hashlib.md5(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
+        "sha1": hashlib.sha1(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="지문/해시 생성기 (Fingerprint/Hash Generator)",
+        description="텍스트의 호환성 지문(MD5, SHA-1) 및 보안 해시(SHA-256) 값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    hash_generator_handler,
 )
 
+
+_EMAIL_ATOM = r"A-Za-z0-9!#$%&'*+/=?^_`{|}~"
+_EMAIL_PATTERN = re.compile(
+    rf"(?<![{_EMAIL_ATOM}.-])"
+    rf"[{_EMAIL_ATOM}-]+(?:\.[{_EMAIL_ATOM}-]+)*@"
+    rf"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z]{2,63}(?![A-Za-z0-9-])"
+)
+_PHONE_PATTERN = re.compile(
+    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
+    r"|\d{2,3}-\d{3,4}-\d{4}"
+    r"|(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4})(?!\d)"
+)
+
+
+async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Mask ASCII email and selected Korean or North American phone formats."""
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    anonymized = _EMAIL_PATTERN.sub("[EMAIL]", text)
+    anonymized = _PHONE_PATTERN.sub("[PHONE]", anonymized)
+
+    return {"masked_text": anonymized}
+
+registry.register(
+    ToolInfo(
+        code="email_phone_masker",
+        name="이메일/전화번호 마스킹 (Email/Phone Masker)",
+        description="텍스트에서 ASCII 이메일 주소와 일부 한국·북미 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    email_phone_masker_handler,
+)
+
+
 async def email_address_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract valid ASCII email addresses in first-occurrence order."""
     text = params.get("text", "")
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
-        )
-    emails = EMAIL_PATTERN.findall(text)
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
 
-    unique_emails = []
-    seen_lower = set()
-    for email in emails:
-        email_lower = email.lower()
-        if email_lower not in seen_lower:
-            seen_lower.add(email_lower)
-            # Remove trailing dot if exists, which is a common artifact of regex matching
-            if email.endswith('.'):
-                email = email[:-1]
-                email_lower = email_lower[:-1]
-                if email_lower in seen_lower:
-                     continue
-                seen_lower.add(email_lower)
-            unique_emails.append(email)
+    unique_emails: list[str] = []
+    seen_addresses: set[str] = set()
+    for match in _EMAIL_PATTERN.finditer(text):
+        email_address = match.group(0)
+        normalized_address = email_address.casefold()
+        if normalized_address not in seen_addresses:
+            seen_addresses.add(normalized_address)
+            unique_emails.append(email_address)
 
     return {"emails": unique_emails, "count": len(unique_emails)}
+
 
 registry.register(
     ToolInfo(
         code="email_address_extractor",
         name="이메일 주소 추출기 (Email Address Extractor)",
-        description="텍스트 본문에서 이메일 주소를 찾아 중복을 제거하여 추출합니다.",
+        description="텍스트 본문에서 유효한 ASCII 이메일 주소를 찾아 중복을 제거하여 추출합니다.",
         category="이메일 분석",
         parameters={"text": "string"},
     ),
     email_address_extractor_handler,
 )
+
 
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
@@ -808,7 +859,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
