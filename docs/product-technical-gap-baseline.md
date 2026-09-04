@@ -158,15 +158,16 @@ remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 which carries its complete valid delta plus the newer exact-head repair rules.
 #1558 remains open until #1564 reaches protected merge or an independent
 equivalence check confirms succession; no count-only closure is authorized. #1538
-(`71c331e1e059d22f44f605711ab230926edc1c88`)
+(`3ea92ed238c2b582178ab650d401a65d82d9b66c`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
 boundary, bounded malformed-input regression, and North American cases. Ruff
 and 78 focused tests pass. Draft PR #1496
-(`49bbfa476c1318bc286d18bad248470ee77d56fd`) is the URL-extractor child on
-that exact owner head; its effective delta is three files and 97 combined
-tool/privacy tests pass. Draft PR #1512
+(`260db8f3d328e52ce340de33a60af13c0e3edfc4`) was non-force restacked on
+that current owner head after GitHub reported a dirty stack. The merge preserves
+the URL-extractor delta and the parent's complete masking/security contract;
+98 combined tool/privacy tests pass without warnings. Draft PR #1512
 (`6a66a9b0d1fa106c19c0fbf51031aaba41ba6415`) follows #1496, removes its
 permissive duplicate email regex, consumes the canonical matcher, rejects empty
 domain labels and trailing ellipses, and records its RFC 5322 ASCII subset. Its
