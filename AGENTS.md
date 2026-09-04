@@ -223,9 +223,10 @@ in this repo.
   validator to accept a fabricated receipt; fail closed or repair the canonical
   receipt producer.
 - Pending or queued reviews and checks are wait states. Continue safe work on
-  another gap, but never call a PR merge-ready or merged without freshly
-  verifying the exact head, required checks, approvals after the last push,
-  merge commit, and protected target branch.
+  another gap. Before calling a PR merge-ready, freshly verify the exact head
+  and base, live rulesets, required checks, unresolved threads, and applicable
+  current-head CodeRabbit or structured OpenCode fallback evidence. After the
+  merge, verify the merge commit and protected target branch.
 - Do not close a PR merely to reach zero open PRs. Close only with explicit user
   direction, no valid delta, a malicious change, or a verified successor that
   carries the predecessor's complete delta and records the lineage.
