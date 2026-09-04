@@ -386,7 +386,7 @@ describe("EmailDetail", () => {
         return Promise.resolve(jsonResponse({
           summary: "출시 메시지의 핵심 맥락입니다.",
           action_items: ["캘린더에 출시 리뷰 일정을 반영", "답장 초안 준비"],
-          confidence: 0.82,
+          confidence: 82,
         }));
       }
       throw new Error(`Unexpected fetch: ${url}`);
@@ -433,7 +433,7 @@ describe("EmailDetail", () => {
         return Promise.resolve(jsonResponse({
           summary: "근거 원본을 확인해야 하는 맥락 종합입니다.",
           action_items: ["원본 확인"],
-          confidence: 0.86,
+          confidence: 86,
           provenance: "mail-thread",
         }));
       }
@@ -671,7 +671,7 @@ describe("EmailDetail", () => {
           jsonResponse({
             summary: "출시 계획 검토",
             action_items: ["일정 확인"],
-            confidence: 0.91,
+            confidence: 91,
           }),
         );
       }
@@ -716,7 +716,7 @@ describe("EmailDetail", () => {
           jsonResponse({
             summary: "이전 응답 형식을 정규화합니다.",
             todos: ["근거 확인"],
-            confidence: 0.86,
+            confidence: 86,
           }),
         );
       }
