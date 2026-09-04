@@ -26,7 +26,3 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
-
-## 2026-09-02 - React.memo syntax issues
-**Learning:** When adding `React.memo()` dynamically to a component, using `$$typeof` in tests to verify it is an actual `React.memo` component causes syntax/build issues if used with string literal bracket notation like `['$$typeof']` inside string search/replaces, or `$typeof`. The correct way to assert `memo` behavior when you can't export a named memo is to use a properly typed mock of the component, or use `React.memo` properly on the export without breaking the TypeScript parser with bad characters.
-**Action:** When creating tests or using `$$typeof` manually, be extremely careful with exact literal escaping when generating tests via heredoc bash scripts. Also, it's simpler and more robust to just verify the component's `typeof` or mock it out instead of directly inspecting internal `$$typeof` symbols unless necessary.
