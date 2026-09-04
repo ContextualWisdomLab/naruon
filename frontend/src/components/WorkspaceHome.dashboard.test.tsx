@@ -813,6 +813,64 @@ describe("WorkspaceHome Today dashboard", () => {
     expect(container.textContent).not.toContain("대기 작업이 없습니다.");
   });
 
+  it.each([401, 403])("shows login recovery instead of retry for a %i core response", async (status) => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status })));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("로그인이 필요합니다.") ?? false);
+
+    expect(container.textContent).toContain("세션이 만료됐거나 이 작업공간에 접근할 수 없습니다.");
+    expect(container.querySelector('a[href="/settings"]')?.textContent).toContain("로그인 설정 열기");
+    expect(container.querySelector('button[aria-label="대시보드 데이터 다시 시도"]')).toBeNull();
+  });
+
+  it("leaves loading state when a core read never returns", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails") || url.endsWith("/api/emails/pending-replies?limit=3") || url.endsWith("/api/tasks")) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "AbortError")), { once: true });
+        });
+      }
+      const sourceEvidenceResponse = emptySourceEvidenceResponse(url);
+      if (sourceEvidenceResponse) return sourceEvidenceResponse;
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await act(async () => timeoutController.abort());
+    await waitForCondition(() => container?.textContent?.includes("대시보드 데이터를 불러올 수 없습니다.") ?? false);
+
+    expect(container.textContent).not.toContain("메일을 불러오는 중...");
+    timeoutSpy.mockRestore();
+  });
+
   it.each([
     ["mail missing emails", "/api/emails", {}, "수신된 메일이 없습니다."],
     ["mail", "/api/emails", { emails: "not-an-array" }, "수신된 메일이 없습니다."],

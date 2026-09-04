@@ -146,7 +146,14 @@ function buildCompletionRate(tasks: TaskItem[]) {
   return Math.round((tasks.filter((task) => task.status === 'done').length / tasks.length) * 100);
 }
 
-type DashboardDataStatus = 'loading' | 'ready' | 'unavailable';
+type DashboardDataStatus = 'loading' | 'ready' | 'auth' | 'unavailable';
+
+function getApiErrorStatus(error: unknown) {
+  const shapedError = error as { status?: unknown; response?: { status?: unknown } } | null;
+  if (typeof shapedError?.status === 'number') return shapedError.status;
+  if (typeof shapedError?.response?.status === 'number') return shapedError.response.status;
+  return null;
+}
 
 function useDashboardData() {
   const [emails, setEmails] = useState<EmailItem[]>([]);
@@ -159,11 +166,12 @@ function useDashboardData() {
 
   useEffect(() => {
     let cancelled = false;
+    const coreReadSignal = AbortSignal.timeout(15_000);
 
     Promise.all([
-      apiClient.get<{ emails: EmailItem[] }>('/api/emails'),
-      apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3'),
-      apiClient.get<TaskItem[]>('/api/tasks'),
+      apiClient.get<{ emails: EmailItem[] }>('/api/emails', { signal: coreReadSignal }),
+      apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3', { signal: coreReadSignal }),
+      apiClient.get<TaskItem[]>('/api/tasks', { signal: coreReadSignal }),
     ]).then(([emailRes, pendingReplyRes, tasksRes]) => {
       if (cancelled) return;
       if (!Array.isArray(emailRes.emails) || !Array.isArray(pendingReplyRes.emails) || !Array.isArray(tasksRes)) {
@@ -173,12 +181,13 @@ function useDashboardData() {
       setPendingReplies(pendingReplyRes.emails);
       setTasks(tasksRes);
       setDashboardDataStatus('ready');
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (cancelled) return;
       setEmails([]);
       setPendingReplies([]);
       setTasks([]);
-      setDashboardDataStatus('unavailable');
+      const status = getApiErrorStatus(error);
+      setDashboardDataStatus(status === 401 || status === 403 ? 'auth' : 'unavailable');
     });
 
     Promise.all([
@@ -255,7 +264,8 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
   const completedTaskCount = tasks.filter((task) => task.status === 'done').length;
   const writableCalendarSourceCount = calendarSources.filter(isWritableCalendarSource).length;
   const taskCompletionRate = buildCompletionRate(tasks);
-  const dashboardDataUnavailable = dashboardDataStatus === 'unavailable';
+  const dashboardDataUnavailable = dashboardDataStatus === 'unavailable' || dashboardDataStatus === 'auth';
+  const dashboardAuthenticationRequired = dashboardDataStatus === 'auth';
   const sourceEvidenceLoading = sourceEvidenceStatus === 'loading';
   const sourceEvidenceError = sourceEvidenceStatus === 'error';
   const dashboardStats = useMemo(() => ([
@@ -348,16 +358,22 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
 
         {dashboardDataUnavailable ? (
           <div role="alert" aria-label="대시보드 데이터 상태" className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
-            <h2 className="font-bold">대시보드 데이터를 불러올 수 없습니다.</h2>
-            <p className="mt-1 text-sm">데이터 연결에 일시적인 문제가 있습니다. 잠시 후 다시 시도하세요.</p>
-            <button
-              type="button"
-              aria-label="대시보드 데이터 다시 시도"
-              onClick={() => window.location.reload()}
-              className="mt-3 min-h-11 rounded-lg border border-destructive/40 px-3 py-1.5 text-sm font-bold hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              다시 시도
-            </button>
+            <h2 className="font-bold">{dashboardAuthenticationRequired ? '로그인이 필요합니다.' : '대시보드 데이터를 불러올 수 없습니다.'}</h2>
+            <p className="mt-1 text-sm">{dashboardAuthenticationRequired ? '세션이 만료됐거나 이 작업공간에 접근할 수 없습니다.' : '데이터 연결에 일시적인 문제가 있습니다. 잠시 후 다시 시도하세요.'}</p>
+            {dashboardAuthenticationRequired ? (
+              <a href="/settings" className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-destructive/40 px-3 py-1.5 text-sm font-bold hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                로그인 설정 열기
+              </a>
+            ) : (
+              <button
+                type="button"
+                aria-label="대시보드 데이터 다시 시도"
+                onClick={() => window.location.reload()}
+                className="mt-3 min-h-11 rounded-lg border border-destructive/40 px-3 py-1.5 text-sm font-bold hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                다시 시도
+              </button>
+            )}
           </div>
         ) : null}
 
