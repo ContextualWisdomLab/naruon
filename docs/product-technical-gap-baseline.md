@@ -245,6 +245,17 @@ pass with warnings as errors; eight disposable PostgreSQL 16 + pgvector tests
 also pass across empty, pre-registry, stamped-repair, and legacy document-scope
 histories. The exact head remains Draft until hosted PostgreSQL, security, and
 independent review evidence replace stale central-workflow failures.
+Draft PR #1497 (`152d1998c4e8024be9dc7026c8789d343c884fd0`)
+implements Naruon's bounded tenant provenance archive: deterministic BagIt,
+RO-Crate 1.3, and PROV metadata; OIDC-authoritative export/import; tenant and
+workspace closure; portable identity remapping; transactional conflict checks;
+and bounded archive parsing. CodeGraph review traced the shared service and API
+authority paths. One hundred fifty-four focused fast contracts and Ruff pass;
+the 115 database-marked contracts also pass against a disposable localhost-only
+PostgreSQL 16 + pgvector instance with warnings as errors. Binary payloads,
+credentials, provider state, embeddings, and audit-history portability remain
+explicit non-goals. The head stays Draft until fresh central review controls and
+protected checks replace historical malformed/absent reviewer evidence.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
