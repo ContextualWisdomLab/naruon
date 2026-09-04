@@ -284,6 +284,16 @@ rerenders current agent assignments without erasing client-enriched analytics
 or readiness state. All review threads are resolved and the current source,
 quality, CodeQL, Semgrep, and repository-security evidence passes; central
 review retry `33910863565` is queued after Noema infrastructure failure.
+Contextual-orchestrator PR #1034
+(`b03f3b10211e188e81313cba5e1cf641991a6f71`) is stacked on #1068 and uses
+Thompson-sampled per-member stability for live model-group serving while admin
+and report reads remain deterministic. Integer outcome counts survive
+fractional-prior floating drift; zero-observation cold start retains static
+order. Thompson (1933), Chapelle and Li (2011), and Agrawal and Goyal (2012)
+ground the sampling mechanism, but do not prove optimality for the product's
+composite stability-sample/EWMA-latency score. Ninety-three focused contracts
+and the exact stacked full suite (`3399 passed, 2 skipped`) pass; hosted Checks
+are queued and no protected-main or buyer-traffic optimality claim is made.
 Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
 provider/model-specific routing policy from Naruon's agent guidance. Central
 model-backed Actions now name only the `.github`-owned `orchestrator/free`
