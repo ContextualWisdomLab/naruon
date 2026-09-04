@@ -401,32 +401,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "egress-policy: block" in mail_smoke_workflow
     assert "allowed-endpoints:" in mail_smoke_workflow
 
-    dependency_review_workflow = read_repo_text(
-        ".github/workflows/dependency-review.yml"
-    )
-    assert (
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
-        in dependency_review_workflow
-    )
-    assert "BASE_REF: ${{ github.base_ref || github.ref_name }}" in (
-        dependency_review_workflow
-    )
-    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in (
-        dependency_review_workflow
-    )
-    log_dependency_review_step = dependency_review_workflow.split(
-        "- name: Log dependency review policy", 1
-    )[1].split("- name: Review dependency changes", 1)[0]
-    log_dependency_review_script = log_dependency_review_step.split("run: |", 1)[1]
-    assert "${{ github.base_ref || github.ref_name }}" not in (
-        log_dependency_review_script
-    )
-    assert "${{ github.head_ref || github.ref_name }}" not in (
-        log_dependency_review_script
-    )
-    assert "printf 'Base ref: %s\\n' \"$BASE_REF\"" in log_dependency_review_script
-    assert "printf 'Head ref: %s\\n' \"$HEAD_REF\"" in log_dependency_review_script
-
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
     assert "rev: v8.16.3" in pre_commit
@@ -438,6 +412,14 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "rev: v4.4.0" in pre_commit
     assert "https://github.com/pylint-dev/pylint" in pre_commit
     assert "rev: v2.17.2" in pre_commit
+
+
+def test_dependency_review_is_owned_by_the_central_required_workflow() -> None:
+    assert not (WORKFLOW_DIR / "dependency-review.yml").exists()
+
+    agent_guidance = read_repo_text("AGENTS.md")
+    assert "central **Security Scan** required gate" in agent_guidance
+    assert "`dependency-review` (diff-scoped)" in agent_guidance
 
 
 def test_actionlint_recognizes_the_mail_egress_runner_label() -> None:
