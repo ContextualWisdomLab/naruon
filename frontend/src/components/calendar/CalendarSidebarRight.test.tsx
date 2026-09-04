@@ -93,5 +93,21 @@ describe("CalendarSidebarRight", () => {
       (editBtn as HTMLButtonElement).click();
     });
     expect(onRequestUpdate).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      root?.render(
+        <CalendarSidebarRight
+          selectedDetailEvent={mockEvent}
+          isWritebackDisabled
+          onRequestUpdate={onRequestUpdate}
+        />,
+      );
+    });
+    const disabledEditBtn = container.querySelector(
+      'button[aria-label="Meeting 일정 수정 점검"]',
+    ) as HTMLButtonElement;
+    expect(disabledEditBtn.disabled).toBe(true);
+    disabledEditBtn.click();
+    expect(onRequestUpdate).toHaveBeenCalledOnce();
   });
 });
