@@ -41,7 +41,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "Contextual Orchestrator",
       "options": {
-        "baseURL": "{env:CONTEXTUAL_ORCHESTRATOR_BASE_URL}",
+        "baseURL": "http://127.0.0.1:8100/v1",
         "apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}",
         "timeout": false
       },

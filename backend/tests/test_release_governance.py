@@ -54,18 +54,23 @@ def test_agent_lifecycle_governance_artifacts_stay_aligned() -> None:
 
     assert '"model": "contextual-orchestrator/orchestrator/free"' in opencode_config
     assert '"enabled_providers": ["contextual-orchestrator"]' in opencode_config
+    assert '"baseURL": "http://127.0.0.1:8100/v1"' in opencode_config
+    assert '"apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}"' in opencode_config
+    assert "CONTEXTUAL_ORCHESTRATOR_BASE_URL" not in opencode_config
     assert opencode_config.count('"timeout": false') == 1
     assert "STRIX_GITHUB_MODELS_TOKEN" not in opencode_config
-    for variable_name in (
-        "CONTEXTUAL_ORCHESTRATOR_BASE_URL",
-        "CONTEXTUAL_ORCHESTRATOR_TOKEN",
-    ):
-        assert f"{variable_name}=" in environment_example
-        assert variable_name in readme
-    assert "OpenAI-compatible `/v1` endpoint" in readme
-    assert "short-lived owner-issued" in readme
+    assert "CONTEXTUAL_ORCHESTRATOR_BASE_URL" not in environment_example
+    assert "CONTEXTUAL_ORCHESTRATOR_BASE_URL" not in readme
+    assert "CONTEXTUAL_ORCHESTRATOR_TOKEN=" in environment_example
+    assert "CONTEXTUAL_ORCHESTRATOR_TOKEN" in readme
+    assert "http://127.0.0.1:8100/v1" in readme
+    assert "short-lived" in readme
+    assert "owner-issued" in readme
     assert "docs/development/merge-gate-policy.md" in guidance
     assert "prove complete-delta succession" in guidance
+    assert "Do not use administrative merge bypass" in guidance
+    assert "stale-context procedure" in guidance
+    assert "successor's exact tree, effective diff, tests, and lineage record" in guidance
     assert research_artifact.read_bytes().startswith(b"%PDF-")
 
 
