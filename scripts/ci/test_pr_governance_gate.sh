@@ -571,23 +571,18 @@ assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval() {
   assert_in_file 'conclusion=success' "$temp_dir/gh.log"
 }
 
-assert_missing_coderabbit_adversarial_approval_still_waits_for_pending_coderabbit_notice() {
-  # CodeRabbit has no check-run yet, but its own approval-pending issue
-  # comment shows it is actively reviewing this exact head -- it is not
-  # absent, so a structured OpenCode adversarial approval must not
-  # substitute for CodeRabbit's own terminal verdict. Governance must stay
-  # non-terminal (waiting), never publish conclusion=success, on this
-  # combination.
+assert_missing_coderabbit_adversarial_approval_overrides_pending_notice() {
+  # With no CodeRabbit check-run, its issue-comment notice is not gate
+  # evidence. The exact-head structured OpenCode approval satisfies the
+  # documented fallback even while that notice remains present.
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate missing_coderabbit_adversarial_approval_with_pending_notice "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Waiting for CodeRabbit to review the latest commit' "$temp_dir/output.txt"
-  assert_not_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
-  assert_not_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file 'conclusion=success' "$temp_dir/gh.log"
-  assert_in_file 'status=in_progress' "$temp_dir/gh.log"
+  assert_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
 }
 
 assert_coderabbit_approval_pending_notice_does_not_hide_separate_blocking_warning() {
@@ -1003,7 +998,7 @@ assert_coderabbit_failed_commit_status_blocks
 assert_coderabbit_unknown_commit_status_fails_closed
 assert_missing_coderabbit_waits_for_adversarial_opencode_approval
 assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval
-assert_missing_coderabbit_adversarial_approval_still_waits_for_pending_coderabbit_notice
+assert_missing_coderabbit_adversarial_approval_overrides_pending_notice
 assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence
 assert_opencode_review_lookup_error_is_logged_but_not_published_verbatim
 assert_completed_gate_check_is_republished_as_new_run

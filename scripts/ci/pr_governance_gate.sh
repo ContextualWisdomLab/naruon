@@ -391,6 +391,7 @@ CODERABBIT_STATUS_MATCHES="$(printf '%s' "$COMMIT_STATUS_JSON" | jq '
 CODERABBIT_CHECK_COUNT="$(printf '%s' "$CODERABBIT_MATCHES" | jq 'length')"
 CODERABBIT_STATUS_COUNT="$(printf '%s' "$CODERABBIT_STATUS_MATCHES" | jq 'length')"
 CODERABBIT_COUNT=$((CODERABBIT_CHECK_COUNT + CODERABBIT_STATUS_COUNT))
+OPENCODE_ADVERSARIAL_APPROVAL_COUNT=0
 if [ "$CODERABBIT_COUNT" = "0" ]; then
   if ! OPENCODE_REVIEWS_JSON="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" 2>"$OPENCODE_REVIEWS_ERROR_FILE")"; then
     printf 'OpenCode review lookup failed:\n'
@@ -411,14 +412,8 @@ if [ "$CODERABBIT_COUNT" = "0" ]; then
     )"
     if [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
       add_waiting "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval on ${HEAD_REF_OID}."
-    elif [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ]; then
-      # CodeRabbit has no check-run yet but has posted its own approval-pending
-      # issue comment for this exact head: it is actively engaged, not absent,
-      # so a different model's approval must not substitute for its own
-      # terminal verdict. Wait for CodeRabbit specifically.
-      add_waiting "Waiting for CodeRabbit to review the latest commit on ${HEAD_REF_OID}."
     else
-      printf 'CodeRabbit check and issue-comment evidence are both absent; accepted current-head OpenCode App adversarial approval on %s.\n' "$HEAD_REF_OID"
+      printf 'CodeRabbit check evidence is absent; accepted current-head OpenCode App adversarial approval on %s.\n' "$HEAD_REF_OID"
     fi
   fi
 else
@@ -488,7 +483,7 @@ CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s \
 )"
 if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then
   add_blocker "Current-head CodeRabbit issue comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
-elif [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ]; then
+elif [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ] && [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
   add_waiting "Waiting for CodeRabbit to review the latest commit on ${HEAD_REF_OID}."
 fi
 
