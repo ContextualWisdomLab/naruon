@@ -257,10 +257,11 @@ memoization assertion. Its current exact head `9a6be24a30c76497510b1de19f7cabe12
 then overwrote those repairs with full-array materialization and a private
 React-marker assertion. The PR remains open for lineage; the overwrite does not
 invalidate the verified delta. Stable successor #1560
-(`20fdedbae61f0e11cc650413d35532507b99656b`) now inherits the repaired #1526
+(`e9e356c054d9935fa7918e980644bbd377c0eed4`) now inherits the repaired #1526
 commit and current parent #1522 by non-force merge, removes the duplicate
-standalone memoization test, and records validated tree
-`913c5431bbcf909b3d91e3807baacbfeda79f02d`. The complete frontend suite (52
+private-marker assertion, and restores a behavioral parent-rerender regression
+test in a focused test file. Its validated tree is
+`e76963913d102ed3059ce790f1655110b52cb9d5`. The complete frontend suite (53
 files, 439 tests), TypeScript, focused ESLint, and diff checks pass. No
 predecessor gate evidence transfers, and #1526 may close only after #1560 merges
 and exact protected-main equivalence is reverified. #1560 remains Draft while
