@@ -337,6 +337,84 @@ def test_published_policy_resolves_evidence_bytes_and_preregistration_order() ->
         load_policy_artifact(**common, evidence_artifacts=evidence_artifacts)
 
 
+def test_published_evidence_envelopes_fail_closed_on_identity_mismatch() -> None:
+    """Reject missing, malformed, mislabeled, and self-referential evidence."""
+
+    def load_with(
+        payload: dict[str, object], artifacts: dict[str, bytes]
+    ) -> EmailWritingJudgePolicy:
+        return load_policy_artifact(
+            artifact_name=_POLICY_NAME,
+            artifact_bytes=_canonical_bytes(payload),
+            manifest_bytes=_canonical_bytes(_manifest_for(_POLICY_NAME, payload)),
+            now=_NOW,
+            runtime_contracts={
+                "naruon": "0.14.4",
+                "inkspan": "0.6.0",
+                "fast_mlsirm": "0.9.2",
+                "contextual_orchestrator": "v1",
+            },
+            evidence_artifacts=artifacts,
+        )
+
+    payload = _published_policy()
+    artifacts = _published_evidence_artifacts(payload)
+    missing = dict(artifacts)
+    missing.pop(next(iter(missing)))
+    with pytest.raises(
+        EmailWritingPolicyError, match="policy_publication_evidence_unverified"
+    ):
+        load_with(payload, missing)
+
+    for evidence_kind, replacement, expected_code in (
+        (
+            "calibration_dataset",
+            {
+                "evidence_version": 1,
+                "evidence_kind": "calibration_dataset",
+                "recorded_at": "2026-08-02T00:00:00Z",
+                "protocol_hash": "invalid",
+            },
+            "policy_publication_evidence_invalid",
+        ),
+        (
+            "locked_holdout",
+            {
+                "evidence_version": 1,
+                "evidence_kind": "reference_adjudication",
+                "recorded_at": "2026-08-03T00:00:00Z",
+                "protocol_hash": payload["evidence"]["protocol_hash"],
+            },
+            "policy_publication_evidence_invalid",
+        ),
+        (
+            "protocol",
+            {
+                "evidence_version": 1,
+                "evidence_kind": "protocol",
+                "recorded_at": "2026-08-01T00:00:00Z",
+                "protocol_hash": "sha256:" + "0" * 64,
+            },
+            "policy_publication_evidence_invalid",
+        ),
+    ):
+        current_payload = deepcopy(payload)
+        current_artifacts = dict(artifacts)
+        evidence = current_payload["evidence"]
+        assert isinstance(evidence, dict)
+        field_name = f"{evidence_kind}_hash"
+        old_hash = evidence[field_name]
+        assert isinstance(old_hash, str)
+        replacement_bytes = _canonical_bytes(replacement)
+        replacement_hash = "sha256:" + hashlib.sha256(replacement_bytes).hexdigest()
+        evidence[field_name] = replacement_hash
+        current_artifacts.pop(old_hash)
+        current_artifacts[replacement_hash] = replacement_bytes
+
+        with pytest.raises(EmailWritingPolicyError, match=expected_code):
+            load_with(current_payload, current_artifacts)
+
+
 def test_profile_and_contract_mismatch_fail_closed() -> None:
     """Unsupported runtime contracts and language profiles cannot silently broaden claims."""
     payload = _published_policy()
