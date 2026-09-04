@@ -238,6 +238,35 @@ in this repo.
   and base, live rulesets, required checks, unresolved threads, and applicable
   current-head CodeRabbit or structured OpenCode fallback evidence. After the
   merge, verify the merge commit and protected target branch.
+- Audit workflow triggers and concurrency as parsed YAML behavior, not by text
+  search. PR review and repair groups use
+  `<workflow>-<repository>-<PR number>` with `cancel-in-progress: true`, so a
+  new head cancels only the older run for the same workflow, repository, and
+  PR. Release, deployment, migration, and provenance jobs remain serialized and
+  are not canceled by review concurrency.
+- Prefer central required or reusable workflows over repository-local copies.
+  Remove duplicate scanners, arbitrary sleeps, runner-held polling, and
+  per-PR organization queue sweeps once a current-head dispatcher or central
+  control-plane workflow owns that job. On `converted_to_draft`, `closed`, or
+  an obsolete head, revalidate the live PR state before canceling queued or
+  running review work; `ready_for_review` must start fresh current-head work.
+- A queued workflow record is not proof of an occupied runner. Inspect jobs and
+  preserve current-head release, deployment, image, migration, SBOM,
+  provenance, and security evidence. Administrative bypass is limited to an
+  Actions-capacity chicken-and-egg repair that cannot run because the defective
+  workflow itself saturates the queue; never use it for product or security
+  changes, and never weaken a required gate.
+- Model-backed OpenCode, Strix, and Noema workflows request only
+  `contextual-orchestrator/orchestrator/free` with the gateway credential.
+  Provider discovery, capability routing, and fallback belong to the
+  orchestrator; consumer workflows do not carry provider names, direct-provider
+  credentials, or paid fallbacks. Verify the requested logical model, endpoint,
+  served-model metadata, and terminal response in the same run.
+- Do not impose a shared application, agent, or gateway wall-clock timeout on
+  model work. The default is unset; only explicit user cancellation, a provider
+  terminal result, or a configured administrator limit ends it. OpenCode,
+  Strix, and Noema jobs must permit at least two hours, but that job budget is
+  not a model timeout and does not create a three-hour maximum.
 - On GitHub 401, 403, rate limit, or repeatedly truncated responses, fail closed
   instead of inferring current state. Use bounded retry and archive validation,
   then continue only work grounded in already fetched exact SHAs until access is
