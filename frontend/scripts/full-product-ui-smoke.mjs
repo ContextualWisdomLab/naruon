@@ -814,7 +814,7 @@ async function installRoutes(page) {
         ],
       });
     }
-    if (endpoint === "/api/llm/summarize") return routeJson(route, { summary: "20억 판매 검토용 맥락 종합입니다.", action_items: ["근거 확인"], confidence: 0.86 });
+    if (endpoint === "/api/llm/summarize") return routeJson(route, { summary: "20억 판매 검토용 맥락 종합입니다.", action_items: ["근거 확인"], confidence: 86 });
     if (endpoint === "/api/llm/draft") return routeJson(route, { draft: "검토 가능한 답장 초안입니다." });
     if (endpoint === "/api/llm/translate") return routeJson(route, { translation: "번역된 맥락입니다." });
     if (endpoint === "/api/emails/send") {
