@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
+    ANALYSIS_TEXT_MAX_CHARS,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -377,6 +378,167 @@ async def test_execute_tool_handler_error():
     assert data["status"] == "failed"
     assert data["result"] is None
     assert "Simulated error" in data["message"]
+
+
+def test_execute_url_extractor():
+    text = (
+        "URLs: https://example.com:8443/foo/bar?q=a%20b#section "
+        "(http://foo.com?next=/a) https://example.com:8443/foo/bar?q=a%20b#section."
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["urls"] == [
+        "https://example.com:8443/foo/bar?q=a%20b#section",
+        "http://foo.com?next=/a",
+        "https://example.com:8443/foo/bar?q=a%20b#section.",
+    ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a,b,",
+        "https://example.com?q=what?",
+        "https://example.com#frag!",
+    ),
+)
+def test_execute_url_extractor_preserves_valid_terminal_punctuation(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": url}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+@pytest.mark.parametrize("suffix", (").", "),", ")!"))
+def test_execute_url_extractor_removes_wrapped_prose_delimiters(suffix):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(https://example.com/path{suffix}"}},
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/path"]
+
+
+@pytest.mark.parametrize(
+    ("text", "url"),
+    (
+        ("(https://example.com/path!),", "https://example.com/path!"),
+        ("([https://example.com/path]).", "https://example.com/path"),
+    ),
+)
+def test_execute_url_extractor_handles_punctuated_nested_wrappers(text, url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+def test_execute_url_extractor_handles_spaced_nested_wrappers():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "([  https://example.com/path])."}},
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/path"]
+
+
+def test_execute_url_extractor_does_not_borrow_distant_wrapper():
+    url = "https://example.com/path)."
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(see {url}"}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a(b)",
+        "https://example.com/a[b]",
+        "https://example.com/a{b}",
+    ),
+)
+def test_execute_url_extractor_preserves_balanced_url_delimiters(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(\n{url}"}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a).",
+        "https://example.com/a],",
+        "https://example.com/a}!",
+    ),
+)
+def test_execute_url_extractor_preserves_unwrapped_delimiter_suffixes(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": url}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+def test_execute_url_extractor_handles_many_unmatched_delimiters_linearly():
+    wrapper_count = 25_000
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "(" * wrapper_count
+                    + "https://example.com/"
+                    + ")" * wrapper_count
+                }
+            },
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/"]
+
+
+def test_execute_url_extractor_rejects_oversized_text():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
 
 
 @pytest.mark.asyncio
@@ -1094,6 +1256,29 @@ def test_execute_data_anonymizer():
         # fallback 커버리지를 위해 직접 handler를 호출하는 비동기 테스트를 아래에 추가합니다.
 
 
+def test_execute_data_anonymizer_masks_separator_free_and_international_formats():
+    source_values = (
+        "01012345678",
+        "9001011234567",
+        "01 42 68 53 00",
+        "사용자@예시.한국",
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/data_anonymizer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": " / ".join(source_values) + "."}},
+        )
+
+    assert response.status_code == 200
+    anonymized = response.json()["result"]["anonymized_text"]
+    assert all(source_value not in anonymized for source_value in source_values)
+    assert anonymized.endswith(".")
+    assert anonymized.count("***-****-****") == 2
+    assert "******-*******" in anonymized
+    assert "***@***" in anonymized
+
+
 @pytest.mark.asyncio
 async def test_data_anonymizer_handler_none():
     from api.tools import data_anonymizer_handler
@@ -1103,6 +1288,11 @@ async def test_data_anonymizer_handler_none():
 
     result_missing = await data_anonymizer_handler({})
     assert result_missing["anonymized_text"] == ""
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await data_anonymizer_handler(
+            {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
+        )
 
 
 def test_execute_grammar_checker():
@@ -1240,6 +1430,63 @@ async def test_keyword_extractor_handler():
     assert empty == {"keywords": [], "keyword_count": 0}
 
 
+
+@pytest.mark.asyncio
+async def test_email_address_extractor_handler():
+    from api.tools import email_address_extractor_handler
+
+    text = "Please contact me at John.Doe@example.com or support@example.com. For urgent matters, email john.doe@EXAMPLE.COM. Or try user@mail.example.com"
+    first = await email_address_extractor_handler({"text": text})
+    second = await email_address_extractor_handler({"text": text})
+
+    assert first == second
+    assert first == {
+        "emails": ["John.Doe@example.com", "support@example.com", "user@mail.example.com"],
+        "count": 3,
+    }
+
+    empty = await email_address_extractor_handler({"text": "No emails here."})
+    assert empty == {"emails": [], "count": 0}
+
+    malformed = await email_address_extractor_handler(
+        {"text": "Reject a@b..com but keep support@example.com..."}
+    )
+    assert malformed == {"emails": ["support@example.com"], "count": 1}
+
+def test_execute_email_address_extractor_envelope():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_address_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Hello, contact test@example.com."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"] == {"emails": ["test@example.com"], "count": 1}
+
+def test_email_address_extractor_rejects_oversized_text():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_address_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "failed",
+        "result": None,
+        "message": f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters",
+    }
+
+
 def test_execute_analysis_tool_rejects_oversized_text():
     from api.tools import ANALYSIS_TEXT_MAX_CHARS
 
@@ -1258,3 +1505,149 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_success():
+    params = {"text": "Hello world. This is a test. How are you?"}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "Hello world. How are you?"}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_cjk_punctuation():
+    params = {"text": "첫 번째 문장입니다． 두 번째 문장입니다！ 세 번째 문장입니다？"}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "첫 번째 문장입니다． 세 번째 문장입니다？"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "excerpt"),
+    [
+        (
+            "Dr. Smith approved it. Please proceed.",
+            "Dr. Smith approved it. Please proceed.",
+        ),
+        ("Version 1.2 works. Please deploy.", "Version 1.2 works. Please deploy."),
+        (
+            "Contact alice@example.com for help. Thanks.",
+            "Contact alice@example.com for help. Thanks.",
+        ),
+        (
+            "Read https://example.com/docs.html first. Done.",
+            "Read https://example.com/docs.html first. Done.",
+        ),
+        ('He said "First." She said "Last."', 'He said "First." She said "Last."'),
+    ],
+)
+async def test_first_last_sentence_handler_internal_periods_and_closers(text, excerpt):
+    result = await registry.invoke_tool("first_last_sentence", {"text": text})
+    assert result == {"excerpt": excerpt}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_empty_text():
+    params = {"text": ""}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": ""}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_no_sentences():
+    params = {"text": "..."}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "..."}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_one_sentence():
+    params = {"text": "Just one sentence."}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "Just one sentence."}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_oversized():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
+    with pytest.raises(ValueError, match="must not exceed"):
+        await registry.invoke_tool("first_last_sentence", params)
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler, ANALYSIS_TEXT_MAX_CHARS
+
+    res = await hash_generator_handler({"text": "hello"})
+    assert res["md5"] == "5d41402abc4b2a76b9719d911017c592"
+    assert res["sha1"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+    assert res["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await hash_generator_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_handler():
+    from api.tools import email_phone_masker_handler, ANALYSIS_TEXT_MAX_CHARS
+
+    res = await email_phone_masker_handler({"text": "Contact me at user@example.com or 010-1234-5678."})
+    assert res["masked_text"] == "Contact me at [EMAIL] or [PHONE]."
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await email_phone_masker_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_masks_complete_ascii_dot_atom_local_parts():
+    from api.tools import email_phone_masker_handler
+
+    result = await email_phone_masker_handler(
+        {"text": "Contact john&jane@example.com or customer/service@example.com."}
+    )
+
+    assert result["masked_text"] == "Contact [EMAIL] or [EMAIL]."
+
+
+@pytest.mark.asyncio
+async def test_email_phone_masker_bounds_near_limit_malformed_email_work():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS, email_phone_masker_handler
+
+    started_at = time.perf_counter()
+    result = await email_phone_masker_handler(
+        {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS - 2) + "@x"}
+    )
+
+    assert result["masked_text"].endswith("@x")
+    assert time.perf_counter() - started_at < 1
+
+
+def test_execute_hash_generator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["md5"] == "5d41402abc4b2a76b9719d911017c592"
+    assert (
+        data["result"]["sha256"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+
+def test_execute_email_phone_masker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_phone_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "My email is test@example.com and phone is 010-1234-5678, but 1234 is not."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["masked_text"] == "My email is [EMAIL] and phone is [PHONE], but 1234 is not."
