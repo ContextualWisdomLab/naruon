@@ -9,7 +9,7 @@ from core.config import settings
 from core.exceptions import LLMServiceError
 from services.circuit_breaker import provider_circuit_breaker
 from services.retry import retry_transient
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from services.llm_provider_urls import build_llm_provider_http_client
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,8 @@ OLLAMA_NATIVE_CHAT_PORT = 11434
 
 class ExtractionResult(BaseModel):
     """Result model for email extraction."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     summary: str
     action_items: list[str]

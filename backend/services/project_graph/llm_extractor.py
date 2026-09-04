@@ -32,7 +32,7 @@ import logging
 from typing import Iterable
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from services.llm_provider_urls import build_llm_provider_http_client
 
@@ -79,11 +79,15 @@ ALLOWED_RELATION_TYPES: frozenset[str] = frozenset(
 
 
 class ExtractedObjectPayload(BaseModel):
+    """One provider-produced project object before provenance validation."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     object_type: str
     title: str
     summary: str
     source_segment_uids: list[str]
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
     # Stable within-response handle the model assigns so relations can reference
     # objects before their persisted uid exists. Optional for backward
     # compatibility; when omitted the object's position supplies the handle.
@@ -91,13 +95,21 @@ class ExtractedObjectPayload(BaseModel):
 
 
 class ExtractedRelationPayload(BaseModel):
+    """One provider-produced relation before endpoint validation."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     source_local_key: str
     target_local_key: str
     relation_type: str
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
 
 
 class ExtractionPayload(BaseModel):
+    """Strict provider response envelope for project graph extraction."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     objects: list[ExtractedObjectPayload]
     relations: list[ExtractedRelationPayload] = []
 
@@ -211,7 +223,6 @@ def _validated_objects(
         if not title or not summary:
             continue
         primary = segments_by_uid[cited[0]]
-        confidence = min(max(candidate.confidence, 0.0), 1.0)
         local_key = candidate.local_key.strip() or f"__object_{position}"
         objects.append(
             (
@@ -222,7 +233,7 @@ def _validated_objects(
                     title=title,
                     summary=summary,
                     source_segment_uids=cited,
-                    confidence=confidence,
+                    confidence=candidate.confidence,
                     extractor_name=LLM_EXTRACTOR_NAME,
                     extractor_version=LLM_EXTRACTOR_VERSION,
                     attributes={
@@ -300,7 +311,7 @@ def _relation_edges(
                 source_uid=source_object.uid,
                 target_uid=target_object.uid,
                 edge_type=relation_type,
-                confidence=min(max(relation.confidence, 0.0), 1.0),
+                confidence=relation.confidence,
                 source_segment_uids=_relation_citation(source_object, target_object),
             )
         )
