@@ -24,7 +24,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T13:50Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T13:57Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) carries the exact-head PR
 completion playbook. It now distinguishes AI-authored commits from generated
