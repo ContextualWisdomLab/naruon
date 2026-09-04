@@ -256,6 +256,16 @@ PostgreSQL 16 + pgvector instance with warnings as errors. Binary payloads,
 credentials, provider state, embeddings, and audit-history portability remain
 explicit non-goals. The head stays Draft until fresh central review controls and
 protected checks replace historical malformed/absent reviewer evidence.
+Draft PR #1493 (`e4b702fd095848f911f198644c9b49ca86050824`)
+updates the self-hosted connector to websockets 17.1 and repairs the missing
+runtime release boundary discovered during review. The existing image workflow
+validated only backend, combined, and frontend images, so the connector change
+could pass without building or publishing its owner runtime. PR and semver-tag
+matrices now build `naruon-connector` for amd64 and arm64. The first arm64 build
+failed on the x86-only hash lock; the verified Python 3.14 arm64 wheel digest is
+now pinned alongside amd64. Thirty-five governance tests, Ruff, actionlint, and
+warning-free image import smoke pass for both platforms. Fresh hosted
+`validate connector image` and protected review evidence remain required.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
