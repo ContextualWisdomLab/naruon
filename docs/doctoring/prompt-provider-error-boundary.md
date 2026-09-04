@@ -17,6 +17,10 @@ label appears in captured logs. This keeps enough event classification for
 operations without copying provider-controlled detail into a broader log trust
 domain.
 
+Client cleanup follows the same boundary. If both the provider operation and
+client close fail, cleanup records only a fixed event and exception class; it
+cannot replace the fixed 502 response or expose either exception message.
+
 OWASP recommends removing, masking, sanitizing, hashing, or encrypting access
 tokens, credentials, connection strings, and other sensitive values before log
 recording. NIST SP 800-92 frames log management as an enterprise lifecycle that
@@ -34,7 +38,12 @@ verified in this PR.
 - protected base: `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 - reviewed implementation head before this doctoring commit:
   `164d1e85700001978cee0cb131ba33fe8e3c1498`
-- `PYTHONWARNINGS=error … pytest -q backend/tests/test_prompt_error_logging.py backend/tests/test_prompts_api.py`: 21 passed
+- prerequisite: PR #1565
+  `3a4ec5833db649994dc0042653d1d29f71010cfd`
+- verified implementation stack before this doctoring update:
+  `58eabe7bc75d413e9d784b60b049264cdb5157b2`
+- `PYTHONWARNINGS=error … pytest -q` across prompt, dependency-pin, and release
+  governance contracts: 58 passed
 - Ruff on the prompt route and regression file: passed
 - protected-base diff check: passed
 
