@@ -39,21 +39,24 @@ and 78 focused tests pass. Draft PR #1496
 (`49bbfa476c1318bc286d18bad248470ee77d56fd`) is the URL-extractor child on
 that exact owner head; its effective delta is three files and 97 combined
 tool/privacy tests pass. Draft PR #1512
-(`671ebdc6c812c9a0dd132f8939e287630c8db23e`) follows #1496, removes its
+(`6a66a9b0d1fa106c19c0fbf51031aaba41ba6415`) follows #1496, removes its
 permissive duplicate email regex, consumes the canonical matcher, rejects empty
-domain labels and trailing ellipses, and records its RFC 5322 ASCII subset.
-Draft PR #1555 (`03799bc157fa39a419cf6c3f77a29a2ca02cd7f4`) follows #1512 and carries
+domain labels and trailing ellipses, and records its RFC 5322 ASCII subset. Its
+latest review acknowledgement removes inherited duplicate code and tests
+without deleting the effective email-extractor delta. Draft PR #1555
+(`24cdd5900ecf2919b8887efedc1effcdd409c4a9`) follows #1512 and carries
 only the first/last-sentence extractor. It consumes both parent matchers and
 preserves U+FF0E, decimal/title periods, URL/email periods, repeated terminators,
-and trailing quotation or bracket punctuation. The final stack passes 111
+and trailing quotation or bracket punctuation. After a non-force parent merge,
+the current stack passes 84
 combined tests, Ruff, and diff checks. No predecessor gate evidence transfers
 after these base/head changes. Draft PR #1482
-(`67433f375ea1b8eb38baf3bf512ac761d9325dbd`) is restacked last on #1555,
+(`fa202dcb665789ee5c955646a511d9678d29aab2`) is restacked last on #1555,
 reuses the canonical email and phone matchers, and adds bounded Unicode-email,
 French-phone, and separator-optional Korean resident-registration masking. Its
 catalog claim excludes complete de-identification, and NIST SP 800-188 grounds
 that boundary. The effective child delta is three files; the combined tool and
-privacy contract suite passes 114 tests with warnings as errors, plus Ruff and
+privacy contract suite passes 87 tests with warnings as errors, plus Ruff and
 diff checks. PR #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
