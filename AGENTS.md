@@ -189,6 +189,47 @@ in this repo.
 
 ## PR automation and review defaults
 
+### Agent PR lifecycle playbook
+
+- Use `autoresearch` for an autonomous review-repair loop, `babysit-pr` for
+  protected-merge observation, `github-robot-review-gate` for robot evidence,
+  and `git-commit-format` before committing. Use CodeGraph before broad source
+  searches when an index exists; apply `humanize-korean` to Korean prose when
+  that shared skill is available.
+- For every open PR, repeat: fetch the exact remote base and head, inspect
+  current-head reviews and unresolved threads, reproduce failed checks from
+  their logs, repair the canonical owner, run focused tests plus the applicable
+  contract/security suite, push without force, and re-fetch evidence. A new
+  head invalidates earlier reviews and checks.
+- Before creating a worktree or restacking a branch, compare `git ls-remote`
+  with the local remote-tracking ref and start from the verified 40-character
+  SHA. Never guess or manually extend abbreviated SHAs in commits, PR bodies,
+  release evidence, or gap baselines.
+- Treat concurrent commits and pushes as lineage to reconcile, not as grounds
+  for force-pushing. Merge the updated prerequisite into the same stacked
+  branch, preserve its complete delta, rerun focused checks, and retarget only
+  when the resulting dependency order is verified.
+- Preserve unrelated dirty or untracked files. If a command changes the wrong
+  checkout, stop before editing or pushing, record the reflog evidence, restore
+  only the affected branch with a non-destructive detached-head and branch-ref
+  move, and verify the original checkout and untracked files afterward.
+- Tests invoked with `--noconftest` must bootstrap every required setting in
+  the test or trusted workflow step. Use explicit test-only values and fresh
+  random secrets; do not weaken production validation or depend on a developer
+  shell's environment.
+- Exact changed-line review evidence must be generated only from real
+  current-head added or modified lines. Do not invent line 1 for deleted-only,
+  binary, oversized, or otherwise ineligible files, and do not relax the
+  validator to accept a fabricated receipt; fail closed or repair the canonical
+  receipt producer.
+- Pending or queued reviews and checks are wait states. Continue safe work on
+  another gap, but never call a PR merge-ready or merged without freshly
+  verifying the exact head, required checks, approvals after the last push,
+  merge commit, and protected target branch.
+- Do not close a PR merely to reach zero open PRs. Close only with explicit user
+  direction, no valid delta, a malicious change, or a verified successor that
+  carries the predecessor's complete delta and records the lineage.
+
 - Follow `docs/development/merge-gate-policy.md` for PR gate interpretation.
 - PR Governance must stay metadata-only: no PR-head checkout, no admin merge, no
   review dismissal, and no security-check suppression.
