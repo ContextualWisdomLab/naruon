@@ -30,7 +30,7 @@ opentelemetry-exporter-otlp==1.43.0
 protobuf==7.35.1
 setuptools==83.0.0
 wheel==0.47.0
-websockets==16.1
+websockets==17.1
 PyJWT==2.13.0  # latest verified 2026-06-12; do not downgrade to 2.8.0
 icalendar==7.2.0
 ruff==0.15.21

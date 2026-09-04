@@ -670,6 +670,16 @@ def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushe
     assert "release/**" not in push_block
 
 
+def test_connector_image_contains_seeded_adapter_runtime() -> None:
+    """Keep the published connector's database-backed adapters importable."""
+    dockerfile = read_repo_text("connector/Dockerfile")
+
+    assert "COPY backend/requirements-hashes.txt" in dockerfile
+    assert "COPY backend /app/backend" in dockerfile
+    assert "from runner.local_dav_adapters import LocalDavAdapters" in dockerfile
+    assert "from runner.local_mail_adapters import LocalMailAdapters" in dockerfile
+
+
 def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_tags() -> (
     None
 ):
@@ -713,11 +723,15 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "develop" in pull_request_block
     assert "ai_email_client-backend" in workflow
     assert "ai_email_client-frontend" in workflow
-    assert workflow.count("image: naruon") == 2
+    assert len(re.findall(r"^\s+image: naruon$", workflow, re.MULTILINE)) == 2
+    assert len(
+        re.findall(r"^\s+image: naruon-connector$", workflow, re.MULTILINE)
+    ) == 2
     assert "push: false" in workflow
     assert "push: true" in workflow
     assert workflow.count("base_dockerfile: Dockerfile") == 4
     assert workflow.count("base_dockerfile: frontend/Dockerfile") == 2
+    assert workflow.count("base_dockerfile: connector/Dockerfile") == 2
     assert workflow.count('base_digest="${base_reference##*@}"') == 2
     assert workflow.count('base_name="docker.io/library/$base_reference"') == 2
     assert "Resolve pinned Ollama base manifest" in workflow
