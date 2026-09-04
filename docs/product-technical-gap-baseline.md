@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.7
+**Baseline version:** 1.8
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -39,6 +39,17 @@ current-head changed-side line. The exact-line validator remains fail closed;
 167 focused owner tests pass. Both heads are mergeable but their required
 current-head checks and independent review remain pending, so neither local
 result is protected-branch evidence yet.
+
+**Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
+(`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
+README and public Pages lane. Its latest repair restores the tested ownership
+boundary: repository workflows own product tests, while the
+ContextualWisdomLab central required workflows own OpenCode review, Strix
+analysis, branch updates, auto-merge, and mechanical merge actions. The same
+head preserves reviewed dotenv duplicate-assignment handling and applies mode
+`0600` before generated local secrets are written. Forty-one focused setup and
+release-governance tests pass, but the new hosted checks are queued and the
+earlier requested review does not transfer to this head.
 
 **Exact-head execution refresh (2026-09-04T14:10Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
