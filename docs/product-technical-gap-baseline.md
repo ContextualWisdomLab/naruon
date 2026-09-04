@@ -88,14 +88,17 @@ no buyer-visible latency claim or protected-branch completion is recorded.
 
 **Backend test-runtime dependency refresh (2026-09-04T17:35Z):** Minimal
 protected-base prerequisite PR #1565 exact head
-`9990a999fd9e7413d98f830d3bda495470c44e8f` removes the Starlette `TestClient`
+`3a4ec5833db649994dc0042653d1d29f71010cfd` removes the Starlette `TestClient`
 warning suppression and promotes the already used optional-agent
 `httpx2==2.5.0` pin into the core development, direct test, project lock, and
-hash lock contracts. This was found while validating utility consumer PR
+hash lock contracts. The current head also includes that pin in the shared
+SHA-256 digest-format assertion instead of checking only record presence. This
+was found while validating utility consumer PR
 #1538: its source tests could not collect under Python 3.14 with warnings as
 errors because protected `develop` omitted the direct test dependency. Frozen
-sync, 65 pin-contract and public-tool tests, Ruff, and diff checks pass without
-the warning. Broad dependency-upgrade PR #1494 exact head
+sync and the predecessor's 65 focused tests passed without the warning; the
+current head independently passes 36 pin/release-governance tests with warnings
+as errors, Ruff, and diff checks. Broad dependency-upgrade PR #1494 exact head
 `8ac9cfbe882bddfb85c44e84aca5c8ee841a3453` remains the successor owner for
 `httpx2==2.12.0` and its other package migrations; it also removes the
 suppression rather than reviving it. PR #1538 remains Draft until the minimal
