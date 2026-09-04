@@ -1,6 +1,7 @@
 "use client";
 
-import { completeOidcRedirect } from '@/lib/oidc-session';
+import type { OidcPopupResultMessage } from '@/lib/oidc-session';
+import { broadcastOidcPopupResult, completeOidcRedirect, isOidcPopupFlow } from '@/lib/oidc-session';
 import { useEffect, useState } from 'react';
 import { toSafeReturnTo } from './return-target';
 
@@ -9,13 +10,27 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const { isPopup, flowId } = isOidcPopupFlow();
     completeOidcRedirect()
       .then(({ returnTo }) => {
-        if (!cancelled) window.location.replace(toSafeReturnTo(returnTo));
+        if (cancelled) return;
+        const safeTarget = toSafeReturnTo(returnTo);
+        if (isPopup && flowId) {
+          const message: OidcPopupResultMessage = { source: 'naruon-oidc', flowId, status: 'success', returnTo: safeTarget };
+          broadcastOidcPopupResult(message);
+          window.close();
+          return;
+        }
+        window.location.replace(safeTarget);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'OIDC callback failed');
+        const message = err instanceof Error ? err.message : 'OIDC callback failed';
+        setError(message);
+        if (isPopup && flowId) {
+          const popupMessage: OidcPopupResultMessage = { source: 'naruon-oidc', flowId, status: 'error', message };
+          broadcastOidcPopupResult(popupMessage);
+        }
       });
     return () => {
       cancelled = true;

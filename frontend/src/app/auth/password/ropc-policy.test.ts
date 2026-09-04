@@ -1,0 +1,54 @@
+import { access, readFile } from "node:fs/promises";
+
+import { describe, expect, it } from "vitest";
+
+async function sourceFile(relativePath: string): Promise<string> {
+  return readFile(new URL(relativePath, import.meta.url), "utf8");
+}
+
+describe("password-route authentication authority", () => {
+  it("keeps Naruon password routes fail-closed until Keyverse publishes a released headless contract", async () => {
+    const [loginRoute, signupRoute] = await Promise.all([
+      sourceFile("./login/route.ts"),
+      sourceFile("./signup/route.ts"),
+    ]);
+
+    for (const source of [loginRoute, signupRoute]) {
+      expect(source).not.toContain("exchangePasswordForSessionResponse");
+      expect(source).not.toContain('grant_type: "password"');
+      expect(source).not.toContain("grant_type=password");
+    }
+  });
+
+  it("does not retain dormant ROPC or password-registration authority", async () => {
+    const oidcShared = await sourceFile("../oidc/shared.ts");
+
+    expect(oidcShared).not.toContain("exchangePasswordForSessionResponse");
+    expect(oidcShared).not.toContain('grant_type: "password"');
+    await expect(
+      access(new URL("../../../../lib/account-unification-client.ts", import.meta.url)),
+    ).rejects.toBeDefined();
+  });
+
+  it("does not solicit passwords while the password capability is fail-closed", async () => {
+    const settingsLayout = await sourceFile("../../../components/SettingsLayout.tsx");
+
+    expect(settingsLayout).not.toContain("naruon-password-login-password");
+    expect(settingsLayout).not.toContain("naruon-password-signup-password");
+    expect(settingsLayout).not.toContain("handlePasswordLogin");
+    expect(settingsLayout).not.toContain("handlePasswordSignup");
+    expect(settingsLayout).toContain("비밀번호 로그인과 가입은 현재 사용할 수 없습니다.");
+  });
+
+  it("keeps ADR-0005 Proposed while the released Keyverse capability is unavailable", async () => {
+    const adrIndex = await sourceFile("../../../../../docs/adr/README.md");
+    const adrRow = adrIndex
+      .split("\n")
+      .find((line) => line.includes("[ADR-0005]"));
+
+    expect(adrRow).toBeDefined();
+    expect(adrRow).toContain("| Proposed |");
+    expect(adrRow).toContain("BLOCKED-UPSTREAM");
+    expect(adrRow).not.toContain("working end-to-end");
+  });
+});

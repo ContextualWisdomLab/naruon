@@ -5,7 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import type { SessionClaims } from '@/lib/session-cookie';
 import { clearOidcSession, getOidcBrowserConfig, startOidcLogin } from '@/lib/oidc-session';
 import { useWorkspaceStartupView, setWorkspaceStartupView } from '@/lib/workspace-preferences';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 export type SettingsTab = '워크스페이스' | '멤버' | 'AI 모델' | '연결 계정' | '알림' | '자동화' | '결제' | '개발자';
 const EMPTY_SESSION_CLAIMS: SessionClaims = {
@@ -589,10 +589,116 @@ export function SettingsLayout() {
     clearInputValue(oauthClientSecretInputRef);
   };
 
+  const refreshOidcSessionClaims = async () => {
+    try {
+      setOidcSessionClaims(await apiClient.getServerSessionClaims());
+    } catch {
+      setOidcSessionClaims(EMPTY_SESSION_CLAIMS);
+    }
+  };
+
+  // Fetches every backend-authenticated settings resource this page shows.
+  // Called on mount AND again after a successful OIDC login, since a mount
+  // that happened while the user was still signed out leaves each of these
+  // in their failed (401) error state -- refreshOidcSessionClaims() alone
+  // only re-fetches identity, not the settings data gated behind it.
+  const loadAccountSettings = useCallback((isCancelled: () => boolean) => {
+    void apiClient
+      .get<RunnerConfig>('/api/runner-config')
+      .then((config) => {
+        if (isCancelled()) return;
+        setRunnerConfig(config);
+        setRunnerError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setRunnerError(error.message || 'Self-hosted connector 설정을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setRunnerLoading(false);
+      });
+
+    void apiClient
+      .get<OperationalSignalsResponse>('/api/observability/operational-signals')
+      .then((signals) => {
+        if (isCancelled()) return;
+        setOperationalSignals(signals);
+        setOperationalError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setOperationalError(error.message || '운영 신호를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setOperationalLoading(false);
+      });
+
+    void apiClient
+      .get<AccountConfig>('/api/accounts/config')
+      .then((config) => {
+        if (isCancelled()) return;
+        setAccountConfig(config);
+        setAccountForm(toAccountForm(config));
+        setAccountError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setAccountError(error.message || '계정 설정을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setAccountLoading(false);
+      });
+
+    void Promise.all([
+      apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources'),
+      apiClient.get<WebdavAccount[]>('/api/webdav/accounts'),
+    ])
+      .then(([calendarSourceRows, webdavAccountRows]) => {
+        if (isCancelled()) return;
+        setCalendarSources(calendarSourceRows);
+        setWebdavAccounts(webdavAccountRows);
+        setSourceReadinessError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setSourceReadinessError(error.message || 'Source readiness를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setSourceReadinessLoading(false);
+      });
+
+    void apiClient
+      .get<LLMProviderConfig[]>('/api/llm-providers')
+      .then((providers) => {
+        if (isCancelled()) return;
+        setModelProviders(providers);
+        const activeProvider = providers.find((provider) => provider.is_active) ?? providers[0] ?? null;
+        setSelectedEmbeddingProviderId(activeProvider?.id ?? null);
+        setSelectedEmbeddingModel(activeProvider?.embedding_model ?? 'embeddinggemma');
+        setModelProvidersError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setModelProvidersError(error.message || 'AI 모델 설정을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setModelProvidersLoading(false);
+      });
+  }, []);
+
   const handleOidcLogin = async () => {
     setOidcActionError(null);
     try {
+      // Resolves once the naruon-branded login popup posts back completion;
+      // the naruon tab itself never navigates away.
       await startOidcLogin({ returnTo: window.location.pathname });
+      await refreshOidcSessionClaims();
+      setRunnerLoading(true);
+      setOperationalLoading(true);
+      setAccountLoading(true);
+      setSourceReadinessLoading(true);
+      setModelProvidersLoading(true);
+      loadAccountSettings(() => false);
     } catch (error) {
       setOidcActionError(error instanceof Error ? error.message : 'OIDC login failed');
     }
@@ -730,93 +836,15 @@ export function SettingsLayout() {
       .catch(() => {
         if (!cancelled) setOidcSessionClaims(EMPTY_SESSION_CLAIMS);
       });
+    // (refreshOidcSessionClaims mirrors this fetch for the post-login refresh below;
+    // kept separate so this mount effect's cleanup/cancellation stays local.)
 
-    void apiClient
-      .get<RunnerConfig>('/api/runner-config')
-      .then((config) => {
-        if (cancelled) return;
-        setRunnerConfig(config);
-        setRunnerError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setRunnerError(error.message || 'Self-hosted connector 설정을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setRunnerLoading(false);
-      });
-
-    void apiClient
-      .get<OperationalSignalsResponse>('/api/observability/operational-signals')
-      .then((signals) => {
-        if (cancelled) return;
-        setOperationalSignals(signals);
-        setOperationalError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setOperationalError(error.message || '운영 신호를 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setOperationalLoading(false);
-      });
-
-    void apiClient
-      .get<AccountConfig>('/api/accounts/config')
-      .then((config) => {
-        if (cancelled) return;
-        setAccountConfig(config);
-        setAccountForm(toAccountForm(config));
-        setAccountError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setAccountError(error.message || '계정 설정을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setAccountLoading(false);
-      });
-
-    void Promise.all([
-      apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources'),
-      apiClient.get<WebdavAccount[]>('/api/webdav/accounts'),
-    ])
-      .then(([calendarSourceRows, webdavAccountRows]) => {
-        if (cancelled) return;
-        setCalendarSources(calendarSourceRows);
-        setWebdavAccounts(webdavAccountRows);
-        setSourceReadinessError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setSourceReadinessError(error.message || 'Source readiness를 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setSourceReadinessLoading(false);
-      });
-
-    void apiClient
-      .get<LLMProviderConfig[]>('/api/llm-providers')
-      .then((providers) => {
-        if (cancelled) return;
-        setModelProviders(providers);
-        const activeProvider = providers.find((provider) => provider.is_active) ?? providers[0] ?? null;
-        setSelectedEmbeddingProviderId(activeProvider?.id ?? null);
-        setSelectedEmbeddingModel(activeProvider?.embedding_model ?? 'embeddinggemma');
-        setModelProvidersError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setModelProvidersError(error.message || 'AI 모델 설정을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setModelProvidersLoading(false);
-      });
+    loadAccountSettings(() => cancelled);
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAccountSettings]);
 
   return (
     <div className="flex h-full min-w-0 min-h-0 bg-background text-foreground flex-col overflow-x-hidden">
@@ -1602,15 +1630,28 @@ export function SettingsLayout() {
                   ) : null}
                 </section>
 
-                <section aria-label="OIDC 인증 세션" className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section aria-label="비밀번호 인증 이용 상태" className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Shield className="size-5 text-blue-500" />
+                    <h3 className="font-bold text-lg">비밀번호 로그인 및 가입</h3>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-foreground">
+                    비밀번호 로그인과 가입은 현재 사용할 수 없습니다.
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Keyverse가 Naruon이 고정해 검증할 수 있는 headless 인증 계약을 immutable release로 제공할 때까지 자격 증명을 입력받지 않습니다. 현재 지원되는 조직 SSO는 아래에서 사용할 수 있습니다.
+                  </p>
+                </section>
+
+                <section aria-label="Keyverse SSO 인증 세션" className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Shield className="size-5 text-blue-500" />
-                        <h3 className="font-bold text-lg">OIDC 인증 세션</h3>
+                        <h3 className="font-bold text-lg">Keyverse SSO 인증 세션</h3>
                       </div>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        Keycloak/Casdoor OIDC 토큰을 브라우저 bearer 세션으로 연결합니다.
+                        회사 ADFS 등 연동된 외부 IdP로 로그인합니다. Keyverse가 호스팅하는 인증 화면을 거쳐 Authorization Code + PKCE 세션을 연결합니다.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1618,10 +1659,10 @@ export function SettingsLayout() {
                         type="button"
                         onClick={handleOidcLogin}
                         disabled={!oidcBrowserConfig}
-                        title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
+                        title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "Keyverse SSO로 로그인"}
                         className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        OIDC 로그인
+                        Keyverse SSO로 로그인
                       </button>
                       <button
                         type="button"
