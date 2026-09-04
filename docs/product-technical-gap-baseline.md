@@ -374,6 +374,15 @@ compatibility launcher lacked `httpx2`; canonical `.github` PR #1851 has since
 merged the hash-locked dependency into protected main
 `769691526f8c73cf714de8fe8ba51ae6cfa2901a`. Fresh #1525 exact-head hosted
 evidence must prove that owner repair; prior failure evidence does not transfer.
+Draft PR #1514 (`22a3ddff94c29f51a4f56590a85a7b723c454ecc`)
+repairs Naruon's Relationship Context naming boundary while preserving the
+published network-graph JSON keys. Current-head review also found that set and
+database encounter order leaked into response arrays, so equivalent email
+evidence could perturb client layout, cache, screenshot, and incident evidence.
+The shared endpoint now emits nodes in email-identity order and edges in
+source/target order. Eleven focused warning-as-error tests and Ruff pass; fresh
+hosted Checks and independent review remain required, and no p95 improvement is
+claimed without a measured buyer path.
 PR #1522 (`2d58b23003917319fb6fd5170973f70b88793fb0`) remains the bounded
 NetworkGraph option-materialization parent and owns its repository-local Strix
 lock prerequisite. Failed job `101062515199` proved the scanner stopped before
