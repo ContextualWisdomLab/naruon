@@ -755,6 +755,62 @@ registry.register(
 )
 
 
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Generate compatibility fingerprints plus a SHA-256 security hash."""
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    encoded = text.encode("utf-8")
+    return {
+        "md5": hashlib.md5(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
+        "sha1": hashlib.sha1(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="지문/해시 생성기 (Fingerprint/Hash Generator)",
+        description="텍스트의 호환성 지문(MD5, SHA-1) 및 보안 해시(SHA-256) 값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+_PHONE_PATTERN = re.compile(
+    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
+    r"|\d{2,3}-\d{3,4}-\d{4}"
+    r"|(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4})(?!\d)"
+)
+
+
+async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Mask ASCII email and selected Korean or North American phone formats."""
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    anonymized = _EMAIL_PATTERN.sub("[EMAIL]", text)
+    anonymized = _PHONE_PATTERN.sub("[PHONE]", anonymized)
+
+    return {"masked_text": anonymized}
+
+registry.register(
+    ToolInfo(
+        code="email_phone_masker",
+        name="이메일/전화번호 마스킹 (Email/Phone Masker)",
+        description="텍스트에서 ASCII 이메일 주소와 일부 한국·북미 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    email_phone_masker_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
@@ -803,39 +859,6 @@ registry.register(
     ),
     first_last_sentence_handler,
 )
-
-
-async def email_phone_masker_handler(params: Dict[str, Any]) -> Any:
-    """Mask email addresses and North American-style telephone numbers."""
-    text = params.get("text", "")
-    _normalize_analysis_text(text)
-
-    masked_text = re.sub(
-        r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+",
-        "[MASKED EMAIL]",
-        text,
-    )
-    masked_text = re.sub(
-        r"(?<!\d)(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?!\d)",
-        "[MASKED PHONE]",
-        masked_text,
-    )
-
-    return {"masked_text": masked_text}
-
-
-registry.register(
-    ToolInfo(
-        code="email_phone_masker",
-        name="이메일·전화번호 마스커 (Email and Phone Masker)",
-        description="영문 이메일 주소와 북미 형식 전화번호를 마스킹합니다.",
-        category="보안 도구",
-        parameters={"text": "string"},
-    ),
-    email_phone_masker_handler,
-)
-
-
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
