@@ -27,13 +27,17 @@ checks and independent review remain pending.
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`d286004b582c588b11c223f44cacc4a74a9244e5`) carries the exact-head PR
 completion playbook after six review threads were resolved and 35 governance
-tests passed locally. #1555 (`ab8a5abe47ddb80008fb00e0a310eaa65ee1a854`)
-restores the truthful first/last-sentence and bounded email/phone masking
-contracts after a remote regression, retains CJK sentence-boundary coverage,
-and passes Ruff plus 72 focused tests. #1502
+tests passed locally. #1538 (`8d57b2935ee2cd55d9a93b09c9337203defcc0fe`)
+is the single writer for bounded ASCII email and selected Korean/North American
+phone masking after a remote acknowledgement commit removed verified behavior;
+Ruff and 76 focused tests pass on the restored head. #1555
+(`e0ab25e85e820d243e181d1023198c2320a201e5`) is non-force stacked on that
+owner head and now carries only the truthful first/last-sentence extractor with
+CJK sentence-boundary coverage; the combined stack passes Ruff and 82 focused
+tests. #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
-All three remain candidate heads rather than protected-branch evidence.
+All four remain candidate heads rather than protected-branch evidence.
 
 #1485 (`4e2cb3b39f89aff811d5113962861bd1963d2996`) has successful product,
 frontend, backend, and security checks; its prior Noema review failed because
@@ -42,8 +46,9 @@ the model cited a non-changed line, and OpenCode ended on GitHub HTTP 502.
 CodeRabbit approval and zero unresolved threads, while its prior Strix and
 OpenCode jobs were cancelled. The deleted historical workflow IDs cannot be
 rerun, so the current central merge-scheduler contract was dispatched once per
-PR with auto-merge and branch updates disabled. Scheduler runs `33871200407`
-and `33871251541` are queued. At the same observation time, runner-requiring
+PR with auto-merge and branch updates disabled. Scheduler runs `33871200407`,
+`33871251541`, and stacked-child dispatch `33872054770` are queued. At the same
+observation time, runner-requiring
 work across central `.github` had remained queued since 11:56Z while
 metadata-only jobs completed. This is point-in-time organization queue
 evidence, not a source failure, a successful review, or permission to reuse
