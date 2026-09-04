@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CalendarSidebarRight } from "./CalendarSidebarRight";
 import type { CalendarDetailEvent } from "./types";
 
@@ -33,22 +33,21 @@ describe("CalendarSidebarRight", () => {
     root = createRoot(container);
 
     await act(async () => {
-      root?.render(<CalendarSidebarRight selectedDetailEvent={null} />);
+      root?.render(
+        <CalendarSidebarRight
+          selectedDetailEvent={null}
+          isWritebackDisabled={false}
+          onRequestUpdate={vi.fn()}
+        />,
+      );
     });
     await flushAsyncWork();
 
     expect(container.textContent).toContain("표시 중인 일정 없음");
 
     const buttons = container.querySelectorAll("button");
-    expect(buttons.length).toBe(5);
-
-    const deleteBtn = container.querySelector('button[aria-label="일정 삭제"]');
-    expect((deleteBtn as HTMLButtonElement)?.disabled).toBe(true);
-
-    const copyBtn = container.querySelector('button[aria-label="일정 복사"]');
-    expect((copyBtn as HTMLButtonElement)?.disabled).toBe(true);
-
-    const editBtn = container.querySelector('button[aria-label="일정 수정"]');
+    expect(buttons.length).toBe(1);
+    const editBtn = container.querySelector('button[aria-label="일정 수정 점검"]');
     expect((editBtn as HTMLButtonElement)?.disabled).toBe(true);
   });
 
@@ -56,7 +55,9 @@ describe("CalendarSidebarRight", () => {
     const mockEvent: CalendarDetailEvent = {
       id: "1",
       calendarId: "cal-1",
+      dayIndex: 1,
       title: "Meeting",
+      source: "CalDAV",
       badgeLabel: "Work",
       badgeClassName: "bg-blue-100",
       dotClassName: "bg-blue-500",
@@ -64,27 +65,33 @@ describe("CalendarSidebarRight", () => {
       duration: "1h",
       location: "Room A",
       description: "Discuss project",
+      monthClassName: "bg-blue-50",
     };
 
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
 
+    const onRequestUpdate = vi.fn();
     await act(async () => {
-      root?.render(<CalendarSidebarRight selectedDetailEvent={mockEvent} />);
+      root?.render(
+        <CalendarSidebarRight
+          selectedDetailEvent={mockEvent}
+          isWritebackDisabled={false}
+          onRequestUpdate={onRequestUpdate}
+        />,
+      );
     });
     await flushAsyncWork();
 
     expect(container.textContent).toContain("Meeting (Naruon 2.0)");
     expect(container.textContent).toContain("Room A");
 
-    const deleteBtn = container.querySelector('button[aria-label="Meeting 일정 삭제"]');
-    expect((deleteBtn as HTMLButtonElement)?.disabled).toBe(false);
-
-    const copyBtn = container.querySelector('button[aria-label="Meeting 일정 복사"]');
-    expect((copyBtn as HTMLButtonElement)?.disabled).toBe(false);
-
-    const editBtn = container.querySelector('button[aria-label="Meeting 일정 수정"]');
+    const editBtn = container.querySelector('button[aria-label="Meeting 일정 수정 점검"]');
     expect((editBtn as HTMLButtonElement)?.disabled).toBe(false);
+    await act(async () => {
+      (editBtn as HTMLButtonElement).click();
+    });
+    expect(onRequestUpdate).toHaveBeenCalledOnce();
   });
 });
