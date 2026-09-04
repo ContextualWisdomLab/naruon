@@ -34,7 +34,7 @@ const NetworkGraph = dynamic(() => import("@/components/NetworkGraph"), {
 const DEFAULT_QUERY = "런칭 캠페인";
 
 type SearchResultItem = {
-  id: number;
+  email_id: number;
   source_message_id?: string | null;
   subject: string | null;
   sender: string;
@@ -59,8 +59,8 @@ function evidenceKindLabel(kind: string | null | undefined) {
   return EVIDENCE_KIND_LABELS[kind] ?? kind;
 }
 
-type SearchResponse = {
-  results: SearchResultItem[];
+type SearchApiResponse = {
+  results: Array<Omit<SearchResultItem, "email_id"> & { id: number }>;
 };
 
 type AnswerCitation = {
@@ -153,7 +153,7 @@ function nowMs() {
 
 function ontologySourceKey(result: SearchResultItem | null) {
   if (!result) return null;
-  return `${result.id}:${result.source_message_id ?? ""}:${result.thread_id ?? ""}`;
+  return `${result.email_id}:${result.source_message_id ?? ""}:${result.thread_id ?? ""}`;
 }
 
 function buildOntologyUrl(result: SearchResultItem) {
@@ -297,7 +297,7 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
   return (
     <button
       type="button"
-      onClick={() => onSelect(result.id)}
+      onClick={() => onSelect(result.email_id)}
       aria-current={isActive ? "true" : undefined}
       className={`w-full border-l-4 p-4 text-left transition-colors focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
         isActive
@@ -384,15 +384,19 @@ export function SearchLayout() {
 
     const startedAt = nowMs();
     apiClient
-      .post<SearchResponse>(
+      .post<SearchApiResponse>(
         "/api/search",
         { query: trimmedQuery, limit: 8 },
         { signal: controller.signal },
       )
       .then((response) => {
         if (controller.signal.aborted) return;
-        setResults(response.results);
-        setActiveResultId(response.results[0]?.id ?? null);
+        const searchResults = response.results.map(({ id, ...result }) => ({
+          ...result,
+          email_id: id,
+        }));
+        setResults(searchResults);
+        setActiveResultId(searchResults[0]?.email_id ?? null);
         recordProductEvent("latency_guardrail_recorded", {
           surface: "context_search",
           request_trace_id: createProductEventId("search_trace"),
@@ -463,7 +467,7 @@ export function SearchLayout() {
   }, [activeFilter, results]);
 
   const activeResult =
-    filteredResults.find((result) => result.id === activeResultId) ??
+    filteredResults.find((result) => result.email_id === activeResultId) ??
     filteredResults[0] ??
     null;
   const activeOntologySourceKey = ontologySourceKey(activeResult);
@@ -494,15 +498,17 @@ export function SearchLayout() {
   useEffect(() => {
     if (!activeResult || loading) return;
 
-    const resultIndex = filteredResults.findIndex((result) => result.id === activeResult.id);
-    const eventKey = `${searchSessionIdRef.current}:${activeResult.id}`;
+    const resultIndex = filteredResults.findIndex(
+      (result) => result.email_id === activeResult.email_id,
+    );
+    const eventKey = `${searchSessionIdRef.current}:${activeResult.email_id}`;
     if (lastOpenedResultKeyRef.current === eventKey) return;
     lastOpenedResultKeyRef.current = eventKey;
 
     recordProductEvent("context_search_result_opened", {
       surface: "context_search",
       search_session_id: searchSessionIdRef.current,
-      result_id: activeResult.id,
+      result_id: activeResult.email_id,
       result_type: "mail",
       rank_bucket: bucketSearchRank(resultIndex < 0 ? 0 : resultIndex),
       confidence: activeConfidence,
@@ -582,7 +588,7 @@ export function SearchLayout() {
         recordProductEvent("context_search_result_action_created", {
           surface: "context_search",
           search_session_id: searchSessionIdRef.current,
-          result_id: actionResult.id,
+          result_id: actionResult.email_id,
           action_id: `relationship:${response.source_message_id ?? actionResult.source_message_id}`,
           action_type: "relation_capture",
           source_backlink_present: Boolean(actionResult.source_message_id),
@@ -623,16 +629,16 @@ export function SearchLayout() {
       ) : (
         filteredResults.map((result) => (
           <SearchResultItemComponent
-            key={result.id}
+            key={result.email_id}
             result={result}
-            isActive={activeResult?.id === result.id}
+            isActive={activeResult?.email_id === result.email_id}
             confidence={confidencePercent(result.score)}
             onSelect={setActiveResultId}
           />
         ))
       )}
     </div>
-  ), [loading, error, filteredResults, activeResult?.id, setActiveResultId]);
+  ), [loading, error, filteredResults, activeResult?.email_id, setActiveResultId]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">

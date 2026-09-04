@@ -558,7 +558,7 @@ def test_build_search_result_items_orders_dedupes_and_limits():
         candidates, fusion_settings, limit=2, reply_counts_by_thread_key={}
     )
 
-    assert [item.id for item in results] == [1, 3]
+    assert [item.email_id for item in results] == [1, 3]
     assert results[0].score > results[1].score
     assert results[0].reply_count == 1
 
