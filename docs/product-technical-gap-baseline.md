@@ -25,7 +25,7 @@ passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
 **Governed review evidence refresh (2026-09-04T17:03Z):** Naruon PR #1564
-(`c261dcca612891095e98a8bf6be50f218e15a17b`) records the reusable exact-head,
+(`b9ee877da7244c92987e2ddb1cedd50837bcd597`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
 procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
 evidence from post-merge commit verification and names the applicable
@@ -36,8 +36,12 @@ verified absent-ref initial-push path, fail-closed GitHub API handling, truthful
 commit attribution, NIST SSDF grounding, and safe independent work during gate
 waits. Shared lifecycle skills now have direct procedural fallbacks, signing is
 tied to actual repository policy, and metadata-only PR Governance is explicitly
-excluded from canceling review concurrency. All six current-head review threads
-are resolved; fresh hosted checks remain queued. Canonical workflow
+excluded from canceling review concurrency. The repository OpenCode config now
+uses only `contextual-orchestrator/orchestrator/free`; the stale-context exception
+matches the reversible merge-gate procedure, verified complete-delta succession
+is an explicit phase terminal state, and the public-domain NIST SP 800-218 PDF is
+retained with a focused governance regression test. All ten current-head review
+threads are resolved; fresh hosted checks remain queued. Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
 retains only allowlisted, secret-free gateway failure fields and stops creating
@@ -472,11 +476,12 @@ for the cache path. This removes the mutable `pnpm/latest` lookup that failed
 #1502's frontend job on `ECONNRESET`. The inherited governance harness, 40
 release/stacked-workflow tests, actionlint, and diff checks pass.
 Bandit-only PR #1554
-(`7f00cd0e56c4061b339e9d64bf44426f39d4120d`) removes the undeclared
+(`6b7ad6ccb4a7a021d74381781f40af7cc97233f8`) removes the undeclared
 Application CI and image-validation experiment from its effective delta and
-keeps only the Bandit workflow plus parsed-YAML regression test. Its
-`run_attempt == 1` cancellation guard prevents an old manually rerun scan from
-evicting newer current-head evidence. The focused test and actionlint pass, all
+keeps only the Bandit workflow plus parsed-YAML regression test. First-attempt
+PR runs share the PR-number lane and cancel only superseded first attempts;
+manual reruns use a `run_id` lane, so GitHub's pending-run replacement cannot
+evict newer current-head evidence. The focused test and actionlint pass, all
 current-head review threads are resolved, and fresh hosted evidence remains
 pending. #1562 is a separate broader trigger/concurrency child and does not
 carry this rerun guard, so neither PR may be closed as a complete successor of
