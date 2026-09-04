@@ -254,6 +254,17 @@ Contextual-orchestrator successor #1067
 trusted base-repository branch. Both heads resolve to tree
 `db3ee97813c93df4bdebae41eb335523e882039f`; #1058 remains open until the
 successor is protected-main integrated and that equivalence is reverified.
+Contextual-orchestrator #1068
+(`fa5446294ae7ae69f1c2958aa1ab6c071fa760bc`) carries fork #1063's current
+NVIDIA hosted-access evidence above #1066. The predecessor/main and
+successor/#1066 effective diffs share SHA-256
+`2a79c5600dd54b3a47a27f70d9e75daeba80d5b886a9ab93005ce47d65c7d7f5`;
+139 NIM, release-acceptance, and stacked-workflow contracts pass. EgressWeave
+consumer PR #1046 (`7ebe9128245c3ad212f8f2d6456bd6d968cc5139`)
+is stacked on #1068 with only its six owner-boundary files in the three-dot
+diff; 47 focused tests and the exact stacked full suite (`3396 passed, 2
+skipped`) pass. Both PRs remain open and mergeable while hosted Checks and
+current-head review are pending; neither is protected-main or release evidence.
 Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
 provider/model-specific routing policy from Naruon's agent guidance. Central
 model-backed Actions now name only the `.github`-owned `orchestrator/free`
