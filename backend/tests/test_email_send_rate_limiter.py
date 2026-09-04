@@ -35,6 +35,7 @@ class _PostgresSession:
         self.queries = []
         self.lock_held = False
         self.pending = []
+        self.isolation_level = None
 
     async def __aenter__(self):
         return self
@@ -46,6 +47,10 @@ class _PostgresSession:
 
     def get_bind(self):
         return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+    async def connection(self, *, execution_options):
+        self.isolation_level = execution_options["isolation_level"]
+        return self
 
     async def execute(self, query, params=None):
         query_text = str(query).lower()
@@ -172,6 +177,7 @@ async def test_limiter_uses_owned_transaction_and_non_sensitive_audit_state(monk
 
     assert decision.allowed is True
     assert any("pg_advisory_xact_lock" in query for query in session.queries)
+    assert session.isolation_level == "READ COMMITTED"
     audit = next(item for item in session.added if isinstance(item, SecurityAuditEvent))
     assert "user-1" not in repr(audit)
     assert "org-1" not in repr(audit)

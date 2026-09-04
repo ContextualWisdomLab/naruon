@@ -103,6 +103,9 @@ async def enforce_send_email_rate_limit(
         if not _session_uses_postgresql(session):
             raise EmailSendRateLimitUnavailable
         try:
+            await session.connection(
+                execution_options={"isolation_level": "READ COMMITTED"}
+            )
             await session.execute(
                 select(func.pg_advisory_xact_lock(bindparam("lock_key"))),
                 {"lock_key": _lock_key(scope_hash)},
