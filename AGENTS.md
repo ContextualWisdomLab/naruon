@@ -123,9 +123,10 @@ in this repo.
   `.agents/skills/github-robot-review-gate/SKILL.md`.
 - When available in the active agent environment, use `babysit-pr` for
   continuous check/review monitoring, `agents-md` for this file, and `Git
-  Commit Format` before committing. Use `autoresearch` only for an explicit,
-  repeatable metric and experiment budget. If a shared skill is unavailable,
-  follow the equivalent procedure below without installing an unpinned tool.
+  Commit Format` before committing; apply `humanize-korean` to Korean prose.
+  Use `autoresearch` only for an explicit, repeatable metric and experiment
+  budget. If a shared skill is unavailable, follow the equivalent procedure
+  below without installing an unpinned tool.
 - Use CodeGraph before broad source searches when `.codegraph/` exists; run
   `codegraph init` when absent and `codegraph sync` when unhealthy. Use
   Context7 for current third-party APIs and DeepWiki for external repository
@@ -208,11 +209,29 @@ in this repo.
   fails, stop repeating that request and re-authenticate before mutation.
 - A wrong base, conflict, duplicate ADR, stale review, missing test, or
   single-writer overlap is a repair finding. Restack or retarget without force.
+- Before worktree creation or restacking, compare `git ls-remote` with the local
+  remote-tracking ref and start from a verified 40-character SHA. Never guess
+  or extend abbreviated SHAs in commits, PR bodies, releases, or gap evidence.
+- Treat concurrent pushes as lineage to reconcile. Merge the updated
+  prerequisite into the same stacked branch, preserve its full delta, rerun
+  focused checks, and retarget only after verifying dependency order.
+- Preserve unrelated dirty and untracked files. If a command changes the wrong
+  checkout, stop before push, retain reflog evidence, repair only the affected
+  branch non-destructively, and verify the original checkout afterward.
+- Tests run with `--noconftest` must bootstrap every required setting with
+  explicit test-only values and fresh random secrets; never weaken production
+  validation or depend on a developer shell environment.
+- Generate changed-line review evidence only from real current-head additions
+  or modifications. Deleted-only, binary, oversized, and ineligible files must
+  fail closed; never fabricate line 1 or relax the receipt validator.
 - Do not close a PR merely to reduce the count. Close it only when requested,
   empty or malicious, or an independently verified successor contains its full
   delta. Record predecessor-to-successor evidence before closing it.
 - Dated gap inventories are not merge or release authority. Separate protected
   branch truth from active PR candidates.
+- NIST SSDF 1.1 PS.1 and PS.3 ground accountable protected changes and retained
+  integrity/provenance evidence without prescribing repository-specific tools:
+  https://doi.org/10.6028/NIST.SP.800-218.
 
 ## Release governance defaults
 
