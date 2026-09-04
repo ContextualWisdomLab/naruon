@@ -241,6 +241,13 @@ the shared check/comment. Thirty-eight governance tests, the shell harness,
 actionlint, and diff checks pass. Central scheduler main still does not prove the
 structured adversarial fallback contract, so #1543 is not a complete successor
 for #1531 and must not delete that delta.
+Contextual-orchestrator successor #1066
+(`6e7a08fc1a77f8be6a536f2de5426dad2fbb5225`) carries the complete #1060
+stacked-security trigger delta on a trusted base-repository branch after the
+fork head could not materialize long-running required review. Actionlint,
+thirteen security metadata tests, and diff checks pass. #1060 remains open until
+#1066 reaches protected main and exact-tree equivalence is verified; queued
+hosted Checks and review are wait states, not protected integration evidence.
 Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
 provider/model-specific routing policy from Naruon's agent guidance. Central
 model-backed Actions now name only the `.github`-owned `orchestrator/free`
