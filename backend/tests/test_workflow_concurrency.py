@@ -4,27 +4,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _workflow_text(name: str) -> str:
+def _workflow(name: str) -> dict[str, object]:
     path = REPO_ROOT / ".github" / "workflows" / name
     assert path.exists(), f"workflow is missing: {name}"
-    return path.read_text(encoding="utf-8")
+    parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert isinstance(parsed, dict), f"workflow must parse as a mapping: {name}"
+    return parsed
 
 
 def test_bandit_cancels_only_superseded_pull_request_runs() -> None:
     """Keep manual and push scans independent while deduplicating PR scans."""
-    workflow = _workflow_text("bandit.yml")
-    concurrency = workflow.split("concurrency:\n", 1)[1].split("\npermissions:", 1)[0]
+    concurrency = _workflow("bandit.yml").get("concurrency")
 
-    assert (
-        "group: bandit-security-scan-${{ github.event.pull_request.number || github.run_id }}"
-        in concurrency
-    )
-    assert (
-        "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in concurrency
-    )
-    assert "github.ref" not in concurrency
-    assert "github.repository" not in concurrency
+    assert isinstance(concurrency, dict)
+    assert concurrency == {
+        "group": "bandit-security-scan-${{ github.event.pull_request.number || github.run_id }}",
+        "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    }
