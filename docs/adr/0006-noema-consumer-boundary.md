@@ -83,12 +83,21 @@ cannot transfer their checks or approvals to a consumer.
 
 ## Evidence and references
 
-- `ContextualWisdomLab/noema`, protected `main` README, verified 2026-09-04.
-- `ContextualWisdomLab/noema` PR #536, draft proposal for `noema-core`, verified
-  2026-09-04.
+- `ContextualWisdomLab/noema`, protected `main` README at exact commit
+  `e1ac9d50f6c646f04be8c137c8acdc7200182fcd`, verified 2026-09-04.
+- `ContextualWisdomLab/noema` PR #536, draft proposal for `noema-core`, exact
+  head `5531a5327d822028c4be59e290b4d101b34d49db`, verified 2026-09-04.
 - `ContextualWisdomLab/naruon` PRs #1384, #1486, and #1527, verified 2026-09-04.
 - `ContextualWisdomLab/contextual-orchestrator` PR #1004, exact head
   `6a992538b6efcc34b957f72fc599bb33ac40c152`, verified 2026-09-04.
 - Evans, E. (2003). *Domain-driven design: Tackling complexity in the heart of
   software*. Addison-Wesley.
 - Vernon, V. (2013). *Implementing domain-driven design*. Addison-Wesley.
+- Parnas, D. L. (1972). On the criteria to be used in decomposing systems into
+  modules. *Communications of the ACM, 15*(12), 1053–1058.
+  https://doi.org/10.1145/361598.361623. Parnas shows that modules should hide
+  changeable design decisions behind stable interfaces. That supports keeping
+  Naruon domain policy behind its own boundary and consuming owner capabilities
+  through released contracts. The publisher record does not grant general
+  repository redistribution, so this PR links and summarizes the paper instead
+  of committing a PDF.
