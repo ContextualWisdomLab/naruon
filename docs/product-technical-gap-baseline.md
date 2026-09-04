@@ -105,13 +105,15 @@ Escape dismisses a focus-triggered overlay without moving focus. Thirteen unit
 tests, one isolated real-browser Playwright regression, TypeScript, ESLint, and
 diff checks pass. No predecessor gate evidence transfers, and #1500 remains
 open until the successor merges and equivalence is reverified.
-PR #1488 (`a81719927953d131f5f04355440ec6fae020947a`) repairs the calendar
+PR #1488 (`88944a9ec490745c2a7bbca5e6e134a568bad919`) repairs the calendar
 sidebar's deceptive enabled controls. Location, delete, copy, and close actions
 had no product-backed behavior and are removed; the remaining update check uses
 the existing signed-session calendar writeback-intent callback and stays
 disabled until source readiness. The interaction test now clicks the enabled
-action and proves callback dispatch; two focused tests, TypeScript, ESLint, and
-diff checks pass. Hosted exact-head evidence remains required.
+action and proves callback dispatch. The same test rerenders a selected event
+with source writeback disabled and proves the callback cannot fire; two focused
+tests, TypeScript, ESLint, and diff checks pass. Hosted exact-head evidence
+remains required.
 PR #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
