@@ -108,6 +108,73 @@ in this repo.
   keyword/embedding/LLM result presented as STM.
 <!-- END cwl-agent-guidance -->
 
+## Agent operating procedure
+
+### Required skills
+
+- Use `fix-development-mistakes` for failed checks, dependency/security
+  findings, overwritten work, merge conflicts, and gate misdiagnosis. See
+  `.agents/skills/fix-development-mistakes/SKILL.md`.
+- Use `github-actions-privileged-pr-scan` before changing any workflow that
+  reads secrets or scans PR-authored content. See
+  `.agents/skills/github-actions-privileged-pr-scan/SKILL.md`.
+- Use `github-robot-review-gate` for CodeRabbit, required-review, stale-check,
+  and protected-merge decisions. See
+  `.agents/skills/github-robot-review-gate/SKILL.md`.
+- Use CodeGraph before broad source searches when `.codegraph/` exists; run
+  `codegraph init` when absent and `codegraph sync` when unhealthy. Use
+  Context7 for current third-party APIs and DeepWiki for external repository
+  architecture. Use sequential thinking for multi-step design or debugging.
+
+### Commit attribution
+
+- AI-assisted commits include the human author's `Signed-off-by` footer and a
+  `Co-Authored-By` footer naming the agent model and its attribution address.
+
+### GitHub Actions capacity
+
+- Audit the parsed trigger and `concurrency` semantics, not string counts.
+  Pull-request groups use `<workflow>-<repository>-<PR number>` with
+  `cancel-in-progress: true`; non-PR events use a ref or run identifier so they
+  cannot cancel unrelated work.
+- Prefer central required/reusable workflows over repository-local copies.
+  Remove duplicate scanners, runner-held polling loops, arbitrary sleeps, and
+  per-PR organization sweeps once a current-head dispatch or control-plane
+  mechanism owns that responsibility.
+- Distinguish queued workflow records from active jobs. Before cancellation,
+  resolve the PR, compare the run SHA with its live head, and preserve current-
+  head release, deployment, image, migration, SBOM, provenance, and security
+  evidence. A queued API record with no job is not proof that it consumes a
+  runner slot.
+- Treat `startup_failure`, credentials errors, provider failures, and timeouts
+  as failed evidence. Read the exact job log and repair the shared root cause;
+  never weaken a required check or manufacture a passing status.
+
+### LLM review path
+
+- OpenCode Review, Strix, and Noema must route model work through
+  `contextual-orchestrator` using `orchestrator/free`. Verify the requested
+  model, API base, served-model metadata, and terminal response on the same
+  execution; configuration text or a healthy sidecar alone is insufficient.
+- Keep private-source review fail-closed and ZDR-only. Never log or copy bearer
+  tokens, provider credentials, request payloads, or secret-derived values.
+- Do not add direct-provider fallback credentials to repository workflows.
+  Repair shared sidecar, credential bootstrap, timeout, or response-normalizing
+  code where all three review paths converge.
+
+### PR delivery
+
+- Work in a clean task branch or worktree and preserve unrelated user changes.
+  Use conventional commits with a `Signed-off-by` footer.
+- Follow `review -> repair -> focused tests -> push -> exact-head recheck ->
+  protected merge`. Re-fetch base/head SHAs, reviews, unresolved threads,
+  required checks, merge state, and rules immediately before a merge claim.
+- A local pass, `MERGEABLE`, auto-merge registration, or stale approval is not
+  delivery proof. A changed head invalidates previous checks and reviews.
+- Never self-approve, dismiss reviews, force-push, disable scanners, or use an
+  admin bypass for product/security changes. Wait when independent approval is
+  the only unmet gate; continue other safe work instead of polling blindly.
+
 ## Release governance defaults
 
 - GitHub Actions used by governed workflows must be pinned to full commit SHAs
@@ -136,51 +203,11 @@ in this repo.
   `.github/workflows/opencode-review.yml`, `.github/workflows/strix.yml`,
   `.github/workflows/strix-selftest.yml`, or
   `.github/workflows/pr-review-merge-scheduler.yml`.
-- The central Strix Security Scan uses GitHub Models by default through
-  `STRIX_GITHUB_MODELS_TOKEN`, `STRIX_LLM=openai/gpt-5`, and
-  `LLM_API_BASE_FILE` pointing at a trusted file containing
-  `https://models.github.ai/inference`; GitHub Models scans must try the
-  configured GPT-5-or-newer model first and may fall back to the explicit
-  workflow fallback list, currently
-  `github_models/deepseek/deepseek-r1-0528` and
-  `github_models/deepseek/deepseek-v3-0324`, when GitHub Models provider
-  capacity or model availability blocks the primary run. The Strix gate must
-  route these fallback names through the GitHub Models endpoint with
-  OpenAI-compatible child model names such as
-  `openai/deepseek/deepseek-r1-0528`, not the public DeepSeek API. Do not use
-  GPT-4.1 or weaker GitHub Models fallbacks for Strix or OpenCode PR review
-  evidence. Keep the GitHub Models endpoint in a trusted input file and pass
-  the token only through
-  the provider-scoped Strix child-process key path. Legacy `STRIX_LLM` secrets
-  must not override PR, push, or scheduled Strix defaults. Vertex remains
-  available only for manual
-  `workflow_dispatch` evidence when the `strix_llm` input
-  explicitly selects `vertex_ai/gemini-3.1-pro-preview-customtools` or
-  `vertex_ai/gemini-2.5-flash` with `GCP_SA_KEY`; expose Google/Vertex
-  credentials only for Vertex provider mode. Direct OpenAI GPT-5.4-or-newer
-  scans remain supported only for manual `strix_llm` selections with
-  `STRIX_OPENAI_API_KEY`. Do not silently fall back between providers, and
-  do not treat timeout-class provider infrastructure failures as clean PR
-  evidence even when Strix printed zero vulnerabilities before failing. Disable
-  silent Vertex fallback models in the workflow unless a future PR proves a new
-  exact fallback contract with no Timeout/Fatal/Warn/Denied output. Record
-  provider evidence in the PR. Known third-party Strix/Pydantic
-  serializer warnings must be filtered narrowly inside the Strix gate child
-  process, not as a visible workflow env entry, so Warn-class logs are not
-  accepted as clean evidence and warning-filter variable names do not pollute
-  GitHub logs. Strix workflow runtime budget keys should be exported inside the
-  execution shell, not listed as visible step `env:` timeout names, so clean runs
-  do not carry stale timeout-signal strings. Keep PR-scope process budgets large
-  enough for Strix to finalize reports after the scanner emits completion
-  events; a wrapper timeout after `vulnerability_count: 0` is still failed
-  evidence, not a pass. PR evidence must present the full scannable changed-file
-  set from the PR head, plus allowlisted trusted context files, to Strix in one
-  scanner invocation; do not split changed files into separate scanner runs or
-  copy the entire PR-head repository tree by default because either breaks
-  Strix's required whole-context and bounded-input contract. Keep architecture
-  docs and reusable Strix gate tests aligned with this rule so stale
-  Vertex-default, OpenAI-only, unavailable-model, blanket-warning, or generic-key
-  examples cannot re-enter copied workflow guidance.
+- Central LLM review workflows use
+  `contextual-orchestrator/orchestrator/free`; do not restore direct GitHub
+  Models, Vertex, OpenAI, OpenRouter, or provider-specific fallback credentials.
+  Preserve whole-context Strix input, bounded runtime, ZDR-only private-source
+  routing, and fail-closed `Timeout`/`Fatal`/`Warn`/`Denied` artifact checks.
 - HMAC fallback sessions are local/control-plane compatibility credentials, not
   authoritative workspace-membership evidence. Sensitive tenant security posture
   surfaces must require OIDC/JWKS-backed membership or an explicit dependency
@@ -224,7 +251,7 @@ in this repo.
 - Strix logs may print the report's `Model ...` line after the title, endpoint,
   and Code Locations block. Failed-check evidence parsers and OpenCode review
   validators must attribute each vulnerability to that in-report model line, not
-  to a previous retry attempt such as a failed primary `openai/gpt-5` run.
+  to a previous failed routing attempt.
 - OpenCode Agent PR reviews must be general-purpose and meticulous rather than
   narrowly scenario-specific. Configure the review prompt to use all relevant
   MCP sources: CodeGraph for structural source evidence, DeepWiki for repo docs,
@@ -458,9 +485,9 @@ in this repo.
   responses must include `Referrer-Policy`, and `target="_blank"` links must
   use explicit `rel="noopener noreferrer"`.
 - When robot review cites an obsolete Strix provider policy, update the docs and
-  tests to the current GitHub Models default contract before accepting a
-  rollback suggestion; do not reintroduce generic `LLM_API_KEY` or
-  cross-provider credential forwarding while trying to satisfy old comments.
+  tests to the current `contextual-orchestrator/orchestrator/free` contract
+  before accepting a rollback suggestion; do not reintroduce generic
+  `LLM_API_KEY` or direct-provider credential forwarding to satisfy old comments.
 - When reviews find inert navigation/dead-space controls, either wire them to an
   implemented workspace route/API or remove the control; do not leave
   high-traffic drawer/sidebar entries as permanent `준비 중` copy.
