@@ -634,6 +634,13 @@ An exact two-tree comparison against `develop@042b0c70531b229af3acbd0421a2f23098
 still shows all four implementation, test, and doctoring files as a 344-line
 effective delta, so no protected successor has fully inherited this work.
 
+Draft PR #1570 (`32a1e0b2df499b80ca5852f6b1fd348fa4eb933e`)
+keeps Today-dashboard source failures distinct from legitimate empty business
+data and gives the user a real retry action without hiding successful partial
+sources. Exact-head local evidence is 10 focused component tests, TypeScript,
+ESLint, and three signed-session Playwright recovery paths across desktop,
+tablet, and mobile. Fresh hosted Checks and independent review remain required.
+
 **Live exact-head queue refresh (2026-08-25T17:51Z):** the following
 post-snapshot states supersede only the matching historical SHA references
 above; the full inventory remains a point-in-time record and is not silently
