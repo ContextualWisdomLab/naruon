@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 
 from services.email_writing_policy import (
+    EmailWritingCalibrationSummary,
+    EmailWritingJudgePolicy,
     EmailWritingPolicyError,
     evaluate_policy_admission,
     load_policy_artifact,
@@ -214,7 +216,9 @@ def test_published_policy_requires_complete_calibration_and_holdout_evidence() -
     """Publication is invalid before preregistered holdout and adjudication evidence exists."""
     payload = _published_policy()
     payload["evidence"]["locked_holdout_hash"] = None
-    with pytest.raises(EmailWritingPolicyError, match="policy_publication_evidence_incomplete"):
+    with pytest.raises(
+        EmailWritingPolicyError, match="policy_publication_evidence_incomplete"
+    ):
         _load(
             payload,
             runtime_contracts={
@@ -399,9 +403,334 @@ def test_revoked_policy_rolls_back_only_to_explicit_compatible_manifest_entry() 
             "contextual_orchestrator": "v1",
         },
     )
-    assert select_rollback_policy(current_policy=current, candidates=[previous]) is previous
+    assert (
+        select_rollback_policy(current_policy=current, candidates=[previous])
+        is previous
+    )
 
     unlisted = deepcopy(previous)
     object.__setattr__(unlisted, "policy_version", "email-writing-policy-v0")
     with pytest.raises(EmailWritingPolicyError, match="policy_rollback_unavailable"):
         select_rollback_policy(current_policy=current, candidates=[unlisted])
+
+
+def _assert_policy_rejected(payload: dict[str, object], code: str) -> None:
+    """Require one mutated policy to fail with a stable public error code."""
+    with pytest.raises(EmailWritingPolicyError, match=code):
+        _load(
+            payload,
+            runtime_contracts={
+                "naruon": "0.14.4",
+                "inkspan": "0.6.0",
+                "fast_mlsirm": "0.9.2",
+                "contextual_orchestrator": "v1",
+            },
+        )
+
+
+def test_policy_error_repr_and_manifest_boundaries() -> None:
+    """Cover redacted error display and manifest allowlist edge cases."""
+    assert repr(EmailWritingPolicyError("policy_invalid")) == (
+        "EmailWritingPolicyError('policy_invalid')"
+    )
+    payload = _evaluation_policy()
+    for artifacts in ({}, {"../policy.json": {"sha256": "0" * 64}}):
+        manifest = {"manifest_version": 1, "artifacts": artifacts}
+        with pytest.raises(EmailWritingPolicyError, match="policy_manifest_invalid"):
+            load_policy_artifact(
+                artifact_name=_POLICY_NAME,
+                artifact_bytes=_canonical_bytes(payload),
+                manifest_bytes=_canonical_bytes(manifest),
+                now=_NOW,
+                runtime_contracts=_RUNTIME_CONTRACTS,
+            )
+
+    with pytest.raises(
+        EmailWritingPolicyError, match="policy_manifest_unknown_artifact"
+    ):
+        load_policy_artifact(
+            artifact_name="unknown.json",
+            artifact_bytes=_canonical_bytes(payload),
+            manifest_bytes=_canonical_bytes(_manifest_for(_POLICY_NAME, payload)),
+            now=_NOW,
+            runtime_contracts=_RUNTIME_CONTRACTS,
+        )
+
+
+def test_policy_field_validators_reject_invalid_values() -> None:
+    """Exercise every bounded identity, profile, metric, and list validator."""
+    mutations = []
+
+    payload = _evaluation_policy()
+    payload["compatible_contracts"]["naruon"] = "bad path/value"
+    mutations.append(payload)
+
+    for field in (
+        "profile_id",
+        "candidate_model_profile_id",
+        "candidate_provider_id",
+        "judge_model_profile_id",
+        "judge_provider_id",
+        "rubric_version",
+    ):
+        payload = _evaluation_policy()
+        payload["approved_profiles"][0][field] = "bad path/value"
+        mutations.append(payload)
+
+    for language_tags in ([], ["en", "en"], ["*"]):
+        payload = _evaluation_policy()
+        payload["approved_profiles"][0]["language_tags"] = language_tags
+        mutations.append(payload)
+
+    for review_modes in ([], ["deep", "deep"]):
+        payload = _evaluation_policy()
+        payload["approved_profiles"][0]["review_modes"] = review_modes
+        mutations.append(payload)
+
+    for field, value in (
+        ("brier_score", float("nan")),
+        ("brier_score", 1.1),
+        ("test_retest_reliability", float("inf")),
+        ("dif_profiles_evaluated", -1),
+    ):
+        payload = _evaluation_policy()
+        payload["calibration_summary"][field] = value
+        mutations.append(payload)
+
+    payload = _evaluation_policy()
+    payload["evidence"]["protocol_hash"] = "not-a-qualified-hash"
+    mutations.append(payload)
+
+    payload = _evaluation_policy()
+    payload["policy_id"] = "bad path/value"
+    mutations.append(payload)
+
+    for payload in mutations:
+        _assert_policy_rejected(payload, "policy_schema_invalid")
+
+
+def test_policy_collection_validators_reject_invalid_values() -> None:
+    """Reject empty, duplicate, unknown, unordered, and inconsistent policy maps."""
+    mutations = []
+    for profiles in ([], [_evaluation_policy()["approved_profiles"][0]] * 2):
+        payload = _evaluation_policy()
+        payload["approved_profiles"] = deepcopy(profiles)
+        mutations.append(payload)
+
+    for category_count in (1, 10):
+        payload = _evaluation_policy()
+        payload["category_count"] = category_count
+        mutations.append(payload)
+
+    for anchors in ([], ["same", "same"], ["bad anchor", "b", "c", "d"]):
+        payload = _evaluation_policy()
+        payload["category_anchors"] = anchors
+        mutations.append(payload)
+
+    for conditions in (
+        ["criterion_disagreement", "criterion_disagreement"],
+        ["unknown_condition"],
+    ):
+        payload = _evaluation_policy()
+        payload["adjudication_conditions"] = conditions
+        mutations.append(payload)
+
+    for limitations in ([], [""]):
+        payload = _evaluation_policy()
+        payload["limitations"] = limitations
+        mutations.append(payload)
+
+    payload = _evaluation_policy()
+    payload["category_anchors"] = payload["category_anchors"][:-1]
+    mutations.append(payload)
+
+    payload = _evaluation_policy()
+    payload["required_criteria_by_candidate_kind"] = {
+        "replacement_diagnostic": list(_REQUIRED_CRITERIA)
+    }
+    mutations.append(payload)
+
+    for criterion_ids in (
+        [],
+        ["invented_criterion"],
+        list(reversed(_REQUIRED_CRITERIA)),
+        [
+            criterion
+            for criterion in _REQUIRED_CRITERIA
+            if criterion != "replacement_correctness"
+        ],
+    ):
+        payload = _evaluation_policy()
+        payload["required_criteria_by_candidate_kind"]["replacement_diagnostic"] = (
+            criterion_ids
+        )
+        mutations.append(payload)
+
+    payload = _evaluation_policy()
+    payload["required_criteria_by_candidate_kind"]["no_replacement_diagnostic"].insert(
+        2, "replacement_correctness"
+    )
+    mutations.append(payload)
+
+    payload = _evaluation_policy()
+    payload["mandatory_criterion_floors"].pop("fact_preservation")
+    mutations.append(payload)
+
+    payload = _evaluation_policy()
+    payload["minimum_criterion_scores"].pop("fact_preservation")
+    mutations.append(payload)
+
+    for score in (float("nan"), 1.1):
+        payload = _evaluation_policy()
+        payload["minimum_criterion_scores"]["fact_preservation"] = score
+        mutations.append(payload)
+
+    for payload in mutations:
+        _assert_policy_rejected(payload, "policy_schema_invalid")
+
+    with pytest.raises(ValueError, match="calibration_metric_non_finite"):
+        EmailWritingCalibrationSummary(
+            status="validated",
+            brier_score=float("nan"),
+            test_retest_reliability=0.9,
+            dif_profiles_evaluated=1,
+            temporal_drift_evaluated=True,
+        )
+
+    payload = _evaluation_policy()
+    payload["minimum_criterion_scores"]["fact_preservation"] = float("nan")
+    with pytest.raises(ValueError, match="policy_score_floor_non_finite"):
+        EmailWritingJudgePolicy.model_validate(payload)
+
+
+def test_policy_lifecycle_evidence_requirements() -> None:
+    """Reject every incomplete publication and evaluation-only holdout state."""
+    lifecycle_cases = []
+
+    payload = _published_policy()
+    payload["publish_decision"] = "withhold"
+    lifecycle_cases.append((payload, "policy_lifecycle_invalid"))
+
+    payload = _evaluation_policy()
+    payload["evidence"]["holdout_labels_accessed_after_preregistration"] = True
+    lifecycle_cases.append((payload, "policy_lifecycle_invalid"))
+
+    payload = _published_policy()
+    payload["calibration_summary"]["status"] = "not_evaluated"
+    lifecycle_cases.append((payload, "policy_publication_evidence_incomplete"))
+
+    for section, field, value in (
+        ("evidence", "holdout_labels_accessed_after_preregistration", False),
+        ("calibration_summary", "brier_score", None),
+        ("calibration_summary", "test_retest_reliability", None),
+        ("calibration_summary", "dif_profiles_evaluated", 0),
+        ("calibration_summary", "temporal_drift_evaluated", False),
+    ):
+        payload = _published_policy()
+        payload[section][field] = value
+        lifecycle_cases.append((payload, "policy_publication_evidence_incomplete"))
+
+    for payload, code in lifecycle_cases:
+        _assert_policy_rejected(payload, code)
+
+
+def test_policy_time_and_runtime_contract_boundaries() -> None:
+    """Reject malformed clocks, invalid windows, and incomplete runtime maps."""
+    payload = _evaluation_policy()
+    payload["created_at"] = "not-a-time"
+    _assert_policy_rejected(payload, "policy_schema_invalid")
+
+    payload = _evaluation_policy()
+    payload["created_at"] = "2026-09-01T00:00:00"
+    _assert_policy_rejected(payload, "policy_schema_invalid")
+
+    payload = _evaluation_policy()
+    manifest = _manifest_for(_POLICY_NAME, payload)
+    common = {
+        "artifact_name": _POLICY_NAME,
+        "artifact_bytes": _canonical_bytes(payload),
+        "manifest_bytes": _canonical_bytes(manifest),
+        "runtime_contracts": _RUNTIME_CONTRACTS,
+    }
+    for now, code in (
+        (datetime(2026, 9, 2), "policy_clock_invalid"),
+        (datetime(2025, 9, 2, tzinfo=timezone.utc), "policy_future_dated"),
+        (datetime(2028, 9, 2, tzinfo=timezone.utc), "policy_expired"),
+    ):
+        with pytest.raises(EmailWritingPolicyError, match=code):
+            load_policy_artifact(now=now, **common)
+
+    payload["expires_at"] = payload["created_at"]
+    with pytest.raises(EmailWritingPolicyError, match="policy_time_window_invalid"):
+        load_policy_artifact(
+            artifact_name=_POLICY_NAME,
+            artifact_bytes=_canonical_bytes(payload),
+            manifest_bytes=_canonical_bytes(_manifest_for(_POLICY_NAME, payload)),
+            now=_NOW,
+            runtime_contracts=_RUNTIME_CONTRACTS,
+        )
+
+    with pytest.raises(EmailWritingPolicyError, match="policy_contract_incompatible"):
+        _load(_evaluation_policy(), runtime_contracts={"naruon": "0.14.4"})
+
+
+def test_published_policy_admission_value_boundaries() -> None:
+    """Cover category, score, threshold, and successful admission outcomes."""
+    policy = _load(
+        _published_policy(),
+        runtime_contracts={
+            "naruon": "0.14.4",
+            "inkspan": "0.6.0",
+            "fast_mlsirm": "0.9.2",
+            "contextual_orchestrator": "v1",
+        },
+    )
+    categories = {criterion: 3 for criterion in _REQUIRED_CRITERIA}
+    scores = {criterion: 1.0 for criterion in _REQUIRED_CRITERIA}
+
+    def evaluate(current_categories: dict[str, int], current_scores: dict[str, float]):
+        return evaluate_policy_admission(
+            policy=policy,
+            language_tag="en",
+            review_mode="deep",
+            candidate_model_profile_id="candidate-reviewer-v1",
+            candidate_provider_id="contextual-orchestrator",
+            judge_model_profile_id="independent-judge-v1",
+            judge_provider_id="contextual-orchestrator",
+            rubric_version="email_writing_judge_rubric_v1",
+            criterion_categories=current_categories,
+            criterion_scores=current_scores,
+        )
+
+    assert evaluate(categories, scores) == "admit"
+
+    for value in (True, -1, policy.category_count):
+        invalid_categories = dict(categories)
+        invalid_categories["fact_preservation"] = value
+        with pytest.raises(EmailWritingPolicyError, match="criterion_category_invalid"):
+            evaluate(invalid_categories, scores)
+
+    for value in (True, float("nan"), float("inf"), -0.1, 1.1):
+        invalid_scores = dict(scores)
+        invalid_scores["fact_preservation"] = value
+        with pytest.raises(EmailWritingPolicyError, match="criterion_score_invalid"):
+            evaluate(categories, invalid_scores)
+
+    below_floor = dict(scores)
+    below_floor["fact_preservation"] = 0.1
+    assert evaluate(categories, below_floor) == "withhold"
+
+
+def test_rollback_requires_an_explicit_version() -> None:
+    """A policy without a named rollback target cannot select a candidate."""
+    current = _load(
+        _published_policy(),
+        runtime_contracts={
+            "naruon": "0.14.4",
+            "inkspan": "0.6.0",
+            "fast_mlsirm": "0.9.2",
+            "contextual_orchestrator": "v1",
+        },
+    )
+    with pytest.raises(EmailWritingPolicyError, match="policy_rollback_unavailable"):
+        select_rollback_policy(current_policy=current, candidates=[])
