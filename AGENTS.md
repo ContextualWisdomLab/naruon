@@ -152,11 +152,14 @@ in this repo.
 
 ### Agent PR lifecycle playbook
 
-- Use `autoresearch` for an autonomous review-repair loop, `babysit-pr` for
-  protected-merge observation, `github-robot-review-gate` for robot evidence,
-  and `git-commit-format` before committing. Use CodeGraph before broad source
-  searches when an index exists; apply `humanize-korean` to Korean prose when
-  that shared skill is available. Prefer repository-local
+- When available, use `autoresearch` for an autonomous review-repair loop,
+  `babysit-pr` for protected-merge observation, and `git-commit-format` before
+  committing. If one is unavailable, perform the same steps directly: keep an
+  evidence log, poll current-head checks without treating pending work as a
+  failure, and use the repository's conventional commit history as the format
+  contract. Use CodeGraph before broad source searches when an index exists;
+  apply `humanize-korean` to Korean prose when that shared skill is available.
+  Prefer repository-local
   `fix-development-mistakes`, `github-actions-privileged-pr-scan`, and
   `github-robot-review-gate` skills for their matching repair, privileged
   scanner, and review-gate work; read the selected `SKILL.md` completely.
@@ -172,11 +175,15 @@ in this repo.
   with the local remote-tracking ref and start from the verified 40-character
   SHA. Never guess or manually extend abbreviated SHAs in commits, PR bodies,
   release evidence, or gap baselines.
-- Create a signed conventional commit with truthful agent attribution and the
-  required `Signed-off-by` footer. Immediately before a non-force push, fetch
-  the branch and require its remote head to equal the reviewed parent. Generated
-  GitHub merge refs are transport evidence, not authored commits; verify their
-  parent and tree SHAs rather than rewriting them.
+- Create a conventional commit with truthful agent attribution. Add a
+  cryptographic signature or `Signed-off-by` footer when repository rules or
+  contributor policy require it; verify that evidence before claiming the
+  commit satisfies that policy. Immediately before updating an existing remote
+  branch without force, fetch it and require its head to equal the reviewed
+  parent. For an initial push, first verify that the exact remote ref is absent,
+  then create it with a normal non-force push. Generated GitHub merge refs are
+  transport evidence, not authored commits; verify their parent and tree SHAs
+  rather than rewriting them.
 - Treat concurrent commits and pushes as lineage to reconcile, not as grounds
   for force-pushing. Merge the updated prerequisite into the same stacked
   branch, preserve its complete delta, rerun focused checks, and retarget only
@@ -206,8 +213,10 @@ in this repo.
   search. PR review and repair groups use
   `<workflow>-<repository>-<PR number>` with `cancel-in-progress: true`, so a
   new head cancels only the older run for the same workflow, repository, and
-  PR. Release, deployment, migration, and provenance jobs remain serialized and
-  are not canceled by review concurrency.
+  PR. Metadata-only PR Governance is the deliberate exception: it serializes
+  the same PR's state publication with `cancel-in-progress: false`. Release,
+  deployment, migration, and provenance jobs also remain serialized and are not
+  canceled by review concurrency.
 - Prefer central required or reusable workflows over repository-local copies.
   Remove duplicate scanners, arbitrary sleeps, runner-held polling, and
   per-PR organization queue sweeps once a current-head dispatcher or central
