@@ -177,9 +177,10 @@ in this repo.
   release evidence before adoption and fail closed when that contract or a
   required capability is unavailable. Do not copy owner source, query owner
   storage, or treat an open PR or unreleased branch as a consumable contract.
-- Bound the shared application/agent/gateway wall-clock timeout to at most three
-  hours. Nested model or transport deadlines must fit inside that budget and
-  report their terminal reason instead of surfacing a generic 900-second error.
+- Do not impose a shared application/agent/gateway wall-clock timeout on model
+  work. A configured administrator limit, explicit user cancellation, or the
+  upstream provider's terminal result may end it; reasoning, streaming, and
+  tool calls are not failed merely because elapsed time is long.
 - Keep private-source review fail-closed and ZDR-only. Never log or copy bearer
   tokens, provider credentials, request payloads, or secret-derived values.
 - Do not add direct-provider fallback credentials to repository workflows.
