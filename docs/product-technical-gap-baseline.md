@@ -77,11 +77,14 @@ tests), TypeScript, ESLint, and diff checks pass. No predecessor gate evidence
 transfers, and #1526 may close only after #1560 merges and equivalence is
 reverified. #1560 remains Draft while non-default-base review and validation
 evidence are incomplete. Trigger repair #1562
-(`804b5e79fadf3e4ee1ac37a0d6047fcff4e023c1`) removes pull-request base
+(`1ac1f82e1bda1ec11c0c6e325dfb7ff323eff0ad`) removes pull-request base
 filters from Application CI, Bandit, and image validation, scopes validation
 concurrency by workflow/repository/PR, and keeps tag publication
 non-cancellable. Its authoritative merge-gate policy now matches that behavior;
-39 governance tests, actionlint, and diff checks pass.
+it also installs the repository-pinned `pnpm@11.5.3` before `setup-node` asks
+for the cache path. This removes the mutable `pnpm/latest` lookup that failed
+#1502's frontend job on `ECONNRESET`. An isolated Corepack probe, 39 governance
+tests, actionlint, and diff checks pass.
 PR #1500 (`8be7681416230a1bcbf3c457a47cf230f70a1936`) is likewise Draft after
 repeated empty CI-trigger commits kept replacing its exact head while retaining
 tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
