@@ -48,8 +48,9 @@ review object.
   transient GitHub API truncation and fails closed instead of falling back to
   PR-head or local scripts.
 - Pending, queued, requested, waiting, and in-progress required checks are wait
-  states and remain non-passing. Skipped-required and neutral evidence are
-  non-passing. Cancelled, failed, timed-out, action-required, absent-required,
+  states and remain non-passing.
+- Skipped-required and neutral evidence are non-passing. Cancelled, failed,
+  timed-out, action-required, absent-required,
   and unrecognized required-check states are blockers. Only exact-current-head
   terminal success/pass evidence for every live required context authorizes the
   required-check portion of the merge gate.

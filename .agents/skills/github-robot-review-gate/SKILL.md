@@ -20,8 +20,10 @@ is itself a qualifying `APPROVED` review object.
 
 The active organization ruleset currently requires one qualifying independent
 approval (`required_approving_review_count=1`) and review-thread resolution. Do
-not lower that count, add a bypass, dismiss a review, or reinterpret a status or
-check as an approval merely to land a PR. If the canonical organization owner
+not lower that count or the repository rule's
+`require_last_push_approval=true` setting, add a bypass, dismiss a review, or
+reinterpret a status or check as an approval merely to land a PR. The approval
+must be recorded after the last push. If the canonical organization owner
 later changes the rule, refetch the live ruleset first and update this skill and
 the merge-gate policy from that evidence.
 
