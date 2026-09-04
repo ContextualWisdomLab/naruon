@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.4
+**Baseline version:** 1.5
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -60,15 +60,29 @@ privacy contract suite passes 87 tests with warnings as errors, plus Ruff and
 diff checks. PR #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
-PR #1530 (`91813e60948e070ca3734ec4634adf28cb5daadd`) remains a Draft Task-8
-email-writing policy lane behind immutable dependency prerequisites. Its real
-79% coverage failure is repaired without weakening the gate. The current head
-also closes the publication-integrity finding at Naruon's consumer boundary:
-the schema requires validated calibration and complete evidence identities,
-while the loader resolves immutable evidence bytes, recomputes every digest,
-binds evaluation artifacts to the preregistered protocol, and rejects missing,
-modified, or pre-protocol holdout evidence. Thirty-four focused contract tests
-pass with warnings treated as errors; Ruff and diff checks pass.
+The Draft email-writing stack now carries every prerequisite delta by non-force
+merge. Task 7 PR #1524
+(`cc1da5125e761d80caa7b0e81bd346e1004fad2e`) adds deterministic race coverage
+for cancelled queued Judge work and concurrent lazy executor creation; 65
+focused tests and all 250 statements/54 branches pass. Task 8 PR #1530
+(`e7bc7b5dc97b312ca907d2e1def15b399a51cd48`) consumes that head and closes the
+publication-integrity boundary: the schema requires validated calibration and
+complete evidence identities, while the loader resolves immutable evidence
+bytes, recomputes every digest, binds artifacts to the preregistered protocol,
+and rejects missing, malformed, mislabeled, modified, self-referential, or
+pre-protocol evidence. Twenty-four focused tests and all 396 statements/188
+branches pass. Task 9 PR #1535
+(`d07c68ff36c7ed7fb1022138ac10134aa5654128`) consumes Task 8, initializes only
+ephemeral isolated-test bootstrap values, and covers owner, clock, context,
+Candidate, Judge, policy, confidence, cancellation, timeout, persistence, and
+rollback failure paths; 32 focused tests and all 274 statements/64 branches
+pass. Task 10 PR #1536
+(`59fe843e0c04c6e8d920967ee73f16fceed5a5da`) consumes Task 9 and verifies the
+production route through FastAPI's public reverse-routing contract; 11 focused
+tests and all 39 statements/8 branches pass. All four lanes pass Ruff and diff
+checks without warning output. GitHub had not materialized Actions runs for
+these new heads at the observation time, so local results are not protected
+merge evidence and predecessor checks or reviews do not transfer.
 Draft PR #1563 (`a65be465f600f3f640a7a3d5cca91db2475ae9e4`) repairs the prompt-provider
 error boundary. Provider-controlled exception messages and tracebacks no longer
 enter application logs; operations retain only a fixed event name and exception
