@@ -271,6 +271,19 @@ batch test race by waiting on the existing completion contract before reading
 terminal usage. Source, security, Strix, and quality Checks pass; the remaining
 Noema failure is a 96.4-second gateway 502 with no source finding, so central
 review retry run `33910613120` is queued without changing the exact head.
+Contextual-orchestrator PR #1043
+(`414e2340f5c23d2bca732ecd53234d69b941df42`) corrects the stale proposal to
+cap the entire serial provider loop: the shared application, agent, and gateway
+default remains unbounded, while upstream termination and durable candidate
+health evidence govern failover. Its review thread is resolved and source,
+security, quality, CodeQL, Semgrep, and Strix gates pass or are policy-skipped;
+Noema retry `33910784180` is queued after an 1814.3-second gateway 502.
+Admin-state PR #1039 (`ae9a331994bc075b2c2148c9f5ff29c53dd8fe9e`)
+keeps successful model-group mutations distinct from refresh failures and
+rerenders current agent assignments without erasing client-enriched analytics
+or readiness state. All review threads are resolved and the current source,
+quality, CodeQL, Semgrep, and repository-security evidence passes; central
+review retry `33910863565` is queued after Noema infrastructure failure.
 Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
 provider/model-specific routing policy from Naruon's agent guidance. Central
 model-backed Actions now name only the `.github`-owned `orchestrator/free`
