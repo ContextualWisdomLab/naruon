@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, memo } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -280,44 +280,27 @@ export default memo(function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    const labels = [];
-    for (const node of nodes) {
-      if (labels.length >= 5) break;
-      const label = String(node.label ?? node.id);
-      if (label) labels.push(label);
-    }
-    return labels;
+    return nodes
+      .map((node) => String(node.label ?? node.id))
+      .filter(Boolean)
+      .slice(0, 5);
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    const options = [];
-    let index = 0;
-    for (const edge of edgeMap.values()) {
-      if (index >= 5) break;
-      options.push({
-        edge,
-        id: String(edge.id),
-        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-      });
-      index++;
-    }
-    return options;
+    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
+      edge,
+      id: String(edge.id),
+      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+    }));
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    const options = [];
-    let count = 0;
-    for (const node of nodeInstanceMap.values()) {
-      if (count >= 8) break;
-      options.push({
-        id: String(node.id),
-        label: `노드: ${String(node.label ?? node.id)}`,
-        node,
-      });
-      count++;
-    }
-    return options;
+    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
+      id: String(node.id),
+      label: `노드: ${String(node.label ?? node.id)}`,
+      node,
+    }));
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {

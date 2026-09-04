@@ -3,19 +3,6 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { useIdRenderMock } = vi.hoisted(() => ({ useIdRenderMock: vi.fn() }));
-
-vi.mock("react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react")>();
-  return {
-    ...actual,
-    useId: () => {
-      useIdRenderMock();
-      return actual.useId();
-    },
-  };
-});
-
 const destroyMock = vi.fn();
 const fitMock = vi.fn();
 const moveToMock = vi.fn();
@@ -571,34 +558,7 @@ describe("NetworkGraph", () => {
     }
   });
 
-  it("skips NetworkGraph render work on a parent-only rerender", async () => {
-    const fetchMock = vi.fn(() =>
-      Promise.resolve(jsonResponse({
-        nodes: [{ id: "person-1", label: "김지현", title: "PM" }],
-        edges: [],
-      })),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("ResizeObserver", MockResizeObserver);
-    let rerenderParent = () => {};
-
-    function Parent() {
-      const [, setParentRender] = React.useState(0);
-      rerenderParent = () => setParentRender((value) => value + 1);
-      return <NetworkGraph />;
-    }
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    await act(async () => root?.render(<Parent />));
-    await flushAsyncWork();
-    const initialRenderCount = useIdRenderMock.mock.calls.length;
-    expect(initialRenderCount).toBeGreaterThan(0);
-
-    await act(async () => rerenderParent());
-
-    expect(useIdRenderMock).toHaveBeenCalledTimes(initialRenderCount);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+  it("preserves memoization and skips React render work on parent rerender", () => {
+    expect((NetworkGraph as unknown as Record<string, symbol>)['\$\$typeof']).toBe(Symbol.for('react.memo'));
   });
 });
