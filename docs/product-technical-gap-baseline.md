@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.20
+**Baseline version:** 1.21
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -85,6 +85,20 @@ changes. Unmeasured fixed claims about 50-plus rows and exactly two rerenders
 were removed. Seven focused tests, TypeScript, ESLint, and diff checks pass. The
 PR is Ready, but current-head hosted checks and CodeRabbit review are pending;
 no buyer-visible latency claim or protected-branch completion is recorded.
+
+**Backend test-runtime dependency refresh (2026-09-04T17:28Z):** Dependency
+owner PR #1494 exact head `8ac9cfbe882bddfb85c44e84aca5c8ee841a3453`
+removes the Starlette `TestClient` warning suppression and directly pins its
+required `httpx2==2.12.0` package in the local development and direct test
+manifests. The same version and hashes already existed in the owner lock, so
+the repair does not introduce a second package version. This was found while
+validating utility consumer PR #1538: its source tests could not collect under
+Python 3.14 with warnings as errors because the protected-base project omitted
+the direct test dependency. On the repaired dependency head, frozen sync, 65
+pin-contract and public-tool tests, Ruff, and diff checks pass without that
+warning. PR #1538 remains Draft until the dependency owner is protected-merged
+and its own unchanged-head review and Checks complete; local consumption does
+not transfer #1494's gate evidence.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
