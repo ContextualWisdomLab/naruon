@@ -3,6 +3,7 @@ starlette==1.6.0
 uvicorn==0.52.4
 pytest==9.1.1
 httpx==0.28.1
+httpx2==2.12.0
 pydantic-settings==2.15.0
 aiosmtplib==5.1.2
 aioimaplib==2.0.1
