@@ -277,11 +277,14 @@ Seventy-five focused tests, Ruff, actionlint, and warning-free adapter import
 smoke pass for both platforms. Fresh hosted
 `validate connector image` and protected review evidence remain required.
 Canonical workflow-owner PR `ContextualWisdomLab/.github#1871`
-(`36d396387d0de6acc2a242f8e2cfa7efa2943d17`) repairs stale schedule and
+(`25083c8b006db8ec8234aa02661d0c23a05c44df`) repairs stale schedule and
 inactive-review test oracles against current protected main, closes Python 3.14
 HTTP-error response leaks in the Noema, GitHub policy, Pages, and sandbox
 readiness paths, and completes missing CodeQL rollout, admission, scheduler,
-and direct-import contracts. The warning-fatal full suite passes with 2,900
+and direct-import contracts. A current-head P1 review exposed a daily-cadence
+regression in the consolidated 18-repository recovery caller; the owner now
+restores all 17 staggered cron triggers to hourly execution and rejects that
+regression across the focused and full contract suites. The warning-fatal full suite passes with 2,900
 tests, one skip, and 21 subtests; all 13,115 production statements and 5,294
 branches are covered with no missing or partial branch. The PR remains Draft
 until fresh hosted checks and exact-current-head independent review complete.
