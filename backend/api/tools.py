@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -769,64 +771,70 @@ registry.register(
 )
 
 
-
-
-async def text_summarizer_handler(params: Dict[str, Any]) -> Any:
-    """Summarize the given text."""
+async def first_last_sentence_handler(params: Dict[str, Any]) -> Any:
+    """Return the first and last non-empty sentences without claiming synthesis."""
     text = params.get("text", "")
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
-        )
+    _normalize_analysis_text(text)
     if not text:
-        return {"summary": ""}
+        return {"excerpt": ""}
 
-    sentences = [s.strip() for s in text.replace('!', '.').replace('?', '.').split('.') if s.strip()]
+    sentences = [
+        sentence.strip()
+        for sentence in re.findall(r"[^.!?]+[.!?]?", text)
+        if sentence.strip()
+    ]
     if not sentences:
-        return {"summary": text}
+        return {"excerpt": text}
 
-    summary = sentences[0] + "."
+    excerpt = sentences[0]
     if len(sentences) > 1:
-        summary += " " + sentences[-1] + "."
+        excerpt += " " + sentences[-1]
 
-    return {"summary": summary}
+    return {"excerpt": excerpt}
+
 
 registry.register(
     ToolInfo(
-        code="text_summarizer",
-        name="텍스트 요약기 (Text Summarizer)",
-        description="제공된 텍스트의 핵심 내용을 요약합니다.",
+        code="first_last_sentence",
+        name="첫 문장·끝 문장 추출기 (First and Last Sentence Extractor)",
+        description="텍스트의 첫 문장과 끝 문장을 원문 그대로 추출합니다.",
         category="이메일 분석",
         parameters={"text": "string"},
     ),
-    text_summarizer_handler,
+    first_last_sentence_handler,
 )
 
-async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
-    """Redact PII from the given text."""
+
+async def email_phone_masker_handler(params: Dict[str, Any]) -> Any:
+    """Mask email addresses and North American-style telephone numbers."""
     text = params.get("text", "")
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
-        )
+    _normalize_analysis_text(text)
 
-    # Email redaction
-    redacted_text = re.sub(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', '[REDACTED EMAIL]', text)
-    # Phone number redaction (simple pattern for illustration)
-    redacted_text = re.sub(r'\b\d{3}[-.]?\d{3,4}[-.]?\d{4}\b', '[REDACTED PHONE]', redacted_text)
+    masked_text = re.sub(
+        r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+",
+        "[MASKED EMAIL]",
+        text,
+    )
+    masked_text = re.sub(
+        r"(?<!\d)(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?!\d)",
+        "[MASKED PHONE]",
+        masked_text,
+    )
 
-    return {"redacted_text": redacted_text}
+    return {"masked_text": masked_text}
+
 
 registry.register(
     ToolInfo(
-        code="pii_redactor",
-        name="개인정보 비식별화 (PII Redactor)",
-        description="텍스트 내의 이메일, 전화번호 등 개인정보를 마스킹합니다.",
+        code="email_phone_masker",
+        name="이메일·전화번호 마스커 (Email and Phone Masker)",
+        description="영문 이메일 주소와 북미 형식 전화번호를 마스킹합니다.",
         category="보안 도구",
         parameters={"text": "string"},
     ),
-    pii_redactor_handler,
+    email_phone_masker_handler,
 )
+
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:

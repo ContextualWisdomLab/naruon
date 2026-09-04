@@ -113,9 +113,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1127,7 +1125,7 @@ async def test_sentiment_analyzer_handler_positive_and_neutral():
 @pytest.mark.asyncio
 async def test_analysis_handlers_safe_and_fallthrough_paths():
     from api.tools import (
-    email_translator_handler,
+        email_translator_handler,
         grammar_checker_handler,
         sentiment_analyzer_handler,
         spam_phishing_detector_handler,
@@ -1196,7 +1194,6 @@ async def test_keyword_extractor_handler():
 
 def test_execute_analysis_tool_rejects_oversized_text():
 
-
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/keyword_extractor/execute",
@@ -1215,43 +1212,49 @@ def test_execute_analysis_tool_rejects_oversized_text():
 
 
 @pytest.mark.asyncio
-async def test_text_summarizer_handler_success():
+async def test_first_last_sentence_handler_success():
     params = {"text": "Hello world. This is a test. How are you?"}
-    result = await registry.invoke_tool("text_summarizer", params)
-    assert result == {"summary": "Hello world. How are you."}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "Hello world. How are you?"}
+
 
 @pytest.mark.asyncio
-async def test_text_summarizer_handler_empty_text():
+async def test_first_last_sentence_handler_empty_text():
     params = {"text": ""}
-    result = await registry.invoke_tool("text_summarizer", params)
-    assert result == {"summary": ""}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": ""}
+
 
 @pytest.mark.asyncio
-async def test_text_summarizer_handler_no_sentences():
+async def test_first_last_sentence_handler_no_sentences():
     params = {"text": "..."}
-    result = await registry.invoke_tool("text_summarizer", params)
-    assert result == {"summary": "..."}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "..."}
+
 
 @pytest.mark.asyncio
-async def test_text_summarizer_handler_one_sentence():
+async def test_first_last_sentence_handler_one_sentence():
     params = {"text": "Just one sentence."}
-    result = await registry.invoke_tool("text_summarizer", params)
-    assert result == {"summary": "Just one sentence."}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "Just one sentence."}
+
 
 @pytest.mark.asyncio
-async def test_text_summarizer_handler_oversized():
+async def test_first_last_sentence_handler_oversized():
     params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
     with pytest.raises(ValueError, match="must not exceed"):
-        await registry.invoke_tool("text_summarizer", params)
+        await registry.invoke_tool("first_last_sentence", params)
+
 
 @pytest.mark.asyncio
-async def test_pii_redactor_handler_success():
-    params = {"text": "Contact me at test@example.com or call 123-456-7890."}
-    result = await registry.invoke_tool("pii_redactor", params)
-    assert result == {"redacted_text": "Contact me at [REDACTED EMAIL] or call [REDACTED PHONE]."}
+async def test_email_phone_masker_handler_success():
+    params = {"text": "Email test@example.co.uk or call +1 (123) 456-7890."}
+    result = await registry.invoke_tool("email_phone_masker", params)
+    assert result == {"masked_text": "Email [MASKED EMAIL] or call [MASKED PHONE]."}
+
 
 @pytest.mark.asyncio
-async def test_pii_redactor_handler_oversized():
+async def test_email_phone_masker_handler_oversized():
     params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
     with pytest.raises(ValueError, match="must not exceed"):
-        await registry.invoke_tool("pii_redactor", params)
+        await registry.invoke_tool("email_phone_masker", params)
