@@ -20,6 +20,12 @@ RFC 10017 §7.3, published in August 2026 for browser-based applications, repeat
 
 Therefore the earlier rationale that Direct Access Grants was "the mechanism that actually fits" is superseded. It fits the rendering constraint but violates the protocol/security constraint. This ADR remains Proposed until Keyverse publishes a standards-compliant, versioned headless authentication/session contract that can preserve Naruon's product-owned UI without reintroducing ROPC.
 
+## Research traceability
+
+The prohibition above comes from the current normative RFCs; the academic literature is supporting evidence rather than a substitute for those requirements. Fett, Küsters, and Schmitz (2016) formally analyze OAuth 2.0—including the authorization-code and resource-owner-password modes—in an expressive web model and show that authentication/session-integrity guarantees depend on following the protocol's security recommendations and applying the required fixes. That result supports treating protocol security guidance as part of the system model rather than as an optional deployment note.
+
+Bonneau et al. (2012) evaluate web-authentication schemes across security, usability, and deployability rather than security in isolation. Naruon's successor acceptance therefore includes both protocol correctness and buyer-visible behavior: the product must not solicit credentials for a capability that is deliberately unavailable, and a future Keyverse contract must be evaluated for usable recovery, multi-step authentication, deployment boundaries, and migration—not only whether an API call succeeds.
+
 ## Current decision
 
 1. **Naruon owns the product surfaces.** Login, signup, recovery, loading, error, permission, responsive, keyboard, and accessibility states are Naruon UI responsibilities.
@@ -95,6 +101,10 @@ The desired product boundary remains unchanged: Naruon presents the user experie
 Any successor must preserve the independent SSO security fixes, consume an immutable Keyverse contract through an ACL, align the buyer-visible UI with actual capability, define signup continuation semantics, rehydrate permission-sensitive settings after authentication, and then obtain exact-head evidence before merge.
 
 ## References
+
+Bonneau, J., Herley, C., van Oorschot, P. C., & Stajano, F. (2012). The quest to replace passwords: A framework for comparative evaluation of web authentication schemes. In *2012 IEEE Symposium on Security and Privacy* (pp. 553–567). IEEE. https://doi.org/10.1109/SP.2012.44
+
+Fett, D., Küsters, R., & Schmitz, G. (2016). A comprehensive formal security analysis of OAuth 2.0. In *Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security* (pp. 1204–1215). Association for Computing Machinery. https://doi.org/10.1145/2976749.2978385
 
 Lodderstedt, T., Bradley, J., Labunets, A., & Fett, D. (2025). *Best current practice for OAuth 2.0 security* (RFC 9700, BCP 240). RFC Editor. https://doi.org/10.17487/RFC9700
 
