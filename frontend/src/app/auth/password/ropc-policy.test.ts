@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
@@ -18,6 +18,16 @@ describe("password-route authentication authority", () => {
       expect(source).not.toContain('grant_type: "password"');
       expect(source).not.toContain("grant_type=password");
     }
+  });
+
+  it("does not retain dormant ROPC or password-registration authority", async () => {
+    const oidcShared = await sourceFile("../../oidc/shared.ts");
+
+    expect(oidcShared).not.toContain("exchangePasswordForSessionResponse");
+    expect(oidcShared).not.toContain('grant_type: "password"');
+    await expect(
+      access(new URL("../../../../lib/account-unification-client.ts", import.meta.url)),
+    ).rejects.toBeDefined();
   });
 
   it("keeps ADR-0005 Proposed while the released Keyverse capability is unavailable", async () => {
