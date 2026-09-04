@@ -1330,7 +1330,7 @@ test('renders unique email canonical thread intent with signed API headers', asy
   await page.screenshot({ path: testInfo.outputPath('data-unique-thread-intent-mobile-scroll.png'), fullPage: false });
 });
 
-test('reveals the unavailable relationship explanation on keyboard focus', async ({ page }, testInfo) => {
+test('keeps the unavailable relationship explanation inspectable and dismissible', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'The keyboard tooltip behavior is viewport-independent.');
   await mockDashboardApi(page);
   await page.route('**/api/network/graph', (route) => route.fulfill({
@@ -1350,6 +1350,13 @@ test('reveals the unavailable relationship explanation on keyboard focus', async
   await expect(adjacentButton).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(button).toBeFocused();
+  await expect(tooltip).toHaveCSS('opacity', '1');
+  await page.keyboard.press('Escape');
+  await expect(button).toBeFocused();
+  await expect(tooltip).toHaveCSS('opacity', '0');
+  await button.hover();
+  await expect(tooltip).toHaveCSS('opacity', '1');
+  await tooltip.hover();
   await expect(tooltip).toHaveCSS('opacity', '1');
 });
 

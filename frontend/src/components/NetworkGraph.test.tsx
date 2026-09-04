@@ -140,10 +140,17 @@ describe("NetworkGraph", () => {
     expect(tooltip?.getAttribute("role")).toBe("tooltip");
     expect(tooltip?.className).toContain("left-0");
     expect(tooltip?.className).not.toContain("-translate-x-1/2");
+    expect(tooltip?.className).toContain("pointer-events-auto");
+    expect(tooltip?.className).not.toContain("mb-2");
     expect(tooltip?.className).toContain("group-hover:opacity-100");
     expect(tooltip?.className).toContain("group-focus-within:opacity-100");
     button?.focus();
     expect(document.activeElement).toBe(button);
+    await act(async () => {
+      button?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(document.activeElement).toBe(button);
+    expect(tooltip?.className).not.toContain("group-focus-within:opacity-100");
   });
 
   it("announces graph loading failures as a polite alert", async () => {

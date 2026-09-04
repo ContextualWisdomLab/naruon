@@ -168,6 +168,7 @@ export default function NetworkGraph() {
   const [error, setError] = useState<string | null>(null);
   const [selectedGraphDetail, setSelectedGraphDetail] = useState<string | null>(null);
   const [graphActionStatus, setGraphActionStatus] = useState('그래프 준비 완료');
+  const [isUnavailableTooltipDismissed, setIsUnavailableTooltipDismissed] = useState(false);
   const [relationshipOptionId, setRelationshipOptionId] = useState('');
   const [nodeOptionId, setNodeOptionId] = useState('');
   const edgeMap = useMemo(() => firstGraphEntryById(edges, (edge) => edge.id), [edges]);
@@ -395,7 +396,7 @@ export default function NetworkGraph() {
               <span
                 id={unavailableRelationshipDescriptionId}
                 role="tooltip"
-                className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 w-max max-w-56 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                className={`pointer-events-auto absolute bottom-full left-0 z-10 w-max max-w-56 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 ${isUnavailableTooltipDismissed ? '' : 'group-focus-within:opacity-100'}`}
               >
                 표시할 관계 데이터가 없습니다.
               </span>
@@ -408,6 +409,15 @@ export default function NetworkGraph() {
                   return;
                 }
                 handleSelectFirstRelationship();
+              }}
+              onFocus={() => setIsUnavailableTooltipDismissed(false)}
+              onBlur={() => setIsUnavailableTooltipDismissed(false)}
+              onMouseEnter={() => setIsUnavailableTooltipDismissed(false)}
+              onKeyDown={(event) => {
+                if (!firstEdge && event.key === 'Escape') {
+                  event.preventDefault();
+                  setIsUnavailableTooltipDismissed(true);
+                }
               }}
               aria-disabled={!firstEdge}
               aria-describedby={!firstEdge ? unavailableRelationshipDescriptionId : undefined}
