@@ -18,7 +18,7 @@ function sourceBetween(startMarker: string, endMarker: string): string {
   return networkGraphSource.slice(startIndex, endIndex);
 }
 
-describe("NetworkGraph indexed lookup architecture", () => {
+describe("NetworkGraph constant-time selection lookup contract", () => {
   it("keeps graph event selection on memoized maps without linear fallback scans", () => {
     const edgeSelection = sourceBetween("const selectEdge =", "const selectNode =");
     const nodeSelection = sourceBetween("const selectNode =", "const handleEdgeSelection =");
