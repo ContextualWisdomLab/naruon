@@ -128,7 +128,7 @@ describe('CalendarWritebackSection accessibility contract', () => {
     expect(sourceButton?.textContent).toContain('읽기 전용');
     expect(sourceButton?.textContent).toContain('외부 쓰기 차단');
     expect(container?.querySelector('#calendar-writeback-control-status')?.textContent)
-      .toContain('선택한 원본에 충돌 토큰이 없어 외부 실행 요청은 사용할 수 없습니다.');
+      .toContain('선택한 반영 가능한 원본 또는 충돌 토큰이 없어 외부 실행 요청은 사용할 수 없습니다.');
 
     act(() => {
       sourceButton?.click();
