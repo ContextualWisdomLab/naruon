@@ -758,9 +758,11 @@ in this repo.
 
 ### Failure and succession rules
 
-- On GitHub 401, 403, rate limit, or truncated API output, fail closed: do not
-  infer current state, publish stale claims, or loop the same request. Continue
-  only work grounded in fetched SHAs and re-authenticate before push or merge.
+- On GitHub 401, 403, or rate limit, fail closed: do not infer current state or
+  publish stale claims. For a truncated API response or archive, use the
+  repository's bounded retry and archive-validation path; if validation still
+  fails, stop repeating that request. Continue only work grounded in fetched
+  SHAs and re-authenticate before push or merge.
 - A wrong base, conflict, duplicate ADR number, stale review, missing test, or
   single-writer overlap is a repair finding. Restack or retarget without force.
 - Do not close a PR to reduce the count. Close only when explicitly requested,
@@ -771,9 +773,11 @@ in this repo.
 
 ### Commit attribution
 
-- AI commits must identify the acting agent in a truthful attribution footer
-  and include the repository-required `Signed-off-by` footer. Never attribute a
-  Codex-authored message to Claude or another agent.
+- AI-authored commits must identify the acting agent in a truthful attribution
+  footer and include the repository-required `Signed-off-by` footer. Generated
+  GitHub pull-request merge refs are transport evidence, not authored commits;
+  validate their parent and tree SHAs instead of rewriting them. Never attribute
+  a Codex-authored message to Claude or another agent.
 
 ### Evidence basis
 
