@@ -1219,9 +1219,9 @@ async def test_hash_generator_handler():
     from api.tools import hash_generator_handler, ANALYSIS_TEXT_MAX_CHARS
 
     res = await hash_generator_handler({"text": "hello"})
-    assert res["md5"] == "5d41402abc4b2a76b9719d911017c592"
-    assert res["sha1"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
-    assert res["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    assert res == {
+        "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    }
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
         await hash_generator_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
@@ -1249,8 +1249,9 @@ def test_execute_hash_generator():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["md5"] == "5d41402abc4b2a76b9719d911017c592"
-    assert data["result"]["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    assert data["result"] == {
+        "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    }
 
 def test_execute_email_phone_masker():
     with TestClient(app) as client:

@@ -754,23 +754,19 @@ registry.register(
 
 
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Generate compatibility fingerprints plus a SHA-256 security hash."""
+    """Generate a SHA-256 content hash."""
     text = params["text"]
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
 
     encoded = text.encode("utf-8")
-    return {
-        "md5": hashlib.md5(encoded, usedforsecurity=False).hexdigest(),  # nosec B324 # nosem
-        "sha1": hashlib.sha1(encoded, usedforsecurity=False).hexdigest(),  # nosec B324 # nosem
-        "sha256": hashlib.sha256(encoded).hexdigest(),
-    }
+    return {"sha256": hashlib.sha256(encoded).hexdigest()}
 
 registry.register(
     ToolInfo(
         code="hash_generator",
-        name="지문/해시 생성기 (Fingerprint/Hash Generator)",
-        description="텍스트의 호환성 지문(MD5, SHA-1) 및 보안 해시(SHA-256) 값을 생성합니다.",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트의 SHA-256 해시 값을 생성합니다.",
         category="유틸리티",
         parameters={"text": "string"},
     ),
