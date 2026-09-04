@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.9
+**Baseline version:** 1.10
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -53,15 +53,17 @@ earlier requested review does not transfer to this head.
 
 **Authentication owner prerequisite refresh (2026-09-04T16:27Z):** Naruon
 Draft PR #1532 remains a consumer lane and must not restore ROPC. Keyverse Draft
-PR #128 (`bad8635f2d1aa94023fc6482dad35f6a1b688176`) disables that path while a
+PR #128 (`737624f4ad6e63a5cbbc7b926fdf329c0851fc1a`) disables that path while a
 standards-compliant headless session contract is unfinished. Its merge-ref
-account-unification failure is traced to Keyverse `main`: workflow consolidation
-removed the repo-local hourly PR steward but retained five tests that open the
+account-unification failure was traced to Keyverse `main`: workflow consolidation
+removed the repo-local hourly PR steward but retained five tests that opened the
 deleted workflow. Canonical prerequisite Keyverse PR #145
 (`239e362c95d48894a10841ec8a087f9107f3f90c`) removes only that retired
 self-modifying workflow contract; the full account-unification suite and diff
-check pass locally. #128 must consume #145 through protected `main` or a
-non-force stack before its current-head evidence can be reacquired.
+check pass locally. #128 now non-force merges that exact prerequisite and targets
+#145 as its base; its full account-unification suite also passes. Both heads need
+their own hosted current-head checks and independent review before #145 can
+merge and #128 can be retargeted to protected `main`.
 
 **Exact-head execution refresh (2026-09-04T14:10Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
