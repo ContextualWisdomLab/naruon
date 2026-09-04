@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.3
+**Baseline version:** 1.4
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -22,6 +22,33 @@ Contextual Orchestrator #1004
 for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
+
+**Exact-head execution refresh (2026-09-04T12:08Z):** protected `develop`
+remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
+(`d286004b582c588b11c223f44cacc4a74a9244e5`) carries the exact-head PR
+completion playbook after six review threads were resolved and 35 governance
+tests passed locally. #1555 (`ab8a5abe47ddb80008fb00e0a310eaa65ee1a854`)
+restores the truthful first/last-sentence and bounded email/phone masking
+contracts after a remote regression, retains CJK sentence-boundary coverage,
+and passes Ruff plus 72 focused tests. #1502
+(`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
+image by digest and has local migration, real PostgreSQL, and 97-test evidence.
+All three remain candidate heads rather than protected-branch evidence.
+
+#1485 (`4e2cb3b39f89aff811d5113962861bd1963d2996`) has successful product,
+frontend, backend, and security checks; its prior Noema review failed because
+the model cited a non-changed line, and OpenCode ended on GitHub HTTP 502.
+#1531 (`27ab83b57e94dc84bf5f8c8708d5b2b7a962304f`) is Ready with a current-head
+CodeRabbit approval and zero unresolved threads, while its prior Strix and
+OpenCode jobs were cancelled. The deleted historical workflow IDs cannot be
+rerun, so the current central merge-scheduler contract was dispatched once per
+PR with auto-merge and branch updates disabled. Scheduler runs `33871200407`
+and `33871251541` are queued. At the same observation time, runner-requiring
+work across central `.github` had remained queued since 11:56Z while
+metadata-only jobs completed. This is point-in-time organization queue
+evidence, not a source failure, a successful review, or permission to reuse
+predecessor-head Checks. Runner-policy details remain unverified because the
+current credential lacks organization Actions administration permission.
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
