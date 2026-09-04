@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.10
+**Baseline version:** 1.11
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -175,17 +175,22 @@ merged the hash-locked dependency into protected main
 `769691526f8c73cf714de8fe8ba51ae6cfa2901a`. Fresh #1525 exact-head hosted
 evidence must prove that owner repair; prior failure evidence does not transfer.
 PR #1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
-NetworkGraph option-materialization parent. #1526
-(`b2d6cb257dc1af1b2bc15342825b74185f74a78a`) is Draft after a third unsigned
-generated overwrite again removed the parent implementation and behavioral
-tests. It remains open for lineage. Stable successor #1560
-(`86dab1e6495ea989d186f189940a595bdee65f41`) carries the complete memoization
-delta directly on exact parent #1522 as validated tree
-`9e200125fc5dacad2d2f6a23369835016953ff61`; three combined Vitest files (five
-tests), TypeScript, ESLint, and diff checks pass. No predecessor gate evidence
-transfers, and #1526 may close only after #1560 merges and equivalence is
-reverified. #1560 remains Draft while non-default-base review and validation
-evidence are incomplete. Governance owner #1531
+NetworkGraph option-materialization parent. #1526 was repaired non-force at
+`cd99fef3245d1097a0422e9b1f48cb42d51ab6e0`: it restored early-terminating
+option loops, executable option-limit coverage, and a real parent-rerender
+memoization assertion. Its current exact head `9a6be24a30c76497510b1de19f7cabe1254864a9`
+then overwrote those repairs with full-array materialization and a private
+React-marker assertion. The PR remains open for lineage; the overwrite does not
+invalidate the verified delta. Stable successor #1560
+(`e3b734ac88415ecd4cd7ade25516bb8bf1576cb5`) now inherits the repaired #1526
+commit by non-force merge on exact parent #1522, removes the duplicate standalone
+memoization test, and records validated tree
+`f95aace5d83877d8fa604db7f71e12ab7ce4f07e`. The complete frontend suite (52
+files, 439 tests), TypeScript, focused ESLint, and diff checks pass. No
+predecessor gate evidence transfers, and #1526 may close only after #1560 merges
+and exact protected-main equivalence is reverified. #1560 remains Draft while
+non-default-base hosted review and validation evidence are incomplete.
+Governance owner #1531
 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) retains the CodeRabbit/OpenCode
 fallback and stacked-base contract. Trigger repair #1562
 (`f20917099dced7acfc14d02224072ab558a2e40a`) is non-force restacked on that
