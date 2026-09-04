@@ -533,14 +533,17 @@ with source writeback disabled and proves the callback cannot fire; two focused
 tests, TypeScript, ESLint, and diff checks pass. Hosted exact-head evidence
 remains required.
 Stacked accessibility child #1569
-(`52f732a29ac3c8ab31d45eaae572c04f9ee33259`) keeps sidebar ownership in
+(`2831901efcc8c98d712107f08039621a769b365f`) keeps sidebar ownership in
 #1488 and repairs the reusable writeback section. It now evaluates the selected
 source with the canonical writable-source predicate rather than treating every
 non-null stale selection as writable; a read-only stale selection cannot enable
 create, update, or provider execution and cannot display a false selected badge.
 The focused six tests, complete frontend suite (54 files, 445 tests), TypeScript,
-ESLint, and diff checks pass. The non-default-base head remains Draft until
-#1562 supplies required hosted validation and independent review evidence.
+ESLint, and diff checks pass. A real desktop Chromium regression also proves all
+four read-only actions remain disabled, the reason is visible, no selected badge
+appears, no writeback request fires, and a screenshot is produced. The
+non-default-base head remains Draft until #1562 supplies required hosted
+validation and independent review evidence.
 PR #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
