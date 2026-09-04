@@ -74,3 +74,13 @@ def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     )
     for phrase in forbidden_direct_routing:
         assert phrase not in raw_config
+
+
+def test_remote_mcp_guidance_keeps_private_source_local() -> None:
+    """Remote MCP requests must stay inside the documented confidentiality boundary."""
+    agents = " ".join(_read("AGENTS.md").split())
+    config = json.loads(_read("opencode.jsonc"))
+
+    assert config["mcp"]["deepwiki"]["type"] == "remote"
+    assert "send only public metadata to external MCP servers" in agents
+    assert "organization-approved zero-data-retention endpoint" in agents
