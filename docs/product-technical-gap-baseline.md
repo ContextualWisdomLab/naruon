@@ -47,7 +47,14 @@ only the first/last-sentence extractor. It consumes both parent matchers and
 preserves U+FF0E, decimal/title periods, URL/email periods, repeated terminators,
 and trailing quotation or bracket punctuation. The final stack passes 111
 combined tests, Ruff, and diff checks. No predecessor gate evidence transfers
-after these base/head changes. PR #1502
+after these base/head changes. Draft PR #1482
+(`67433f375ea1b8eb38baf3bf512ac761d9325dbd`) is restacked last on #1555,
+reuses the canonical email and phone matchers, and adds bounded Unicode-email,
+French-phone, and separator-optional Korean resident-registration masking. Its
+catalog claim excludes complete de-identification, and NIST SP 800-188 grounds
+that boundary. The effective child delta is three files; the combined tool and
+privacy contract suite passes 114 tests with warnings as errors, plus Ruff and
+diff checks. PR #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
 PR #1530 (`91813e60948e070ca3734ec4634adf28cb5daadd`) remains a Draft Task-8
