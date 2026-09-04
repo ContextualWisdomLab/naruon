@@ -467,12 +467,16 @@ it also installs the repository-pinned `pnpm@11.5.3` before `setup-node` asks
 for the cache path. This removes the mutable `pnpm/latest` lookup that failed
 #1502's frontend job on `ECONNRESET`. The inherited governance harness, 40
 release/stacked-workflow tests, actionlint, and diff checks pass.
-Bandit-only predecessor #1554
-(`9d7d16d8e90edc9f08193718434cb9255d744250`) remains Draft and open for
-provenance. Its two-file effective delta passes actionlint and 36 focused
-workflow-governance tests, with zero valid unresolved review threads;
-#1562 must merge and pass fresh tree-equivalence review before the predecessor
-can close, and no check or review evidence transfers.
+Bandit-only PR #1554
+(`7f00cd0e56c4061b339e9d64bf44426f39d4120d`) removes the undeclared
+Application CI and image-validation experiment from its effective delta and
+keeps only the Bandit workflow plus parsed-YAML regression test. Its
+`run_attempt == 1` cancellation guard prevents an old manually rerun scan from
+evicting newer current-head evidence. The focused test and actionlint pass, all
+current-head review threads are resolved, and fresh hosted evidence remains
+pending. #1562 is a separate broader trigger/concurrency child and does not
+carry this rerun guard, so neither PR may be closed as a complete successor of
+the other and no check or review evidence transfers.
 PR #1500 (`dfee7c12a535a79ca43daa14b17c9580bcbf2658`) is likewise Draft after
 repeated empty CI-trigger commits kept replacing its exact head while retaining
 tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
