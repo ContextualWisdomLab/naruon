@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.6
+**Baseline version:** 1.7
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -25,9 +25,12 @@ passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
 **Governed review evidence refresh (2026-09-04T16:12Z):** Naruon PR #1564
-(`38b14430fdcc3769e0aee223844ff31193f7cb14`) records the reusable exact-head,
+(`9f890a3b7eac16e25c808d6275eacdfec4cb04cc`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
-procedure in `AGENTS.md`; 35 release-governance tests pass. Canonical workflow
+procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
+evidence from post-merge commit verification and names the applicable
+current-head CodeRabbit or structured OpenCode fallback contract; the sole
+review thread is resolved and 35 release-governance tests pass. Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`9e279ba99bcc098bdca20e724e848b0172a6e261`) repairs two evidence losses. It
 retains only allowlisted, secret-free gateway failure fields and stops creating
