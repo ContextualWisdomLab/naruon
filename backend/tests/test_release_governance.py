@@ -775,8 +775,13 @@ def test_frontend_dockerfile_builds_and_starts_production_artifact() -> None:
     docker_publish_workflow = read_repo_text(".github/workflows/docker-publish.yml")
     frontend_deployment = read_repo_text("k8s/frontend-deployment.yaml")
     package_json = read_repo_text("frontend/package.json")
+    app_ci_workflow = read_repo_text(".github/workflows/app-ci.yml")
 
     assert '"packageManager": "pnpm@11.5.3"' in package_json
+    assert "corepack install --global pnpm@11.5.3" in app_ci_workflow
+    assert app_ci_workflow.index("corepack install --global pnpm@11.5.3") < (
+        app_ci_workflow.index("cache: pnpm")
+    )
     assert "NEXT_PUBLIC_API_URL" not in root_dockerfile
     assert "NEXT_PUBLIC_API_URL" not in dockerfile
     assert "NEXT_PUBLIC_API_URL" not in docker_publish_workflow
