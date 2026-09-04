@@ -1228,6 +1228,23 @@ async def test_first_last_sentence_handler_cjk_punctuation():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "excerpt"),
+    [
+        (
+            "Dr. Smith approved it. Please proceed.",
+            "Dr. Smith approved it. Please proceed.",
+        ),
+        ("Version 1.2 works. Please deploy.", "Version 1.2 works. Please deploy."),
+        ('He said "First." She said "Last."', 'He said "First." She said "Last."'),
+    ],
+)
+async def test_first_last_sentence_handler_internal_periods_and_closers(text, excerpt):
+    result = await registry.invoke_tool("first_last_sentence", {"text": text})
+    assert result == {"excerpt": excerpt}
+
+
+@pytest.mark.asyncio
 async def test_first_last_sentence_handler_empty_text():
     params = {"text": ""}
     result = await registry.invoke_tool("first_last_sentence", params)
@@ -1268,8 +1285,6 @@ async def test_hash_generator_handler():
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
         await hash_generator_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
-
-
 
 @pytest.mark.asyncio
 async def test_email_phone_masker_handler():
@@ -1317,7 +1332,11 @@ def test_execute_hash_generator():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["md5"] == "5d41402abc4b2a76b9719d911017c592"
-    assert data["result"]["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    assert (
+        data["result"]["sha256"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
 
 def test_execute_email_phone_masker():
     with TestClient(app) as client:

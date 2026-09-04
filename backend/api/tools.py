@@ -838,10 +838,18 @@ async def first_last_sentence_handler(params: Dict[str, Any]) -> Any:
     if not text:
         return {"excerpt": ""}
 
+    protected_text = list(text)
+    for match in re.finditer(
+        r"(?<=\d)\.(?=\d)|\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr)\.", text, re.IGNORECASE
+    ):
+        protected_text[match.end() - 1] = "\0"
+
     sentences = [
-        sentence.strip()
-        for sentence in re.findall(r"[^.!?。！？]+[.!?。！？]?", text)
-        if sentence.strip()
+        text[match.start() : match.end()].strip()
+        for match in re.finditer(
+            r"[^.!?。！？]+(?:[.!?。！？]+[\"'”’\)\]\}]*)?", "".join(protected_text)
+        )
+        if text[match.start() : match.end()].strip()
     ]
     if not sentences:
         return {"excerpt": text}
