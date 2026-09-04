@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.18
+**Baseline version:** 1.19
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -61,6 +61,19 @@ frontend console tests, TypeScript, and diff checks pass. The central scheduler
 dispatch is run `33898524781`, currently queued. Hosted exact-head checks and
 current-head independent review remain pending; this is not protected-branch or
 release evidence.
+
+**Structured-output confidence refresh (2026-09-04T17:12Z):** Naruon Draft
+PR #1553 exact head `b4242580e93ada697b405f8c48eb822daadd6de9`
+repairs the product-owned project-graph response schema. The predecessor accepted
+negative, greater-than-one, `NaN`, and infinite confidence and heuristically
+clamped finite outliers downstream, allowing a provider value such as `7.5` to
+become maximum confidence. Object and relation payloads now reject every
+non-finite or out-of-range value at the provider boundary and projection uses
+only the validated 0.0–1.0 value. Eight new cases were RED before the fix; 71
+focused structured-output, project-graph, and LLM tests pass with warnings as
+errors, plus Ruff and diff checks. Fresh hosted checks and current-head
+independent review remain pending, so the inference-confidence Gap is not yet
+closed on protected `develop`.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
