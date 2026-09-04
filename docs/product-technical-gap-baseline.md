@@ -88,9 +88,14 @@ not transfer to this head.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
-pass. #1543 (`887d2461526d0f1c70748cf9c9f726a45b742b5e`) remains Draft: central
-scheduler main does not yet prove the structured adversarial fallback contract,
-so it is not a complete successor for #1531 and must not delete that delta yet.
+pass. #1543 (`6ae95ae0ce1d2395b1dce9375c87bc5170fc5e79`) remains Draft and keeps the
+trusted-base local evaluator for non-default bases. Synchronize workflow runs
+cancel only older synchronize evaluations, while every same-PR event publishes
+through one non-cancelling job lane so stale same-head snapshots cannot race on
+the shared check/comment. Thirty-eight governance tests, the shell harness,
+actionlint, and diff checks pass. Central scheduler main still does not prove the
+structured adversarial fallback contract, so #1543 is not a complete successor
+for #1531 and must not delete that delta.
 PR #1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
 NetworkGraph option-materialization parent. #1526
 (`b2d6cb257dc1af1b2bc15342825b74185f74a78a`) is Draft after a third unsigned
