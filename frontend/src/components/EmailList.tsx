@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo, useMemo } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -173,6 +173,17 @@ export function EmailList({
       };
   const searchBusy = isSearching || loading;
 
+  const emailListNodes = useMemo(() => {
+    return emails.map((email: EmailItem) => (
+      <EmailListItemComponent
+        key={email.id}
+        email={email}
+        selected={selectedEmailId === email.id}
+        onSelectEmail={onSelectEmail}
+      />
+    ));
+  }, [emails, selectedEmailId, onSelectEmail]);
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col border-r border-border/80 bg-card/95">
       <div className="border-b border-border/80 bg-gradient-to-br from-card via-card to-primary/5 p-4">
@@ -259,14 +270,7 @@ export function EmailList({
               <p className="mt-1 text-xs leading-5">{folderCopy.emptyBody}</p>
             </div>
           ) : (
-            emails.map((email: EmailItem) => (
-              <EmailListItemComponent
-                key={email.id}
-                email={email}
-                selected={selectedEmailId === email.id}
-                onSelectEmail={onSelectEmail}
-              />
-            ))
+            emailListNodes
           )}
         </div>
       </ScrollArea>
