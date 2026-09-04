@@ -1,0 +1,227 @@
+name: PR Governance
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+  workflow_run:
+    workflows:
+      - Application CI
+      - Bandit Security Scan
+      - Build and Publish Docker Images
+      - Strix Security Scan
+    types: [completed]
+  check_run:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to evaluate
+        required: true
+      base_sha:
+        description: Trusted base commit SHA for manual recovery runs
+        required: false
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  # A synchronize run shares one PR-scoped workflow group so a newer push can
+  # cancel only an older synchronize evaluation. Every other event uses its
+  # unique run id here and is serialized losslessly by the governance job below.
+  group: >-
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}-${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && 'synchronize' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }}
+
+jobs:
+  governance:
+    name: PR governance metadata controller
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      statuses: read
+      pull-requests: write
+      issues: write
+    if: >-
+      ${{
+        github.event_name == 'pull_request_target' ||
+        github.event_name == 'pull_request_review' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != '') ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].number != '') ||
+        (
+          github.event_name == 'check_run' &&
+          github.event.check_run.pull_requests[0].number != '' &&
+          (
+            github.event.check_run.app.slug == 'coderabbitai' ||
+            contains(github.event.check_run.name, 'CodeRabbit') ||
+            contains(github.event.check_run.name, 'coderabbit')
+          )
+        )
+      }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Materialize trusted governance gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || '' }}
+          TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.workflow_run.pull_requests[0].base.sha || github.event.check_run.pull_requests[0].base.sha || github.event.inputs.base_sha || '' }}
+        run: |
+          set -euo pipefail
+
+          extract_json_value() {
+            local json_file="$1"
+            local jq_filter="$2"
+            python3 - "$json_file" "$jq_filter" <<'PY'
+          import json
+          import sys
+
+          json_path = sys.argv[1]
+          filter_expr = sys.argv[2]
+          try:
+              raw = open(json_path, "r", encoding="utf-8").read()
+          except OSError as exc:
+              print(f"unable to read response body: {exc}", file=sys.stderr)
+              sys.exit(1)
+          if not raw.strip():
+              print("empty response body", file=sys.stderr)
+              sys.exit(1)
+          try:
+              value = json.loads(raw)
+          except json.JSONDecodeError as exc:
+              print(f"invalid JSON response body: {exc}", file=sys.stderr)
+              sys.exit(1)
+          if not filter_expr.startswith("."):
+              print(f"unsupported jq filter for guarded parsing: {filter_expr}", file=sys.stderr)
+              sys.exit(1)
+          try:
+              for part in filter(None, filter_expr[1:].split(".")):
+                  value = value[part]
+          except (KeyError, TypeError) as exc:
+              print(f"filter {filter_expr} did not match response: {exc}", file=sys.stderr)
+              sys.exit(1)
+          if value in (None, ""):
+              print(f"filter {filter_expr} produced an empty value", file=sys.stderr)
+              sys.exit(1)
+          print(value)
+          PY
+          }
+
+          gh_api_with_retry() {
+            local attempt output_file error_file parsed parse_reason rc jq_filter endpoint
+            local -a api_args=()
+            jq_filter=""
+            endpoint=""
+            while [ "$#" -gt 0 ]; do
+              if [ "$1" = "--jq" ]; then
+                if [ "$#" -lt 2 ]; then
+                  echo "::error::gh_api_with_retry requires a filter after --jq." >&2
+                  return 2
+                fi
+                jq_filter="$2"
+                shift 2
+                continue
+              fi
+              if [ -z "$endpoint" ]; then
+                endpoint="$1"
+              fi
+              api_args+=("$1")
+              shift
+            done
+            output_file="$(mktemp)"
+            error_file="$(mktemp)"
+            for attempt in 1 2 3 4; do
+              rc=0
+              if [ -n "$jq_filter" ]; then
+                gh api "${api_args[@]}" > "$output_file" || rc=$?
+              else
+                gh api "${api_args[@]}" > "$output_file" || rc=$?
+              fi
+              if [ "$rc" -eq 0 ]; then
+                if [ -n "$jq_filter" ]; then
+                  if parsed="$(extract_json_value "$output_file" "$jq_filter" 2>"$error_file")"; then
+                    printf '%s\n' "$parsed"
+                    rm -f "$output_file" "$error_file"
+                    return 0
+                  fi
+                  parse_reason="$(cat "$error_file")"
+                  rc=65
+                else
+                  cat "$output_file"
+                  rm -f "$output_file" "$error_file"
+                  return 0
+                fi
+              fi
+              if [ "$attempt" -lt 4 ]; then
+                if [ "$rc" -eq 65 ]; then
+                  echo "GitHub API request attempt ${attempt} for ${endpoint} returned invalid JSON for ${jq_filter}: ${parse_reason}; retrying." >&2
+                else
+                  echo "GitHub API request attempt ${attempt} for ${endpoint} failed with exit ${rc}; retrying." >&2
+                fi
+                sleep $((attempt * 3))
+              fi
+            done
+            if [ -n "$jq_filter" ]; then
+              echo "::error::GitHub API request did not produce valid JSON after 4 attempts: gh api ${api_args[*]} --jq ${jq_filter}" >&2
+            else
+              echo "::error::GitHub API request did not complete after 4 attempts: gh api ${api_args[*]}" >&2
+            fi
+            rm -f "$output_file" "$error_file"
+            return "$rc"
+          }
+
+          trusted_ref=""
+          if [[ "${TRUSTED_BASE_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
+            trusted_ref="$TRUSTED_BASE_SHA"
+            echo "Using event-provided trusted governance base SHA ${trusted_ref}."
+          elif [ -n "$TRUSTED_PR_NUMBER" ]; then
+            trusted_ref="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}/pulls/${TRUSTED_PR_NUMBER}" --jq '.base.sha')"
+          else
+            default_branch="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"
+            trusted_ref="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}/branches/${default_branch}" --jq '.commit.sha')"
+          fi
+          if [[ ! "$trusted_ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Trusted governance ref must be a full commit SHA." >&2
+            exit 1
+          fi
+
+          trusted_workspace="$RUNNER_TEMP/trusted-governance"
+          trusted_archive="$RUNNER_TEMP/trusted-governance.tar.gz"
+          trusted_archive_candidate="$RUNNER_TEMP/trusted-governance.tar.gz.candidate"
+          mkdir -p "$trusted_workspace"
+          for attempt in 1 2 3 4; do
+            rm -f "$trusted_archive" "$trusted_archive_candidate"
+            if gh api "/repos/${GITHUB_REPOSITORY}/tarball/${trusted_ref}" > "$trusted_archive_candidate" && tar -tzf "$trusted_archive_candidate" >/dev/null 2>&1; then
+              mv "$trusted_archive_candidate" "$trusted_archive"
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              echo "::error::Trusted governance archive could not be materialized after 4 attempts." >&2
+              exit 1
+            fi
+            echo "Trusted governance archive materialization attempt ${attempt} did not produce a valid archive; retrying." >&2
+            sleep $((attempt * 3))
+          done
+          tar -xzf "$trusted_archive" -C "$trusted_workspace" --strip-components=1
+          test -f "$trusted_workspace/scripts/ci/pr_governance_gate.sh"
+          echo "GOVERNANCE_GATE=$trusted_workspace/scripts/ci/pr_governance_gate.sh" >> "$GITHUB_ENV"
+
+      - name: Evaluate PR gate metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          DIRECT_PR_NUMBER: ${{ github.event.inputs.pr_number || '' }}
+          TARGET_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          WORKFLOW_RUN_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || '' }}
+          CHECK_RUN_PR_NUMBER: ${{ github.event.check_run.pull_requests[0].number || '' }}
+        run: |
+          bash "$GOVERNANCE_GATE"

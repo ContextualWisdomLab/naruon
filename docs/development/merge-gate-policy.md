@@ -21,19 +21,36 @@ awaited by default.
   adversarial validation with `status=passed` and at least two probes whose
   outcome is `falsified`. Stale-head reviews, `github-actions` reviews, and
   insufficient probe evidence do not satisfy the gate.
-- The organization-required PR Review Merge Scheduler owns metadata evaluation,
-  branch refresh, and protected merge scheduling from trusted central code.
-  This repository does not carry a local PR-governance controller or execute
-  PR-head scripts in a privileged metadata workflow.
+- PR Governance automation is metadata-only: it must not checkout pull request
+  code, clone the head branch, dismiss reviews, enable auto-merge, or use admin
+  merge. It may read PR/check/review-thread metadata and post blocker comments;
+  the separate human/agent landing path performs any allowed merge action after
+  current-head gates are satisfied. Submitted and dismissed review events rerun
+  the metadata controller so OpenCode App evidence updates the gate promptly.
+- PR Governance runs trusted-base logic only. The workflow materializes the base
+  repository script from a trusted tarball and must not execute PR-head scripts.
+  Trusted tarball materialization uses bounded retry plus archive validation for
+  transient GitHub API truncation and fails closed instead of falling back to
+  PR-head or local scripts.
 - Pending, queued, requested, waiting, or in-progress checks are wait states, not
   hard failure findings. Success, pass, skipped, and neutral states satisfy the
   gate. Every other required-check state — including failed, cancelled,
   timed-out, action-required, and any unrecognized state — is a blocker: the
   gate fails closed rather than passing states it does not understand.
+- If gate evaluation itself errors (for example a transient GitHub API
+  failure), the gate publishes a completed/failure check-run instead of leaving
+  a previously published result in place.
+- Gate blocker comments publish sanitized check names and generic error text
+  only; raw CLI diagnostics stay in the workflow run log. Inside Actions the
+  gate runs with a pinned system PATH so earlier steps cannot influence tool
+  resolution via GITHUB_PATH.
 - Authoritative `Review skipped` evidence counts only when the same check
   output carries no blocking warning/failure language alongside it.
 - `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are
   addressed or superseded on the current head.
+- Blocker comments use the idempotent
+  `<!-- pr-governance:metadata-gate -->` marker and are patched in place instead
+  of duplicated on repeated workflow events.
 - GitHub rulesets must use `required_approving_review_count=0` so GitHub does
   not require a human `APPROVED` review when robot-review policy applies.
 - GitHub rulesets must keep `required_review_thread_resolution=true`.

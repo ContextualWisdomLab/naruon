@@ -669,6 +669,7 @@ cd frontend && npm test -- \
   src/app/page.test.tsx \
   src/components/EmailDetail.test.tsx
 cd frontend && LIVE_BASE_URL=http://127.0.0.1:18081 npm run test:e2e -- tests/e2e/dashboard-branding.spec.ts
+bash scripts/ci/test_pr_governance_gate.sh
 ```
 
 Known local warnings: backend tests emit dependency/toolchain deprecation warnings

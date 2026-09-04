@@ -59,6 +59,7 @@ npm run test:e2e -- tests/e2e/dashboard-branding.spec.ts   # Playwright (set LIV
 
 ```bash
 ./scripts/verify_threading.sh        # backend threading tests + frontend test/lint/build
+bash scripts/ci/test_pr_governance_gate.sh   # PR governance gate self-test
 ```
 
 Before opening a PR, run the focused tests that cover the changed contract and
@@ -143,7 +144,7 @@ Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgve
   are strict egress allowlists that resolve only to pinned global addresses.
 - CI (`.github/workflows/`): `app-ci.yml` (backend ruff+pytest, frontend
   test/lint/build), plus `bandit`, `codeql`, `trivy`, `scorecard`,
-  `docker-publish` (GHCR on `v*` tags matching `VERSION`), and
+  `pr-governance`, `docker-publish` (GHCR on `v*` tags matching `VERSION`), and
   `mail-smoke`. Actions are pinned to full commit SHAs.
 - Topic intelligence is **not implemented**. Never use lexical frequencies,
   embeddings, zero-shot labels, or request-time LLM labels as an STM result.

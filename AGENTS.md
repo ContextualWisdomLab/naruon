@@ -190,10 +190,12 @@ in this repo.
 ## PR automation and review defaults
 
 - Follow `docs/development/merge-gate-policy.md` for PR gate interpretation.
-- The central Required PR Review Merge Scheduler owns PR metadata evaluation;
-  do not add a repo-local PR Governance workflow or gate script.
+- PR Governance must stay metadata-only: no PR-head checkout, no admin merge, no
+  review dismissal, and no security-check suppression.
 - Pending/queued checks, pending CodeRabbit evidence, and a missing structured
-  OpenCode fallback approval are wait states, not hard failures.
+  OpenCode fallback approval are wait states, not hard failures. Hard blockers
+  should be reported through the idempotent
+  `<!-- pr-governance:metadata-gate -->` comment path.
 - CodeRabbit gating is evidence-preferred. When the current head has CodeRabbit
   check-run evidence, pending evidence is a wait state and blocking evidence is
   a blocker. When no CodeRabbit check-run exists, require an exact-current-head
