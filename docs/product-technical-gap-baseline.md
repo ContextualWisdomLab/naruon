@@ -23,36 +23,40 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T12:37Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T12:57Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`3d9ea27d424ffabf7d9496c9085f5f4a8a172e5d`) carries the exact-head PR
 completion playbook after six review threads were resolved and 35 governance
-tests passed locally. #1538 (`8d57b2935ee2cd55d9a93b09c9337203defcc0fe`)
+tests passed locally. #1538 (`71c331e1e059d22f44f605711ab230926edc1c88`)
 is the single writer for bounded ASCII email and selected Korean/North American
-phone masking after a remote acknowledgement commit removed verified behavior;
-Ruff and 76 focused tests pass on the restored head. #1555
+phone masking. A second remote acknowledgement commit again removed verified
+behavior; the non-force corrective head restores the complete ASCII dot-atom
+boundary, bounded malformed-input regression, and North American cases. Ruff
+and 78 focused tests pass. #1555
 (`e0ab25e85e820d243e181d1023198c2320a201e5`) is non-force stacked on that
 owner head and now carries only the truthful first/last-sentence extractor with
-CJK sentence-boundary coverage; the combined stack passes Ruff and 82 focused
-tests. #1502
+CJK sentence-boundary coverage; its prior 82-test stack evidence predates the
+new parent head and must be rerun before merge. #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
-#1559 (`9d2a6ea892a8367713976e15babcbd337d06895d`) independently succeeds the
+#1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
-percentage contract. Its 30 focused tests, TypeScript check, and lint pass
-locally. All five remain candidate heads rather than protected-branch evidence.
+percentage contract. Its unit and EmailDetail fixtures, pilot and full-product
+smokes, and AGENTS.md recurrence rule now share that unit; 65 focused tests,
+TypeScript, lint, and both smokes pass locally. All five remain candidate heads
+rather than protected-branch evidence.
 
-#1485 (`4e2cb3b39f89aff811d5113962861bd1963d2996`) has successful product,
-frontend, backend, and security checks; its prior Noema review failed because
-the model cited a non-changed line, and OpenCode ended on GitHub HTTP 502.
-#1531 (`27ab83b57e94dc84bf5f8c8708d5b2b7a962304f`) is Ready with a current-head
-CodeRabbit approval and zero unresolved threads, while its prior Strix and
-OpenCode jobs were cancelled. The deleted historical workflow IDs cannot be
-rerun, so the current central merge-scheduler contract was dispatched once per
-PR with auto-merge and branch updates disabled. Scheduler runs `33871200407`,
-`33871251541`, and stacked-child dispatch `33872054770` are queued. At the same
-observation time, runner-requiring
+#1485 (`796083106d46cff494836004937bb767fbb9672e`) now distinguishes 401/403
+login recovery from transport retry and bounds its three core dashboard reads
+with one native abort signal; 17 focused tests, TypeScript, and lint pass.
+#1531 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) now honors an exact-head
+structured OpenCode approval when no CodeRabbit check exists even if a pending
+issue notice is present; the full shell gate harness and ShellCheck pass, and
+current-head unresolved threads are zero. The historical scheduler handles
+`33871200407`, `33871251541`, and `33872054770` belong to predecessor heads and
+are not reusable evidence. Current heads have fresh runner-required workflows
+queued. At the same observation time, runner-requiring
 work across central `.github` had remained queued since 11:56Z while
 metadata-only jobs completed. This is point-in-time organization queue
 evidence, not a source failure, a successful review, or permission to reuse
