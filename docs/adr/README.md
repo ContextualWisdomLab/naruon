@@ -13,7 +13,7 @@ govern implementation.
 | [ADR-0002](0002-fitted-topic-artifact-consumption.md) | Conditionally consume only a versioned fitted topic artifact through a fail-closed adapter | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` |
 | [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical measurement separate from agenda generation | Proposed | Target and future capability `PLANNED`; no implementation authorization |
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
-| [ADR-0005](0005-naruon-owned-password-login-form.md) | naruon renders its own login and signup forms; Keyverse authenticates and issues credentials via scoped exceptions, never a Keycloak-rendered page | Accepted | `ACCEPTED-NARUON-POLICY`; login and signup working end-to-end (keyverse#0014, keyverse#0015); email verification/abuse hardening deferred |
+| [ADR-0005](0005-naruon-owned-password-login-form.md) | Naruon owns login, signup, and recovery product surfaces while Keyverse remains identity/authentication authority | Proposed | `BLOCKED-UPSTREAM`; public password routes fail closed pending an immutable standards-compliant Keyverse contract |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at
