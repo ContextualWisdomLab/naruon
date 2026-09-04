@@ -32,7 +32,7 @@ import logging
 from typing import Iterable
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from services.llm_provider_urls import build_llm_provider_http_client
 
@@ -79,6 +79,8 @@ ALLOWED_RELATION_TYPES: frozenset[str] = frozenset(
 
 
 class ExtractedObjectPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     object_type: str
     title: str
     summary: str
@@ -91,6 +93,8 @@ class ExtractedObjectPayload(BaseModel):
 
 
 class ExtractedRelationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     source_local_key: str
     target_local_key: str
     relation_type: str
@@ -98,6 +102,8 @@ class ExtractedRelationPayload(BaseModel):
 
 
 class ExtractionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     objects: list[ExtractedObjectPayload]
     relations: list[ExtractedRelationPayload] = []
 

@@ -13,7 +13,7 @@ import json
 import logging
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core.config import settings
 from services.llm_provider_urls import build_llm_provider_http_client
@@ -25,6 +25,8 @@ MAX_CONTENT_CHARS = 1500
 
 
 class GroundedAnswerPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     answer: str
     cited_email_ids: list[int]
 
