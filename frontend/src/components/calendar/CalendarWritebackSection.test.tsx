@@ -142,12 +142,40 @@ describe('CalendarWritebackSection accessibility contract', () => {
     expect(sourceButton?.textContent).toContain('읽기 전용');
     expect(sourceButton?.textContent).toContain('외부 쓰기 차단');
     expect(status?.textContent)
-      .toContain('선택한 반영 가능한 원본 또는 충돌 토큰이 없어 외부 실행 요청은 사용할 수 없습니다.');
+      .toContain('반영 가능한 일정 원본이 없어 반영 의도 점검을 시작할 수 없습니다.');
 
     act(() => {
       sourceButton?.click();
     });
     expect(setSelectedSourceId).not.toHaveBeenCalled();
+  });
+
+  it('disables intent checks when the ready registry has no writable source', () => {
+    const { requestWritebackIntent } = renderSection({
+      writebackSources: [readOnlySource],
+      selectedWritebackSource: null,
+      sourceLoadStatus: 'ready',
+      isWritebackActionDisabled: false,
+      isProviderExecutionDisabled: true,
+    });
+    const buttons = Array.from(container?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+    const createButton = buttons.find((button) => button.textContent?.includes('새 일정 intent 점검'));
+    const updateButton = buttons.find((button) => button.textContent?.includes('ETag 업데이트 점검'));
+    const executeButton = buttons.find((button) => button.textContent?.includes('ETag 실행 요청'));
+    const { status } = getControlStatus(createButton);
+
+    expect(createButton?.disabled).toBe(true);
+    expect(updateButton?.disabled).toBe(true);
+    expect(executeButton?.disabled).toBe(true);
+    expect(status?.textContent)
+      .toContain('반영 가능한 일정 원본이 없어 반영 의도 점검을 시작할 수 없습니다.');
+
+    act(() => {
+      createButton?.click();
+      updateButton?.click();
+      executeButton?.click();
+    });
+    expect(requestWritebackIntent).not.toHaveBeenCalled();
   });
 
   it('keeps aria-describedby targets unique when reusable writeback sections share a document', () => {
