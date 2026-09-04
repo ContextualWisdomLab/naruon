@@ -755,131 +755,18 @@ registry.register(
 )
 
 
-async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Generate compatibility fingerprints plus a SHA-256 security hash."""
-    text = params["text"]
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
-
-    encoded = text.encode("utf-8")
-    return {
-        "md5": hashlib.md5(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
-        "sha1": hashlib.sha1(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
-        "sha256": hashlib.sha256(encoded).hexdigest(),
-    }
-
-registry.register(
-    ToolInfo(
-        code="hash_generator",
-        name="지문/해시 생성기 (Fingerprint/Hash Generator)",
-        description="텍스트의 호환성 지문(MD5, SHA-1) 및 보안 해시(SHA-256) 값을 생성합니다.",
-        category="유틸리티",
-        parameters={"text": "string"},
-    ),
-    hash_generator_handler,
-)
-
-
-_EMAIL_ATOM = r"A-Za-z0-9!#$%&'*+/=?^_`{|}~"
-_EMAIL_PATTERN = re.compile(
-    rf"(?<![{_EMAIL_ATOM}.-])"
-    rf"[{_EMAIL_ATOM}-]+(?:\.[{_EMAIL_ATOM}-]+)*@"
-    rf"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+"
-    r"[A-Za-z]{2,63}(?![A-Za-z0-9-])"
-)
-_PHONE_PATTERN = re.compile(
-    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
-    r"|\d{2,3}-\d{3,4}-\d{4}"
-    r"|(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4})(?!\d)"
-)
-
-
-async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Mask ASCII email and selected Korean or North American phone formats."""
-    text = params["text"]
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
-
-    anonymized = _EMAIL_PATTERN.sub("[EMAIL]", text)
-    anonymized = _PHONE_PATTERN.sub("[PHONE]", anonymized)
-
-    return {"masked_text": anonymized}
-
-registry.register(
-    ToolInfo(
-        code="email_phone_masker",
-        name="이메일/전화번호 마스킹 (Email/Phone Masker)",
-        description="텍스트에서 ASCII 이메일 주소와 일부 한국·북미 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
-        category="유틸리티",
-        parameters={"text": "string"},
-    ),
-    email_phone_masker_handler,
-)
-
-
-async def email_address_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract valid ASCII email addresses in first-occurrence order."""
-    text = params.get("text", "")
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
-
-    unique_emails: list[str] = []
-    seen_addresses: set[str] = set()
-    for match in _EMAIL_PATTERN.finditer(text):
-        email_address = match.group(0)
-        normalized_address = email_address.casefold()
-        if normalized_address not in seen_addresses:
-            seen_addresses.add(normalized_address)
-            unique_emails.append(email_address)
-
-    return {"emails": unique_emails, "count": len(unique_emails)}
-
-
-registry.register(
-    ToolInfo(
-        code="email_address_extractor",
-        name="이메일 주소 추출기 (Email Address Extractor)",
-        description="텍스트 본문에서 유효한 ASCII 이메일 주소를 찾아 중복을 제거하여 추출합니다.",
-        category="이메일 분석",
-        parameters={"text": "string"},
-    ),
-    email_address_extractor_handler,
-)
-
-
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
 
-_INTERNATIONAL_EMAIL_PATTERN = re.compile(
-    rf"(?<![\w{_EMAIL_ATOM}.-])"
-    rf"[\w{_EMAIL_ATOM}-]+(?:\.[\w{_EMAIL_ATOM}-]+)*@"
-    r"(?:[^\W_](?:(?:[^\W_]|-){0,61}[^\W_])?\.)+"
-    r"[^\W_]{2,63}(?![\w-])"
-)
-_INTERNATIONAL_PHONE_PATTERN = re.compile(
-    r"(?<!\d)(?:01[016789][ .-]?\d{3,4}[ .-]?\d{4}"
-    r"|0[1-9](?:[ .-]?\d{2}){4})(?!\d)"
-)
-_KOREAN_RESIDENT_REGISTRATION_PATTERN = re.compile(
-    r"(?<!\d)\d{6}[ -]?[1-4]\d{6}(?!\d)"
-)
-
-
 async def data_anonymizer_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Mask bounded contact and Korean resident-registration identifiers."""
     text = params.get("text", "")
     if text is None:
         text = ""
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
-        )
-    text = _EMAIL_PATTERN.sub("***@***", text)
-    text = _INTERNATIONAL_EMAIL_PATTERN.sub("***@***", text)
-    text = _PHONE_PATTERN.sub("***-****-****", text)
-    text = _INTERNATIONAL_PHONE_PATTERN.sub("***-****-****", text)
-    text = _KOREAN_RESIDENT_REGISTRATION_PATTERN.sub("******-*******", text)
+    text = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "***@***", text)
+    text = re.sub(r"\b01[016789]-\d{3,4}-\d{4}\b", "***-****-****", text)
+    text = re.sub(r"(?:\+33|0)\s*[1-9](?:[\s.-]*\d{2}){4}\b", "***-****-****", text)
+    text = re.sub(r"\b\d{6}[- ]?[1-4]\d{6}\b", "******-*******", text)
     return {"anonymized_text": text}
 
 
@@ -887,7 +774,7 @@ registry.register(
     ToolInfo(
         code="data_anonymizer",
         name="데이터 비식별화 (Data Anonymizer)",
-        description="텍스트에서 이메일 주소, 일부 한국·북미·프랑스 전화번호, 한국 주민등록번호 형식을 단순 마스킹합니다. 완전한 개인정보 비식별화를 보장하지 않습니다.",
+        description="텍스트 내의 이메일, 휴대전화 번호, 주민등록번호 등 민감한 개인정보를 마스킹 처리하여 비식별화합니다.",
         category="보안",
         parameters={"text": "string"},
     ),
@@ -905,120 +792,6 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
-
-_URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
-_PROSE_TRAILING_PUNCTUATION = ".,;:!?"
-
-
-def _trim_url_candidate(candidate: str, wrapping_openers: str) -> str:
-    """Remove only closing delimiters proven by adjacent opening wrappers."""
-    delimiters = (("(", ")"), ("[", "]"), ("{", "}"))
-    excess = {
-        closer: min(
-            wrapping_openers.count(opener),
-            max(0, candidate.count(closer) - candidate.count(opener)),
-        )
-        for opener, closer in delimiters
-    }
-    without_prose = candidate.rstrip(_PROSE_TRAILING_PUNCTUATION)
-    end = len(without_prose)
-    while end and excess.get(without_prose[end - 1], 0):
-        excess[without_prose[end - 1]] -= 1
-        end -= 1
-    return without_prose[:end] if end < len(without_prose) else candidate
-
-async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
-    text = params["text"]
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
-        )
-    urls: list[str] = []
-    seen: set[str] = set()
-    for match in _URL_PATTERN.finditer(text):
-        wrapper_start = match.start()
-        while wrapper_start and text[wrapper_start - 1].isspace():
-            wrapper_start -= 1
-        wrapper_end = wrapper_start
-        while wrapper_start and text[wrapper_start - 1] in "([{":
-            wrapper_start -= 1
-        candidate = _trim_url_candidate(
-            match.group(), text[wrapper_start:wrapper_end]
-        )
-        try:
-            parsed = urllib.parse.urlsplit(candidate)
-            _ = parsed.port  # validate a declared port without requiring one
-            valid = parsed.hostname is not None
-        except ValueError:
-            valid = False
-        if valid and candidate not in seen:
-            seen.add(candidate)
-            urls.append(candidate)
-    return {"urls": urls}
-
-
-registry.register(
-    ToolInfo(
-        code="url_extractor",
-        name="URL 추출기 (URL Extractor)",
-        description="텍스트 본문에서 HTTP 및 HTTPS URL을 추출합니다.",
-        category="유틸리티",
-        parameters={"text": "string"},
-    ),
-    url_extractor_handler,
-)
-
-
-async def first_last_sentence_handler(params: Dict[str, Any]) -> Any:
-    """Return the first and last non-empty sentences without claiming synthesis."""
-    text = params.get("text", "")
-    _normalize_analysis_text(text)
-    if not text:
-        return {"excerpt": ""}
-
-    protected_text = list(text)
-    for match in re.finditer(
-        r"(?<=\d)\.(?=\d)|\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr)\.", text, re.IGNORECASE
-    ):
-        protected_text[match.end() - 1] = "\0"
-    for match in _EMAIL_PATTERN.finditer(text):
-        for character_index in range(match.start(), match.end()):
-            if text[character_index] == ".":
-                protected_text[character_index] = "\0"
-    for match in _URL_PATTERN.finditer(text):
-        token_end = match.end() - (len(match.group()) - len(match.group().rstrip(".")))
-        for character_index in range(match.start(), token_end):
-            if text[character_index] == ".":
-                protected_text[character_index] = "\0"
-
-    sentences = [
-        text[match.start() : match.end()].strip()
-        for match in re.finditer(
-            r"[^.!?。！？．]+(?:[.!?。！？．]+[\"'”’\)\]\}]*)?",
-            "".join(protected_text),
-        )
-        if text[match.start() : match.end()].strip()
-    ]
-    if not sentences:
-        return {"excerpt": text}
-
-    excerpt = sentences[0]
-    if len(sentences) > 1:
-        excerpt += " " + sentences[-1]
-
-    return {"excerpt": excerpt}
-
-
-registry.register(
-    ToolInfo(
-        code="first_last_sentence",
-        name="첫 문장·끝 문장 추출기 (First and Last Sentence Extractor)",
-        description="텍스트의 첫 문장과 끝 문장을 원문 그대로 추출합니다.",
-        category="이메일 분석",
-        parameters={"text": "string"},
-    ),
-    first_last_sentence_handler,
-)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
