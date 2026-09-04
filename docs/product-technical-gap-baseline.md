@@ -23,7 +23,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T13:12Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T13:25Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`3d9ea27d424ffabf7d9496c9085f5f4a8a172e5d`) carries the exact-head PR
 completion playbook after six review threads were resolved and 35 governance
@@ -40,6 +40,10 @@ abbreviations, and trailing quotation or bracket punctuation. Ruff and all 79
 tool API tests pass, and its GitHub base resolves to parent `71c331e1`. #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
+#1530 (`fbf32aaf67e53fcb00e640e48df62c22b2eb4f41`) remains a Draft Task-8
+email-writing policy lane behind immutable dependency prerequisites. Its real
+79% coverage failure is repaired without weakening the gate: 22 focused tests
+cover all 353 owned statements and 170 branches (100%), with Ruff passing.
 #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
