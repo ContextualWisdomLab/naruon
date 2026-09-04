@@ -309,19 +309,22 @@ answer. CodeGraph confirms the serving path from orchestrated completion through
 the exact stacked full suite (`3426 passed, 2 skipped`) pass. The six-file delta
 remains Proposed while current-head CodeRabbit and hosted Checks are pending;
 it is not protected-main, release, or buyer-quality evidence.
-Reopened foundation PR #1549
-(`c249658908c8cf4dccc5122b47e1ab2a4e56474d`) removes direct provider/model
+AGENTS entry PR #1528 (`57254cb61ecc67dd593ea96ae878bf651682a501`)
+adds verifiable read-first product, Project, gap, issue, Figma-decision, and
+organization-governance links plus a regression contract. Reopened foundation
+PR #1549 (`4c31028fa3e058515bd7203001de8ad05fc951b1`) is non-force stacked on #1528
+and removes direct provider/model
 routing from Naruon guidance and OpenCode configuration. Central workflows pass
 only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
 discovery, capability routing, free-pool membership, and fallback remain with
 the canonical owner. Consumer adoption still requires an immutable protected
 owner release, and open PRs or unreleased branches remain Proposed evidence.
-Stacked PR #1566 (`a302174bdee4120c86e15b57742f9cb7a4de6db4`)
+Stacked PR #1566 (`73e7d7c1f135410b692ab16c2faa53d40c45645f`)
 preserves the operating playbook and restores #1549's canonical gateway,
 released-owner, and no-shared-timeout block after conflict resolution had
-deleted it. Child PR #1567 (`3e3404e869ee830178fcc5e661a158b5a804ba2d`)
-now differs from #1566 only by whitespace-normalizing the same documentation
-contract; it is not a second policy writer or a full successor. Fifty-five
+deleted it. Child PR #1567 (`0505afd0c598f447db20edad46ff7e83d71cfb77`)
+now differs from #1566 only by its documentation authority regression test;
+it is not a second policy writer or a full successor. Fifty-five
 focused documentation/governance contracts and diff checks pass. Fresh
 exact-head hosted Checks and independent review remain required; no predecessor
 evidence transfers.
