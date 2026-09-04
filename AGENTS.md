@@ -446,6 +446,9 @@ in this repo.
   topic components, or label evidence by a bare document, model, topic, rank,
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
+- `/api/llm/summarize` confidence uses the backend's integer 0--100 percentage
+  contract. Frontend unit, E2E, pilot, and full-product fixtures must preserve
+  that unit; do not supply 0--1 ratios or infer the unit from the value.
 - Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
   `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
   desynchronizes first-wins label maps from the selected node or edge when
