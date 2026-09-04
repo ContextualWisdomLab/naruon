@@ -148,6 +148,43 @@ describe("EmailList", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("does not remap stable emails for an unrelated search-input rerender", async () => {
+    const emailItems = [
+      {
+        id: 31,
+        sender: "운영팀",
+        subject: "안정된 목록",
+        date: "2026-05-11T09:30:00Z",
+        snippet: "목록 재계산 여부를 확인합니다.",
+      },
+    ];
+    const mapSpy = vi.spyOn(emailItems, "map");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse({ emails: emailItems }))),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailList onSelectEmail={vi.fn()} selectedEmailId={31} />);
+    });
+    await flushAsyncWork();
+    expect(mapSpy).toHaveBeenCalledTimes(1);
+
+    const searchInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="메일 맥락 검색"]',
+    );
+    expect(searchInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(searchInput!, "내부 상태 변경");
+    });
+
+    expect(mapSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("uses the missing-title fallback for blank email subjects", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(

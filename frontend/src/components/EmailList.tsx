@@ -47,9 +47,6 @@ async function fetchFolderEmails(folder: MailFolder) {
 
 
 
-// ⚡ Bolt: Extracted and memoized individual email items
-// 🎯 Why: Previously, selecting a single email caused the entire list of 50+ items to re-render.
-// 💡 Impact: Reduces re-renders to only 2 items per selection change (the old active item and the new one), saving CPU cycles.
 const EmailListItemComponent = memo(function EmailListItemComponent({
 
   email,
