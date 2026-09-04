@@ -166,13 +166,6 @@ in this repo.
   `contextual-orchestrator` using `orchestrator/free`. Verify the requested
   model, API base, served-model metadata, and terminal response on the same
   execution; configuration text or a healthy sidecar alone is insufficient.
-- Central workflows provide only the gateway token; provider discovery,
-  capability routing, and fallback remain with `contextual-orchestrator`.
-- Naruon guidance does not select provider names, model names, endpoint groups,
-  or paid fallbacks. Production adoption requires an immutable released owner API/client/schema;
-  an open PR or unreleased branch is only Proposed evidence.
-- Do not add a shared application/agent/gateway wall-clock timeout. Model work ends
-  only on user cancellation, an administrator limit, or provider terminal completion.
 - Keep private-source review fail-closed and ZDR-only. Never log or copy bearer
   tokens, provider credentials, request payloads, or secret-derived values.
 - Do not add direct-provider fallback credentials to repository workflows.
