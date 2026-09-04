@@ -169,16 +169,6 @@ in this repo.
 - Keep private-source review fail-closed and ZDR-only. Never log or copy bearer
   tokens, provider credentials, request payloads, or secret-derived values.
 - Do not add direct-provider fallback credentials to repository workflows.
-- `ContextualWisdomLab/.github` owns central model-backed Actions. Repository
-  configuration may select only the logical `orchestrator/free` pool and pass
-  a gateway token; provider names, model selection, retries, and fallback
-  credentials remain private to `contextual-orchestrator`.
-- Production consumers require an immutable released owner API/client/schema.
-  An open PR or unreleased branch is proposed evidence, not an available
-  runtime contract, and incompatibility must fail closed.
-- Keep one shared application/agent/gateway wall-clock timeout and emit the
-  terminal owner reason at that boundary. Do not hide a shorter nested model
-  timeout behind a generic 900-second failure.
   Repair shared sidecar, credential bootstrap, timeout, or response-normalizing
   code where all three review paths converge.
 
