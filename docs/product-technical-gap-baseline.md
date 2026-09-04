@@ -106,6 +106,20 @@ prerequisite is protected-merged and its own unchanged-head review and Checks
 complete. No gate evidence transfers between the owner, upgrade, and consumer
 heads.
 
+**Semantic configuration naming refresh (2026-09-04T17:49Z):** Runtime-config
+PR #1521 (`cd8bc8b6425ca61e6aedbf24b5413a050dc4bd19`) preserves the published
+`version` and `features` wire keys while translating them to qualified internal
+product fields. Its remaining RED evidence is an old cancelled Strix lane and
+the resulting metadata/Noema gate response, not a demonstrated source defect;
+central exact-head revalidation is queued as `.github` run `33902484641`.
+Agent-registry PR #1537
+(`8bb4648a34e29c41e10581f14e21f95bfc7123e1`) similarly keeps legacy generic
+JSON keys only in its anti-corruption loader and publishes semantic fields to
+application callers. Its 41 focused registry/governance tests pass with
+warnings as errors, Ruff and diff checks pass, and central exact-head
+revalidation is queued as `.github` run `33902596826`. Both PRs remain Draft;
+cancelled predecessor checks and local tests do not transfer as merge evidence.
+
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
 README and public Pages lane. Its latest repair restores the tested ownership
