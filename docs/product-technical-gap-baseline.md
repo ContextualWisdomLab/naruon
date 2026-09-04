@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.15
+**Baseline version:** 1.16
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -242,8 +242,11 @@ confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
 percentage contract. Its unit and EmailDetail fixtures, pilot and full-product
 smokes, and AGENTS.md recurrence rule now share that unit; 65 focused tests,
-TypeScript, lint, and both smokes pass locally. These remain candidate heads
-rather than protected-branch evidence.
+TypeScript, lint, and both smokes pass locally. Both findings are resolved on
+the exact head, and Application CI, Bandit, image validation, and the initial
+CodeQL/Semgrep/security admission jobs are green; final Noema, Strix, OpenCode,
+compatibility-analysis, and security jobs remain queued. These remain candidate
+heads rather than protected-branch evidence.
 
 PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) now distinguishes 401/403
 login recovery from transport retry and bounds its three core dashboard reads
