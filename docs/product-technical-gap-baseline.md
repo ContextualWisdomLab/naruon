@@ -23,9 +23,9 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T12:08Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T12:37Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
-(`d286004b582c588b11c223f44cacc4a74a9244e5`) carries the exact-head PR
+(`3d9ea27d424ffabf7d9496c9085f5f4a8a172e5d`) carries the exact-head PR
 completion playbook after six review threads were resolved and 35 governance
 tests passed locally. #1538 (`8d57b2935ee2cd55d9a93b09c9337203defcc0fe`)
 is the single writer for bounded ASCII email and selected Korean/North American
@@ -37,7 +37,11 @@ CJK sentence-boundary coverage; the combined stack passes Ruff and 82 focused
 tests. #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
-All four remain candidate heads rather than protected-branch evidence.
+#1559 (`9d2a6ea892a8367713976e15babcbd337d06895d`) independently succeeds the
+confidence-boundary finding from conflicted #1436: it removes the frontend's
+unit-guessing discontinuity and follows the backend's documented 0--100
+percentage contract. Its 30 focused tests, TypeScript check, and lint pass
+locally. All five remain candidate heads rather than protected-branch evidence.
 
 #1485 (`4e2cb3b39f89aff811d5113962861bd1963d2996`) has successful product,
 frontend, backend, and security checks; its prior Noema review failed because
@@ -629,6 +633,7 @@ button, form, navigation, chart, or asynchronous data surface.
 |---|---|---|---|---|
 | Canonical evidence identity | OCR/media/attachment/model slices can disagree about the same source | source segments and several deterministic admission slices exist | #1350, #1353, #1397, #1419 | one source identity/provenance chain across email, thread, document, attachment, media, model result |
 | Judgment explanation | model output without evidence/calibration is not defensible | grounded extractor seam exists; wider evidence pipeline incomplete | #1350 | evidence IDs, claim support, abstention, correction, verifier result, prompt/model/version receipt |
+| Confidence unit integrity | adjacent values can appear as 100% and 2% when a client guesses whether a score is a ratio or percentage | backend extraction contract is 0--100; protected frontend still guesses the unit at runtime | #1436, #1559 | one explicit unit at the API boundary, current-head UI tests for low/high values, independent review, and protected merge evidence |
 | Provider-neutral route | raw provider coupling spreads credentials and failure behavior | contextual-orchestrator boundary exists; EgressWeave integration is blocked on release | #1262, #1264 | released hash-locked adapter, route/fallback evidence, no raw secret in products |
 | Noema workspace-agent boundary | buyers cannot rely on an assistant that bypasses governed routing or imports unreleased owner code | Noema protected `main` owns governed GitHub capability and delegates model routing; no released shared runtime is proven | #1384, #1486, #1527, Noema #536, Contextual Orchestrator #1004, ADR-0006 | tenant/workspace-authorized released orchestrator contract, distinct-candidate structured-output recovery, fail-closed direct-provider path, Naruon-owned domain tools, immutable owner release, and consumer conformance tests |
 | Scientific claim discipline | keyword labels can be mistaken for topic/event measurement | architecture explicitly says no live STM | TEPP dependency path | accepted immutable TEPP artifact/API or explicit feature absence; no lexical-as-STM claim |
