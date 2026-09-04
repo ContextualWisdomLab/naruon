@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.17
+**Baseline version:** 1.18
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -48,6 +48,19 @@ the full owner suite (2,817 passed, one skipped, 21 subtests) pass. Both heads
 are mergeable but their required
 current-head checks and independent review remain pending, so neither local
 result is protected-branch evidence yet.
+
+**Utility boundary refresh (2026-09-04T17:06Z):** Naruon Draft PR #1505 is
+the verified full-delta successor of closed PR #1547 for URL encoding/decoding
+and JSON formatting. Exact head
+`3bf2f42ab8c854046f16b516073c13b13af77c6b` closes a remaining RFC 3986
+contract gap: Python `urllib.parse.unquote(errors="strict")` rejects invalid
+UTF-8 but preserves incomplete or non-hexadecimal percent escapes, so the
+canonical handler now rejects `%`, `%2`, `%ZZ`, and `value%4G` before decoding.
+The focused backend suite passes 87 tests with warnings as errors; Ruff, seven
+frontend console tests, TypeScript, and diff checks pass. The central scheduler
+dispatch is run `33898524781`, currently queued. Hosted exact-head checks and
+current-head independent review remain pending; this is not protected-branch or
+release evidence.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
