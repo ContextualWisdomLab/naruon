@@ -741,14 +741,14 @@ focused authentication tests. Its prior Noema failure was malformed model and
 repair JSON rather than an auth-test failure; Noema, Strix, and OpenCode have
 each been rerun once as attempt 2 on the same head and remain queued. PR #1417
 now has exact head
-`bb7085ccc886284b47b0ce81253a53b7f12b356e`; its PostgreSQL smoke seed now
-explicitly supplies `is_read` after a real existing-schema NOT NULL failure,
-and 180 focused tests pass. Current-head review also replaced the fixed window
+`ad3ba4e44a015a9da9da221c841d1d9f345b0947` after a non-force merge of current
+`develop`; its PostgreSQL smoke seed explicitly supplies `is_read` after a real
+existing-schema NOT NULL failure. Current-head review also replaced the fixed window
 with an exact trailing-60-second count over existing scoped audit evidence,
 moved the limiter into its own READ COMMITTED transaction, and coalesced denial
 audits to one per scope/window. This prevents boundary double bursts, caller
 commit leakage, stale repeatable-read snapshots, and denial-storm write growth;
-65 limiter/email API tests pass with one PostgreSQL-only skip, and all five
+86 limiter/email/parser tests pass with one PostgreSQL-only skip, and all five
 review threads are resolved. Fresh hosted Checks are queued. PR #1455 now has exact head
 `b2b4701366bc6bb2de1347b19eac9b4ed64cc614`; bounded filename decoding and
 Windows-separator traversal protection passed 130 focused parser/import tests.
