@@ -33,10 +33,10 @@ phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
 boundary, bounded malformed-input regression, and North American cases. Ruff
 and 78 focused tests pass. #1555
-(`e0ab25e85e820d243e181d1023198c2320a201e5`) is non-force stacked on that
+(`6f26ede44a9121a67f89676f4e25bcf43aa2755d`) is non-force stacked on that
 owner head and now carries only the truthful first/last-sentence extractor with
-CJK sentence-boundary coverage; its prior 82-test stack evidence predates the
-new parent head and must be rerun before merge. #1502
+CJK sentence-boundary coverage. The refreshed stack passes Ruff and 84 focused
+tests, and its GitHub base now resolves to parent `71c331e1`. #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
 #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
