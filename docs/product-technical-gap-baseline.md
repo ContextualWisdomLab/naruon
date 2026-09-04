@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.21
+**Baseline version:** 1.22
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -86,19 +86,22 @@ were removed. Seven focused tests, TypeScript, ESLint, and diff checks pass. The
 PR is Ready, but current-head hosted checks and CodeRabbit review are pending;
 no buyer-visible latency claim or protected-branch completion is recorded.
 
-**Backend test-runtime dependency refresh (2026-09-04T17:28Z):** Dependency
-owner PR #1494 exact head `8ac9cfbe882bddfb85c44e84aca5c8ee841a3453`
-removes the Starlette `TestClient` warning suppression and directly pins its
-required `httpx2==2.12.0` package in the local development and direct test
-manifests. The same version and hashes already existed in the owner lock, so
-the repair does not introduce a second package version. This was found while
-validating utility consumer PR #1538: its source tests could not collect under
-Python 3.14 with warnings as errors because the protected-base project omitted
-the direct test dependency. On the repaired dependency head, frozen sync, 65
-pin-contract and public-tool tests, Ruff, and diff checks pass without that
-warning. PR #1538 remains Draft until the dependency owner is protected-merged
-and its own unchanged-head review and Checks complete; local consumption does
-not transfer #1494's gate evidence.
+**Backend test-runtime dependency refresh (2026-09-04T17:35Z):** Minimal
+protected-base prerequisite PR #1565 exact head
+`9990a999fd9e7413d98f830d3bda495470c44e8f` removes the Starlette `TestClient`
+warning suppression and promotes the already used optional-agent
+`httpx2==2.5.0` pin into the core development, direct test, project lock, and
+hash lock contracts. This was found while validating utility consumer PR
+#1538: its source tests could not collect under Python 3.14 with warnings as
+errors because protected `develop` omitted the direct test dependency. Frozen
+sync, 65 pin-contract and public-tool tests, Ruff, and diff checks pass without
+the warning. Broad dependency-upgrade PR #1494 exact head
+`8ac9cfbe882bddfb85c44e84aca5c8ee841a3453` remains the successor owner for
+`httpx2==2.12.0` and its other package migrations; it also removes the
+suppression rather than reviving it. PR #1538 remains Draft until the minimal
+prerequisite is protected-merged and its own unchanged-head review and Checks
+complete. No gate evidence transfers between the owner, upgrade, and consumer
+heads.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
