@@ -23,7 +23,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T13:25Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T13:31Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`3d9ea27d424ffabf7d9496c9085f5f4a8a172e5d`) carries the exact-head PR
 completion playbook after six review threads were resolved and 35 governance
@@ -44,6 +44,12 @@ image by digest and has local migration, real PostgreSQL, and 97-test evidence.
 email-writing policy lane behind immutable dependency prerequisites. Its real
 79% coverage failure is repaired without weakening the gate: 22 focused tests
 cover all 353 owned statements and 170 branches (100%), with Ruff passing.
+#1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
+local Dependency Review after confirming the central Security Scan retains the
+exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
+pass. #1543 (`887d2461526d0f1c70748cf9c9f726a45b742b5e`) remains Draft: central
+scheduler main does not yet prove the structured adversarial fallback contract,
+so it is not a complete successor for #1531 and must not delete that delta yet.
 #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
