@@ -312,12 +312,15 @@ only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
 discovery, capability routing, free-pool membership, and fallback remain with
 the canonical owner. Consumer adoption still requires an immutable protected
 owner release, and open PRs or unreleased branches remain Proposed evidence.
-Successor PR #1567 (`c5dc35d192fcdcf16089c646c3065b988684e7fb`)
-preserves the full AGENTS/CLAUDE/config/test delta after #1566 could not emit
-new check suites, including the external-MCP confidentiality and no-shared-
-timeout contracts. Fifty-five focused documentation/governance contracts and
-diff checks pass. Fresh exact-head hosted Checks and independent review remain
-required; no predecessor evidence transfers.
+Stacked PR #1566 (`a302174bdee4120c86e15b57742f9cb7a4de6db4`)
+preserves the operating playbook and restores #1549's canonical gateway,
+released-owner, and no-shared-timeout block after conflict resolution had
+deleted it. Child PR #1567 (`f3d79a174cebf01c1e3712c7d6763d855af7ff24`)
+now differs from #1566 only by whitespace-normalizing the same documentation
+contract; it is not a second policy writer or a full successor. Fifty-five
+focused documentation/governance contracts and diff checks pass. Fresh
+exact-head hosted Checks and independent review remain required; no predecessor
+evidence transfers.
 Canonical owner release PR contextual-orchestrator #1030
 (`f753f453ce4fc3dbc612bb9bdbb8db4cbfd93c16`) now implements the missing
 immutable publication mechanism: exact tag-namespace identity, annotated-tag
