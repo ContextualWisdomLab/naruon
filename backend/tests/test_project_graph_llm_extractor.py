@@ -647,18 +647,17 @@ async def test_decision_relation_synonym_outside_vocabulary_is_dropped(monkeypat
 
 
 # The import selector resolves through the KG extractor registry, so these
-# tests patch the extraction cores where the registry imports them.
-def _patch_extractor_cores(monkeypatch, *, llm, keyword):
-    monkeypatch.setattr(extractor_registry, "extract_project_semantics_llm", llm)
+# tests patch the deterministic core where the registry imports it. The raw LLM
+# core is intentionally absent from that module and is covered by the boundary test.
+def _patch_keyword_core(monkeypatch, *, keyword):
     monkeypatch.setattr(extractor_registry, "extract_project_semantics", keyword)
 
 
 @pytest.mark.asyncio
 async def test_import_selection_llm_is_policy_disabled(monkeypatch):
     """The import path cannot restore direct-provider LLM routing authority."""
-    llm_mock = AsyncMock(return_value="llm-result")
     keyword_mock = Mock()
-    _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
+    _patch_keyword_core(monkeypatch, keyword=keyword_mock)
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "llm", raising=False
     )
@@ -668,17 +667,13 @@ async def test_import_selection_llm_is_policy_disabled(monkeypatch):
             [_segment("seg1", "text")]
         )
 
-    llm_mock.assert_not_awaited()
     keyword_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_import_selection_defaults_to_keyword(monkeypatch):
-    llm_mock = AsyncMock()
     keyword_result = types.SimpleNamespace(objects=(), edges=())
-    _patch_extractor_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_result)
-    )
+    _patch_keyword_core(monkeypatch, keyword=Mock(return_value=keyword_result))
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "keyword", raising=False
     )
@@ -688,7 +683,6 @@ async def test_import_selection_defaults_to_keyword(monkeypatch):
     )
 
     assert result is keyword_result
-    llm_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -696,9 +690,8 @@ async def test_import_selection_orchestrator_propagates_pending_a_co_release(
     monkeypatch,
 ):
     """The import path fails closed until an immutable CO contract exists."""
-    llm_mock = AsyncMock(return_value="orchestrator-result")
     keyword_mock = Mock()
-    _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
+    _patch_keyword_core(monkeypatch, keyword=keyword_mock)
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
     )
@@ -711,5 +704,4 @@ async def test_import_selection_orchestrator_propagates_pending_a_co_release(
             [_segment("seg1", "text")]
         )
 
-    llm_mock.assert_not_awaited()
     keyword_mock.assert_not_called()

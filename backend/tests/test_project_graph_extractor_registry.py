@@ -1,7 +1,7 @@
 """Behavioral contract for the project-graph extractor registry."""
 
 from dataclasses import fields
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,12 +12,10 @@ from services.project_graph.extractor_registry import (
     SELECTOR_KEYWORD,
     SELECTOR_LLM,
     SELECTOR_ORCHESTRATOR,
-    DeterministicKeywordExtractor,
     ExtractorUnavailableError,
     KgExtractor,
     KgExtractorContext,
     KgExtractorRegistry,
-    LlmGroundedExtractor,
     build_default_registry,
     resolve_extractor_chain,
     run_extraction,
@@ -79,15 +77,8 @@ def test_registry_without_keyword_fallback_is_programming_error():
 
 def test_context_has_no_authority_bearing_dataclass_fields():
     assert tuple(field.name for field in fields(KgExtractorContext)) == ()
-    context = KgExtractorContext(
-        api_key="must-not-survive",
-        orchestrator_base_url="https://orchestrator.example/v1",
-        orchestrator_model="must-not-survive",
-    )
-    assert not hasattr(context, "api_key")
-    assert not hasattr(context, "orchestrator_base_url")
-    assert not hasattr(context, "orchestrator_model")
-    assert context._legacy_endpoint_configured is True
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        KgExtractorContext(api_key="must-not-survive")
 
 
 @pytest.mark.asyncio
@@ -105,58 +96,23 @@ async def test_keyword_selector_runs_deterministic_core(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_direct_llm_selector_is_policy_disabled_even_with_legacy_inputs(monkeypatch):
-    raw_transport = AsyncMock()
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
-
+async def test_direct_llm_selector_is_policy_disabled():
     with pytest.raises(ExtractorUnavailableError, match="disabled"):
         await run_extraction(
             [_segment()],
             selector=SELECTOR_LLM,
-            context=KgExtractorContext(
-                api_key="secret",
-                orchestrator_base_url="https://orchestrator.example/v1",
-                orchestrator_model="provider/model",
-            ),
+            context=KgExtractorContext(),
         )
-
-    raw_transport.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_selector_fails_closed_without_endpoint(monkeypatch):
-    raw_transport = AsyncMock()
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
-
-    with pytest.raises(ExtractorUnavailableError, match="endpoint is not configured"):
+async def test_orchestrator_selector_fails_closed_without_release():
+    with pytest.raises(ExtractorUnavailableError, match="released consumer contract"):
         await run_extraction(
             [_segment()],
             selector=SELECTOR_ORCHESTRATOR,
             context=KgExtractorContext(),
         )
-
-    raw_transport.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_selector_rejects_raw_transport_even_when_legacy_values_exist(
-    monkeypatch,
-):
-    raw_transport = AsyncMock(return_value=object())
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", raw_transport)
-
-    with pytest.raises(ExtractorUnavailableError, match="no consumer release"):
-        await run_extraction(
-            [_segment()],
-            selector=SELECTOR_ORCHESTRATOR,
-            context=KgExtractorContext(
-                api_key="tenant-provider-secret",
-                orchestrator_base_url="https://orchestrator.example/v1",
-                orchestrator_model="provider/model",
-            ),
-        )
-
-    raw_transport.assert_not_awaited()
 
 
 def test_custom_non_llm_extractor_keeps_keyword_fallback():
