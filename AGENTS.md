@@ -225,10 +225,12 @@ in this repo.
   running review work; `ready_for_review` must start fresh current-head work.
 - A queued workflow record is not proof of an occupied runner. Inspect jobs and
   preserve current-head release, deployment, image, migration, SBOM,
-  provenance, and security evidence. Administrative bypass is limited to an
-  Actions-capacity chicken-and-egg repair that cannot run because the defective
-  workflow itself saturates the queue; never use it for product or security
-  changes, and never weaken a required gate.
+  provenance, and security evidence. Do not use administrative merge bypass.
+  The only permitted temporary required-context adjustment is the documented
+  stale-context procedure in `docs/development/merge-gate-policy.md`: capture
+  equivalent current-head evidence, make a reversible ruleset change, restore
+  the context after protected-branch repair, and rerun its evidence. It does not
+  authorize suppressing a product or security finding.
 - Model-backed OpenCode, Strix, and Noema workflows request only
   `contextual-orchestrator/orchestrator/free` with the gateway credential.
   Provider discovery, capability routing, and fallback belong to the
@@ -257,7 +259,10 @@ Software Development Framework (SSDF) Version 1.1: Recommendations for
 Mitigating the Risk of Software Vulnerabilities* (NIST SP 800-218). National
 Institute of Standards and Technology. https://doi.org/10.6028/NIST.SP.800-218.
 SSDF PS.1 and PS.3 ground accountable protected changes and retained integrity
-and provenance evidence without prescribing repository-specific tooling.
+and provenance evidence without prescribing repository-specific tooling. The
+redistributable NIST publication is retained at
+`docs/papers/nist-sp-800-218.pdf`; NIST states that SP 800 publications are not
+subject to U.S. copyright, while attribution remains required.
 
 - Follow `docs/development/merge-gate-policy.md` for PR gate interpretation.
 - PR Governance must stay metadata-only: no PR-head checkout, no admin merge, no
@@ -778,8 +783,10 @@ and provenance evidence without prescribing repository-specific tooling.
 ## Phase 10 development rules
 
 - **Stepwise execution**: Each phase requires an atomic PR, GitHub PR Tracking,
-  Push, and Robot Review. A phase only ends when merged; while it waits, continue
-  independent work that does not consume or contradict the pending delta.
+  Push, and Robot Review. A phase ends only when its PR is protected-merged or a
+  successor's exact tree, effective diff, tests, and lineage record independently
+  prove complete-delta succession. While it waits, continue independent work
+  that does not consume or contradict the pending delta.
 - **TDD + DDD**: Practice TDD, micro TDD, nano TDD, Domain Driven Development, and Context Driven Development.
 - **API Wiring**: Always work with API wiring completed.
 - **Collaboration**: Respect other agents' concurrent work; do not overwrite or dismiss unfamiliar changes.

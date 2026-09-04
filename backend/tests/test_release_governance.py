@@ -44,6 +44,20 @@ def read_repo_text(relative_path: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def test_agent_lifecycle_governance_artifacts_stay_aligned() -> None:
+    """Keep lifecycle policy, model routing, and research evidence consistent."""
+    guidance = read_repo_text("AGENTS.md")
+    opencode_config = read_repo_text("opencode.jsonc")
+    research_artifact = REPO_ROOT / "docs/papers/nist-sp-800-218.pdf"
+
+    assert '"model": "contextual-orchestrator/orchestrator/free"' in opencode_config
+    assert '"enabled_providers": ["contextual-orchestrator"]' in opencode_config
+    assert "STRIX_GITHUB_MODELS_TOKEN" not in opencode_config
+    assert "docs/development/merge-gate-policy.md" in guidance
+    assert "prove complete-delta succession" in guidance
+    assert research_artifact.read_bytes().startswith(b"%PDF-")
+
+
 def assert_dockerfile_stage_from(dockerfile: str, image: str, stage_alias: str) -> None:
     pattern = (
         rf"^FROM {re.escape(image)}@sha256:[0-9a-f]{{64}} AS {re.escape(stage_alias)}$"
