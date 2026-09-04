@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
+    ANALYSIS_TEXT_MAX_CHARS,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -1126,7 +1127,7 @@ async def test_sentiment_analyzer_handler_positive_and_neutral():
 @pytest.mark.asyncio
 async def test_analysis_handlers_safe_and_fallthrough_paths():
     from api.tools import (
-        email_translator_handler,
+    email_translator_handler,
         grammar_checker_handler,
         sentiment_analyzer_handler,
         spam_phishing_detector_handler,
@@ -1194,7 +1195,7 @@ async def test_keyword_extractor_handler():
 
 
 def test_execute_analysis_tool_rejects_oversized_text():
-    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
 
     with TestClient(app) as client:
         response = client.post(
@@ -1211,3 +1212,46 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_text_summarizer_handler_success():
+    params = {"text": "Hello world. This is a test. How are you?"}
+    result = await registry.invoke_tool("text_summarizer", params)
+    assert result == {"summary": "Hello world. How are you."}
+
+@pytest.mark.asyncio
+async def test_text_summarizer_handler_empty_text():
+    params = {"text": ""}
+    result = await registry.invoke_tool("text_summarizer", params)
+    assert result == {"summary": ""}
+
+@pytest.mark.asyncio
+async def test_text_summarizer_handler_no_sentences():
+    params = {"text": "..."}
+    result = await registry.invoke_tool("text_summarizer", params)
+    assert result == {"summary": "..."}
+
+@pytest.mark.asyncio
+async def test_text_summarizer_handler_one_sentence():
+    params = {"text": "Just one sentence."}
+    result = await registry.invoke_tool("text_summarizer", params)
+    assert result == {"summary": "Just one sentence."}
+
+@pytest.mark.asyncio
+async def test_text_summarizer_handler_oversized():
+    params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
+    with pytest.raises(ValueError, match="must not exceed"):
+        await registry.invoke_tool("text_summarizer", params)
+
+@pytest.mark.asyncio
+async def test_pii_redactor_handler_success():
+    params = {"text": "Contact me at test@example.com or call 123-456-7890."}
+    result = await registry.invoke_tool("pii_redactor", params)
+    assert result == {"redacted_text": "Contact me at [REDACTED EMAIL] or call [REDACTED PHONE]."}
+
+@pytest.mark.asyncio
+async def test_pii_redactor_handler_oversized():
+    params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
+    with pytest.raises(ValueError, match="must not exceed"):
+        await registry.invoke_tool("pii_redactor", params)

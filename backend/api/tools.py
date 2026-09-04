@@ -770,6 +770,64 @@ registry.register(
 
 
 
+
+async def text_summarizer_handler(params: Dict[str, Any]) -> Any:
+    """Summarize the given text."""
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    if not text:
+        return {"summary": ""}
+
+    sentences = [s.strip() for s in text.replace('!', '.').replace('?', '.').split('.') if s.strip()]
+    if not sentences:
+        return {"summary": text}
+
+    summary = sentences[0] + "."
+    if len(sentences) > 1:
+        summary += " " + sentences[-1] + "."
+
+    return {"summary": summary}
+
+registry.register(
+    ToolInfo(
+        code="text_summarizer",
+        name="텍스트 요약기 (Text Summarizer)",
+        description="제공된 텍스트의 핵심 내용을 요약합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    text_summarizer_handler,
+)
+
+async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
+    """Redact PII from the given text."""
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+
+    # Email redaction
+    redacted_text = re.sub(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', '[REDACTED EMAIL]', text)
+    # Phone number redaction (simple pattern for illustration)
+    redacted_text = re.sub(r'\b\d{3}[-.]?\d{3,4}[-.]?\d{4}\b', '[REDACTED PHONE]', redacted_text)
+
+    return {"redacted_text": redacted_text}
+
+registry.register(
+    ToolInfo(
+        code="pii_redactor",
+        name="개인정보 비식별화 (PII Redactor)",
+        description="텍스트 내의 이메일, 전화번호 등 개인정보를 마스킹합니다.",
+        category="보안 도구",
+        parameters={"text": "string"},
+    ),
+    pii_redactor_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
