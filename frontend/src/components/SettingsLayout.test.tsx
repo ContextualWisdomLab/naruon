@@ -46,8 +46,10 @@ function jsonResponse(body: unknown) {
 describe("SettingsLayout", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
+  let accountConfigUnauthorized = false;
 
   beforeEach(() => {
+    accountConfigUnauthorized = false;
     oidcMocks.getOidcBrowserConfig.mockReturnValue({
       issuerUrl: "https://login.example.com/realms/naruon",
       clientId: "naruon-web",
@@ -267,6 +269,12 @@ describe("SettingsLayout", () => {
           });
         }
         if (String(input) === "/api/accounts/config") {
+          if (accountConfigUnauthorized) {
+            return new Response(JSON.stringify({ error_code: "unauthorized" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
           return jsonResponse({
             user_id: "default",
             smtp_server: "smtp.example.com",
@@ -489,6 +497,53 @@ describe("SettingsLayout", () => {
     expect(oidcMocks.clearOidcSession).toHaveBeenCalledWith({
       postLogoutRedirectUri: "http://localhost:3000",
     });
+  });
+
+  it("retries settings that failed while signed out once OIDC login succeeds, instead of leaving them stale until reload", async () => {
+    accountConfigUnauthorized = true;
+    oidcMocks.startOidcLogin.mockResolvedValue(undefined);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("API request failed");
+
+    const developerTab = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "개발자");
+    await act(async () => {
+      developerTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const loginButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Keyverse SSO로 로그인");
+    expect(loginButton).toBeTruthy();
+
+    accountConfigUnauthorized = false;
+    await act(async () => {
+      loginButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).not.toContain("API request failed");
+    expect(container.textContent).toContain("smtp.example.com:587");
   });
 
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {

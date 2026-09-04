@@ -5,7 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import type { SessionClaims } from '@/lib/session-cookie';
 import { clearOidcSession, getOidcBrowserConfig, startOidcLogin } from '@/lib/oidc-session';
 import { useWorkspaceStartupView, setWorkspaceStartupView } from '@/lib/workspace-preferences';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 export type SettingsTab = '워크스페이스' | '멤버' | 'AI 모델' | '연결 계정' | '알림' | '자동화' | '결제' | '개발자';
 const EMPTY_SESSION_CLAIMS: SessionClaims = {
@@ -597,6 +597,95 @@ export function SettingsLayout() {
     }
   };
 
+  // Fetches every backend-authenticated settings resource this page shows.
+  // Called on mount AND again after a successful OIDC login, since a mount
+  // that happened while the user was still signed out leaves each of these
+  // in their failed (401) error state -- refreshOidcSessionClaims() alone
+  // only re-fetches identity, not the settings data gated behind it.
+  const loadAccountSettings = useCallback((isCancelled: () => boolean) => {
+    void apiClient
+      .get<RunnerConfig>('/api/runner-config')
+      .then((config) => {
+        if (isCancelled()) return;
+        setRunnerConfig(config);
+        setRunnerError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setRunnerError(error.message || 'Self-hosted connector 설정을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setRunnerLoading(false);
+      });
+
+    void apiClient
+      .get<OperationalSignalsResponse>('/api/observability/operational-signals')
+      .then((signals) => {
+        if (isCancelled()) return;
+        setOperationalSignals(signals);
+        setOperationalError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setOperationalError(error.message || '운영 신호를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setOperationalLoading(false);
+      });
+
+    void apiClient
+      .get<AccountConfig>('/api/accounts/config')
+      .then((config) => {
+        if (isCancelled()) return;
+        setAccountConfig(config);
+        setAccountForm(toAccountForm(config));
+        setAccountError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setAccountError(error.message || '계정 설정을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setAccountLoading(false);
+      });
+
+    void Promise.all([
+      apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources'),
+      apiClient.get<WebdavAccount[]>('/api/webdav/accounts'),
+    ])
+      .then(([calendarSourceRows, webdavAccountRows]) => {
+        if (isCancelled()) return;
+        setCalendarSources(calendarSourceRows);
+        setWebdavAccounts(webdavAccountRows);
+        setSourceReadinessError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setSourceReadinessError(error.message || 'Source readiness를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setSourceReadinessLoading(false);
+      });
+
+    void apiClient
+      .get<LLMProviderConfig[]>('/api/llm-providers')
+      .then((providers) => {
+        if (isCancelled()) return;
+        setModelProviders(providers);
+        const activeProvider = providers.find((provider) => provider.is_active) ?? providers[0] ?? null;
+        setSelectedEmbeddingProviderId(activeProvider?.id ?? null);
+        setSelectedEmbeddingModel(activeProvider?.embedding_model ?? 'embeddinggemma');
+        setModelProvidersError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled()) return;
+        setModelProvidersError(error.message || 'AI 모델 설정을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isCancelled()) setModelProvidersLoading(false);
+      });
+  }, []);
+
   const handleOidcLogin = async () => {
     setOidcActionError(null);
     try {
@@ -604,6 +693,12 @@ export function SettingsLayout() {
       // the naruon tab itself never navigates away.
       await startOidcLogin({ returnTo: window.location.pathname });
       await refreshOidcSessionClaims();
+      setRunnerLoading(true);
+      setOperationalLoading(true);
+      setAccountLoading(true);
+      setSourceReadinessLoading(true);
+      setModelProvidersLoading(true);
+      loadAccountSettings(() => false);
     } catch (error) {
       setOidcActionError(error instanceof Error ? error.message : 'OIDC login failed');
     }
@@ -744,92 +839,12 @@ export function SettingsLayout() {
     // (refreshOidcSessionClaims mirrors this fetch for the post-login refresh below;
     // kept separate so this mount effect's cleanup/cancellation stays local.)
 
-    void apiClient
-      .get<RunnerConfig>('/api/runner-config')
-      .then((config) => {
-        if (cancelled) return;
-        setRunnerConfig(config);
-        setRunnerError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setRunnerError(error.message || 'Self-hosted connector 설정을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setRunnerLoading(false);
-      });
-
-    void apiClient
-      .get<OperationalSignalsResponse>('/api/observability/operational-signals')
-      .then((signals) => {
-        if (cancelled) return;
-        setOperationalSignals(signals);
-        setOperationalError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setOperationalError(error.message || '운영 신호를 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setOperationalLoading(false);
-      });
-
-    void apiClient
-      .get<AccountConfig>('/api/accounts/config')
-      .then((config) => {
-        if (cancelled) return;
-        setAccountConfig(config);
-        setAccountForm(toAccountForm(config));
-        setAccountError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setAccountError(error.message || '계정 설정을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setAccountLoading(false);
-      });
-
-    void Promise.all([
-      apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources'),
-      apiClient.get<WebdavAccount[]>('/api/webdav/accounts'),
-    ])
-      .then(([calendarSourceRows, webdavAccountRows]) => {
-        if (cancelled) return;
-        setCalendarSources(calendarSourceRows);
-        setWebdavAccounts(webdavAccountRows);
-        setSourceReadinessError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setSourceReadinessError(error.message || 'Source readiness를 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setSourceReadinessLoading(false);
-      });
-
-    void apiClient
-      .get<LLMProviderConfig[]>('/api/llm-providers')
-      .then((providers) => {
-        if (cancelled) return;
-        setModelProviders(providers);
-        const activeProvider = providers.find((provider) => provider.is_active) ?? providers[0] ?? null;
-        setSelectedEmbeddingProviderId(activeProvider?.id ?? null);
-        setSelectedEmbeddingModel(activeProvider?.embedding_model ?? 'embeddinggemma');
-        setModelProvidersError(null);
-      })
-      .catch((error: Error) => {
-        if (cancelled) return;
-        setModelProvidersError(error.message || 'AI 모델 설정을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setModelProvidersLoading(false);
-      });
+    loadAccountSettings(() => cancelled);
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAccountSettings]);
 
   return (
     <div className="flex h-full min-w-0 min-h-0 bg-background text-foreground flex-col overflow-x-hidden">
