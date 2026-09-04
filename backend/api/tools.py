@@ -778,7 +778,13 @@ registry.register(
 )
 
 
-_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+_EMAIL_ATOM = r"A-Za-z0-9!#$%&'*+/=?^_`{|}~"
+_EMAIL_PATTERN = re.compile(
+    rf"(?<![{_EMAIL_ATOM}.-])"
+    rf"[{_EMAIL_ATOM}-]+(?:\.[{_EMAIL_ATOM}-]+)*@"
+    rf"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z]{2,63}(?![A-Za-z0-9-])"
+)
 _PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
     r"|\d{2,3}-\d{3,4}-\d{4}"
