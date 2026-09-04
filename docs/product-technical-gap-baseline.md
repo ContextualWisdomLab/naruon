@@ -252,6 +252,18 @@ Proposed evidence. The owner implementation was inspected at local exact head
 surface exist, while its changelog still marks the versions Unreleased. Two
 focused documentation contracts, Ruff, and diff checks pass; hosted exact-head
 checks and independent review remain required.
+Canonical owner release PR contextual-orchestrator #1030
+(`f753f453ce4fc3dbc612bb9bdbb8db4cbfd93c16`) now implements the missing
+immutable publication mechanism: exact tag-namespace identity, annotated-tag
+peeling, protected-main freshness, read-only verification, mandatory
+exact-commit CycloneDX SBOM, and resumable asset attachment. It non-force
+inherits Python/fast-mlsirm prerequisite #995 and the current NVIDIA hosted
+prototype evidence from #1063; official NVIDIA guidance still separates free
+prototype access from production licensing. Actionlint, Ruff, 83 focused
+release contracts, 209 combined release/NIM contracts, and the full suite
+(`3477 passed, 2 skipped`) pass. The PR remains Draft, ADR 0129 remains
+Proposed, hosted exact-head evidence is pending, and the owner still has zero
+published GitHub Releases; consumers therefore remain fail closed.
 Draft PR #1525 (`8225123257400be29f72fe0e3039512e6c95ac78`) repairs the
 project-graph selector boundary and its executable tests. `keyword` remains an
 explicit deterministic mode; `llm` and `orchestrator` neither choose provider
