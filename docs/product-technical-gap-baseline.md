@@ -523,7 +523,7 @@ Escape dismisses a focus-triggered overlay without moving focus. Thirteen unit
 tests, one isolated real-browser Playwright regression, TypeScript, ESLint, and
 diff checks pass. No predecessor gate evidence transfers, and #1500 remains
 open until the successor merges and equivalence is reverified.
-PR #1488 (`88944a9ec490745c2a7bbca5e6e134a568bad919`) repairs the calendar
+PR #1488 (`5a5789e04b9e8bcb50ddd22fbc411fc7581a24d8`) repairs the calendar
 sidebar's deceptive enabled controls. Location, delete, copy, and close actions
 had no product-backed behavior and are removed; the remaining update check uses
 the existing signed-session calendar writeback-intent callback and stays
@@ -532,6 +532,15 @@ action and proves callback dispatch. The same test rerenders a selected event
 with source writeback disabled and proves the callback cannot fire; two focused
 tests, TypeScript, ESLint, and diff checks pass. Hosted exact-head evidence
 remains required.
+Stacked accessibility child #1569
+(`52f732a29ac3c8ab31d45eaae572c04f9ee33259`) keeps sidebar ownership in
+#1488 and repairs the reusable writeback section. It now evaluates the selected
+source with the canonical writable-source predicate rather than treating every
+non-null stale selection as writable; a read-only stale selection cannot enable
+create, update, or provider execution and cannot display a false selected badge.
+The focused six tests, complete frontend suite (54 files, 445 tests), TypeScript,
+ESLint, and diff checks pass. The non-default-base head remains Draft until
+#1562 supplies required hosted validation and independent review evidence.
 PR #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
