@@ -21,7 +21,7 @@ describe("password-route authentication authority", () => {
   });
 
   it("does not retain dormant ROPC or password-registration authority", async () => {
-    const oidcShared = await sourceFile("../../oidc/shared.ts");
+    const oidcShared = await sourceFile("../oidc/shared.ts");
 
     expect(oidcShared).not.toContain("exchangePasswordForSessionResponse");
     expect(oidcShared).not.toContain('grant_type: "password"');
