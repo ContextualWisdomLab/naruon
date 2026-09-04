@@ -27,9 +27,18 @@ The frontend then normalizes backend `source`/`target` into `vis-network`'s `fro
 
 This change does not alter persisted data, database schema, tenant ownership filters, endpoint paths, response JSON keys, or network authority. No migration or data backfill is required.
 
+The response boundary sorts nodes by email identity and edges by source/target
+identity. Identical email evidence therefore produces a deterministic JSON
+array order instead of inheriting process-dependent set order or database row
+order. This keeps client graph layout inputs, cache validators, screenshots,
+and incident comparisons stable without changing graph membership or weights.
+
 ## Verification contract
 
 `backend/tests/test_network_graph_naming_contract.py` pins both sides of the boundary: the Python model fields must remain semantically specific and the legacy JSON aliases must remain byte-shape compatible at the object-key level. Repository exact-head CI remains authoritative for the focused test, full backend suite, lint/type checks, security gates, and review evidence.
+
+`backend/tests/test_network_api.py` also pins the complete node and edge order
+for deliberately unsorted source rows.
 
 ## DDD traceability
 
@@ -38,4 +47,5 @@ This change does not alter persisted data, database schema, tenant ownership fil
 - **Entities/value records:** `NetworkGraphNode`, `NetworkGraphEdge`.
 - **Invariant:** graph-node and relationship meanings are explicit inside Naruon; generic wire/vendor vocabulary is confined to adapters.
 - **Invariant:** tenant-scoped email ownership and organization filters remain unchanged.
+- **Invariant:** equivalent relationship evidence serializes in canonical node and edge order.
 - **Compatibility event:** no public wire-format event is emitted because the external response schema is intentionally preserved.
