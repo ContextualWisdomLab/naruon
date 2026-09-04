@@ -30,7 +30,7 @@ def test_agent_guidance_does_not_reintroduce_direct_model_routing_authority() ->
 
 def test_agent_guidance_names_canonical_llm_owner_and_fail_closed_boundary() -> None:
     """Guidance must preserve product ownership while delegating LLM routing."""
-    agents = _read("AGENTS.md")
+    agents = " ".join(_read("AGENTS.md").split())
     claude = _read("CLAUDE.md")
 
     assert "ContextualWisdomLab/.github" in agents

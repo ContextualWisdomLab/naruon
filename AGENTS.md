@@ -167,10 +167,15 @@ in this repo.
   model, API base, served-model metadata, and terminal response on the same
   execution; configuration text or a healthy sidecar alone is insufficient.
 - Keep private-source review fail-closed and ZDR-only. Never log or copy bearer
-  tokens, provider credentials, request payloads, or secret-derived values.
+  tokens, provider credentials, request payloads, or secret-derived values. Pass
+  only the gateway token; provider names, model selection, retries, and fallback
+  credentials remain private to `contextual-orchestrator`.
 - Do not add direct-provider fallback credentials to repository workflows.
-  Repair shared sidecar, credential bootstrap, timeout, or response-normalizing
-  code where all three review paths converge.
+  Production requires an immutable released owner API/client/schema; an open PR
+  or unreleased branch is proposed evidence, not an available runtime contract.
+  Repair shared sidecar, credential bootstrap, response normalization, and the
+  shared application/agent/gateway wall-clock timeout where all three review
+  paths converge instead of hiding a nested 900-second failure.
 
 ### PR delivery
 
