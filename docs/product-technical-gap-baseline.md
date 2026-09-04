@@ -96,6 +96,17 @@ the shared check/comment. Thirty-eight governance tests, the shell harness,
 actionlint, and diff checks pass. Central scheduler main still does not prove the
 structured adversarial fallback contract, so #1543 is not a complete successor
 for #1531 and must not delete that delta.
+Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
+provider/model-specific routing policy from Naruon's agent guidance. Central
+model-backed Actions now name only the `.github`-owned `orchestrator/free`
+gateway boundary; provider discovery, capability routing, free-pool membership,
+and fallback remain with `contextual-orchestrator`. Consumer adoption requires
+an immutable protected owner release, and open PRs or unreleased branches remain
+Proposed evidence. The owner implementation was inspected at local exact head
+`2af17386a8ae3c0f0879cf48c5a1a05cdaa63bab`: the logical pool and routing
+surface exist, while its changelog still marks the versions Unreleased. Two
+focused documentation contracts, Ruff, and diff checks pass; hosted exact-head
+checks and independent review remain required.
 PR #1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
 NetworkGraph option-materialization parent. #1526
 (`b2d6cb257dc1af1b2bc15342825b74185f74a78a`) is Draft after a third unsigned
