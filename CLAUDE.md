@@ -36,6 +36,13 @@ uvicorn main:app --reload                    # local dev server only
   `DISABLE_BACKGROUND_WORKERS=1`, then fails the job if the pytest output
   contains `Timeout`, `Fatal`, `Warn`, or `Denied`. Match that locally for
   merge evidence.
+- The `backend` job provisions a real `pgvector/pgvector:pg16` Postgres
+  `services:` container (`.github/workflows/app-ci.yml`), so every
+  `@pytest.mark.postgres`/real-Postgres smoke test actually runs in CI — it
+  is a hard gate, not a soft-skip. Locally, point `DATABASE_URL` at a
+  Postgres+pgvector instance (`docker-compose.yml`'s `db` service, or any
+  local Postgres 16) before running the full suite, or those tests skip with
+  `PostgreSQL smoke database/path unavailable` instead of proving anything.
 - Containers never run `uvicorn main:app` directly; the entrypoint is
   `python scripts/start_backend.py`, which validates required settings first.
 - `scripts/bootstrap_db.py` is the local/dev-only schema compatibility path;

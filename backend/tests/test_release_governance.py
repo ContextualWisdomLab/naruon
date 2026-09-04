@@ -663,6 +663,11 @@ def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushe
     assert "uses: actions/checkout@v" not in workflow
     assert "uses: actions/setup-python@v" not in workflow
     assert "uses: actions/setup-node@v" not in workflow
+    assert (
+        "image: pgvector/pgvector:pg16@sha256:"
+        "ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b"
+        in workflow
+    )
 
     push_block = workflow.split("push:", 1)[1].split("pull_request:", 1)[0]
     assert "master" in push_block

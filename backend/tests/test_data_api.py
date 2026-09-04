@@ -2951,11 +2951,11 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_records (
                 user_id, organization_id, message_id, thread_id,
-                fingerprint, sender, recipients, subject, "date", body
+                fingerprint, sender, recipients, subject, "date", body, is_read
             )
             VALUES (
                 :user_id, :organization_id, :message_id, :thread_id,
-                :fingerprint, :sender, :recipients, :subject, now(), :body
+                :fingerprint, :sender, :recipients, :subject, now(), :body, true
             )
             RETURNING id
             """
@@ -2977,11 +2977,11 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_records (
                 user_id, organization_id, message_id, sender, recipients,
-                subject, "date", body
+                subject, "date", body, is_read
             )
             VALUES (
                 :user_id, :organization_id, :message_id, :sender,
-                :recipients, :subject, now(), :body
+                :recipients, :subject, now(), :body, true
             )
             RETURNING id
             """
@@ -3001,11 +3001,11 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_records (
                 user_id, organization_id, message_id, thread_id,
-                fingerprint, sender, recipients, subject, "date", body
+                fingerprint, sender, recipients, subject, "date", body, is_read
             )
             VALUES (
                 :user_id, :organization_id, :message_id, :thread_id,
-                :fingerprint, :sender, :recipients, :subject, now(), :body
+                :fingerprint, :sender, :recipients, :subject, now(), :body, true
             )
             RETURNING id
             """

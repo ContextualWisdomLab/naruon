@@ -1,4 +1,26 @@
 ## [Unreleased]
+- **(CI 인프라, 🔴 critical) `backend` job에 Postgres 서비스 컨테이너가 없어 `@pytest.mark.postgres`
+  real-Postgres 테스트가 CI에서 단 한 번도 실제로 실행되지 않고 항상 조용히 skip되던 문제를
+  고쳤습니다.** `.github/workflows/app-ci.yml`의 `backend` job에 `pgvector/pgvector:pg16`
+  서비스 컨테이너(`test`/`test`/`test_db`, `pg_isready` 헬스체크)를 추가하고 `DATABASE_URL`을
+  같은 자격증명으로 설정해, `tests/conftest.py`의 기본값과 그대로 맞물리도록 했습니다. 실제로
+  CI 환경과 동일하게(로컬 PostgreSQL 16 + pgvector) 처음 돌려보자, 완전히 새 데이터베이스에 대한
+  `alembic upgrade head`가 `0011_email_read_state`에서 레거시 `emails` 테이블을 직접 대상으로
+  해 `relation "emails" does not exist`로 깨지는 결함과, `tests/test_bootstrap_db.py`/
+  `tests/test_data_api.py`의 raw SQL `INSERT INTO email_records`가 `is_read`(ORM 쪽
+  Python-side `default=True`뿐, DB 서버측 default 없음)를 빠뜨려 real Postgres에서
+  `NotNullViolationError`로 하드 실패하는 결함이 함께 드러났습니다. `#1503`이 동일한 근본
+  원인을 독립적으로 재현·수정(현재 `email_records`/레거시 `emails` 양쪽을 컬럼 존재 여부로
+  가드)했기에, 서로 다른 두 구현이 충돌하지 않도록 `0011_email_read_state.py`와
+  `backend/scripts/bootstrap_db.py`는 `#1503`의 구현으로 수렴시켰습니다 — 이 PR은 CI
+  service-container 추가와 그것이 처음으로 드러낸 `is_read` raw-SQL 시딩 결함 수정만
+  담당하는 의존성 루트 슬라이스로 범위를 좁혔습니다(owner 요청, 2026-09-02). PR-governance/
+  stacked-PR 트리거 관련 무관한 변경은 `#1531`로 분리했습니다.
+  전체 백엔드 스위트를 실제 PostgreSQL 16(+pgvector)로 검증: **1837 passed, 2 skipped**
+  (남은 2개는 `LIVE_BASE_URL` 미설정에 따른 무관한 live-API smoke skip), `ruff check` clean.
+  `CLAUDE.md`/`AGENTS.md`에 이 job이 이제 real-Postgres 테스트를 하드 게이트로 실행한다는 것과
+  로컬 재현 방법을 기록. 후속 과제로 남겨두었던 항목(`docs/product-technical-gap-baseline.md`,
+  `.github` repo)을 닫습니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
