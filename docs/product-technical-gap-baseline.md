@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.22
+**Baseline version:** 1.23
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -244,18 +244,23 @@ compatibility launcher lacked `httpx2`; canonical `.github` PR #1851 has since
 merged the hash-locked dependency into protected main
 `769691526f8c73cf714de8fe8ba51ae6cfa2901a`. Fresh #1525 exact-head hosted
 evidence must prove that owner repair; prior failure evidence does not transfer.
-PR #1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
-NetworkGraph option-materialization parent. #1526 was repaired non-force at
+PR #1522 (`2d58b23003917319fb6fd5170973f70b88793fb0`) remains the bounded
+NetworkGraph option-materialization parent and owns its repository-local Strix
+lock prerequisite. Failed job `101062515199` proved the scanner stopped before
+analysis with `ModuleNotFoundError: No module named 'httpx2'`; the target lock
+now directly pins `httpx2==2.12.0`, its generated hash lock is unchanged, and
+a hash-required Python 3.13 install imports that exact version. #1526 was
+repaired non-force at
 `cd99fef3245d1097a0422e9b1f48cb42d51ab6e0`: it restored early-terminating
 option loops, executable option-limit coverage, and a real parent-rerender
 memoization assertion. Its current exact head `9a6be24a30c76497510b1de19f7cabe1254864a9`
 then overwrote those repairs with full-array materialization and a private
 React-marker assertion. The PR remains open for lineage; the overwrite does not
 invalidate the verified delta. Stable successor #1560
-(`e3b734ac88415ecd4cd7ade25516bb8bf1576cb5`) now inherits the repaired #1526
-commit by non-force merge on exact parent #1522, removes the duplicate standalone
-memoization test, and records validated tree
-`f95aace5d83877d8fa604db7f71e12ab7ce4f07e`. The complete frontend suite (52
+(`20fdedbae61f0e11cc650413d35532507b99656b`) now inherits the repaired #1526
+commit and current parent #1522 by non-force merge, removes the duplicate
+standalone memoization test, and records validated tree
+`913c5431bbcf909b3d91e3807baacbfeda79f02d`. The complete frontend suite (52
 files, 439 tests), TypeScript, focused ESLint, and diff checks pass. No
 predecessor gate evidence transfers, and #1526 may close only after #1560 merges
 and exact protected-main equivalence is reverified. #1560 remains Draft while
