@@ -1,4 +1,4 @@
-"""Regression contract for bounded Korean phone masking."""
+"""Regression contract for bounded Korean and North American phone masking."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +8,7 @@ from main import app
 from tests.test_tools_api import _signed_session_token
 
 
-_COMMON_KOREAN_PHONE_CASES = (
+_SUPPORTED_PHONE_CASES = (
     (
         "국내 연락처는 010 1234 5678입니다.",
         "국내 연락처는 [PHONE]입니다.",
@@ -21,23 +21,27 @@ _COMMON_KOREAN_PHONE_CASES = (
         "기존 표기는 010-1234-5678입니다.",
         "기존 표기는 [PHONE]입니다.",
     ),
+    (
+        "북미 연락처는 +1 (123) 456-7890입니다.",
+        "북미 연락처는 [PHONE]입니다.",
+    ),
 )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("source_text", "expected_text"), _COMMON_KOREAN_PHONE_CASES)
-async def test_email_phone_masker_masks_common_korean_phone_formats(
+@pytest.mark.parametrize(("source_text", "expected_text"), _SUPPORTED_PHONE_CASES)
+async def test_email_phone_masker_masks_supported_phone_formats(
     source_text: str,
     expected_text: str,
 ) -> None:
-    """Mask common domestic and +82 Korean phone representations."""
+    """Mask selected Korean and North American phone representations."""
     result = await email_phone_masker_handler({"text": source_text})
 
     assert result["masked_text"] == expected_text
 
 
-@pytest.mark.parametrize(("source_text", "expected_text"), _COMMON_KOREAN_PHONE_CASES)
-def test_execute_email_phone_masker_masks_common_korean_phone_formats(
+@pytest.mark.parametrize(("source_text", "expected_text"), _SUPPORTED_PHONE_CASES)
+def test_execute_email_phone_masker_masks_supported_phone_formats(
     source_text: str,
     expected_text: str,
 ) -> None:
