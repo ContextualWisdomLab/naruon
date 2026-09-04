@@ -647,125 +647,61 @@ async def test_decision_relation_synonym_outside_vocabulary_is_dropped(monkeypat
 
 
 # The import selector resolves through the KG extractor registry, so these
-# tests patch the extraction cores where the registry imports them.
-def _patch_extractor_cores(monkeypatch, *, llm, keyword):
-    monkeypatch.setattr(extractor_registry, "extract_project_semantics_llm", llm)
+# tests patch the deterministic core where the registry imports it. The raw LLM
+# core is intentionally absent from that module and is covered by the boundary test.
+def _patch_keyword_core(monkeypatch, *, keyword):
     monkeypatch.setattr(extractor_registry, "extract_project_semantics", keyword)
 
 
 @pytest.mark.asyncio
-async def test_import_selection_uses_llm_when_configured(monkeypatch):
-    llm_mock = AsyncMock(return_value="llm-result")
+async def test_import_selection_llm_is_policy_disabled(monkeypatch):
+    """The import path cannot restore direct-provider LLM routing authority."""
     keyword_mock = Mock()
-    _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
+    _patch_keyword_core(monkeypatch, keyword=keyword_mock)
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "llm", raising=False
     )
-    provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url=None, embedding_model="embed"
-    )
 
-    result = await import_service._extract_project_semantics_for_import(
-        [_segment("seg1", "text")], embedding_provider=provider
-    )
+    with pytest.raises(extractor_registry.ExtractorUnavailableError, match="disabled"):
+        await import_service._extract_project_semantics_for_import(
+            [_segment("seg1", "text")]
+        )
 
-    assert result == "llm-result"
-    llm_mock.assert_awaited_once()
     keyword_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_import_selection_falls_back_to_keyword_on_llm_failure(monkeypatch):
-    keyword_result = types.SimpleNamespace(objects=(), edges=())
-    _patch_extractor_cores(
-        monkeypatch,
-        llm=AsyncMock(side_effect=RuntimeError("provider down")),
-        keyword=Mock(return_value=keyword_result),
-    )
-    monkeypatch.setattr(
-        import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "llm", raising=False
-    )
-    provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url=None, embedding_model="embed"
-    )
-
-    result = await import_service._extract_project_semantics_for_import(
-        [_segment("seg1", "text")], embedding_provider=provider
-    )
-
-    assert result is keyword_result
-
-
-@pytest.mark.asyncio
 async def test_import_selection_defaults_to_keyword(monkeypatch):
-    llm_mock = AsyncMock()
     keyword_result = types.SimpleNamespace(objects=(), edges=())
-    _patch_extractor_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_result)
-    )
+    _patch_keyword_core(monkeypatch, keyword=Mock(return_value=keyword_result))
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "keyword", raising=False
     )
 
     result = await import_service._extract_project_semantics_for_import(
-        [_segment("seg1", "text")], embedding_provider=None
+        [_segment("seg1", "text")]
     )
 
     assert result is keyword_result
-    llm_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_import_selection_routes_through_orchestrator_when_configured(monkeypatch):
-    llm_mock = AsyncMock(return_value="orchestrator-result")
-    _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=Mock())
+async def test_import_selection_orchestrator_propagates_pending_a_co_release(
+    monkeypatch,
+):
+    """The import path fails closed until an immutable CO contract exists."""
+    keyword_mock = Mock()
+    _patch_keyword_core(monkeypatch, keyword=keyword_mock)
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
     )
-    monkeypatch.setattr(
-        import_service.settings,
-        "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL",
-        "https://orchestrator.example/v1",
-        raising=False,
-    )
-    provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url="https://provider.example", embedding_model="embed"
-    )
 
-    result = await import_service._extract_project_semantics_for_import(
-        [_segment("seg1", "text")], embedding_provider=provider
-    )
+    with pytest.raises(
+        extractor_registry.ExtractorUnavailableError,
+        match="released consumer contract",
+    ):
+        await import_service._extract_project_semantics_for_import(
+            [_segment("seg1", "text")]
+        )
 
-    assert result == "orchestrator-result"
-    # Extraction is routed at the orchestrator endpoint, not the raw provider.
-    assert (
-        llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
-    )
-
-
-@pytest.mark.asyncio
-async def test_import_selection_orchestrator_falls_back_when_unconfigured(monkeypatch):
-    llm_mock = AsyncMock()
-    keyword_result = types.SimpleNamespace(objects=(), edges=())
-    _patch_extractor_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_result)
-    )
-    monkeypatch.setattr(
-        import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
-    )
-    monkeypatch.setattr(
-        import_service.settings,
-        "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL",
-        None,
-        raising=False,
-    )
-    provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url=None, embedding_model="embed"
-    )
-
-    result = await import_service._extract_project_semantics_for_import(
-        [_segment("seg1", "text")], embedding_provider=provider
-    )
-
-    assert result is keyword_result
-    llm_mock.assert_not_awaited()
+    keyword_mock.assert_not_called()

@@ -207,25 +207,24 @@ extractor seam rather than a hardcoded branch in the import pipeline.
 [`backend/services/project_graph/extractor_registry.py`](backend/services/project_graph/extractor_registry.py)
 defines the `KgExtractor` contract (name + version + `extract`), a
 `KgExtractorRegistry` keyed by the `PROJECT_GRAPH_EXTRACTOR` selector, and
-`run_extraction`, which resolves an ordered fallback chain. The chain's terminal
-element is **always** the deterministic keyword extractor, so "rule-based
-extraction is fallback/reference only" is guaranteed structurally — an LLM
-extractor that lacks credentials, targets an unconfigured orchestrator endpoint,
-or fails at request time raises `ExtractorUnavailableError` (or any exception)
-and the runner degrades down the chain instead of losing the projection. New
-extractors (including future plugins on the platform plan's `kg.extractor`
-extension point) register a selector without editing ingest.
+`run_extraction`, whose failure behavior is explicit per selected capability.
+Explicit `PROJECT_GRAPH_EXTRACTOR=keyword` is the deterministic non-LLM mode.
+Selectors that require LLM capability must not silently fall back to keyword
+extraction: they use only their requested capability, and unavailability or
+request failure propagates as a truthful extraction failure instead of
+fabricating a lexical projection. Unknown selectors and non-conforming plugins
+also fail closed.
 
-Routing LLM extraction through **contextual-orchestrator** is modelled as a
-transport concern: the orchestrator is an OpenAI-compatible gateway, so the
-`orchestrator` selector reuses the identical grounded LLM extractor
-(`extract_project_semantics_llm`, which enforces segment citations) but points
-its SSRF-allowlisted client (`build_llm_provider_http_client`) at
-`PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` instead of the raw provider. The provider
-API key stays the tenant's Fernet-encrypted credential, and the orchestrator base
-URL must be HTTPS and exact-host allowlisted by `ALLOWED_LLM_BASE_URL_HOSTS`;
-an unset or rejected endpoint fails closed to the deterministic extractor. Design
-and grounding: [`docs/architecture/kg-extractor-seam.md`](docs/architecture/kg-extractor-seam.md).
+The `llm` selector remains recognized only for configuration compatibility and
+is policy-disabled before any direct-provider credential/model resolution. The
+`orchestrator` selector is likewise unavailable until Naruon can consume a
+released contextual-orchestrator consumer contract that owns provider/model/
+group/pool routing. Naruon must not invent `orchestrator/free`, provider ids,
+model ids, virtual pools, or a mutable owner-branch contract. The outer email
+import boundary remains best-effort: an unavailable semantic extractor may
+leave the project-graph projection absent while the email import succeeds, but
+it does not substitute keyword output and present it as LLM-derived semantics.
+Design and grounding: [`docs/architecture/kg-extractor-seam.md`](docs/architecture/kg-extractor-seam.md).
 
 ## CI security boundary
 

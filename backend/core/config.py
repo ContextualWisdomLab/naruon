@@ -107,20 +107,22 @@ class Settings(BaseSettings):
     PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
     # Which extractor projects segments into the graph, resolved through the
     # named+versioned KG extractor seam (services/project_graph/extractor_registry):
-    #   "keyword"      — deterministic baseline (the structural fallback),
-    #   "llm"          — grounded LLM extraction (enforced segment citations),
-    #   "orchestrator" — the same grounded LLM extraction routed through the
-    #                    contextual-orchestrator gateway (see below).
-    # Every selection falls back to "keyword" on any failure, so rule-based
-    # extraction stays fallback/reference only.
+    #   "keyword"      — deterministic baseline, an intentional always-on
+    #                    non-LLM product mode in its own right,
+    #   "llm"          — grounded LLM extraction; policy-disabled (raises
+    #                    unconditionally) as of extractor_registry.py
+    #                    ADR-0005 Revision 10 -- Naruon holds no production
+    #                    LLM provider/model authority outside a released
+    #                    contextual-orchestrator consumer contract,
+    #   "orchestrator" — reserved for the released contextual-orchestrator
+    #                    consumer contract; unavailable until that immutable
+    #                    API/client/schema exists.
+    # Only "keyword" (or an explicit request for it) resolves to the
+    # deterministic extractor. "llm"/"orchestrator" never fall back to it: an
+    # unavailable or failed request propagates instead of silently
+    # persisting a keyword-derived result under the request's name. An
+    # unrecognized value also raises rather than defaulting to "keyword".
     PROJECT_GRAPH_EXTRACTOR: str = "keyword"
-    # OpenAI-compatible base URL of the contextual-orchestrator LLM gateway that
-    # grounded extraction is routed through when PROJECT_GRAPH_EXTRACTOR is
-    # "orchestrator". Must be HTTPS and exact-host allowlisted by
-    # ALLOWED_LLM_BASE_URL_HOSTS (enforced by build_llm_provider_http_client);
-    # unset routing fails closed to the deterministic keyword extractor. The
-    # provider API key remains the tenant's Fernet-encrypted credential.
-    PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: str | None = None
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (

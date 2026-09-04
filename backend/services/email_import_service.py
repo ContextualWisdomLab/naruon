@@ -765,29 +765,23 @@ def _project_source_segments(email_obj: Email) -> list[ProjectSourceSegment]:
 
 async def _extract_project_semantics_for_import(
     source_segments: list[ProjectSourceSegment],
-    *,
-    embedding_provider: EmailImportEmbeddingProvider | None,
 ):
     """Project segments into the graph via the configured extractor seam.
 
     Resolution goes through the named+versioned KG extractor registry
     (``services.project_graph.extractor_registry``) keyed by
-    ``settings.PROJECT_GRAPH_EXTRACTOR``. The LLM extractors reuse the import's
-    OpenAI-compatible provider credentials and enforce segment citations, so
-    they cannot introduce uncited claims; a missing credential, an unconfigured
-    orchestrator endpoint, or any provider/parse failure degrades down the chain
-    to the deterministic keyword baseline instead of losing the projection.
+    ``settings.PROJECT_GRAPH_EXTRACTOR``. Explicit ``keyword`` selection is a
+    deterministic, always-available product mode. ``llm`` (direct-provider)
+    is policy-disabled and ``orchestrator`` is not operational until Naruon can
+    consume an immutable contextual-orchestrator API/client/schema release.
+    Selecting either LLM-backed mode therefore raises truthfully; the caller
+    (``_persist_project_graph_projection``) already treats project-graph
+    population as best-effort, so this never fails the email import itself.
     """
-    context = KgExtractorContext(
-        api_key=embedding_provider.api_key if embedding_provider else None,
-        base_url=embedding_provider.base_url if embedding_provider else None,
-        model=settings.OPENAI_MODEL,
-        orchestrator_base_url=settings.PROJECT_GRAPH_ORCHESTRATOR_BASE_URL,
-    )
     return await run_extraction(
         source_segments,
         selector=settings.PROJECT_GRAPH_EXTRACTOR,
-        context=context,
+        context=KgExtractorContext(),
     )
 
 
@@ -797,7 +791,6 @@ async def _persist_project_graph_projection(
     *,
     user_id: str,
     organization_id: str,
-    embedding_provider: EmailImportEmbeddingProvider | None = None,
 ) -> None:
     """Best-effort projection of imported content segments into the project graph.
 
@@ -809,9 +802,7 @@ async def _persist_project_graph_projection(
     if not source_segments:
         return
     try:
-        extraction = await _extract_project_semantics_for_import(
-            source_segments, embedding_provider=embedding_provider
-        )
+        extraction = await _extract_project_semantics_for_import(source_segments)
         if not extraction.objects:
             return
         workspace_id = (
@@ -927,7 +918,6 @@ async def _import_single_eml(
         project_source_segments,
         user_id=user_id,
         organization_id=organization_id,
-        embedding_provider=embedding_provider,
     )
 
     return EmailImportItemResult(

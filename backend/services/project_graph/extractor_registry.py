@@ -1,29 +1,13 @@
-"""Pluggable, named + versioned extractor seam for the project knowledge graph.
+"""Named, versioned extractor seam for the Naruon project knowledge graph.
 
-The semantic project graph is populated by *extractors* that turn grounded
-content segments into cited objects and edges. Historically the import pipeline
-chose between them with a hardcoded ``if settings.PROJECT_GRAPH_EXTRACTOR == "llm"
-… else keyword`` branch. This module replaces that branch with a real, stable
-seam:
+Naruon owns project-graph semantics and selector policy. It does not own LLM
+provider credentials, provider/model/pool selection, or a raw OpenAI-compatible
+transport to contextual-orchestrator. LLM-backed selectors therefore remain
+fail-closed until contextual-orchestrator publishes an immutable consumer
+release whose API/client/schema can be consumed at this boundary.
 
-* a typed :class:`KgExtractor` contract (name + version + ``extract``),
-* a :class:`KgExtractorRegistry` keyed by the stable ``PROJECT_GRAPH_EXTRACTOR``
-  selector value, into which additional extractors (including future plugins,
-  per the platform plan's ``kg.extractor`` extension point) register without
-  editing core ingest,
-* :func:`resolve_extractor_chain` / :func:`run_extraction`, which build an
-  ordered fallback chain whose **terminal element is always the deterministic
-  keyword extractor** — encoding "rule-based extraction is fallback/reference
-  only" structurally rather than in an ad-hoc branch.
-
-Routing LLM extraction through **contextual-orchestrator** is modelled as a
-transport concern: the orchestrator is an OpenAI-compatible gateway, so the
-``orchestrator`` selector reuses the same grounded LLM extractor but points its
-SSRF-allowlisted client at the orchestrator base URL resolved by the caller
-(:class:`KgExtractorContext`). If that endpoint is unset or the provider
-credentials are missing, the extractor raises :class:`ExtractorUnavailableError`
-and the runner fails closed to the deterministic reference extractor — the
-projection is best-effort and never lost.
+The deterministic keyword extractor remains an explicit non-LLM product mode.
+It is never used as a silent substitute for an LLM-backed request.
 """
 
 from __future__ import annotations
@@ -37,67 +21,39 @@ from .extractors import (
     EXTRACTOR_VERSION as DETERMINISTIC_EXTRACTOR_VERSION,
     extract_project_semantics,
 )
-from .llm_extractor import (
-    LLM_EXTRACTOR_NAME,
-    LLM_EXTRACTOR_VERSION,
-    extract_project_semantics_llm,
-)
+from .llm_extractor import LLM_EXTRACTOR_NAME, LLM_EXTRACTOR_VERSION
 from .models import ProjectSemanticExtractionResult, ProjectSourceSegment
 
 logger = logging.getLogger(__name__)
 
-# Stable selector keys the ``PROJECT_GRAPH_EXTRACTOR`` config chooses among.
 SELECTOR_KEYWORD = "keyword"
 SELECTOR_LLM = "llm"
 SELECTOR_ORCHESTRATOR = "orchestrator"
 
 
 class ExtractorUnavailableError(RuntimeError):
-    """An extractor cannot run in the current context.
-
-    Raised for a *recoverable* precondition — missing LLM credentials, an
-    unconfigured orchestrator endpoint — so :func:`run_extraction` advances to
-    the next extractor in the fallback chain instead of propagating. It is not
-    used for genuine extraction failures (those surface as ordinary exceptions,
-    which the runner also treats as fall-through).
-    """
+    """The selected extractor cannot truthfully execute in this context."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class KgExtractorContext:
-    """Per-run resources an extractor may consume.
+    """Authority-free per-run extractor context.
 
-    Deliberately small and provider-agnostic so extractors stay decoupled from
-    import-service internals (no ambient session/settings authority).
-    ``api_key``/``base_url``/``model`` describe the OpenAI-compatible LLM
-    endpoint a direct LLM extractor calls; ``orchestrator_base_url`` is the
-    OpenAI-compatible contextual-orchestrator gateway an orchestrator-routed
-    extractor targets instead of the raw provider.
+    No provider credential, raw contextual-orchestrator URL, provider/model id,
+    group, pool, or compatibility diagnostic belongs here. A future LLM-backed
+    implementation must consume an immutable contextual-orchestrator client/
+    schema contract and add only contract-defined capability inputs at this
+    boundary.
     """
-
-    api_key: str | None = None
-    base_url: str | None = None
-    model: str | None = None
-    orchestrator_base_url: str | None = None
-
-    @property
-    def has_llm_credentials(self) -> bool:
-        return bool(self.api_key and self.model)
 
 
 @runtime_checkable
 class KgExtractor(Protocol):
-    """Stable, named + versioned contract for a project-graph extractor.
-
-    Implementations self-identify with ``name``/``version`` (recorded as
-    per-row provenance on the objects/edges they emit) and turn segments into a
-    :class:`ProjectSemanticExtractionResult`. ``extract`` is always awaited so
-    pure/deterministic and LLM-backed extractors compose uniformly behind the
-    seam.
-    """
+    """Stable named/versioned contract implemented by project-graph extractors."""
 
     name: str
     version: str
+    requires_llm_capability: bool
 
     async def extract(
         self,
@@ -105,24 +61,16 @@ class KgExtractor(Protocol):
         *,
         context: KgExtractorContext,
     ) -> ProjectSemanticExtractionResult:
-        # Structural contract only; concrete extractors override this. The
-        # Protocol method is never invoked directly (no implementation calls
-        # super().extract), so raising here is unreachable at runtime and only
-        # documents that the method is abstract.
         raise NotImplementedError
 
 
 class DeterministicKeywordExtractor:
-    """The deterministic keyword baseline — the structural fallback extractor.
-
-    Pure and dependency-free: it needs no credentials and always produces a
-    result, which is exactly why the registry keeps it as the terminal element
-    of every fallback chain.
-    """
+    """Deterministic project-graph extraction selected explicitly as ``keyword``."""
 
     name = DETERMINISTIC_EXTRACTOR_NAME
     version = DETERMINISTIC_EXTRACTOR_VERSION
     routed_via_orchestrator = False
+    requires_llm_capability = False
 
     async def extract(
         self,
@@ -130,34 +78,28 @@ class DeterministicKeywordExtractor:
         *,
         context: KgExtractorContext,
     ) -> ProjectSemanticExtractionResult:
+        del context
         return extract_project_semantics(segments)
 
 
 class LlmGroundedExtractor:
-    """The grounded LLM extractor, in direct-provider or orchestrator-routed mode.
+    """Fail-closed placeholder for LLM-backed project-graph capability.
 
-    Both modes run the identical grounded extraction core
-    (:func:`extract_project_semantics_llm`, which enforces segment citations);
-    they differ only in which OpenAI-compatible endpoint the request is routed
-    to. When ``routed_via_orchestrator`` is set the request targets the
-    contextual-orchestrator gateway resolved into the context; otherwise it hits
-    the tenant's provider directly.
+    ``llm`` direct-provider mode is policy-disabled. ``orchestrator`` mode is
+    also unavailable while contextual-orchestrator has no immutable consumer
+    release. Importantly, this class does not call the local grounded LLM
+    transport or read credentials, endpoint URLs, model ids, provider names,
+    groups, or pool ids. A future implementation must replace this placeholder
+    with the released contextual-orchestrator API/client/schema; local runtime
+    configuration is not a substitute for that release.
     """
 
     name = LLM_EXTRACTOR_NAME
     version = LLM_EXTRACTOR_VERSION
+    requires_llm_capability = True
 
     def __init__(self, *, routed_via_orchestrator: bool = False) -> None:
         self.routed_via_orchestrator = routed_via_orchestrator
-
-    def _resolve_base_url(self, context: KgExtractorContext) -> str | None:
-        if self.routed_via_orchestrator:
-            if not context.orchestrator_base_url:
-                raise ExtractorUnavailableError(
-                    "contextual-orchestrator endpoint is not configured"
-                )
-            return context.orchestrator_base_url
-        return context.base_url
 
     async def extract(
         self,
@@ -165,26 +107,21 @@ class LlmGroundedExtractor:
         *,
         context: KgExtractorContext,
     ) -> ProjectSemanticExtractionResult:
-        if not context.has_llm_credentials:
-            raise ExtractorUnavailableError("LLM provider credentials are not resolved")
-        base_url = self._resolve_base_url(context)
-        return await extract_project_semantics_llm(
-            segments,
-            api_key=context.api_key,
-            base_url=base_url,
-            model=context.model,
+        del segments, context
+        if not self.routed_via_orchestrator:
+            raise ExtractorUnavailableError(
+                "direct-provider LLM extraction is disabled: Naruon must use "
+                "contextual-orchestrator's released consumer contract"
+            )
+
+        raise ExtractorUnavailableError(
+            "contextual-orchestrator released consumer contract is unavailable; "
+            "project-graph LLM extraction remains fail-closed"
         )
 
 
 class KgExtractorRegistry:
-    """Selector-keyed registry of extractors with a guaranteed keyword fallback.
-
-    The registry is the pluggable seam: a plugin or a new extractor registers a
-    :class:`KgExtractor` under a selector key and becomes selectable via
-    ``PROJECT_GRAPH_EXTRACTOR`` without touching the ingest pipeline. Chain
-    resolution always appends the deterministic keyword extractor as the
-    terminal fallback.
-    """
+    """Selector-keyed extractor registry with explicit fallback semantics."""
 
     def __init__(self) -> None:
         self._by_selector: dict[str, KgExtractor] = {}
@@ -200,20 +137,24 @@ class KgExtractorRegistry:
 
     @property
     def fallback(self) -> KgExtractor:
-        # The keyword extractor is the structural fallback; a registry without
-        # it is a programming error and surfaces loudly as a KeyError.
         return self._by_selector[SELECTOR_KEYWORD]
 
     def resolve_chain(self, selector: str) -> list[KgExtractor]:
         fallback = self.fallback
-        primary = self._by_selector.get(selector, fallback)
+        if selector not in self._by_selector:
+            raise ExtractorUnavailableError(
+                f"unrecognized PROJECT_GRAPH_EXTRACTOR selector: {selector!r}"
+            )
+        primary = self._by_selector[selector]
         if primary is fallback:
             return [fallback]
+        if primary.requires_llm_capability:
+            return [primary]
         return [primary, fallback]
 
 
 def build_default_registry() -> KgExtractorRegistry:
-    """Registry pre-populated with the three built-in extractors."""
+    """Build the registry containing Naruon's three stable selector identities."""
     registry = KgExtractorRegistry()
     registry.register(SELECTOR_KEYWORD, DeterministicKeywordExtractor())
     registry.register(SELECTOR_LLM, LlmGroundedExtractor(routed_via_orchestrator=False))
@@ -223,7 +164,6 @@ def build_default_registry() -> KgExtractorRegistry:
     return registry
 
 
-# Process-wide default registry. Tests and plugins may build their own.
 default_registry = build_default_registry()
 
 
@@ -232,7 +172,7 @@ def resolve_extractor_chain(
     *,
     registry: KgExtractorRegistry | None = None,
 ) -> list[KgExtractor]:
-    """Ordered extractor chain for ``selector`` (deterministic fallback last)."""
+    """Return the ordered extractor chain for a stable selector."""
     return (registry or default_registry).resolve_chain(selector)
 
 
@@ -243,14 +183,7 @@ async def run_extraction(
     context: KgExtractorContext,
     registry: KgExtractorRegistry | None = None,
 ) -> ProjectSemanticExtractionResult:
-    """Run the resolved extractor chain, returning the first successful result.
-
-    Each extractor that raises :class:`ExtractorUnavailableError` (recoverable
-    precondition) or any other exception (extraction failure) is skipped in
-    favour of the next. Because the chain always ends at the pure deterministic
-    keyword extractor, a result is effectively always produced; the trailing
-    raise only guards a misconfigured registry with no fallback.
-    """
+    """Run the chain and preserve the exact terminal failure when none succeeds."""
     chain = resolve_extractor_chain(selector, registry=registry)
     segment_list = list(segments)
     last_error: Exception | None = None
@@ -258,20 +191,11 @@ async def run_extraction(
         try:
             return await extractor.extract(segment_list, context=context)
         except ExtractorUnavailableError as exc:
-            logger.debug(
-                "Extractor %s unavailable; trying next in chain: %s",
-                extractor.name,
-                exc,
-            )
+            logger.debug("Extractor %s unavailable: %s", extractor.name, exc)
             last_error = exc
-            continue
-        except Exception:  # noqa: BLE001 - degrade to the next extractor
-            logger.warning(
-                "Extractor %s failed; falling back to the next extractor",
-                extractor.name,
-                exc_info=True,
-            )
-            continue
+        except Exception as exc:  # noqa: BLE001 - chain policy owns fallback semantics
+            logger.warning("Extractor %s failed", extractor.name, exc_info=True)
+            last_error = exc
     if last_error is not None:
         raise last_error
     raise ExtractorUnavailableError("no extractor produced a project graph result")
