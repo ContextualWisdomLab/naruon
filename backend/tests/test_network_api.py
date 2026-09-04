@@ -73,6 +73,35 @@ def test_network_endpoint_exists():
         assert edges[("bob@example.com", "alice@example.com")] == 1
 
 
+def test_network_endpoint_returns_stable_node_and_edge_order():
+    with patch.dict(
+        app.dependency_overrides,
+        {
+            get_db: get_override(
+                [
+                    ("zoe@example.com", "amy@example.com"),
+                    ("amy@example.com", "zoe@example.com, bob@example.com"),
+                ]
+            )
+        },
+    ):
+        response = client.get("/api/network/graph")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "nodes": [
+            {"id": "amy@example.com", "label": "amy@example.com"},
+            {"id": "bob@example.com", "label": "bob@example.com"},
+            {"id": "zoe@example.com", "label": "zoe@example.com"},
+        ],
+        "edges": [
+            {"source": "amy@example.com", "target": "bob@example.com", "weight": 1},
+            {"source": "amy@example.com", "target": "zoe@example.com", "weight": 1},
+            {"source": "zoe@example.com", "target": "amy@example.com", "weight": 1},
+        ],
+    }
+
+
 def test_network_endpoint_empty_db():
     with patch.dict(app.dependency_overrides, {get_db: get_override([])}):
         response = client.get("/api/network/graph")
