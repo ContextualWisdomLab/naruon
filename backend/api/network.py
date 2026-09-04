@@ -110,7 +110,7 @@ async def get_network_graph(
 
     network_nodes = [
         NetworkGraphNode(node_id=email_address, node_label=email_address)
-        for email_address in network_node_emails
+        for email_address in sorted(network_node_emails)
     ]
     network_edges = [
         NetworkGraphEdge(
@@ -118,7 +118,9 @@ async def get_network_graph(
             target_node_id=target_email,
             message_count=message_count,
         )
-        for (source_email, target_email), message_count in network_edge_counts.items()
+        for (source_email, target_email), message_count in sorted(
+            network_edge_counts.items()
+        )
     ]
 
     return NetworkGraphResponse(
