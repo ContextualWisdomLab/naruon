@@ -30,6 +30,16 @@ describe("password-route authentication authority", () => {
     ).rejects.toBeDefined();
   });
 
+  it("does not solicit passwords while the password capability is fail-closed", async () => {
+    const settingsLayout = await sourceFile("../../../components/SettingsLayout.tsx");
+
+    expect(settingsLayout).not.toContain("naruon-password-login-password");
+    expect(settingsLayout).not.toContain("naruon-password-signup-password");
+    expect(settingsLayout).not.toContain("handlePasswordLogin");
+    expect(settingsLayout).not.toContain("handlePasswordSignup");
+    expect(settingsLayout).toContain("비밀번호 로그인과 가입은 현재 사용할 수 없습니다.");
+  });
+
   it("keeps ADR-0005 Proposed while the released Keyverse capability is unavailable", async () => {
     const adrIndex = await sourceFile("../../../../../docs/adr/README.md");
     const adrRow = adrIndex
