@@ -169,7 +169,7 @@ async def _call_llm(
         http_client=http_client,
     )
     try:
-        response = await client.chat.completions.parse(
+        response = await client.beta.chat.completions.parse(
             model=model,
             messages=[
                 {"role": "system", "content": _system_instruction()},

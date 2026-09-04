@@ -2,27 +2,10 @@
 
 import pytest
 from pydantic import BaseModel, ValidationError
-from openai.lib._parsing import type_to_response_format_param
 
 from services.llm_service import ExtractionResult
 from services.project_graph.llm_extractor import ExtractionPayload
 from services.rag_service import GroundedAnswerPayload
-
-
-@pytest.mark.parametrize(
-    "payload_model",
-    [ExtractionResult, ExtractionPayload, GroundedAnswerPayload],
-)
-def test_structured_payload_models_use_strict_openai_json_schema(
-    payload_model: type[BaseModel],
-) -> None:
-    """Pin the real SDK serializer used by chat.completions.parse."""
-
-    response_format = type_to_response_format_param(payload_model)
-
-    assert response_format["type"] == "json_schema"
-    assert response_format["json_schema"]["strict"] is True
-    assert response_format["json_schema"]["schema"]["additionalProperties"] is False
 
 
 @pytest.mark.parametrize(

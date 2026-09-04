@@ -64,7 +64,7 @@ async def extract_action_items_and_summary(
         response = await provider_circuit_breaker.call(
             validated_base_url or "openai-default",
             lambda: retry_transient(
-            lambda: client.chat.completions.parse(
+            lambda: client.beta.chat.completions.parse(
             model=selected_model,
             messages=[
                 {

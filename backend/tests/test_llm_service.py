@@ -263,7 +263,7 @@ async def test_extract_action_items_and_summary_success(mock_openai):
     mock_choice.message = mock_message
     mock_response.choices = [mock_choice]
 
-    mock_openai.chat.completions.parse = AsyncMock(return_value=mock_response)
+    mock_openai.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
 
     # Call the service
     result = await extract_action_items_and_summary("Test email", "test-key")
@@ -271,9 +271,9 @@ async def test_extract_action_items_and_summary_success(mock_openai):
     # Verify results
     assert result.summary == "Test summary"
     assert result.action_items == ["Task 1"]
-    mock_openai.chat.completions.parse.assert_called_once()
+    mock_openai.beta.chat.completions.parse.assert_called_once()
     assert (
-        mock_openai.chat.completions.parse.call_args.kwargs["model"]
+        mock_openai.beta.chat.completions.parse.call_args.kwargs["model"]
         == settings.OPENAI_MODEL
     )
 
@@ -290,7 +290,7 @@ async def test_extract_action_items_and_summary_uses_selected_provider_model(
     mock_choice = MagicMock()
     mock_choice.message = mock_message
     mock_response.choices = [mock_choice]
-    mock_openai.chat.completions.parse = AsyncMock(return_value=mock_response)
+    mock_openai.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
 
     result = await extract_action_items_and_summary(
         "Test email",
@@ -300,13 +300,13 @@ async def test_extract_action_items_and_summary_uses_selected_provider_model(
     )
 
     assert result.provenance == "Local Gemma4 (gemma4)"
-    assert mock_openai.chat.completions.parse.call_args.kwargs["model"] == "gemma4"
+    assert mock_openai.beta.chat.completions.parse.call_args.kwargs["model"] == "gemma4"
 
 
 @pytest.mark.asyncio
 async def test_extract_action_items_and_summary_api_error(mock_openai):
     # Setup mock to raise an exception
-    mock_openai.chat.completions.parse = AsyncMock(
+    mock_openai.beta.chat.completions.parse = AsyncMock(
         side_effect=Exception("API Error")
     )
 
@@ -342,7 +342,7 @@ async def test_extract_action_items_and_summary_disables_redirect_following_for_
         mock_choice = MagicMock()
         mock_choice.message = mock_message
         mock_response.choices = [mock_choice]
-        mock_client.chat.completions.parse = AsyncMock(return_value=mock_response)
+        mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
         mock_async_openai.return_value = mock_client
 
         result = await extract_action_items_and_summary(
