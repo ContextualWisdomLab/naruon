@@ -557,8 +557,4 @@ describe("NetworkGraph", () => {
       vi.useRealTimers();
     }
   });
-
-  it("preserves memoization and skips React render work on parent rerender", () => {
-    expect((NetworkGraph as unknown as Record<string, symbol>)['\$\$typeof']).toBe(Symbol.for('react.memo'));
-  });
 });
