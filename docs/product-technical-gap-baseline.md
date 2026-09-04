@@ -69,6 +69,14 @@ while the loader resolves immutable evidence bytes, recomputes every digest,
 binds evaluation artifacts to the preregistered protocol, and rejects missing,
 modified, or pre-protocol holdout evidence. Thirty-four focused contract tests
 pass with warnings treated as errors; Ruff and diff checks pass.
+Draft PR #1563 (`a65be465f600f3f640a7a3d5cca91db2475ae9e4`) repairs the prompt-provider
+error boundary. Provider-controlled exception messages and tracebacks no longer
+enter application logs; operations retain only a fixed event name and exception
+class, while the signed API returns fixed actionable copy. A sentinel bearer
+regression plus the existing prompt API suite pass 21 tests with warnings as
+errors, and Ruff and protected-base diff checks pass. Doctoring connects the
+contract to OWASP logging guidance and NIST SP 800-92; hosted exact-head evidence
+remains required.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
