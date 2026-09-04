@@ -34,7 +34,7 @@ jobs:
         # Bundles the pgvector extension so backend/scripts/bootstrap_db.py's
         # `CREATE EXTENSION IF NOT EXISTS vector` needs no separate install
         # step; matches the blessed local stack in docker-compose.yml.
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
