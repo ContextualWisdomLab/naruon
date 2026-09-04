@@ -85,11 +85,13 @@ non-cancellable. Its authoritative merge-gate policy now matches that behavior;
 PR #1500 (`8be7681416230a1bcbf3c457a47cf230f70a1936`) is likewise Draft after
 repeated empty CI-trigger commits kept replacing its exact head while retaining
 tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
-(`1996c1edd63fd47195bfd939b1e6e0f803ec1421`) carries that complete tree
-directly on protected `develop`; 13 unit tests, one real-keyboard Playwright
-regression, TypeScript, and diff checks pass. No predecessor gate evidence
-transfers, and #1500 remains open until the successor merges and equivalence is
-reverified.
+(`dea8edb64d4ae492aec8815798edad8b4200c1dd`) carries the full source delta
+directly on protected `develop` and now inherits both current predecessor
+findings: the explanation remains hit-testable across pointer movement, while
+Escape dismisses a focus-triggered overlay without moving focus. Thirteen unit
+tests, one isolated real-browser Playwright regression, TypeScript, ESLint, and
+diff checks pass. No predecessor gate evidence transfers, and #1500 remains
+open until the successor merges and equivalence is reverified.
 PR #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
