@@ -76,7 +76,7 @@ independent review remain pending, so the inference-confidence Gap is not yet
 closed on protected `develop`.
 
 **Mail-list performance evidence refresh (2026-09-04T17:18Z):** Naruon PR
-#1542 exact head `91857975c61fafb0353358dd318f56df5e6bd43f` now
+#1542 exact head `918579729e3153f0b3b8c1c8d0dfcaf8aa12f025` now
 contains an observable memoization acceptance test rather than only functional
 selection coverage. It instruments the fetched email array's `map`, triggers an
 unrelated search-input state rerender, and proves the stable list is mapped only
