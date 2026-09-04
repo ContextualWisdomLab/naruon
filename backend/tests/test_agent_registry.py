@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-import services.agent_registry as agent_registry_module
 from services.agent_registry import (
     RegisteredAgent,
+    _agent_from_entry,
     clear_registry_cache,
     get_registered_agent,
     load_registered_agents,
@@ -89,9 +89,7 @@ def test_legacy_raw_mapping_survives_semantic_and_legacy_catalog_input() -> None
         (semantic_entry, "Semantic Agent", "services.semantic_agent:run", True),
         (legacy_entry, "Legacy Agent", "services.legacy_agent:run", False),
     ):
-        registered_agent = agent_registry_module._agent_from_entry(
-            "compatibility-agent", catalog_entry
-        )
+        registered_agent = _agent_from_entry("compatibility-agent", catalog_entry)
         assert registered_agent is not None
         assert registered_agent.raw["name"] == expected_name
         assert registered_agent.raw["framework"] == "pydantic-ai"
@@ -112,7 +110,7 @@ def test_legacy_raw_mapping_survives_semantic_and_legacy_catalog_input() -> None
 
 def test_legacy_raw_mutations_write_through_to_semantic_evidence() -> None:
     """Preserve mutable raw metadata while keeping semantic raw_entry authority."""
-    registered_agent = agent_registry_module._agent_from_entry(
+    registered_agent = _agent_from_entry(
         "compatibility-agent",
         {
             "agent_name": "Original Agent",
@@ -151,7 +149,7 @@ def test_legacy_raw_mutations_write_through_to_semantic_evidence() -> None:
 
 def test_legacy_raw_remains_a_json_serializable_dictionary() -> None:
     """Preserve historical dict-specific integrations at the compatibility boundary."""
-    registered_agent = agent_registry_module._agent_from_entry(
+    registered_agent = _agent_from_entry(
         "compatibility-agent",
         {
             "agent_name": "Serializable Agent",
@@ -181,7 +179,7 @@ def test_legacy_raw_remains_a_json_serializable_dictionary() -> None:
 
 def test_legacy_raw_dict_mutators_keep_semantic_evidence_synchronized() -> None:
     """Keep dict mutation APIs synchronized with semantic registry evidence."""
-    registered_agent = agent_registry_module._agent_from_entry(
+    registered_agent = _agent_from_entry(
         "compatibility-agent",
         {
             "agent_name": "Mutable Agent",
@@ -199,18 +197,23 @@ def test_legacy_raw_dict_mutators_keep_semantic_evidence_synchronized() -> None:
     assert registered_agent.raw_entry["agent_name"] == "Updated Agent"
     assert registered_agent.raw_entry["custom_metadata"] == "updated"
 
-    assert legacy_raw.setdefault("name", "ignored") == "Updated Agent"
-    assert legacy_raw.setdefault("new_metadata", "created") == "created"
+    existing_name = legacy_raw.setdefault("name", "ignored")
+    new_metadata = legacy_raw.setdefault("new_metadata", "created")
+    assert existing_name == "Updated Agent"
+    assert new_metadata == "created"
     assert registered_agent.raw_entry["new_metadata"] == "created"
 
-    assert legacy_raw.pop("new_metadata") == "created"
+    popped_new_metadata = legacy_raw.pop("new_metadata")
+    assert popped_new_metadata == "created"
     assert "new_metadata" not in registered_agent.raw_entry
-    assert legacy_raw.pop("missing_metadata", "fallback") == "fallback"
+    missing_with_default = legacy_raw.pop("missing_metadata", "fallback")
+    assert missing_with_default == "fallback"
     with pytest.raises(KeyError, match="missing_metadata"):
         legacy_raw.pop("missing_metadata")
 
     legacy_raw["tail_metadata"] = "tail"
-    assert legacy_raw.popitem() == ("tail_metadata", "tail")
+    popped_tail_item = legacy_raw.popitem()
+    assert popped_tail_item == ("tail_metadata", "tail")
     assert "tail_metadata" not in registered_agent.raw_entry
 
     legacy_raw |= {"description": "updated description", "ior_metadata": "present"}
@@ -229,7 +232,7 @@ def test_legacy_raw_dict_mutators_keep_semantic_evidence_synchronized() -> None:
 
 def test_retained_raw_references_share_one_coherent_dictionary() -> None:
     """Keep every retained legacy mapping coherent with semantic evidence."""
-    registered_agent = agent_registry_module._agent_from_entry(
+    registered_agent = _agent_from_entry(
         "compatibility-agent",
         {
             "agent_name": "Coherent Agent",
@@ -312,7 +315,7 @@ def test_registered_agent_rejects_conflicting_semantic_and_legacy_keywords() -> 
 
 def test_registered_agent_asdict_exposes_only_semantic_dataclass_state() -> None:
     """Serialize dataclass state without traversing the retained legacy adapter."""
-    agent = agent_registry_module._agent_from_entry(
+    agent = _agent_from_entry(
         "serializable-agent",
         {
             "agent_name": "Serializable Agent",
