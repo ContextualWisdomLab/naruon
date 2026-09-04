@@ -135,4 +135,48 @@ describe('CalendarWritebackSection accessibility contract', () => {
     });
     expect(setSelectedSourceId).not.toHaveBeenCalled();
   });
+
+  it('keeps aria-describedby targets unique when reusable writeback sections share a document', () => {
+    const requestWritebackIntent = vi.fn();
+    const setSelectedSourceId = vi.fn();
+    const props: React.ComponentProps<typeof CalendarWritebackSection> = {
+      requestWritebackIntent,
+      isWritebackActionDisabled: false,
+      pendingWritebackAction: null,
+      isProviderExecutionDisabled: false,
+      writebackSources: [writableSource],
+      selectedWritebackSource: writableSource,
+      setSelectedSourceId,
+      isCustomerOwnedWritableSource: (source) => source.writeback_enabled && source.capabilities.includes('write'),
+      sourceLoadStatus: 'ready',
+      writebackStatus: 'idle',
+      writebackResult: null,
+    };
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root?.render(
+        <>
+          <CalendarWritebackSection {...props} />
+          <CalendarWritebackSection {...props} />
+        </>,
+      );
+    });
+
+    const sectionElements = Array.from(container.querySelectorAll<HTMLElement>('section[aria-label="일정 반영 의도 점검"]'));
+    expect(sectionElements).toHaveLength(2);
+
+    const descriptionIds = sectionElements.map((section) => {
+      const createButton = Array.from(section.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.includes('새 일정 intent 점검'));
+      const descriptionId = createButton?.getAttribute('aria-describedby');
+      expect(descriptionId).toBeTruthy();
+      expect(section.querySelector<HTMLElement>(`[id="${descriptionId}"][role="status"]`)).not.toBeNull();
+      return descriptionId;
+    });
+
+    expect(new Set(descriptionIds).size).toBe(2);
+  });
 });
