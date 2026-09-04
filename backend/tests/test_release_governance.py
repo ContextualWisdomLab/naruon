@@ -668,6 +668,10 @@ def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushe
     assert "master" in push_block
     assert "release/**" not in push_block
 
+    pull_request_block = workflow.split("pull_request:", 1)[1].split("push:", 1)[0]
+    assert "branches:" not in pull_request_block
+    assert "branches-ignore:" not in pull_request_block
+
 
 @pytest.mark.parametrize(
     "workflow_path",
@@ -740,6 +744,7 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "tags:" in push_block
     assert "branches:" not in push_block
     assert "branches:" not in pull_request_block
+    assert "branches-ignore:" not in pull_request_block
     assert "ai_email_client-backend" in workflow
     assert "ai_email_client-frontend" in workflow
     assert workflow.count("image: naruon") == 2
