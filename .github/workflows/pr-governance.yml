@@ -31,13 +31,24 @@ permissions:
   issues: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}
-  cancel-in-progress: false
+  # A synchronize run shares one PR-scoped workflow group so a newer push can
+  # cancel only an older synchronize evaluation. Every other event uses its
+  # unique run id here. The governance job below serializes publication; if
+  # GitHub replaces an older pending job, the newer snapshot is the one needed.
+  group: >-
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}-${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && 'synchronize' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }}
 
 jobs:
   governance:
     name: PR governance metadata controller
     runs-on: ubuntu-latest
+    concurrency:
+      # Every event for one PR publishes through one non-cancelling lane. This
+      # prevents an older same-head snapshot from overwriting newer evidence.
+      group: >-
+        ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}-publisher
+      cancel-in-progress: false
     permissions:
       contents: read
       checks: write
