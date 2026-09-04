@@ -272,6 +272,15 @@ backend and connector locks resolve websockets 17.1.
 Seventy-five focused tests, Ruff, actionlint, and warning-free adapter import
 smoke pass for both platforms. Fresh hosted
 `validate connector image` and protected review evidence remain required.
+Canonical workflow-owner PR `ContextualWisdomLab/.github#1871`
+(`e4333c3`) repairs stale schedule and inactive-review test oracles against
+current protected main. Its 78 focused contracts and full 2,851-test suite
+pass, but repository-wide branch coverage initially remained 99%, so the PR
+was returned to Draft rather than presenting partial evidence as merge-ready.
+The first repair increment adds 24 fail-closed CodeQL rollout-auditor tests and
+restores that module to 100% statement/branch coverage; the remaining
+current-main scheduler, Noema, and review-admission coverage gaps stay open on
+the same owner PR.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
