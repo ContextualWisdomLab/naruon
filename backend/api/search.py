@@ -82,12 +82,6 @@ class SearchResultItem(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-    @property
-    def id(self) -> int:
-        """Return the legacy Python attribute for this result's email identity."""
-        return self.email_id
-
-
 class SearchResponse(BaseModel):
     results: list[SearchResultItem]
 
