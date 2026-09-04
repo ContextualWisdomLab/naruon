@@ -24,7 +24,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T13:42Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T13:46Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) carries the exact-head PR
 completion playbook. It now distinguishes AI-authored commits from generated
@@ -63,6 +63,14 @@ delta directly on exact parent #1522 as validated tree
 `9e200125fc5dacad2d2f6a23369835016953ff61`; three combined Vitest files (five
 tests), TypeScript, ESLint, and diff checks pass. No predecessor gate evidence
 transfers, and #1526 may close only after #1560 merges and equivalence is
+reverified.
+#1500 (`8be7681416230a1bcbf3c457a47cf230f70a1936`) is likewise Draft after
+repeated empty CI-trigger commits kept replacing its exact head while retaining
+tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
+(`1996c1edd63fd47195bfd939b1e6e0f803ec1421`) carries that complete tree
+directly on protected `develop`; 13 unit tests, one real-keyboard Playwright
+regression, TypeScript, and diff checks pass. No predecessor gate evidence
+transfers, and #1500 remains open until the successor merges and equivalence is
 reverified.
 #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
