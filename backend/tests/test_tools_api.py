@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
+    ANALYSIS_TEXT_MAX_CHARS,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -379,6 +380,167 @@ async def test_execute_tool_handler_error():
     assert data["status"] == "failed"
     assert data["result"] is None
     assert "Simulated error" in data["message"]
+
+
+def test_execute_url_extractor():
+    text = (
+        "URLs: https://example.com:8443/foo/bar?q=a%20b#section "
+        "(http://foo.com?next=/a) https://example.com:8443/foo/bar?q=a%20b#section."
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["urls"] == [
+        "https://example.com:8443/foo/bar?q=a%20b#section",
+        "http://foo.com?next=/a",
+        "https://example.com:8443/foo/bar?q=a%20b#section.",
+    ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a,b,",
+        "https://example.com?q=what?",
+        "https://example.com#frag!",
+    ),
+)
+def test_execute_url_extractor_preserves_valid_terminal_punctuation(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": url}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+@pytest.mark.parametrize("suffix", (").", "),", ")!"))
+def test_execute_url_extractor_removes_wrapped_prose_delimiters(suffix):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(https://example.com/path{suffix}"}},
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/path"]
+
+
+@pytest.mark.parametrize(
+    ("text", "url"),
+    (
+        ("(https://example.com/path!),", "https://example.com/path!"),
+        ("([https://example.com/path]).", "https://example.com/path"),
+    ),
+)
+def test_execute_url_extractor_handles_punctuated_nested_wrappers(text, url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+def test_execute_url_extractor_handles_spaced_nested_wrappers():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "([  https://example.com/path])."}},
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/path"]
+
+
+def test_execute_url_extractor_does_not_borrow_distant_wrapper():
+    url = "https://example.com/path)."
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(see {url}"}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a(b)",
+        "https://example.com/a[b]",
+        "https://example.com/a{b}",
+    ),
+)
+def test_execute_url_extractor_preserves_balanced_url_delimiters(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(\n{url}"}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a).",
+        "https://example.com/a],",
+        "https://example.com/a}!",
+    ),
+)
+def test_execute_url_extractor_preserves_unwrapped_delimiter_suffixes(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": url}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+def test_execute_url_extractor_handles_many_unmatched_delimiters_linearly():
+    wrapper_count = 25_000
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "(" * wrapper_count
+                    + "https://example.com/"
+                    + ")" * wrapper_count
+                }
+            },
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/"]
+
+
+def test_execute_url_extractor_rejects_oversized_text():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
 
 
 @pytest.mark.asyncio
@@ -1191,6 +1353,63 @@ async def test_keyword_extractor_handler():
 
     empty = await keyword_extractor_handler({"text": "the and 123"})
     assert empty == {"keywords": [], "keyword_count": 0}
+
+
+
+@pytest.mark.asyncio
+async def test_email_address_extractor_handler():
+    from api.tools import email_address_extractor_handler
+
+    text = "Please contact me at John.Doe@example.com or support@example.com. For urgent matters, email john.doe@EXAMPLE.COM. Or try user@mail.example.com"
+    first = await email_address_extractor_handler({"text": text})
+    second = await email_address_extractor_handler({"text": text})
+
+    assert first == second
+    assert first == {
+        "emails": ["John.Doe@example.com", "support@example.com", "user@mail.example.com"],
+        "count": 3,
+    }
+
+    empty = await email_address_extractor_handler({"text": "No emails here."})
+    assert empty == {"emails": [], "count": 0}
+
+    malformed = await email_address_extractor_handler(
+        {"text": "Reject a@b..com but keep support@example.com..."}
+    )
+    assert malformed == {"emails": ["support@example.com"], "count": 1}
+
+def test_execute_email_address_extractor_envelope():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_address_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Hello, contact test@example.com."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"] == {"emails": ["test@example.com"], "count": 1}
+
+def test_email_address_extractor_rejects_oversized_text():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_address_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "failed",
+        "result": None,
+        "message": f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters",
+    }
 
 
 def test_execute_analysis_tool_rejects_oversized_text():

@@ -785,7 +785,6 @@ _EMAIL_PATTERN = re.compile(
     rf"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+"
     r"[A-Za-z]{2,63}(?![A-Za-z0-9-])"
 )
-_URL_TOKEN_PATTERN = re.compile(r"\b(?:https?://|www\.)[^\s<>\"']+")
 _PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
     r"|\d{2,3}-\d{3,4}-\d{4}"
@@ -816,6 +815,36 @@ registry.register(
 )
 
 
+async def email_address_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract valid ASCII email addresses in first-occurrence order."""
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    unique_emails: list[str] = []
+    seen_addresses: set[str] = set()
+    for match in _EMAIL_PATTERN.finditer(text):
+        email_address = match.group(0)
+        normalized_address = email_address.casefold()
+        if normalized_address not in seen_addresses:
+            seen_addresses.add(normalized_address)
+            unique_emails.append(email_address)
+
+    return {"emails": unique_emails, "count": len(unique_emails)}
+
+
+registry.register(
+    ToolInfo(
+        code="email_address_extractor",
+        name="이메일 주소 추출기 (Email Address Extractor)",
+        description="텍스트 본문에서 유효한 ASCII 이메일 주소를 찾아 중복을 제거하여 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    email_address_extractor_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
@@ -829,6 +858,69 @@ registry.register(
         parameters={},
     ),
     uuid_v4_generator_handler,
+)
+
+
+_URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+_PROSE_TRAILING_PUNCTUATION = ".,;:!?"
+
+
+def _trim_url_candidate(candidate: str, wrapping_openers: str) -> str:
+    """Remove only closing delimiters proven by adjacent opening wrappers."""
+    delimiters = (("(", ")"), ("[", "]"), ("{", "}"))
+    excess = {
+        closer: min(
+            wrapping_openers.count(opener),
+            max(0, candidate.count(closer) - candidate.count(opener)),
+        )
+        for opener, closer in delimiters
+    }
+    without_prose = candidate.rstrip(_PROSE_TRAILING_PUNCTUATION)
+    end = len(without_prose)
+    while end and excess.get(without_prose[end - 1], 0):
+        excess[without_prose[end - 1]] -= 1
+        end -= 1
+    return without_prose[:end] if end < len(without_prose) else candidate
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    urls: list[str] = []
+    seen: set[str] = set()
+    for match in _URL_PATTERN.finditer(text):
+        wrapper_start = match.start()
+        while wrapper_start and text[wrapper_start - 1].isspace():
+            wrapper_start -= 1
+        wrapper_end = wrapper_start
+        while wrapper_start and text[wrapper_start - 1] in "([{":
+            wrapper_start -= 1
+        candidate = _trim_url_candidate(
+            match.group(), text[wrapper_start:wrapper_end]
+        )
+        try:
+            parsed = urllib.parse.urlsplit(candidate)
+            _ = parsed.port  # validate a declared port without requiring one
+            valid = parsed.hostname is not None
+        except ValueError:
+            valid = False
+        if valid and candidate not in seen:
+            seen.add(candidate)
+            urls.append(candidate)
+    return {"urls": urls}
+
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 HTTP 및 HTTPS URL을 추출합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
 )
 
 
@@ -848,10 +940,8 @@ async def first_last_sentence_handler(params: Dict[str, Any]) -> Any:
         for character_index in range(match.start(), match.end()):
             if text[character_index] == ".":
                 protected_text[character_index] = "\0"
-    for match in _URL_TOKEN_PATTERN.finditer(text):
-        token_end = match.end()
-        while token_end > match.start() and text[token_end - 1] in ".!?。！？．)]}":
-            token_end -= 1
+    for match in _URL_PATTERN.finditer(text):
+        token_end = match.end() - (len(match.group()) - len(match.group().rstrip(".")))
         for character_index in range(match.start(), token_end):
             if text[character_index] == ".":
                 protected_text[character_index] = "\0"
