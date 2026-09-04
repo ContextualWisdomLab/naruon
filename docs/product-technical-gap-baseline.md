@@ -1,10 +1,22 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.2
-**Observed on:** 2026-08-26 (Asia/Seoul)
-**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
+**Baseline version:** 1.3
+**Observed on:** 2026-09-04 (Asia/Seoul)
+**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Noema owner-boundary refresh (2026-09-04):** Noema protected
+`main@e1ac9d50f6c646f04be8c137c8acdc7200182fcd` defines Noema as the
+credential and maintenance control plane for governed GitHub automation and
+assigns provider discovery and routing to `contextual-orchestrator`. Naruon
+#1384 (`0fd330137cdd19068fa8903dc70e1dc88f42cdc9`) and #1486
+(`b32954dbf6066bc0d953887e8ca06820588f2c5f`) remain draft consumer lanes.
+Noema #536 (`a14cbe020d81fb7276ea4216f56d3f41c762c622`) is a draft shared-package
+proposal, not a released dependency. Naruon #1527
+(`23680b13b443bb4eb7659b9a75073ecc1b67e133`) has no common Git history with
+current `develop` and contains mutually contradictory owner claims; ADR-0006
+therefore records the repair as Proposed rather than transferring its evidence.
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
@@ -581,6 +593,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Canonical evidence identity | OCR/media/attachment/model slices can disagree about the same source | source segments and several deterministic admission slices exist | #1350, #1353, #1397, #1419 | one source identity/provenance chain across email, thread, document, attachment, media, model result |
 | Judgment explanation | model output without evidence/calibration is not defensible | grounded extractor seam exists; wider evidence pipeline incomplete | #1350 | evidence IDs, claim support, abstention, correction, verifier result, prompt/model/version receipt |
 | Provider-neutral route | raw provider coupling spreads credentials and failure behavior | contextual-orchestrator boundary exists; EgressWeave integration is blocked on release | #1262, #1264 | released hash-locked adapter, route/fallback evidence, no raw secret in products |
+| Noema workspace-agent boundary | buyers cannot rely on an assistant that bypasses governed routing or imports unreleased owner code | Noema protected `main` owns governed GitHub capability and delegates model routing; no released shared runtime is proven | #1384, #1486, #1527, Noema #536, ADR-0006 | tenant/workspace-authorized released orchestrator contract, fail-closed direct-provider path, Naruon-owned domain tools, immutable owner release, and consumer conformance tests |
 | Scientific claim discipline | keyword labels can be mistaken for topic/event measurement | architecture explicitly says no live STM | TEPP dependency path | accepted immutable TEPP artifact/API or explicit feature absence; no lexical-as-STM claim |
 
 ### P1 — Typed context and scheduling differentiation
