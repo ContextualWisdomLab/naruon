@@ -107,6 +107,18 @@ Proposed evidence. The owner implementation was inspected at local exact head
 surface exist, while its changelog still marks the versions Unreleased. Two
 focused documentation contracts, Ruff, and diff checks pass; hosted exact-head
 checks and independent review remain required.
+Draft PR #1525 (`8225123257400be29f72fe0e3039512e6c95ac78`) repairs the
+project-graph selector boundary and its executable tests. `keyword` remains an
+explicit deterministic mode; `llm` and `orchestrator` neither choose provider
+details nor substitute keyword output when their requested capability is
+unavailable. Stale tests that still constructed deleted authority-bearing
+fields or monkeypatched the removed raw transport are gone. Ruff, 68 focused
+tests, and the full warning-as-error backend suite (`1801 passed, 33 skipped`)
+pass. The predecessor Strix artifact failed before scanning because its central
+compatibility launcher lacked `httpx2`; canonical `.github` PR #1851 has since
+merged the hash-locked dependency into protected main
+`769691526f8c73cf714de8fe8ba51ae6cfa2901a`. Fresh #1525 exact-head hosted
+evidence must prove that owner repair; prior failure evidence does not transfer.
 PR #1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
 NetworkGraph option-materialization parent. #1526
 (`b2d6cb257dc1af1b2bc15342825b74185f74a78a`) is Draft after a third unsigned
