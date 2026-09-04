@@ -273,7 +273,7 @@ function buildAccountUpdate(form: AccountFormState, secrets: AccountSecretFormVa
   if (smtpPassword) update.smtp_password = smtpPassword;
   const imapPassword = optionalText(secrets.imapPassword);
   if (imapPassword) update.imap_password = imapPassword;
-  const pop3Password = optionalText(secrets.popPassword);
+  const pop3Password = optionalText(secrets.pop3Password);
   if (pop3Password) update.pop3_password = pop3Password;
   const oauthClientSecret = optionalText(secrets.oauthClientSecret);
   if (oauthClientSecret) update.oauth_client_secret = oauthClientSecret;
