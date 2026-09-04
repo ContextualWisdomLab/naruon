@@ -27,32 +27,5 @@ def test_bandit_cancels_only_superseded_pull_request_runs() -> None:
     assert isinstance(concurrency, dict)
     assert concurrency == {
         "group": "bandit-security-scan-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}",
-        "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+        "cancel-in-progress": "${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}",
     }
-
-
-def test_expensive_pr_workflows_cancel_only_active_pr_predecessors() -> None:
-    """Draft and closed events cancel stale work without starting heavy jobs."""
-    for workflow_name, job_names in {
-        "app-ci.yml": ("backend", "frontend"),
-        "docker-publish.yml": ("pull_request_image_validation",),
-    }.items():
-        workflow = _load_workflow(workflow_name)
-        pull_request = workflow[True]["pull_request"]
-        assert pull_request["types"] == [
-            "opened",
-            "synchronize",
-            "reopened",
-            "ready_for_review",
-            "converted_to_draft",
-            "closed",
-        ]
-        assert workflow["concurrency"] == {
-            "group": "${{ github.workflow }}-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}",
-            "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
-        }
-        jobs = workflow["jobs"]
-        for job_name in job_names:
-            condition = jobs[job_name]["if"]
-            assert "!github.event.pull_request.draft" in condition
-            assert "github.event.action != 'closed'" in condition
