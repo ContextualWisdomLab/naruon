@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 from typing import Any
 
@@ -20,6 +20,7 @@ from services.email_writing_candidate_review import (
 )
 from services.email_writing_context_service import (
     EmailWritingContextBundle,
+    EmailWritingContextError,
     EmailWritingMessageContext,
 )
 from services.email_writing_contracts import (
@@ -30,6 +31,7 @@ from services.email_writing_contracts import (
 )
 from services.email_writing_judge import EmailWritingJudgeError, EmailWritingJudgeEvaluation
 from services.email_writing_policy import EmailWritingPolicyError
+import services.email_writing_review_service as review_service_module
 from services.email_writing_review_service import (
     EmailWritingReviewRuntimeProfile,
     EmailWritingReviewService,
@@ -662,3 +664,241 @@ async def test_cancellation_persists_abstained_session_and_propagates_cancellati
     persisted = _persisted_session(session)
     assert persisted.review_status == "abstained"
     assert session.commits == 1
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected_code"),
+    [
+        ({"workflow_identifier": ""}, "review_runtime_identity_invalid"),
+        ({"maximum_candidates": 0}, "review_candidate_limit_invalid"),
+        ({"total_wall_seconds": float("nan")}, "review_wall_time_invalid"),
+    ],
+)
+def test_runtime_profile_rejects_invalid_boundaries(
+    overrides: dict[str, object],
+    expected_code: str,
+) -> None:
+    with pytest.raises(ValueError, match=expected_code):
+        _runtime(**overrides)
+
+
+def test_review_helpers_cover_fail_closed_edge_values() -> None:
+    request = _request()
+    bundle = _bundle(request)
+    without_replacement = _candidate_result(
+        _candidate().model_copy(update={"suggested_replacement": None})
+    )
+
+    assert review_service_module._utc_now().tzinfo is UTC
+    assert review_service_module._stable_unique(["", "a", "a", "b"]) == ["a", "b"]
+    assert (
+        review_service_module._candidate_kind(without_replacement.output.diagnostics[0])
+        == "no_replacement_diagnostic"
+    )
+
+    wrong_mode = replace(_candidate_result(_candidate()), orchestration_mode="route")
+    with pytest.raises(EmailWritingReviewServiceError, match="candidate_orchestration_mode_invalid"):
+        review_service_module._validate_candidate_result_binding(request, bundle, wrong_mode)
+
+    language_result = _candidate_result(_candidate())
+    wrong_language = replace(
+        language_result,
+        output=language_result.output.model_copy(update={"review_language": "ko"}),
+    )
+    with pytest.raises(EmailWritingReviewServiceError, match="candidate_language_mismatch"):
+        review_service_module._validate_candidate_result_binding(
+            request, bundle, wrong_language
+        )
+
+    for invalid_confidence in (True, float("inf"), -0.1):
+        with pytest.raises(
+            EmailWritingReviewServiceError,
+            match="review_confidence_unavailable",
+        ):
+            review_service_module._validate_confidence(invalid_confidence)
+
+
+@pytest.mark.asyncio
+async def test_owner_context_and_clock_fail_closed_boundaries() -> None:
+    request = _request()
+    reviewer = _CandidateReviewer(result=_candidate_result(_candidate()))
+    service, session = _service(
+        request=request,
+        candidate_reviewer=reviewer,
+        judge=_Judge([_judge_evaluation()]),
+    )
+    missing_owner = _auth().__class__(
+        user_id="user-alpha",
+        role="member",
+        organization_id=None,
+        group_ids=(),
+        workspace_id="workspace-alpha",
+    )
+    with pytest.raises(EmailWritingReviewServiceError, match="review_owner_scope_unavailable"):
+        await service.review(session, missing_owner, request)
+
+    naive_clock_service, _ = _service(
+        request=request,
+        candidate_reviewer=reviewer,
+        judge=_Judge([_judge_evaluation()]),
+    )
+    naive_clock_service._clock = lambda: NOW.replace(tzinfo=None)
+    with pytest.raises(EmailWritingReviewServiceError, match="review_clock_invalid"):
+        await naive_clock_service.review(_Session(), _auth(), request)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("context_error", "expected_code"),
+    [
+        (
+            EmailWritingContextError(
+                "email_unavailable", reason_code="selected_email_missing"
+            ),
+            "email_unavailable",
+        ),
+        (
+            EmailWritingContextError(
+                "context_insufficient", reason_code="thread_context_empty"
+            ),
+            "context_insufficient",
+        ),
+    ],
+)
+async def test_context_builder_errors_remain_redacted(
+    context_error: EmailWritingContextError,
+    expected_code: str,
+) -> None:
+    request = _request()
+
+    async def fail_context(*args: object) -> EmailWritingContextBundle:
+        del args
+        raise context_error
+
+    service = EmailWritingReviewService(
+        candidate_reviewer=_CandidateReviewer(result=_candidate_result(_candidate())),
+        independent_judge=_Judge([_judge_evaluation()]),
+        judge_executor=_JudgeExecutor(),
+        judge_policy=_policy(),
+        runtime_profile=_runtime(),
+        context_builder=fail_context,
+        policy_evaluator=lambda **kwargs: "withhold",
+        confidence_mapper=lambda evaluation: 1.0,
+        clock=lambda: NOW,
+    )
+    session = _Session()
+
+    if expected_code == "email_unavailable":
+        with pytest.raises(EmailWritingReviewServiceError, match=expected_code):
+            await service.review(session, _auth(), request)
+    else:
+        response = await service.review(session, _auth(), request)
+        assert response.review_status == expected_code
+        assert expected_code in response.abstained_claims
+
+
+@pytest.mark.asyncio
+async def test_unexpected_judge_policy_and_missing_confidence_fail_closed() -> None:
+    request = _request()
+    for judge_result, policy_evaluator, confidence_mapper, expected_code in (
+        (RuntimeError("judge detail"), lambda **kwargs: "admit", lambda value: 1.0, "judge_runner_failed"),
+        (_judge_evaluation(), lambda **kwargs: (_ for _ in ()).throw(RuntimeError("policy detail")), lambda value: 1.0, "policy_unavailable"),
+        (_judge_evaluation(), lambda **kwargs: "admit", None, "review_confidence_unavailable"),
+    ):
+        service = EmailWritingReviewService(
+            candidate_reviewer=_CandidateReviewer(result=_candidate_result(_candidate())),
+            independent_judge=_Judge([judge_result]),
+            judge_executor=_JudgeExecutor(),
+            judge_policy=_policy(),
+            runtime_profile=_runtime(),
+            context_builder=_builder_for(_bundle(request)),
+            policy_evaluator=policy_evaluator,
+            confidence_mapper=confidence_mapper,
+            clock=lambda: NOW,
+        )
+        response = await service.review(_Session(), _auth(), request)
+        assert response.review_status in {"abstained", "unavailable"}
+        assert expected_code in response.abstained_claims
+
+
+@pytest.mark.asyncio
+async def test_pre_context_timeout_and_cancellation_do_not_claim_evidence() -> None:
+    request = _request()
+
+    async def block_context(*args: object) -> EmailWritingContextBundle:
+        del args
+        await asyncio.sleep(1.0)
+        raise AssertionError("unreachable")
+
+    service = EmailWritingReviewService(
+        candidate_reviewer=_CandidateReviewer(result=_candidate_result(_candidate())),
+        independent_judge=_Judge([_judge_evaluation()]),
+        judge_executor=_JudgeExecutor(),
+        judge_policy=_policy(),
+        runtime_profile=_runtime(total_wall_seconds=0.01),
+        context_builder=block_context,
+        policy_evaluator=lambda **kwargs: "withhold",
+        confidence_mapper=lambda evaluation: 1.0,
+        clock=lambda: NOW,
+    )
+    session = _Session()
+
+    with pytest.raises(EmailWritingReviewServiceError, match="review_timeout"):
+        await service.review(session, _auth(), request)
+    assert session.added == []
+
+    cancellation = asyncio.create_task(service.review(session, _auth(), request))
+    await asyncio.sleep(0)
+    cancellation.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cancellation
+    assert session.added == []
+
+
+@pytest.mark.asyncio
+async def test_candidate_binding_and_persistence_owner_checks_fail_closed() -> None:
+    request = _request()
+
+    class WrongModeCandidate:
+        async def review(
+            self, bundle: EmailWritingContextBundle
+        ) -> EmailWritingCandidateReviewResult:
+            del bundle
+            return replace(
+                _candidate_result(_candidate()), orchestration_mode="route"
+            )
+
+    service = EmailWritingReviewService(
+        candidate_reviewer=WrongModeCandidate(),
+        independent_judge=_Judge([_judge_evaluation()]),
+        judge_executor=_JudgeExecutor(),
+        judge_policy=_policy(),
+        runtime_profile=_runtime(),
+        context_builder=_builder_for(_bundle(request)),
+        policy_evaluator=lambda **kwargs: "withhold",
+        confidence_mapper=lambda evaluation: 1.0,
+        clock=lambda: NOW,
+    )
+    response = await service.review(_Session(), _auth(), request)
+    assert response.review_status == "rejected"
+    assert "candidate_orchestration_mode_invalid" in response.abstained_claims
+
+    missing_owner = replace(_auth(), organization_id=None)
+    with pytest.raises(EmailWritingReviewServiceError, match="review_owner_scope_unavailable"):
+        await service._persist_review(
+            _Session(),
+            missing_owner,
+            request,
+            candidate_result=None,
+            review_status="abstained",
+            diagnostics=(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_rollback_cleanup_swallows_secondary_failure() -> None:
+    class BrokenRollbackSession(_Session):
+        async def rollback(self) -> None:
+            raise RuntimeError("rollback detail")
+
+    await review_service_module._rollback_bounded(BrokenRollbackSession())
