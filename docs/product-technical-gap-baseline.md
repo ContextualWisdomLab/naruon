@@ -402,7 +402,9 @@ for the cache path. This removes the mutable `pnpm/latest` lookup that failed
 #1502's frontend job on `ECONNRESET`. The inherited governance harness, 40
 release/stacked-workflow tests, actionlint, and diff checks pass.
 Bandit-only predecessor #1554
-(`2585126b40570c912399ca3fe49d4d803fed0ebc`) remains open for provenance;
+(`9d7d16d8e90edc9f08193718434cb9255d744250`) remains Draft and open for
+provenance. Its two-file effective delta passes actionlint and 36 focused
+workflow-governance tests, with zero valid unresolved review threads;
 #1562 must merge and pass fresh tree-equivalence review before the predecessor
 can close, and no check or review evidence transfers.
 PR #1500 (`dfee7c12a535a79ca43daa14b17c9580bcbf2658`) is likewise Draft after
