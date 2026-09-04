@@ -48,7 +48,7 @@ def test_expensive_pr_workflows_cancel_only_active_pr_predecessors() -> None:
             "closed",
         ]
         assert workflow["concurrency"] == {
-            "group": "${{ github.workflow }}-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}",
+            "group": "${{ github.workflow }}-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}",
             "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
         }
         jobs = workflow["jobs"]
