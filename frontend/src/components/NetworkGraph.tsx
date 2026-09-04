@@ -390,26 +390,28 @@ export default function NetworkGraph() {
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <span
-            tabIndex={!firstEdge ? 0 : undefined}
-            aria-describedby={!firstEdge ? unavailableRelationshipDescriptionId : undefined}
-            title={!firstEdge ? "표시할 관계 데이터가 없습니다." : undefined}
-            className={
-              !firstEdge
-                ? "cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                : undefined
-            }
-          >
+          <span className="group relative inline-flex">
             {!firstEdge && (
-              <span id={unavailableRelationshipDescriptionId} className="sr-only">
+              <span
+                id={unavailableRelationshipDescriptionId}
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 w-max max-w-56 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+              >
                 표시할 관계 데이터가 없습니다.
               </span>
             )}
             <button
               type="button"
-              onClick={handleSelectFirstRelationship}
-              disabled={!firstEdge}
-              className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ${!firstEdge ? "pointer-events-none" : ""}`}
+              onClick={(e) => {
+                if (!firstEdge) {
+                  e.preventDefault();
+                  return;
+                }
+                handleSelectFirstRelationship();
+              }}
+              aria-disabled={!firstEdge}
+              aria-describedby={!firstEdge ? unavailableRelationshipDescriptionId : undefined}
+              className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
             >
               첫 관계 보기
             </button>
