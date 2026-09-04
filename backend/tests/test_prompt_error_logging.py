@@ -13,7 +13,7 @@ async def test_execute_prompt_with_llm_does_not_log_provider_exception_message(
     caplog,
 ):
     """Provider exception messages must not cross the application log boundary."""
-    sentinel_secret = "sk-sentinel-must-not-appear"
+    sentinel_secret = "sentinel-sensitive-value-must-not-appear"
 
     async def fake_build_llm_provider_http_client(base_url):
         return base_url, MagicMock()
@@ -46,4 +46,5 @@ async def test_execute_prompt_with_llm_does_not_log_provider_exception_message(
     assert "Prompt execution failed" in caplog.text
     assert sentinel_secret not in caplog.text
     assert "Authorization: Bearer" not in caplog.text
+    assert caplog.records[-1].error_type == "RuntimeError"
     mock_client.close.assert_awaited_once()
