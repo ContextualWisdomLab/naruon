@@ -23,7 +23,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T12:57Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T13:12Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`3d9ea27d424ffabf7d9496c9085f5f4a8a172e5d`) carries the exact-head PR
 completion playbook after six review threads were resolved and 35 governance
@@ -33,10 +33,11 @@ phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
 boundary, bounded malformed-input regression, and North American cases. Ruff
 and 78 focused tests pass. #1555
-(`6f26ede44a9121a67f89676f4e25bcf43aa2755d`) is non-force stacked on that
-owner head and now carries only the truthful first/last-sentence extractor with
-CJK sentence-boundary coverage. The refreshed stack passes Ruff and 84 focused
-tests, and its GitHub base now resolves to parent `71c331e1`. #1502
+(`e09a35e260c27b5a1b40f910dcc9fcfa4ea1952d`) is non-force stacked on that
+owner head and now carries only the truthful first/last-sentence extractor. Its
+boundary logic preserves CJK terminators, decimal points, common title
+abbreviations, and trailing quotation or bracket punctuation. Ruff and all 79
+tool API tests pass, and its GitHub base resolves to parent `71c331e1`. #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
 #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
