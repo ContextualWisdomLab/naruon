@@ -273,7 +273,7 @@ Seventy-five focused tests, Ruff, actionlint, and warning-free adapter import
 smoke pass for both platforms. Fresh hosted
 `validate connector image` and protected review evidence remain required.
 Canonical workflow-owner PR `ContextualWisdomLab/.github#1871`
-(`36d39630648f4559d7b6d03f37f59c10355a1bda`) repairs stale schedule and
+(`36d396387d0de6acc2a242f8e2cfa7efa2943d17`) repairs stale schedule and
 inactive-review test oracles against current protected main, closes Python 3.14
 HTTP-error response leaks in the Noema, GitHub policy, Pages, and sandbox
 readiness paths, and completes missing CodeQL rollout, admission, scheduler,
