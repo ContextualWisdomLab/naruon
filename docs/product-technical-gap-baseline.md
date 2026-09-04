@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.8
+**Baseline version:** 1.9
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -50,6 +50,18 @@ head preserves reviewed dotenv duplicate-assignment handling and applies mode
 `0600` before generated local secrets are written. Forty-one focused setup and
 release-governance tests pass, but the new hosted checks are queued and the
 earlier requested review does not transfer to this head.
+
+**Authentication owner prerequisite refresh (2026-09-04T16:27Z):** Naruon
+Draft PR #1532 remains a consumer lane and must not restore ROPC. Keyverse Draft
+PR #128 (`bad8635f2d1aa94023fc6482dad35f6a1b688176`) disables that path while a
+standards-compliant headless session contract is unfinished. Its merge-ref
+account-unification failure is traced to Keyverse `main`: workflow consolidation
+removed the repo-local hourly PR steward but retained five tests that open the
+deleted workflow. Canonical prerequisite Keyverse PR #145
+(`239e362c95d48894a10841ec8a087f9107f3f90c`) removes only that retired
+self-modifying workflow contract; the full account-unification suite and diff
+check pass locally. #128 must consume #145 through protected `main` or a
+non-force stack before its current-head evidence can be reacquired.
 
 **Exact-head execution refresh (2026-09-04T14:10Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
