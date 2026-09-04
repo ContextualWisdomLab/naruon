@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { fetchTrustedBackendSession } from "@/lib/backend-session-probe";
 import {
@@ -8,71 +8,6 @@ import {
   isPrivateOrLoopbackHostname,
   normalizeHostname,
 } from "@/lib/host-policy";
-import { postOidcTokenRequest } from "@/lib/oidc-token-client";
-import { buildSessionCookieOptions, normalizeSessionToken } from "@/lib/session-cookie";
-
-// Generous enough for any real email/passphrase; bounds the request body so
-// a caller cannot force an oversized synchronous parse/allocation.
-const MAX_CREDENTIAL_LENGTH = 256;
-
-// Generous enough for the small JSON bodies these password routes accept
-// (email/password/first_name/last_name/return_to, each already bounded on
-// its own); bounds the raw request body itself so a caller cannot force an
-// oversized parse/allocation before any per-field check ever runs.
-const MAX_REQUEST_BODY_BYTES = 8192;
-
-export class RequestBodyTooLargeError extends Error {
-  constructor() {
-    super("Request body exceeded the allowed size");
-    this.name = "RequestBodyTooLargeError";
-  }
-}
-
-/**
- * Reads and JSON-parses a request body while enforcing `maxBytes`, so an
- * oversized body (declared via Content-Length, or an unbounded/chunked
- * stream lying about its length) is rejected before `JSON.parse` ever runs
- * on it. Callers should map `RequestBodyTooLargeError` to a 413 response and
- * any other read/parse failure to their existing "malformed body" response.
- */
-export async function readBoundedJson(
-  request: NextRequest,
-  maxBytes = MAX_REQUEST_BODY_BYTES,
-): Promise<unknown> {
-  const declaredLength = Number(request.headers.get("content-length") ?? "");
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new RequestBodyTooLargeError();
-  }
-
-  const reader = request.body?.getReader();
-  if (!reader) {
-    // No body stream available (e.g. an already-buffered test double) --
-    // fall back to the standard parse, still bounded by declaredLength above.
-    return request.json();
-  }
-
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      throw new RequestBodyTooLargeError();
-    }
-    chunks.push(value);
-  }
-  reader.releaseLock();
-
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return JSON.parse(new TextDecoder().decode(bytes));
-}
 
 export const OIDC_PKCE_COOKIE_NAME = "naruon_oidc_pkce";
 
@@ -83,18 +18,12 @@ export const OIDC_NO_STORE_HEADERS = {
 const OIDC_CONTROL_CHARACTER_PATTERN = /[\x00-\x1f\x7f]/;
 const OIDC_ALLOWED_HOSTS_ENV = "OIDC_ALLOWED_HOSTS";
 
-/**
- * Failure reasons logged (never with credentials/tokens) when a server-side
- * exchange against Keycloak's token endpoint fails — shared by the
- * authorization-code callback route and the password (Direct Access Grants)
- * login route, since both exchange a grant for a token the same way.
- */
+/** Failure reasons logged without credentials or tokens for OIDC code exchange. */
 export type OidcTokenExchangeFailureReason =
   | "configuration_rejected"
   | "dns_or_transport_rejected"
   | "access_token_missing_or_invalid"
-  | "backend_session_rejected"
-  | "invalid_credentials";
+  | "backend_session_rejected";
 
 export function errorResponse(errorCode: string, status = 400) {
   return NextResponse.json(
@@ -142,8 +71,7 @@ function assertAllowedOidcHostname(hostname: string): void {
 /**
  * Validates that a configured OIDC token endpoint is on the issuer's own
  * origin, HTTPS (or loopback HTTP outside production), and not a private/
- * internal host — before any network call touches it. Shared SSRF guard for
- * every route that POSTs a grant to Keycloak's token endpoint.
+ * internal host before an authorization-code exchange can reach it.
  */
 export function trustedOidcTokenEndpoint(config: {
   issuerUrl: string;
@@ -386,71 +314,4 @@ export function expiredOidcStateCookieOptions() {
     path: "/auth",
     maxAge: 0,
   };
-}
-
-export function normalizeCredential(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  if (!value || value.length > MAX_CREDENTIAL_LENGTH) return null;
-  return value;
-}
-
-/**
- * Exchanges a username/password for a Keyverse session cookie via Direct
- * Access Grants, and builds the same success/failure response shape naruon's
- * login form expects. Shared by `password/login/route.ts` and
- * `password/signup/route.ts`, so a freshly created account logs straight in
- * without a second round trip re-typing the password the user just chose.
- */
-export async function exchangePasswordForSessionResponse(
-  config: ServerOidcConfig,
-  username: string,
-  password: string,
-  returnTo: string,
-): Promise<NextResponse> {
-  const tokenBody = new URLSearchParams({
-    grant_type: "password",
-    client_id: config.clientId,
-    scope: config.scope,
-    username,
-    password,
-  });
-
-  let tokenEndpoint: URL;
-  try {
-    tokenEndpoint = trustedOidcTokenEndpoint(config);
-  } catch {
-    recordOidcTokenExchangeFailure("configuration_rejected");
-    return errorResponse("password_login_failed", 502);
-  }
-
-  let accessToken: string | null = null;
-  try {
-    const tokenJson = await postOidcTokenRequest(tokenEndpoint, tokenBody);
-    accessToken = normalizeSessionToken(tokenJson.access_token);
-  } catch {
-    // Keycloak rejects a wrong password, an unknown user, or a client
-    // without Direct Access Grants enabled all as a non-2xx response, which
-    // postOidcTokenRequest turns into a rejection here. Collapsing every
-    // case to one generic message avoids leaking which one it was.
-    recordOidcTokenExchangeFailure("invalid_credentials");
-    return errorResponse("password_login_invalid_credentials", 401);
-  }
-
-  if (!accessToken) {
-    recordOidcTokenExchangeFailure("access_token_missing_or_invalid");
-  }
-  const backendAccepted = accessToken ? await backendAcceptsSessionToken(accessToken) : false;
-  if (!accessToken || !backendAccepted) {
-    if (accessToken && !backendAccepted) {
-      recordOidcTokenExchangeFailure("backend_session_rejected");
-    }
-    return errorResponse("password_login_invalid_credentials", 401);
-  }
-
-  const response = NextResponse.json(
-    { return_to: returnTo },
-    { headers: OIDC_NO_STORE_HEADERS },
-  );
-  response.cookies.set(buildSessionCookieOptions(accessToken));
-  return response;
 }
