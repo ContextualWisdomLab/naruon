@@ -17,7 +17,6 @@ from typing import Final, Literal, TypeAlias
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Field,
     PrivateAttr,
     StrictBool,
     StrictFloat,
@@ -252,6 +251,35 @@ class EmailWritingPolicyEvidence(_PolicyModel):
         """Require algorithm-qualified SHA-256 identities when evidence exists."""
         if value is not None and _HASH_RE.fullmatch(value) is None:
             raise ValueError("evidence_hash_invalid")
+        return value
+
+
+class _EvidenceArtifact(_PolicyModel):
+    """Minimal immutable evidence envelope resolved before publication."""
+
+    evidence_version: Literal[1]
+    evidence_kind: Literal[
+        "protocol",
+        "calibration_dataset",
+        "locked_holdout",
+        "reference_adjudication",
+    ]
+    recorded_at: StrictStr
+    protocol_hash: StrictStr | None
+
+    @field_validator("recorded_at")
+    @classmethod
+    def validate_recorded_at(cls, value: str) -> str:
+        """Require an offset-aware evidence timestamp."""
+        _parse_timestamp(value)
+        return value
+
+    @field_validator("protocol_hash")
+    @classmethod
+    def validate_protocol_hash(cls, value: str | None) -> str | None:
+        """Require an algorithm-qualified protocol identity when present."""
+        if value is not None and _HASH_RE.fullmatch(value) is None:
+            raise ValueError("evidence_protocol_hash_invalid")
         return value
 
 
@@ -496,6 +524,55 @@ def _validate_runtime_contracts(
             raise EmailWritingPolicyError("policy_contract_incompatible")
 
 
+def _verify_published_evidence(
+    policy: EmailWritingJudgePolicy,
+    evidence_artifacts: Mapping[str, bytes] | None,
+) -> None:
+    """Resolve and hash every published evidence envelope before admission."""
+    expected = {
+        "protocol": policy.evidence.protocol_hash,
+        "calibration_dataset": policy.evidence.calibration_dataset_hash,
+        "locked_holdout": policy.evidence.locked_holdout_hash,
+        "reference_adjudication": policy.evidence.reference_adjudication_hash,
+    }
+    if evidence_artifacts is None or any(value is None for value in expected.values()):
+        raise EmailWritingPolicyError("policy_publication_evidence_unverified")
+
+    resolved: dict[str, _EvidenceArtifact] = {}
+    for evidence_kind, qualified_digest in expected.items():
+        assert qualified_digest is not None
+        artifact_bytes = evidence_artifacts.get(qualified_digest)
+        if artifact_bytes is None:
+            raise EmailWritingPolicyError("policy_publication_evidence_unverified")
+        actual_digest = "sha256:" + hashlib.sha256(artifact_bytes).hexdigest()
+        if actual_digest != qualified_digest:
+            raise EmailWritingPolicyError("policy_publication_evidence_mismatch")
+        try:
+            artifact = parse_strict_email_writing_json(
+                artifact_bytes,
+                _EvidenceArtifact,
+            )
+        except (StrictEmailWritingJsonError, ValidationError, ValueError) as error:
+            raise EmailWritingPolicyError(
+                "policy_publication_evidence_invalid"
+            ) from error
+        if artifact.evidence_kind != evidence_kind:
+            raise EmailWritingPolicyError("policy_publication_evidence_invalid")
+        resolved[evidence_kind] = artifact
+
+    protocol_hash = expected["protocol"]
+    if resolved["protocol"].protocol_hash is not None or any(
+        artifact.protocol_hash != protocol_hash
+        for evidence_kind, artifact in resolved.items()
+        if evidence_kind != "protocol"
+    ):
+        raise EmailWritingPolicyError("policy_publication_evidence_invalid")
+    if _parse_timestamp(resolved["locked_holdout"].recorded_at) <= _parse_timestamp(
+        resolved["protocol"].recorded_at
+    ):
+        raise EmailWritingPolicyError("policy_publication_evidence_order_invalid")
+
+
 def load_policy_artifact(
     *,
     artifact_name: str,
@@ -503,6 +580,7 @@ def load_policy_artifact(
     manifest_bytes: bytes,
     now: datetime,
     runtime_contracts: Mapping[str, str | None],
+    evidence_artifacts: Mapping[str, bytes] | None = None,
 ) -> EmailWritingJudgePolicy:
     """Load one integrity-bound policy after strict manifest and lifecycle validation.
 
@@ -544,6 +622,8 @@ def load_policy_artifact(
         raise EmailWritingPolicyError("policy_expired")
 
     _validate_runtime_contracts(policy, runtime_contracts)
+    if policy.status == "published":
+        _verify_published_evidence(policy, evidence_artifacts)
     object.__setattr__(policy, "_artifact_name", artifact_name)
     object.__setattr__(policy, "_artifact_sha256", actual_digest)
     return policy
