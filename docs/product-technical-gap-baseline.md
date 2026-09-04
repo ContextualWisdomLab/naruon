@@ -556,9 +556,12 @@ percentage contract. Its unit and EmailDetail fixtures, pilot and full-product
 smokes, and AGENTS.md recurrence rule now share that unit; 65 focused tests,
 TypeScript, lint, and both smokes pass locally. Both findings are resolved on
 the exact head, and Application CI, Bandit, image validation, and the initial
-CodeQL/Semgrep/security admission jobs are green; final Noema, Strix, OpenCode,
-compatibility-analysis, and security jobs remain queued. These remain candidate
-heads rather than protected-branch evidence.
+CodeQL/Semgrep/security admission jobs are green. Noema, Strix, Semgrep, Trivy,
+Scorecard, and the OpenCode admission step also passed on the same head. The
+long-running CodeQL compatibility analysis and OpenCode evidence job were
+externally cancelled without a source failure and have been rerun once as
+attempt 2; they remain queued. Independent approval is still required, so this
+remains a Draft candidate rather than protected-branch evidence.
 
 PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) now distinguishes 401/403
 login recovery from transport retry and bounds its three core dashboard reads
