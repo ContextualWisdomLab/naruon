@@ -618,6 +618,15 @@ reuse predecessor evidence or claim a merge. #1448 is historical after its
 normal merge; #1443's current head is `62a0d645…` and must be reviewed and
 checked again from that exact head.
 
+Draft PR #1541 (`2eaf6134434a2ad29ad8fe0365aa1b34b848dd5f`)
+separates attachment display sanitization from parser authority. MIME filename
+percent signs and character references remain literal identity, while path,
+markup, C0/C1, and bidirectional controls fail closed instead of manufacturing
+a trusted extension. Thirty-one filename/parser tests and Ruff pass locally
+with warnings as errors. Exact-head OpenCode and Strix runs were externally
+cancelled at attempt 1 and have each been rerun once; they are queued, and the
+metadata gate correctly remains failed until those checks and review complete.
+
 **Live exact-head queue refresh (2026-08-25T17:51Z):** the following
 post-snapshot states supersede only the matching historical SHA references
 above; the full inventory remains a point-in-time record and is not silently
