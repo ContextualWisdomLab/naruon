@@ -133,7 +133,7 @@ async def test_objects_citing_unknown_segments_are_dropped(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_unknown_type_dropped_and_confidence_clamped(monkeypatch):
+async def test_unknown_type_is_dropped(monkeypatch):
     monkeypatch.setattr(
         llm_extractor,
         "_call_llm",
@@ -148,10 +148,10 @@ async def test_unknown_type_dropped_and_confidence_clamped(monkeypatch):
                 ),
                 llm_extractor.ExtractedObjectPayload(
                     object_type="milestone",
-                    title="Overconfident",
+                    title="Grounded milestone",
                     summary="Due next week.",
                     source_segment_uids=["seg1"],
-                    confidence=7.5,
+                    confidence=0.75,
                 ),
             )
         ),
@@ -163,7 +163,7 @@ async def test_unknown_type_dropped_and_confidence_clamped(monkeypatch):
 
     assert len(result.objects) == 1
     assert result.objects[0].object_type.value == "milestone"
-    assert result.objects[0].confidence == 1.0
+    assert result.objects[0].confidence == 0.75
 
 
 @pytest.mark.asyncio

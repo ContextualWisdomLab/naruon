@@ -86,3 +86,31 @@ def test_structured_payload_models_reject_scalar_coercion() -> None:
         ExtractionResult.model_validate(
             {"summary": "s", "action_items": [], "confidence": "90"}
         )
+
+
+@pytest.mark.parametrize("confidence", [-0.1, 1.1, float("nan"), float("inf")])
+@pytest.mark.parametrize("payload_kind", ["object", "relation"])
+def test_project_graph_payload_rejects_invalid_confidence(
+    confidence: float,
+    payload_kind: str,
+) -> None:
+    """Reject out-of-range or non-finite model confidence at the wire boundary."""
+
+    object_payload = {
+        "object_type": "requirement",
+        "title": "t",
+        "summary": "s",
+        "source_segment_uids": ["segment-1"],
+        "confidence": confidence if payload_kind == "object" else 0.8,
+    }
+    relation_payload = {
+        "source_local_key": "a",
+        "target_local_key": "b",
+        "relation_type": "depends_on",
+        "confidence": confidence if payload_kind == "relation" else 0.8,
+    }
+
+    with pytest.raises(ValidationError):
+        ExtractionPayload.model_validate(
+            {"objects": [object_payload], "relations": [relation_payload]}
+        )

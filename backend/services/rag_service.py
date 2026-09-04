@@ -25,6 +25,8 @@ MAX_CONTENT_CHARS = 1500
 
 
 class GroundedAnswerPayload(BaseModel):
+    """Strict provider response before citation validation and attribution."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
 
     answer: str
