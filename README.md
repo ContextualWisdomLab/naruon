@@ -50,6 +50,10 @@ mail/calendar/file systems.
   auto-merge, and mechanical merge actions run as the target repository's
   `github-actions[bot]` through the central workflow. Pending CodeRabbit or
   required-check evidence is a wait state, not a hard blocker.
+- Local OpenCode contributor runs use the canonical contextual-orchestrator
+  OpenAI-compatible `/v1` endpoint. Set `CONTEXTUAL_ORCHESTRATOR_BASE_URL` and
+  a short-lived owner-issued `CONTEXTUAL_ORCHESTRATOR_TOKEN`; do not substitute
+  an upstream provider key. These values configure OpenCode only, not Naruon.
 - Topic intelligence is not currently a live Naruon capability. The lexical
   `keyword_extractor` is metadata only; Naruon fails closed rather than present
   keyword, embedding, or LLM labels as Structural Topic Modeling. The product,

@@ -42,7 +42,8 @@
       "name": "Contextual Orchestrator",
       "options": {
         "baseURL": "{env:CONTEXTUAL_ORCHESTRATOR_BASE_URL}",
-        "apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}"
+        "apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}",
+        "timeout": false
       },
       "models": {
         "orchestrator/free": {

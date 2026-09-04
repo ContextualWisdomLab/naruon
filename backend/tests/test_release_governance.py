@@ -48,11 +48,22 @@ def test_agent_lifecycle_governance_artifacts_stay_aligned() -> None:
     """Keep lifecycle policy, model routing, and research evidence consistent."""
     guidance = read_repo_text("AGENTS.md")
     opencode_config = read_repo_text("opencode.jsonc")
+    environment_example = read_repo_text(".env.example")
+    readme = read_repo_text("README.md")
     research_artifact = REPO_ROOT / "docs/papers/nist-sp-800-218.pdf"
 
     assert '"model": "contextual-orchestrator/orchestrator/free"' in opencode_config
     assert '"enabled_providers": ["contextual-orchestrator"]' in opencode_config
+    assert opencode_config.count('"timeout": false') == 1
     assert "STRIX_GITHUB_MODELS_TOKEN" not in opencode_config
+    for variable_name in (
+        "CONTEXTUAL_ORCHESTRATOR_BASE_URL",
+        "CONTEXTUAL_ORCHESTRATOR_TOKEN",
+    ):
+        assert f"{variable_name}=" in environment_example
+        assert variable_name in readme
+    assert "OpenAI-compatible `/v1` endpoint" in readme
+    assert "short-lived owner-issued" in readme
     assert "docs/development/merge-gate-policy.md" in guidance
     assert "prove complete-delta succession" in guidance
     assert research_artifact.read_bytes().startswith(b"%PDF-")
