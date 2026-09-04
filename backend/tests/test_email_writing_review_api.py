@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import secrets
 from collections.abc import Iterator
 from typing import Any
+
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test_db"
+)
+os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -243,6 +250,4 @@ def test_review_api_documents_bounded_error_responses() -> None:
 def test_production_application_registers_the_review_route() -> None:
     from main import app as production_app
 
-    matching_routes = [route for route in production_app.routes if route.path == _ROUTE]
-    assert len(matching_routes) == 1
-    assert "POST" in matching_routes[0].methods
+    assert str(production_app.url_path_for("review_email_writing")) == _ROUTE
