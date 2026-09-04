@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
 MAX_TOOL_INPUT_CHARS = 100_000
+MALFORMED_PERCENT_ESCAPE_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 
 
 class ToolExecutionError(ValueError):
@@ -835,13 +836,17 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Decode URL escapes without silently replacing invalid UTF-8 bytes."""
+    """Decode only complete percent escapes containing valid UTF-8 bytes."""
     encoded_url = params.get("encoded_url") or ""
+    if MALFORMED_PERCENT_ESCAPE_RE.search(encoded_url):
+        raise ToolExecutionError(
+            "invalid_url_encoding", "Invalid URL-encoded string"
+        )
     try:
         decoded_url = urllib.parse.unquote(encoded_url, errors="strict")
     except UnicodeDecodeError as exc:
         raise ToolExecutionError(
-            "invalid_url_encoding", f"Invalid URL-encoded string: {exc}"
+            "invalid_url_encoding", "Invalid URL-encoded string"
         ) from exc
     return {"decoded_url": decoded_url}
 

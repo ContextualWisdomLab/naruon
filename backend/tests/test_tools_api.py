@@ -612,6 +612,21 @@ def test_execute_url_decoder_rejects_invalid_utf8_escape():
     assert data["error_code"] == "invalid_url_encoding"
 
 
+@pytest.mark.parametrize("encoded_url", ["%", "%2", "%ZZ", "value%4G"])
+def test_execute_url_decoder_rejects_malformed_percent_escape(encoded_url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"encoded_url": encoded_url}},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["error_code"] == "invalid_url_encoding"
+
+
 @pytest.mark.parametrize(
     ("tool_code", "parameter_name"),
     [
