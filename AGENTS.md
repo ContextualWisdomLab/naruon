@@ -745,6 +745,11 @@ in this repo.
    parent. Integrate concurrent commits; never overwrite them.
 6. Restart PR monitoring after every push. Diagnose logs before retrying;
    pending review/checks are wait states, so continue an independent safe lane.
+   Never create an empty commit or change source only to trigger CI. Rerun a
+   terminal infrastructure failure when its workflow still exists; if the
+   historical workflow was removed, dispatch the current central merge
+   scheduler once for that PR and head. Do not duplicate runs in a verified
+   organization-wide queue.
 7. Merge only when the exact current head has required passing checks and the
    qualifying current-head robot evidence defined above: CodeRabbit success or
    the structured OpenCode App fallback. Require human approval only when the
