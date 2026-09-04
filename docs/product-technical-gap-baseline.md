@@ -213,7 +213,9 @@ workflow prerequisite #1562 and targets its exact branch; the effective
 database/bootstrap delta remains eleven files. Actionlint, 40 governance and
 stacked-workflow tests, and 62 focused migration/bootstrap/data tests pass
 locally, with two PostgreSQL-service tests explicitly skipped in that focused
-no-service run. Fresh hosted exact-head evidence is queued.
+no-service run. Fresh hosted exact-head evidence is queued. The PR was returned
+to Draft because its #1562 foundation, current-head review, and terminal hosted
+evidence are not complete; the database/bootstrap delta remains preserved.
 The Draft email-writing stack now carries every prerequisite delta by non-force
 merge. Task 7 PR #1524
 (`cc1da5125e761d80caa7b0e81bd346e1004fad2e`) adds deterministic race coverage
