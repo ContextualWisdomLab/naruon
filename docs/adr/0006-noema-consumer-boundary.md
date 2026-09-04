@@ -32,6 +32,13 @@ output recovery across distinct eligible candidates. It remains an open
 candidate, so Naruon may use its contract as dependency planning evidence but
 must not treat its branch implementation as released runtime behavior.
 
+At exact organization governance revision
+`ContextualWisdomLab/.github@769691526f8c73cf714de8fe8ba51ae6cfa2901a`,
+`docs/CWL-MASTER-CONTEXT.md` assigns the Naruon workspace agent and quarantine
+sandbox to Noema. This conflicts with Noema's current protected description and
+the separate quarantine owner repository, so owner-level reconciliation is a
+prerequisite rather than a consumer assumption.
+
 ## Decision
 
 1. Naruon retains ownership of workspace-agent prompts, tools, domain policy,
@@ -49,6 +56,8 @@ must not treat its branch implementation as released runtime behavior.
    `ContextualWisdomLab/quarantine-sandbox-runtime`; this ADR does not assign
    it to Naruon or fold it into workspace-agent code. Naruon may adopt only an
    immutable released contract, and none exists yet.
+6. Naruon adopts none of these owner capabilities until the pinned organization
+   master context, protected owner descriptions, and released contracts agree.
 
 ## Consequences
 
@@ -96,6 +105,10 @@ cannot transfer their checks or approvals to a consumer.
   commit `60a85c7633e03b425b67159ec6822c8178cf87ea`, with zero GitHub Releases,
   verified 2026-09-04. This identifies the owner but does not authorize
   consumer adoption.
+- `ContextualWisdomLab/.github`, `docs/CWL-MASTER-CONTEXT.md` at exact commit
+  `769691526f8c73cf714de8fe8ba51ae6cfa2901a`, verified 2026-09-04. It calls
+  Noema the shared Naruon/GitHub runtime and quarantine sandbox; that unresolved
+  statement must be reconciled by the organization/owner path before adoption.
 - Evans, E. (2003). *Domain-driven design: Tackling complexity in the heart of
   software*. Addison-Wesley.
 - Vernon, V. (2013). *Implementing domain-driven design*. Addison-Wesley.

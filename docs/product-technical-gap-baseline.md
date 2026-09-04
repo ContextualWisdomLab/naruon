@@ -10,7 +10,7 @@
 `main@e1ac9d50f6c646f04be8c137c8acdc7200182fcd` defines Noema as the
 credential and maintenance control plane for governed GitHub automation and
 assigns provider discovery and routing to `contextual-orchestrator`. Naruon
-#1384 (`0fd330137cdd19068fa8903dc70e1dc88f42cdc9`) and #1486
+PR #1384 (`0fd330137cdd19068fa8903dc70e1dc88f42cdc9`) and #1486
 (`b32954dbf6066bc0d953887e8ca06820588f2c5f`) remain draft consumer lanes.
 Noema #536 (`5531a5327d822028c4be59e290b4d101b34d49db`, verified
 2026-09-04T13:38Z; supersedes the earlier `a14cbe02` observation) is a draft
@@ -36,24 +36,25 @@ phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
 boundary, bounded malformed-input regression, and North American cases. Ruff
 and 78 focused tests pass. #1555
-(`e09a35e260c27b5a1b40f910dcc9fcfa4ea1952d`) is non-force stacked on that
+(`d8699e67b15371fe73cd6e03561d007429a3741d`) is non-force stacked on that
 owner head and now carries only the truthful first/last-sentence extractor. Its
-boundary logic preserves CJK terminators, decimal points, common title
-abbreviations, and trailing quotation or bracket punctuation. Ruff and all 79
+boundary logic preserves CJK terminators including U+FF0E, decimal points,
+common title abbreviations, email and URL periods, and trailing quotation or
+bracket punctuation. Ruff and all 81
 tool API tests pass, and its GitHub base resolves to parent `71c331e1`. #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
-#1530 (`fbf32aaf67e53fcb00e640e48df62c22b2eb4f41`) remains a Draft Task-8
+PR #1530 (`fbf32aaf67e53fcb00e640e48df62c22b2eb4f41`) remains a Draft Task-8
 email-writing policy lane behind immutable dependency prerequisites. Its real
 79% coverage failure is repaired without weakening the gate: 22 focused tests
 cover all 353 owned statements and 170 branches (100%), with Ruff passing.
-#1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
+PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
 pass. #1543 (`887d2461526d0f1c70748cf9c9f726a45b742b5e`) remains Draft: central
 scheduler main does not yet prove the structured adversarial fallback contract,
 so it is not a complete successor for #1531 and must not delete that delta yet.
-#1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
+PR #1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
 NetworkGraph option-materialization parent. #1526
 (`b2d6cb257dc1af1b2bc15342825b74185f74a78a`) is Draft after a third unsigned
 generated overwrite again removed the parent implementation and behavioral
@@ -69,7 +70,7 @@ evidence are incomplete. Trigger repair #1562
 filters from Application CI, Bandit, and image validation, scopes validation
 concurrency by workflow/repository/PR, and keeps tag publication
 non-cancellable. Its 38 governance tests, actionlint, and diff checks pass.
-#1500 (`8be7681416230a1bcbf3c457a47cf230f70a1936`) is likewise Draft after
+PR #1500 (`8be7681416230a1bcbf3c457a47cf230f70a1936`) is likewise Draft after
 repeated empty CI-trigger commits kept replacing its exact head while retaining
 tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
 (`1996c1edd63fd47195bfd939b1e6e0f803ec1421`) carries that complete tree
@@ -77,7 +78,7 @@ directly on protected `develop`; 13 unit tests, one real-keyboard Playwright
 regression, TypeScript, and diff checks pass. No predecessor gate evidence
 transfers, and #1500 remains open until the successor merges and equivalence is
 reverified.
-#1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
+PR #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
 percentage contract. Its unit and EmailDetail fixtures, pilot and full-product
@@ -85,10 +86,10 @@ smokes, and AGENTS.md recurrence rule now share that unit; 65 focused tests,
 TypeScript, lint, and both smokes pass locally. These remain candidate heads
 rather than protected-branch evidence.
 
-#1485 (`796083106d46cff494836004937bb767fbb9672e`) now distinguishes 401/403
+PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) now distinguishes 401/403
 login recovery from transport retry and bounds its three core dashboard reads
 with one native abort signal; 17 focused tests, TypeScript, and lint pass.
-#1531 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) now honors an exact-head
+PR #1531 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) now honors an exact-head
 structured OpenCode approval when no CodeRabbit check exists even if a pending
 issue notice is present; the full shell gate harness and ShellCheck pass, and
 current-head unresolved threads are zero. The historical scheduler handles
@@ -115,8 +116,8 @@ current merge state.
 `2026-08-25T15:39:22Z` found the active exact-head work relevant to this
 baseline: #1465 (`70596e26…`, tenant-archive import sanitization and duplicate
 identity rejection), #1466 (`a3e6762f…`, origin-integrity port validation),
-#1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
-#1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
+PR #1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
+PR #1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
 (`de6d7128…`, bounded 20–64 MiB deferred attachment parse-source admission),
 and #1455 (`d8757e65…`, attachment filename traversal hardening). The
 governance root #1443 now has exact head `62a0d645…` after child #1448 merged
@@ -677,7 +678,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Judgment explanation | model output without evidence/calibration is not defensible | grounded extractor seam exists; wider evidence pipeline incomplete | #1350 | evidence IDs, claim support, abstention, correction, verifier result, prompt/model/version receipt |
 | Confidence unit integrity | adjacent values can appear as 100% and 2% when a client guesses whether a score is a ratio or percentage | backend extraction contract is 0--100; protected frontend still guesses the unit at runtime | #1436, #1559 | one explicit unit at the API boundary, current-head UI tests for low/high values, independent review, and protected merge evidence |
 | Provider-neutral route | raw provider coupling spreads credentials and failure behavior | contextual-orchestrator boundary exists; EgressWeave integration is blocked on release | #1262, #1264 | released hash-locked adapter, route/fallback evidence, no raw secret in products |
-| Noema workspace-agent boundary | buyers cannot rely on an assistant that bypasses governed routing or imports unreleased owner code | Noema protected `main` owns governed GitHub capability and delegates model routing; no released shared runtime is proven | #1384, #1486, #1527, Noema #536, Contextual Orchestrator #1004, ADR-0006 | tenant/workspace-authorized released orchestrator contract, distinct-candidate structured-output recovery, fail-closed direct-provider path, Naruon-owned domain tools, immutable owner release, and consumer conformance tests |
+| Noema workspace-agent boundary | buyers cannot rely on an assistant that bypasses governed routing or imports unreleased owner code | Noema protected `main` owns governed GitHub capability and delegates model routing; no released shared runtime is proven | #1384, #1486, #1527, Noema #536, Contextual Orchestrator #1004, ADR-0006 | tenant/workspace-authorized released orchestrator contract, distinct-candidate structured-output recovery, no direct-provider fallback, fail closed when the released `contextual-orchestrator` contract is unavailable, Naruon-owned domain tools, immutable owner release, and consumer conformance tests |
 | Scientific claim discipline | keyword labels can be mistaken for topic/event measurement | architecture explicitly says no live STM | TEPP dependency path | accepted immutable TEPP artifact/API or explicit feature absence; no lexical-as-STM claim |
 
 ### P1 — Typed context and scheduling differentiation
@@ -854,7 +855,7 @@ review approval, hidden manual database edits, or an unreleased sibling branch.
 
 Existing linked implementation and blocker issues remain authoritative for their
 bounded scopes, including #1022, #1076, #1229, #1262, #1324, #1350, #1371, and
-#1379.
+PR #1379.
 
 ---
 

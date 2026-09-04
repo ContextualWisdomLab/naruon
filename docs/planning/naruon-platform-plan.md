@@ -576,7 +576,7 @@ flowchart TB
         SVC["Domain services (backend/services/*)<br/>email·threading·caldav·ontology·reply_sla"]
         PG[("Postgres<br/>+ pgvector + Apache AGE (target)")]
     end
-    subgraph sandbox["quarantine-sandbox-runtime — released isolation contract"]
+    subgraph sandbox["quarantine-sandbox-runtime — planned, unreleased contract"]
         UP["Untrusted plugin runtime<br/>(isolated exec, capability-scoped)"]
     end
     subgraph capabilities["Plugins: Verticals + Capabilities"]
