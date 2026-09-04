@@ -130,7 +130,9 @@ in this repo.
 - Use CodeGraph before broad source searches when `.codegraph/` exists; run
   `codegraph init` when absent and `codegraph sync` when unhealthy. Use
   Context7 for current third-party APIs and DeepWiki for external repository
-  architecture. Use sequential thinking for multi-step design or debugging.
+  architecture, but send only public metadata to external MCP servers; private
+  source or customer data requires an organization-approved zero-data-retention
+  endpoint. Use sequential thinking for multi-step design or debugging.
 
 ### Commit attribution
 
