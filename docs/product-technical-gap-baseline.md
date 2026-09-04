@@ -24,8 +24,8 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Governed review evidence refresh (2026-09-04T17:03Z):** Naruon PR #1564
-(`b9ee877da7244c92987e2ddb1cedd50837bcd597`) records the reusable exact-head,
+**Governed review evidence refresh (2026-09-04T22:55Z):** Naruon PR #1564
+(`4bd97cda5a5f35742e46074177750d3d177ad814`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
 procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
 evidence from post-merge commit verification and names the applicable
@@ -40,8 +40,13 @@ excluded from canceling review concurrency. The repository OpenCode config now
 uses only `contextual-orchestrator/orchestrator/free`; the stale-context exception
 matches the reversible merge-gate procedure, verified complete-delta succession
 is an explicit phase terminal state, and the public-domain NIST SP 800-218 PDF is
-retained with a focused governance regression test. All ten current-head review
-threads are resolved; fresh hosted checks remain queued. Canonical workflow
+retained with a focused governance regression test. The OpenCode gateway
+contract now documents its canonical
+`/v1` endpoint and short-lived owner-issued token, and disables the supported
+client request timeout so long-running model work is not cut off at the default
+limit; the focused governance test and parsed OpenCode config pass. All twelve
+current-head review threads are resolved; fresh hosted checks remain queued.
+Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
 retains only allowlisted, secret-free gateway failure fields and stops creating
