@@ -31,24 +31,24 @@ permissions:
   issues: read
 
 concurrency:
-  # Synchronize events get their own PR-scoped group, so a newer push cancels
-  # only an older synchronize evaluation. All other events share a second
-  # PR-scoped group, preserving their serialized, non-cancelling behavior.
+  # A synchronize run shares one PR-scoped workflow group so a newer push can
+  # cancel only an older synchronize evaluation. Every other event uses its
+  # unique run id here and is serialized losslessly by the governance job below.
   group: >-
-    ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}-${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && 'synchronize' || 'other' }}
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}-${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && 'synchronize' || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }}
 
 jobs:
   governance:
     name: PR governance metadata controller
     runs-on: ubuntu-latest
-    # Workflow-level groups keep a new synchronize event from cancelling review
-    # or recovery work. The job-level group is intentionally common across all
-    # event types for one PR so metadata evaluation and publication cannot race.
+    # All event types for one PR converge here. queue:max preserves every
+    # review/recovery evaluation while a running job owns the shared gate state.
     concurrency:
       group: >-
         ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}-publisher
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       checks: write
