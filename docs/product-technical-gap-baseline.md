@@ -772,9 +772,11 @@ check-run annotations prove a single gateway-owned attempt served by
 `google/gemma-4-31b-it` ended after 310.3 seconds with an upstream HTTP 502 in
 `response_error`; this is provider failure rather than source evidence. The
 remaining metadata gate also records a cancelled Strix run. Central
-merge-scheduler run `33896429098` was dispatched once for this exact head with
-branch updates and merge disabled and remains queued, so no protected
-completion claim transfers from the local evidence.
+merge-scheduler run `33896429098` was dispatched for this exact head with
+branch updates and merge disabled but later completed as cancelled. One bounded
+replacement dispatch, run `33917903607`, is queued with the same no-merge and
+no-update boundary, so no protected completion claim transfers from the local
+evidence.
 
 ### 4.2 Source-of-truth and writeback sovereignty
 
