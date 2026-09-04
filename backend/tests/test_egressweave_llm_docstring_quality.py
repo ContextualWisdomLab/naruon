@@ -63,7 +63,7 @@ def _production_definitions(tree: ast.AST) -> list[tuple[str, ast.AST]]:
         ("def sample():\n    pass\n", "missing"),
         ('def sample():\n    """Return the sample."""\n', "single-line"),
         (
-            'def sample():\n    """Return the sample.\n\n    Return the sample unchanged.\n    """\n',
+            'def sample():\n    """Return the sample.\n\n    Return the sample unchanged for every caller in the normal execution path.\n    """\n',
             "vacuous",
         ),
     ],
