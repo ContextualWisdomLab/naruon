@@ -385,7 +385,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
         ".github/workflows/docker-publish.yml",
-        ".github/workflows/pr-governance.yml",
     ]
 
     for workflow_path in hardened_workflows:
@@ -612,6 +611,7 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
 
     central_workflow_paths = [
         ".github/workflows/opencode-review.yml",
+        ".github/workflows/pr-governance.yml",
         ".github/workflows/pr-review-merge-scheduler.yml",
         ".github/workflows/strix-selftest.yml",
         ".github/workflows/strix.yml",
@@ -621,10 +621,12 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
         "scripts/ci/emit_opencode_failed_check_fallback_findings.sh",
         "scripts/ci/opencode_review_approve_gate.sh",
         "scripts/ci/opencode_review_normalize_output.py",
+        "scripts/ci/pr_governance_gate.sh",
         "scripts/ci/pr_review_merge_scheduler.py",
         "scripts/ci/strix_model_utils.sh",
         "scripts/ci/strix_quick_gate.sh",
         "scripts/ci/test_strix_quick_gate.sh",
+        "scripts/ci/test_pr_governance_gate.sh",
         "scripts/ci/validate_opencode_failed_check_review.sh",
     ]
 
@@ -1045,75 +1047,6 @@ def test_compose_log_scanner_allows_nginx_stderr_startup_notices() -> None:
     )
     assert not unexpected, f"Unexpected lines found: {unexpected}"
     assert len(allowed) == 7, f"Expected 7 allowed lines, got {len(allowed)}"
-
-
-def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge() -> (
-    None
-):
-    workflow = read_repo_text(".github/workflows/pr-governance.yml")
-    gate_script = read_repo_text("scripts/ci/pr_governance_gate.sh")
-    combined = f"{workflow}\n{gate_script}"
-
-    assert "pull_request_target:" in workflow
-    assert "pull_request_review:" in workflow
-    assert "types: [submitted, dismissed]" in workflow
-    assert "workflow_run:" in workflow
-    assert "check_run:" in workflow
-    assert "workflow_dispatch:" in workflow
-    assert "Strix Security Scan" in workflow
-    assert "- strix" not in workflow
-    assert "permissions:\n  contents: read" in workflow
-    assert "trusted-governance" in workflow
-    assert ".base.sha" in workflow
-    assert "github.sha" not in workflow
-    assert "tarball/${trusted_ref}" in workflow
-    assert "gh_api_with_retry" in workflow
-    assert "extract_json_value" in workflow
-    assert "empty response body" in workflow
-    assert "invalid JSON response body" in workflow
-    assert "returned invalid JSON" in workflow
-    assert "did not produce valid JSON after 4 attempts" in workflow
-    assert "GitHub API request attempt" in workflow
-    assert "Trusted governance ref must be a full commit SHA" in workflow
-    assert "trusted_archive_candidate" in workflow
-    assert "tar -tzf" in workflow
-    assert "Trusted governance archive materialization attempt" in workflow
-    assert "after 4 attempts" in workflow
-    assert 'bash "$GOVERNANCE_GATE"' in workflow
-    assert "CHECK_RUN_PR_NUMBER" in workflow
-    assert "headRefOid" in gate_script
-    assert "mergeStateStatus" in gate_script
-    assert "Merge state lookup attempt" in gate_script
-    assert "Merge state is still UNKNOWN after 4 attempts" in gate_script
-    assert "PR state became %s during merge-state refresh" in gate_script
-    assert "PR head changed during gate evaluation" in gate_script
-    assert "skipping stale gate publication" in gate_script
-    assert "gh pr checks" in gate_script and "--required" in gate_script
-    assert "no required checks reported" in gate_script
-    assert "no legacy required status contexts reported" in gate_script
-    assert "add_waiting" in gate_script
-    assert "check-runs" in gate_script
-    assert "Review skipped" in gate_script
-    assert "CodeRabbit" in gate_script or "coderabbit" in gate_script
-    assert "BEHIND" in gate_script
-    assert "app.slug" in gate_script
-    assert "coderabbitai" in gate_script
-    assert "/issues/${PR_NUMBER}/comments" in gate_script
-    assert "COMMENT_MARKER" in gate_script
-    assert "no current blocking failures remain" in gate_script
-    assert "Waiting for" in gate_script
-    assert "reviewThreads" in gate_script
-    assert "CHANGES_REQUESTED" in gate_script
-    assert "gh pr merge" not in gate_script
-    assert "--match-head-commit" not in gate_script
-    assert "actions/checkout" not in combined
-    assert "@coderabbitai ignore" not in combined
-    assert "git clone" not in combined
-    assert "--admin" not in combined
-    assert "contents: write" not in combined
-    assert "continue-on-error: true" not in combined
-    assert "/dismissals" not in combined.lower()
-    assert "dismisspullrequestreview" not in combined.lower()
 
 
 def test_20b_kpi_roi_claim_gate_separates_measurements_from_assumptions() -> None:
