@@ -136,51 +136,12 @@ in this repo.
   `.github/workflows/opencode-review.yml`, `.github/workflows/strix.yml`,
   `.github/workflows/strix-selftest.yml`, or
   `.github/workflows/pr-review-merge-scheduler.yml`.
-- The central Strix Security Scan uses GitHub Models by default through
-  `STRIX_GITHUB_MODELS_TOKEN`, `STRIX_LLM=openai/gpt-5`, and
-  `LLM_API_BASE_FILE` pointing at a trusted file containing
-  `https://models.github.ai/inference`; GitHub Models scans must try the
-  configured GPT-5-or-newer model first and may fall back to the explicit
-  workflow fallback list, currently
-  `github_models/deepseek/deepseek-r1-0528` and
-  `github_models/deepseek/deepseek-v3-0324`, when GitHub Models provider
-  capacity or model availability blocks the primary run. The Strix gate must
-  route these fallback names through the GitHub Models endpoint with
-  OpenAI-compatible child model names such as
-  `openai/deepseek/deepseek-r1-0528`, not the public DeepSeek API. Do not use
-  GPT-4.1 or weaker GitHub Models fallbacks for Strix or OpenCode PR review
-  evidence. Keep the GitHub Models endpoint in a trusted input file and pass
-  the token only through
-  the provider-scoped Strix child-process key path. Legacy `STRIX_LLM` secrets
-  must not override PR, push, or scheduled Strix defaults. Vertex remains
-  available only for manual
-  `workflow_dispatch` evidence when the `strix_llm` input
-  explicitly selects `vertex_ai/gemini-3.1-pro-preview-customtools` or
-  `vertex_ai/gemini-2.5-flash` with `GCP_SA_KEY`; expose Google/Vertex
-  credentials only for Vertex provider mode. Direct OpenAI GPT-5.4-or-newer
-  scans remain supported only for manual `strix_llm` selections with
-  `STRIX_OPENAI_API_KEY`. Do not silently fall back between providers, and
-  do not treat timeout-class provider infrastructure failures as clean PR
-  evidence even when Strix printed zero vulnerabilities before failing. Disable
-  silent Vertex fallback models in the workflow unless a future PR proves a new
-  exact fallback contract with no Timeout/Fatal/Warn/Denied output. Record
-  provider evidence in the PR. Known third-party Strix/Pydantic
-  serializer warnings must be filtered narrowly inside the Strix gate child
-  process, not as a visible workflow env entry, so Warn-class logs are not
-  accepted as clean evidence and warning-filter variable names do not pollute
-  GitHub logs. Strix workflow runtime budget keys should be exported inside the
-  execution shell, not listed as visible step `env:` timeout names, so clean runs
-  do not carry stale timeout-signal strings. Keep PR-scope process budgets large
-  enough for Strix to finalize reports after the scanner emits completion
-  events; a wrapper timeout after `vulnerability_count: 0` is still failed
-  evidence, not a pass. PR evidence must present the full scannable changed-file
-  set from the PR head, plus allowlisted trusted context files, to Strix in one
-  scanner invocation; do not split changed files into separate scanner runs or
-  copy the entire PR-head repository tree by default because either breaks
-  Strix's required whole-context and bounded-input contract. Keep architecture
-  docs and reusable Strix gate tests aligned with this rule so stale
-  Vertex-default, OpenAI-only, unavailable-model, blanket-warning, or generic-key
-  examples cannot re-enter copied workflow guidance.
+- Central LLM review workflows use
+  `contextual-orchestrator/orchestrator/free`; do not restore direct GitHub
+  Models, Vertex, OpenAI, OpenRouter, or provider-specific fallback credentials.
+  Preserve whole-context Strix input, bounded job runtime, ZDR-only
+  private-source routing, and fail-closed `Timeout`/`Fatal`/`Warn`/`Denied`
+  artifact checks.
 - HMAC fallback sessions are local/control-plane compatibility credentials, not
   authoritative workspace-membership evidence. Sensitive tenant security posture
   surfaces must require OIDC/JWKS-backed membership or an explicit dependency
@@ -233,6 +194,9 @@ in this repo.
   binary, oversized, or otherwise ineligible files, and do not relax the
   validator to accept a fabricated receipt; fail closed or repair the canonical
   receipt producer.
+- Do not present a heuristic as a security, AI-quality, or completion
+  guarantee. State its evidence boundary and replace it at the canonical owner
+  when the workflow requires an enforceable contract.
 - Pending or queued reviews and checks are wait states. Continue safe work on
   another gap. Before calling a PR merge-ready, freshly verify the exact head
   and base, live rulesets, required checks, unresolved threads, and applicable
@@ -262,6 +226,10 @@ in this repo.
   orchestrator; consumer workflows do not carry provider names, direct-provider
   credentials, or paid fallbacks. Verify the requested logical model, endpoint,
   served-model metadata, and terminal response in the same run.
+- Keep private-source review fail closed and ZDR-only. Never log or copy bearer
+  tokens, provider credentials, request payloads, or secret-derived values.
+  Repair shared sidecar startup, credential bootstrap, timeout handling, and
+  response normalization where all review paths converge.
 - Do not impose a shared application, agent, or gateway wall-clock timeout on
   model work. The default is unset; only explicit user cancellation, a provider
   terminal result, or a configured administrator limit ends it. OpenCode,
