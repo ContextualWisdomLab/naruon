@@ -78,7 +78,7 @@ async def extract_action_items_and_summary(
                 {"role": "user", "content": email_body},
             ],
             response_format=ExtractionResult,
-                ),
+            ),
             operation_name="summary extraction",
             ),
         )
