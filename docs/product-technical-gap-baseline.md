@@ -472,6 +472,15 @@ files, 439 tests), TypeScript, focused ESLint, and diff checks pass. No
 predecessor gate evidence transfers, and #1526 may close only after #1560 merges
 and exact protected-main equivalence is reverified. #1560 remains Draft while
 non-default-base hosted review and validation evidence are incomplete.
+Stacked successor #1568
+(`d65b05992cee54964114c9011a2bbbddd663062f`) keeps the first-wins map lookup
+implementation and now exercises empty, under-limit, exact-limit, and
+over-limit relationship and node option sets. The tests verify insertion order,
+public ids, user-visible labels, the five-relationship cap, and the eight-node
+cap. Its focused 21-test file, complete frontend suite (52 files, 446 tests),
+TypeScript, ESLint, and diff checks pass. The review thread is resolved, but the
+stacked head has only external status evidence and therefore remains Draft;
+protected merge still requires its own required workflow evidence.
 Governance owner #1531
 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) retains the CodeRabbit/OpenCode
 fallback and stacked-base contract. Trigger repair #1562
