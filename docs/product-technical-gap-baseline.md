@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.19
+**Baseline version:** 1.20
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -74,6 +74,17 @@ focused structured-output, project-graph, and LLM tests pass with warnings as
 errors, plus Ruff and diff checks. Fresh hosted checks and current-head
 independent review remain pending, so the inference-confidence Gap is not yet
 closed on protected `develop`.
+
+**Mail-list performance evidence refresh (2026-09-04T17:18Z):** Naruon PR
+#1542 exact head `6113f76e1f7c1c56adc89f932ef423f34ef83566` now
+contains an observable memoization acceptance test rather than only functional
+selection coverage. It instruments the fetched email array's `map`, triggers an
+unrelated search-input state rerender, and proves the stable list is mapped only
+once; the existing test separately verifies selection and callback dependency
+changes. Unmeasured fixed claims about 50-plus rows and exactly two rerenders
+were removed. Seven focused tests, TypeScript, ESLint, and diff checks pass. The
+PR is Ready, but current-head hosted checks and CodeRabbit review are pending;
+no buyer-visible latency claim or protected-branch completion is recorded.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
