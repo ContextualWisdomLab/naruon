@@ -265,6 +265,12 @@ is stacked on #1068 with only its six owner-boundary files in the three-dot
 diff; 47 focused tests and the exact stacked full suite (`3396 passed, 2
 skipped`) pass. Both PRs remain open and mergeable while hosted Checks and
 current-head review are pending; neither is protected-main or release evidence.
+Contextual-orchestrator PR #1044
+(`95bc9a7e7b9ad0b455c44715724c2998ad93868d`) removes a provider-embedding
+batch test race by waiting on the existing completion contract before reading
+terminal usage. Source, security, Strix, and quality Checks pass; the remaining
+Noema failure is a 96.4-second gateway 502 with no source finding, so central
+review retry run `33910613120` is queued without changing the exact head.
 Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
 provider/model-specific routing policy from Naruon's agent guidance. Central
 model-backed Actions now name only the `.github`-owned `orchestrator/free`
