@@ -294,6 +294,17 @@ ground the sampling mechanism, but do not prove optimality for the product's
 composite stability-sample/EWMA-latency score. Ninety-three focused contracts
 and the exact stacked full suite (`3399 passed, 2 skipped`) pass; hosted Checks
 are queued and no protected-main or buyer-traffic optimality claim is made.
+Contextual-orchestrator PR #1032
+(`95b164542ba462d8015107ae6492fa36f22cc357`) is non-force restacked on #1068
+and feeds successful `orchestrator/free` synthesis into the existing realtime
+fast-mlsirm judge as observation-only routing evidence. Request eligibility,
+ZDR, file-replica, and operator-budget boundaries remain in force; rejected
+observations preserve incurred provider usage and never replace the served
+answer. CodeGraph confirms the serving path from orchestrated completion through
+`conduct` to model-judge verification. Two hundred three focused contracts and
+the exact stacked full suite (`3426 passed, 2 skipped`) pass. The six-file delta
+remains Proposed while current-head CodeRabbit and hosted Checks are pending;
+it is not protected-main, release, or buyer-quality evidence.
 Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
 provider/model-specific routing policy from Naruon's agent guidance. Central
 model-backed Actions now name only the `.github`-owned `orchestrator/free`
