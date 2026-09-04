@@ -104,12 +104,55 @@ def _published_policy(*, version: str = "email-writing-policy-v1") -> dict[str, 
     return payload
 
 
+def _published_evidence_artifacts(payload: dict[str, object]) -> dict[str, bytes]:
+    """Build immutable evidence envelopes and bind their digests to the policy."""
+    evidence = payload["evidence"]
+    assert isinstance(evidence, dict)
+    artifacts: dict[str, bytes] = {}
+    protocol_bytes = _canonical_bytes(
+        {
+            "evidence_version": 1,
+            "evidence_kind": "protocol",
+            "recorded_at": "2026-08-01T00:00:00Z",
+            "protocol_hash": None,
+        }
+    )
+    protocol_hash = "sha256:" + hashlib.sha256(protocol_bytes).hexdigest()
+    if evidence.get("protocol_hash") == "sha256:" + "1" * 64:
+        evidence["protocol_hash"] = protocol_hash
+    artifacts[protocol_hash] = protocol_bytes
+    for index, evidence_kind in enumerate(
+        ("calibration_dataset", "locked_holdout", "reference_adjudication"),
+        start=2,
+    ):
+        artifact_bytes = _canonical_bytes(
+            {
+                "evidence_version": 1,
+                "evidence_kind": evidence_kind,
+                "recorded_at": f"2026-08-0{index}T00:00:00Z",
+                "protocol_hash": protocol_hash,
+            }
+        )
+        qualified_digest = "sha256:" + hashlib.sha256(artifact_bytes).hexdigest()
+        field_name = f"{evidence_kind}_hash"
+        placeholder_digit = str(index)
+        if evidence.get(field_name) == "sha256:" + placeholder_digit * 64:
+            evidence[field_name] = qualified_digest
+        artifacts[qualified_digest] = artifact_bytes
+    return artifacts
+
+
 def _load(
     payload: dict[str, object],
     *,
     runtime_contracts: dict[str, str | None] | None = None,
 ):
     """Load one synthetic artifact through the production integrity boundary."""
+    evidence_artifacts = (
+        _published_evidence_artifacts(payload)
+        if payload.get("status") == "published"
+        else None
+    )
     manifest = _manifest_for(_POLICY_NAME, payload)
     return load_policy_artifact(
         artifact_name=_POLICY_NAME,
@@ -117,6 +160,7 @@ def _load(
         manifest_bytes=_canonical_bytes(manifest),
         now=_NOW,
         runtime_contracts=runtime_contracts or _RUNTIME_CONTRACTS,
+        evidence_artifacts=evidence_artifacts,
     )
 
 
@@ -135,6 +179,16 @@ def test_policy_schema_declares_strict_lifecycle_and_publish_decision() -> None:
         "superseded",
         "revoked",
     ]
+    published_contract = schema["allOf"][0]["then"]["properties"]
+    assert published_contract["calibration_summary"]["properties"]["status"] == {
+        "const": "validated"
+    }
+    assert published_contract["evidence"]["properties"]["protocol_hash"] == {
+        "type": "string"
+    }
+    assert published_contract["evidence"]["properties"][
+        "holdout_labels_accessed_after_preregistration"
+    ] == {"const": True}
 
 
 @pytest.mark.parametrize("field", ["publish_decision", "status", "policy_version"])
@@ -228,6 +282,59 @@ def test_published_policy_requires_complete_calibration_and_holdout_evidence() -
                 "contextual_orchestrator": "v1",
             },
         )
+
+
+def test_published_policy_resolves_evidence_bytes_and_preregistration_order() -> None:
+    """Reject missing, modified, or pre-protocol published evidence artifacts."""
+    payload = _published_policy()
+    evidence_artifacts = _published_evidence_artifacts(payload)
+    manifest = _manifest_for(_POLICY_NAME, payload)
+    common = {
+        "artifact_name": _POLICY_NAME,
+        "artifact_bytes": _canonical_bytes(payload),
+        "manifest_bytes": _canonical_bytes(manifest),
+        "now": _NOW,
+        "runtime_contracts": {
+            "naruon": "0.14.4",
+            "inkspan": "0.6.0",
+            "fast_mlsirm": "0.9.2",
+            "contextual_orchestrator": "v1",
+        },
+    }
+    with pytest.raises(
+        EmailWritingPolicyError, match="policy_publication_evidence_unverified"
+    ):
+        load_policy_artifact(**common)
+
+    modified = dict(evidence_artifacts)
+    modified[next(iter(modified))] += b"modified"
+    with pytest.raises(
+        EmailWritingPolicyError, match="policy_publication_evidence_mismatch"
+    ):
+        load_policy_artifact(**common, evidence_artifacts=modified)
+
+    evidence = payload["evidence"]
+    assert isinstance(evidence, dict)
+    old_holdout_hash = evidence["locked_holdout_hash"]
+    assert isinstance(old_holdout_hash, str)
+    early_holdout = _canonical_bytes(
+        {
+            "evidence_version": 1,
+            "evidence_kind": "locked_holdout",
+            "recorded_at": "2026-07-31T00:00:00Z",
+            "protocol_hash": evidence["protocol_hash"],
+        }
+    )
+    new_holdout_hash = "sha256:" + hashlib.sha256(early_holdout).hexdigest()
+    evidence["locked_holdout_hash"] = new_holdout_hash
+    evidence_artifacts.pop(old_holdout_hash)
+    evidence_artifacts[new_holdout_hash] = early_holdout
+    common["artifact_bytes"] = _canonical_bytes(payload)
+    common["manifest_bytes"] = _canonical_bytes(_manifest_for(_POLICY_NAME, payload))
+    with pytest.raises(
+        EmailWritingPolicyError, match="policy_publication_evidence_order_invalid"
+    ):
+        load_policy_artifact(**common, evidence_artifacts=evidence_artifacts)
 
 
 def test_profile_and_contract_mismatch_fail_closed() -> None:
@@ -378,7 +485,7 @@ def test_mixed_criterion_identity_and_impossible_floors_fail_closed() -> None:
 
 
 def test_revoked_policy_rolls_back_only_to_explicit_compatible_manifest_entry() -> None:
-    """Rollback cannot silently downgrade to an unlisted, expired, or incompatible artifact."""
+    """Rollback cannot silently downgrade to an unlisted artifact."""
     current_payload = _published_policy(version="email-writing-policy-v2")
     current_payload["status"] = "revoked"
     current_payload["publish_decision"] = "withhold"
