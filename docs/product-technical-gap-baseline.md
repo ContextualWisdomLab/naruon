@@ -731,9 +731,12 @@ remains pending because it carries a UI overlay at this document path while
 PR #1429 owns the canonical commercial baseline; merge #1429 first, then
 reconcile #1436 against the canonical file before enabling auto-merge. These
 observations are exact-head evidence, not a release or hosted security claim.
-PR #1415 now has exact head `994c6d40bb8a5a1de82e2f137300ea620bcdf933`; the
-OIDC `kid` selection and strict administrator-role boundary passed 98 focused
-authentication tests. PR #1417 now has exact head
+PR #1415 now has exact head `f576eefce98bdc44dc03eed88510f60c3e6cccd9`;
+the OIDC `kid` selection and strict administrator-role boundary passed 98
+focused authentication tests. Its prior Noema failure was malformed model and
+repair JSON rather than an auth-test failure; Noema, Strix, and OpenCode have
+each been rerun once as attempt 2 on the same head and remain queued. PR #1417
+now has exact head
 `46f4b92a717361e3e4e42fcebc1d8c090a64c59b`; its PostgreSQL smoke seed now
 explicitly supplies `is_read` after a real existing-schema NOT NULL failure,
 and 180 focused tests pass. PR #1455 now has exact head
