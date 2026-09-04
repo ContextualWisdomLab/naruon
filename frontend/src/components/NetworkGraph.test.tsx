@@ -236,6 +236,78 @@ describe("NetworkGraph", () => {
     expect(mountedContainer.textContent).not.toContain("nodes and");
   });
 
+  it.each([
+    [0, 0],
+    [3, 3],
+    [5, 5],
+    [7, 5],
+  ])("keeps %i relationships in insertion order up to the five-option cap", async (edgeCount, expectedCount) => {
+    const nodes = Array.from({ length: 8 }, (_, index) => ({
+      id: `node-${index}`,
+      label: `노드 ${index}`,
+    }));
+    const edges = Array.from({ length: edgeCount }, (_, index) => ({
+      id: `edge-${index}`,
+      from: `node-${index}`,
+      to: `node-${index + 1}`,
+      title: `관계 ${index}`,
+    }));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse({ nodes, edges }))));
+
+    await renderGraph();
+    await flushAsyncWork();
+
+    const options = Array.from(
+      getMountedContainer().querySelectorAll<HTMLOptionElement>(
+        'select[aria-label="관계 선택"] option:not([value=""])',
+      ),
+    );
+    expect(options).toHaveLength(expectedCount);
+    expect(options.map((option) => option.value)).toEqual(
+      Array.from({ length: expectedCount }, (_, index) => `edge-${index}`),
+    );
+    expect(options.map((option) => option.textContent)).toEqual(
+      Array.from(
+        { length: expectedCount },
+        (_, index) => `관계 ${index + 1}: 노드 ${index} -> 노드 ${index + 1} (관계 ${index})`,
+      ),
+    );
+  });
+
+  it.each([
+    [0, 0],
+    [4, 4],
+    [8, 8],
+    [10, 8],
+  ])("keeps %i nodes in insertion order up to the eight-option cap", async (nodeCount, expectedCount) => {
+    const nodes = Array.from({ length: nodeCount }, (_, index) => ({
+      id: `node-${index}`,
+      label: `노드 ${index}`,
+    }));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse({ nodes, edges: [] }))));
+
+    await renderGraph();
+    await flushAsyncWork();
+
+    const nodeSelect = getMountedContainer().querySelector<HTMLSelectElement>(
+      'select[aria-label="노드 선택"]',
+    );
+    if (expectedCount === 0) {
+      expect(nodeSelect).toBeNull();
+      return;
+    }
+    const options = Array.from(
+      nodeSelect?.querySelectorAll<HTMLOptionElement>('option:not([value=""])') ?? [],
+    );
+    expect(options).toHaveLength(expectedCount);
+    expect(options.map((option) => option.value)).toEqual(
+      Array.from({ length: expectedCount }, (_, index) => `node-${index}`),
+    );
+    expect(options.map((option) => option.textContent)).toEqual(
+      Array.from({ length: expectedCount }, (_, index) => `노드: 노드 ${index}`),
+    );
+  });
+
   it("exposes accessible relationship detail and zoom controls for the graph", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
