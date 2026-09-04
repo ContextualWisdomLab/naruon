@@ -88,6 +88,103 @@ describe("EmailList", () => {
     expect(selectedThread?.className).toContain("min-h-20");
   });
 
+  it("updates memoized selection and click handling after prop changes", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          emails: [
+            {
+              id: 21,
+              sender: "기획팀",
+              subject: "첫 번째 메일",
+              date: "2026-05-11T09:30:00Z",
+              snippet: "첫 번째 메일입니다.",
+            },
+            {
+              id: 22,
+              sender: "개발팀",
+              subject: "두 번째 메일",
+              date: "2026-05-11T10:30:00Z",
+              snippet: "두 번째 메일입니다.",
+            },
+          ],
+        }),
+      ),
+    );
+    const firstSelect = vi.fn();
+    const secondSelect = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailList onSelectEmail={firstSelect} selectedEmailId={21} />);
+    });
+    await flushAsyncWork();
+
+    let selectedThread = container.querySelector<HTMLButtonElement>('button[aria-current="true"]');
+    expect(selectedThread?.textContent).toContain("첫 번째 메일");
+
+    await act(async () => {
+      root?.render(<EmailList onSelectEmail={secondSelect} selectedEmailId={22} />);
+    });
+
+    selectedThread = container.querySelector<HTMLButtonElement>('button[aria-current="true"]');
+    expect(selectedThread?.textContent).toContain("두 번째 메일");
+
+    const firstThread = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("첫 번째 메일"),
+    );
+    expect(firstThread).toBeDefined();
+
+    await act(async () => {
+      firstThread?.click();
+    });
+
+    expect(secondSelect).toHaveBeenCalledWith(21);
+    expect(firstSelect).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not remap stable emails for an unrelated search-input rerender", async () => {
+    const emailItems = [
+      {
+        id: 31,
+        sender: "운영팀",
+        subject: "안정된 목록",
+        date: "2026-05-11T09:30:00Z",
+        snippet: "목록 재계산 여부를 확인합니다.",
+      },
+    ];
+    const mapSpy = vi.spyOn(emailItems, "map");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse({ emails: emailItems }))),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailList onSelectEmail={vi.fn()} selectedEmailId={31} />);
+    });
+    await flushAsyncWork();
+    expect(mapSpy).toHaveBeenCalledTimes(1);
+
+    const searchInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="메일 맥락 검색"]',
+    );
+    expect(searchInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(searchInput!, "내부 상태 변경");
+    });
+
+    expect(mapSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("uses the missing-title fallback for blank email subjects", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
