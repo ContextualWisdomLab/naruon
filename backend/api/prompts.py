@@ -95,17 +95,19 @@ async def execute_prompt_with_llm(
     from openai import AsyncOpenAI
     from core.config import settings as app_settings
 
-    validated_base_url, http_client = await build_llm_provider_http_client(base_url)
-    messages = []
-    if system_message:
-        messages.append({"role": "system", "content": system_message})
-    messages.append({"role": "user", "content": prompt_text})
-    client = AsyncOpenAI(
-        api_key=api_key,
-        base_url=validated_base_url,
-        http_client=http_client,
-    )
+    client = None
+    http_client = None
     try:
+        validated_base_url, http_client = await build_llm_provider_http_client(base_url)
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt_text})
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=validated_base_url,
+            http_client=http_client,
+        )
         response = await client.chat.completions.create(
             model=model_name or app_settings.OPENAI_MODEL,
             messages=messages,
@@ -125,7 +127,10 @@ async def execute_prompt_with_llm(
         )
     finally:
         try:
-            await client.close()
+            if client is not None:
+                await client.close()
+            elif http_client is not None:
+                await http_client.aclose()
         except Exception as exc:
             logging.getLogger(__name__).error(
                 "Prompt provider client cleanup failed",
