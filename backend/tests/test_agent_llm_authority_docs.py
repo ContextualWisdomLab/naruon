@@ -45,6 +45,9 @@ def test_agent_guidance_names_canonical_llm_owner_and_fail_closed_boundary() -> 
     assert "immutable released owner API/client/schema" in agents
     assert "open PR or unreleased branch" in agents
     assert "shared application/agent/gateway wall-clock timeout" in agents
+    assert "at most three hours" in agents
+    assert "generic 900-second error" in agents
+    assert "Do not add a shared application/agent/gateway wall-clock timeout" not in agents
 
 
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
