@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.13
+**Baseline version:** 1.14
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -566,10 +566,13 @@ qualifies internal ABAC vocabulary while retaining the historical
 `action`/`conditions` wire aliases and read-only compatibility properties. All
 repository callers pass the evaluator policy positionally, 13 focused tests and
 Ruff pass, and both current review threads were verified as informational and
-resolved. Its deleted-workflow `noema-review` log is unavailable by run handle;
-the remaining metadata gate also records a cancelled Strix run. Central
+resolved. The deleted-workflow `noema-review` run body returns 404, but retained
+check-run annotations prove a single gateway-owned attempt served by
+`google/gemma-4-31b-it` ended after 310.3 seconds with an upstream HTTP 502 in
+`response_error`; this is provider failure rather than source evidence. The
+remaining metadata gate also records a cancelled Strix run. Central
 merge-scheduler run `33896429098` was dispatched once for this exact head with
-branch updates and merge disabled and is currently queued, so no protected
+branch updates and merge disabled and remains queued, so no protected
 completion claim transfers from the local evidence.
 
 ### 4.2 Source-of-truth and writeback sovereignty
