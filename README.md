@@ -112,6 +112,16 @@ COMPOSE_PROFILES=newsdom NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh up -d 
 
 The `newsdom` service stays on the internal Compose network and is not published to the host. Enable it deliberately and review the pinned sidecar revision before production use.
 
+## Protected delivery
+
+ContextualWisdomLab central required workflows provide OpenCode review, Strix
+security analysis, and merge scheduling. This repository does not carry
+repo-local OpenCode, Strix, or merge-scheduler workflow copies. Repository
+workflows remain responsible for tests and product-specific checks; central
+automation owns review evidence, branch updates, auto-merge, and mechanical
+merge actions. See the [automation and collaboration policy](docs/development/automation-and-collaboration.md)
+for the exact-head procedure.
+
 ## Required operator configuration
 
 | Setting | Purpose |
