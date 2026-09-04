@@ -383,7 +383,9 @@ answer. CodeGraph confirms the serving path from orchestrated completion through
 `conduct` to model-judge verification. Two hundred three focused contracts and
 the exact stacked full suite (`3426 passed, 2 skipped`) pass. The six-file delta
 remains Proposed while current-head CodeRabbit and hosted Checks are pending;
-it is not protected-main, release, or buyer-quality evidence.
+it is not protected-main, release, or buyer-quality evidence. The live PR was
+returned to Draft after its successor contract identified #1564 as a predecessor
+whose full exact-head succession is still unproven; its delta remains intact.
 AGENTS entry PR #1528 (`57254cb61ecc67dd593ea96ae878bf651682a501`)
 adds verifiable read-first product, Project, gap, issue, Figma-decision, and
 organization-governance links plus a regression contract. Reopened foundation
