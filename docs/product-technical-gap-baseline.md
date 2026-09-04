@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.16
+**Baseline version:** 1.17
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -24,13 +24,17 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Governed review evidence refresh (2026-09-04T16:12Z):** Naruon PR #1564
-(`9f890a3b7eac16e25c808d6275eacdfec4cb04cc`) records the reusable exact-head,
+**Governed review evidence refresh (2026-09-04T17:03Z):** Naruon PR #1564
+(`5ff0f219291ad756dd5638a30c9b8549074959b0`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
 procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
 evidence from post-merge commit verification and names the applicable
-current-head CodeRabbit or structured OpenCode fallback contract; the sole
-review thread is resolved and 35 release-governance tests pass. Canonical workflow
+current-head CodeRabbit or structured OpenCode fallback contract. It also
+inherits PR #1558's unique valid delta: repository-local security-skill routing,
+review-only mutation boundaries, remote-head equality before push, fail-closed
+GitHub API handling, truthful commit attribution, NIST SSDF grounding, and safe
+independent work during gate waits. The sole predecessor review thread is
+resolved and 35 release-governance tests pass on the new head. Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
 retains only allowlisted, secret-free gateway failure fields and stops creating
@@ -70,12 +74,12 @@ check pass locally. #128 now non-force merges that exact prerequisite and target
 their own hosted current-head checks and independent review before #145 can
 merge and #128 can be retargeted to protected `main`.
 
-**Exact-head execution refresh (2026-09-04T14:10Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T17:03Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
-(`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) carries the exact-head PR
-completion playbook. It now distinguishes AI-authored commits from generated
-GitHub merge refs and permits bounded validation retries for truncated remote
-evidence; 35 governance tests pass locally. #1538
+(`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) is now a predecessor of #1564,
+which carries its complete valid delta plus the newer exact-head repair rules.
+#1558 remains open until #1564 reaches protected merge or an independent
+equivalence check confirms succession; no count-only closure is authorized. #1538
 (`71c331e1e059d22f44f605711ab230926edc1c88`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
