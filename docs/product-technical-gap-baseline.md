@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.11
+**Baseline version:** 1.12
 **Observed on:** 2026-09-04 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -99,8 +99,15 @@ catalog claim excludes complete de-identification, and NIST SP 800-188 grounds
 that boundary. The effective child delta is three files; the combined tool and
 privacy contract suite passes 87 tests with warnings as errors, plus Ruff and
 diff checks. PR #1502
-(`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
+(`0b9e324a91fd2148b2b2759cca875ac7d50c86a0`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
+Its previous frontend failure occurred before tests because Corepack resolved
+mutable `pnpm/latest` and received `ECONNRESET`. The PR now non-force inherits
+workflow prerequisite #1562 and targets its exact branch; the effective
+database/bootstrap delta remains eleven files. Actionlint, 40 governance and
+stacked-workflow tests, and 62 focused migration/bootstrap/data tests pass
+locally, with two PostgreSQL-service tests explicitly skipped in that focused
+no-service run. Fresh hosted exact-head evidence is queued.
 The Draft email-writing stack now carries every prerequisite delta by non-force
 merge. Task 7 PR #1524
 (`cc1da5125e761d80caa7b0e81bd346e1004fad2e`) adds deterministic race coverage
