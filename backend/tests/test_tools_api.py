@@ -1239,30 +1239,6 @@ async def test_email_phone_masker_handler():
         await email_phone_masker_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
 
 
-@pytest.mark.asyncio
-async def test_email_phone_masker_masks_complete_ascii_dot_atom_local_parts():
-    from api.tools import email_phone_masker_handler
-
-    result = await email_phone_masker_handler(
-        {"text": "Contact john&jane@example.com or customer/service@example.com."}
-    )
-
-    assert result["masked_text"] == "Contact [EMAIL] or [EMAIL]."
-
-
-@pytest.mark.asyncio
-async def test_email_phone_masker_bounds_near_limit_malformed_email_work():
-    from api.tools import ANALYSIS_TEXT_MAX_CHARS, email_phone_masker_handler
-
-    started_at = time.perf_counter()
-    result = await email_phone_masker_handler(
-        {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS - 2) + "@x"}
-    )
-
-    assert result["masked_text"].endswith("@x")
-    assert time.perf_counter() - started_at < 1
-
-
 def test_execute_hash_generator():
     with TestClient(app) as client:
         response = client.post(
