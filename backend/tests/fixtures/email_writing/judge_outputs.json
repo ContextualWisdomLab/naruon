@@ -1,0 +1,94 @@
+{
+  "valid_replacement_judge": {
+    "criterion_categories": {
+      "actionability": 3,
+      "audience_pragmatics": 3,
+      "explanation_quality": 2,
+      "fact_preservation": 3,
+      "intent_preservation": 3,
+      "issue_support": 3,
+      "replacement_correctness": 3,
+      "request_strength_preservation": 3,
+      "span_fidelity": 3,
+      "technical_precision": 2
+    },
+    "criterion_scores": {
+      "actionability": 1.0,
+      "audience_pragmatics": 1.0,
+      "explanation_quality": 0.6666666666666666,
+      "fact_preservation": 1.0,
+      "intent_preservation": 1.0,
+      "issue_support": 1.0,
+      "replacement_correctness": 1.0,
+      "request_strength_preservation": 1.0,
+      "span_fidelity": 1.0,
+      "technical_precision": 0.6666666666666666
+    },
+    "category_count": 4,
+    "accepted": true
+  },
+  "valid_no_replacement_judge": {
+    "criterion_categories": {
+      "actionability": 2,
+      "audience_pragmatics": 3,
+      "explanation_quality": 2,
+      "fact_preservation": 3,
+      "intent_preservation": 3,
+      "issue_support": 3,
+      "request_strength_preservation": 3,
+      "span_fidelity": 2,
+      "technical_precision": 2
+    },
+    "criterion_scores": {
+      "actionability": 0.6666666666666666,
+      "audience_pragmatics": 1.0,
+      "explanation_quality": 0.6666666666666666,
+      "fact_preservation": 1.0,
+      "intent_preservation": 1.0,
+      "issue_support": 1.0,
+      "request_strength_preservation": 1.0,
+      "span_fidelity": 0.6666666666666666,
+      "technical_precision": 0.6666666666666666
+    },
+    "category_count": 4,
+    "accepted": false
+  },
+  "score_category_disagreement": {
+    "criterion_categories": {
+      "actionability": 0,
+      "audience_pragmatics": 0,
+      "explanation_quality": 0,
+      "fact_preservation": 0,
+      "intent_preservation": 0,
+      "issue_support": 0,
+      "request_strength_preservation": 0,
+      "span_fidelity": 0,
+      "technical_precision": 0
+    },
+    "criterion_scores": {
+      "actionability": 0.99,
+      "audience_pragmatics": 0.99,
+      "explanation_quality": 0.99,
+      "fact_preservation": 0.99,
+      "intent_preservation": 0.99,
+      "issue_support": 0.99,
+      "request_strength_preservation": 0.99,
+      "span_fidelity": 0.99,
+      "technical_precision": 0.99
+    },
+    "category_count": 4,
+    "accepted": true
+  },
+  "same_words_different_context": [
+    {
+      "draft": "무슨 말씀이신가요?",
+      "context": "상대방 설명을 공개 참조자 앞에서 반박하는 회신",
+      "issue_support": 3
+    },
+    {
+      "draft": "무슨 말씀이신가요?",
+      "context": "인용된 고객 문장을 정확히 재현하는 회의록",
+      "issue_support": 1
+    }
+  ]
+}
