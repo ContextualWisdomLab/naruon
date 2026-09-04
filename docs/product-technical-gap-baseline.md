@@ -12,8 +12,9 @@ credential and maintenance control plane for governed GitHub automation and
 assigns provider discovery and routing to `contextual-orchestrator`. Naruon
 #1384 (`0fd330137cdd19068fa8903dc70e1dc88f42cdc9`) and #1486
 (`b32954dbf6066bc0d953887e8ca06820588f2c5f`) remain draft consumer lanes.
-Noema #536 (`a14cbe020d81fb7276ea4216f56d3f41c762c622`) is a draft shared-package
-proposal, not a released dependency. Naruon #1527
+Noema #536 (`5531a5327d822028c4be59e290b4d101b34d49db`, verified
+2026-09-04T13:38Z; supersedes the earlier `a14cbe02` observation) is a draft
+shared-package proposal, not a released dependency. Naruon #1527
 (`23680b13b443bb4eb7659b9a75073ecc1b67e133`) has no common Git history with
 current `develop` and contains mutually contradictory owner claims; ADR-0006
 therefore records the repair as Proposed rather than transferring its evidence.

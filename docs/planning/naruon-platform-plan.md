@@ -236,10 +236,10 @@ The IA reserves named **slots** each extension point attaches to. Today only two
 | **KG enricher** (LLM extractor, multilingual) | Semantic-graph view in /data | `[NEW]` |
 | **Work-item type** | New object types in /projects, /tasks | `[PARTIAL]` |
 | **UI panel** | Side panel in any context view; or a route segment | `[NEW]` |
-| **Agent** (Naruon workspace runtime) | /ai-hub + inline action on Decision Points | `[NEW]` |
+| **Agent** (Naruon workspace runtime) | Registered `noema-general-agent` + `run_noema_agent`; product invocation remains unwired | `[PARTIAL]` |
 | **Scheduling** (RSVP, free/busy, room) | The §4.8 scheduling family | `[NEW]` |
 
-**Registry & lifecycle** (`/plugins`, `[NEW]`): browse & enable (enabled set reshapes nav) · manifest & contract (extension points, permissions, version) · versioned stable plugin API · permissions/data-scope grant · isolated execution for untrusted plugins through the separately released **quarantine-sandbox-runtime** contract.
+**Registry & lifecycle** (`/plugins`, `[NEW]`): browse & enable (enabled set reshapes nav) · manifest & contract (extension points, permissions, version) · versioned stable plugin API · permissions/data-scope grant · isolated execution for untrusted plugins through a future immutable contract published by **ContextualWisdomLab/quarantine-sandbox-runtime**. Its repository exists, but no GitHub Release is currently available for adoption.
 
 **Verticals & capabilities that plug in:** **BandScope** (`band/<id>` context + rehearsal scheduling — the killer demo) · **pg-erd-cloud** (ERD panel; data-requirement & erd_candidate) · **Inkspan** (TipTap WYSIWYG compose; Markdown→HTML on send) · **scopeweave** (PM/WBS/EVM/CPM + ITSM) · **codec-carver** (audio/video STT + diarization + consented voiceprint → meeting minutes) · **contextual-orchestrator** (not a UI surface; the LLM cost-router KG enrichers call).
 
@@ -791,6 +791,11 @@ This section is the honest reconciliation of vision against the code as it stand
 - Live screens (`/mail`, `/calendar`, `/tasks`, `/projects`, `/data`, `/search`, `/ai-hub`, `/prompt-studio`, `/tools`, `/security`, `/settings`) + the BFF proxy; `NetworkGraph.tsx` and `DecisionPointCard.tsx` components.
 
 ### 8.2 `[PARTIAL]` — exists but incomplete, **reconcile / wire**
+- **Naruon workspace agent:** `noema-general-agent` is enabled in the registry,
+  resolves through `agent_registry`, and has a tested `run_noema_agent`
+  entrypoint; no product route invokes it yet, and its provider-direct seam must
+  migrate to a released `contextual-orchestrator` contract rather than be
+  duplicated.
 - **Semantic project graph:** a full read/confirm/correct/traceability API over `project_graph_objects`/`_edges`/`_corrections` is live, but its extractor (`extract_project_semantics`/`persist_project_graph_projection`) is **test-only** — no ingest worker or API calls it, so the semantic graph is **unpopulated in production**. (Verified via `callers_of` → not_found + grep showing only test callers.) *Highest-leverage gap: the dense KG is built but empty.*
 - **Multi-account model:** a normalized `email_messages/instances/raws/threads` model exists in parallel to the live `email_records` model and is **not reconciled**; live ingest still writes the legacy model.
 - **Project-graph curation UI** (`/projects`) is read/confirm/correct only; extraction not wired.
@@ -823,7 +828,7 @@ The single highest-leverage move: the semantic graph exists but is empty.
 
 ### Phase 1 — Platform / Plugin SDK
 5. **Stand up the plugin kernel** — registry (`plugin_registrations`/`plugin_grants`), versioned Plugin API, typed/ordered hook bus — by generalizing the `attachment_parser` + `project_graph` extractor seams into one contract.
-6. Adopt a released **quarantine-sandbox-runtime** contract for untrusted plugins (capability-scoped, budget-bounded, candidate-only KG mutations); develop missing isolation capability in its canonical owner first.
+6. Adopt a released **ContextualWisdomLab/quarantine-sandbox-runtime** contract for untrusted plugins (capability-scoped, budget-bounded, candidate-only KG mutations); its repository is the canonical owner, but because it currently has no GitHub Release, develop and release the missing owner capability before consumer adoption.
 7. Ship the `/plugins` registry UI and the manifest/license/signature load-gate.
 *Makes "everything is a plugin" real; unblocks every vertical.*
 

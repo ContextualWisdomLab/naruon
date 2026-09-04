@@ -45,8 +45,10 @@ must not treat its branch implementation as released runtime behavior.
 4. The proposed `noema-core` package is not adopted until its owner PR merges,
    an immutable release is published, and Naruon verifies a versioned contract.
    Shared construction code alone does not move Naruon domain logic into Noema.
-5. Quarantine execution remains a separately published isolation capability;
-   this ADR does not assign it to Naruon or fold it into workspace-agent code.
+5. Quarantine execution remains owned by
+   `ContextualWisdomLab/quarantine-sandbox-runtime`; this ADR does not assign
+   it to Naruon or fold it into workspace-agent code. Naruon may adopt only an
+   immutable released contract, and none exists yet.
 
 ## Consequences
 
@@ -90,6 +92,10 @@ cannot transfer their checks or approvals to a consumer.
 - `ContextualWisdomLab/naruon` PRs #1384, #1486, and #1527, verified 2026-09-04.
 - `ContextualWisdomLab/contextual-orchestrator` PR #1004, exact head
   `6a992538b6efcc34b957f72fc599bb33ac40c152`, verified 2026-09-04.
+- `ContextualWisdomLab/quarantine-sandbox-runtime`, default `develop` at exact
+  commit `60a85c7633e03b425b67159ec6822c8178cf87ea`, with zero GitHub Releases,
+  verified 2026-09-04. This identifies the owner but does not authorize
+  consumer adoption.
 - Evans, E. (2003). *Domain-driven design: Tackling complexity in the heart of
   software*. Addison-Wesley.
 - Vernon, V. (2013). *Implementing domain-driven design*. Addison-Wesley.
