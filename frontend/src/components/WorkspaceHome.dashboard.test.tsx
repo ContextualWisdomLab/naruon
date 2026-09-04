@@ -229,6 +229,57 @@ describe("WorkspaceHome Today dashboard", () => {
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("preserves project evidence when only calendar sources fail", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/calendar/writeback-sources")) {
+        return Promise.reject(new Error("calendar unavailable"));
+      }
+      if (url.endsWith("/api/webdav/folders")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([{
+            folder_uid: "project-folder-1",
+            project_name: "계약 검토",
+            webdav_path: "/contracts",
+          }]),
+        });
+      }
+      if (url.endsWith("/api/emails")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("일정 원본 목록 응답을 확인할 수 없습니다.") ?? false);
+
+    const metrics = container.querySelector<HTMLElement>('[aria-label="홈 지표"]');
+    expect(metrics?.textContent).toContain("일정 원본오류");
+    expect(metrics?.textContent).toContain("프로젝트 원본1");
+    expect(metrics?.textContent).not.toContain("프로젝트 원본오류");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("다시 시도");
+  });
+
   it("creates overdue reply follow-up tasks from the Today dashboard with signed headers", async () => {
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
       matches: false,
