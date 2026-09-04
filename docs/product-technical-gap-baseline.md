@@ -77,6 +77,14 @@ regression plus the existing prompt API suite pass 21 tests with warnings as
 errors, and Ruff and protected-base diff checks pass. Doctoring connects the
 contract to OWASP logging guidance and NIST SP 800-92; hosted exact-head evidence
 remains required.
+PR #1511 (`f78222dda6ac961fa3c1c4fb2acd9d7625e7b672`) repairs Context Search
+identifier language end to end. Backend and frontend runtime models use
+`email_id`; the legacy `id` exists only at the `/api/search` wire boundary and
+is translated once on receipt. Selection, React keys, ontology lookup, and
+product events consume the semantic identity. Seventeen backend tests plus the
+frontend SearchLayout regression, TypeScript, ESLint, Ruff, and diff checks
+pass. Fresh hosted evidence is required because earlier failed review runs do
+not transfer to this head.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
