@@ -34,6 +34,9 @@ export function CalendarWritebackSection({
   const isCreatePending = pendingWritebackAction === 'create';
   const isUpdatePending = pendingWritebackAction === 'update';
   const isExecutePending = pendingWritebackAction === 'execute';
+  const hasWritableSelectedSource = selectedWritebackSource !== null;
+  const areIntentActionsDisabled = isWritebackActionDisabled || !hasWritableSelectedSource;
+  const isExecutionActionDisabled = isProviderExecutionDisabled || !hasWritableSelectedSource;
   const writebackControlStatus = isWritebackActionDisabled
     ? pendingWritebackAction
       ? '일정 반영 요청을 처리 중이라 새 점검을 시작할 수 없습니다.'
@@ -42,9 +45,11 @@ export function CalendarWritebackSection({
         : sourceLoadStatus === 'error'
           ? '일정 원본을 확인할 수 없어 반영 의도 점검을 시작할 수 없습니다.'
           : '일정 원본 준비가 끝나야 반영 의도 점검을 시작할 수 있습니다.'
-    : isProviderExecutionDisabled
-      ? '반영 의도 점검은 가능하지만 선택한 반영 가능한 원본 또는 충돌 토큰이 없어 외부 실행 요청은 사용할 수 없습니다.'
-      : '선택한 고객 원본 일정에 반영할 의도와 외부 실행 조건을 점검할 수 있습니다.';
+    : !hasWritableSelectedSource
+      ? '반영 가능한 일정 원본이 없어 반영 의도 점검을 시작할 수 없습니다.'
+      : isProviderExecutionDisabled
+        ? '반영 의도 점검은 가능하지만 선택한 원본에 충돌 토큰이 없어 외부 실행 요청은 사용할 수 없습니다.'
+        : '선택한 고객 원본 일정에 반영할 의도와 외부 실행 조건을 점검할 수 있습니다.';
 
   return (
     <section aria-label="일정 반영 의도 점검" className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
@@ -61,7 +66,7 @@ export function CalendarWritebackSection({
           <button
             type="button"
             onClick={() => void requestWritebackIntent('create')}
-            disabled={isWritebackActionDisabled}
+            disabled={areIntentActionsDisabled}
             aria-describedby={writebackControlStatusId}
             aria-busy={isCreatePending}
             className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
@@ -72,7 +77,7 @@ export function CalendarWritebackSection({
           <button
             type="button"
             onClick={() => void requestWritebackIntent('update')}
-            disabled={isWritebackActionDisabled}
+            disabled={areIntentActionsDisabled}
             aria-describedby={writebackControlStatusId}
             aria-busy={isUpdatePending}
             className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-4 py-2 text-sm font-bold hover:bg-secondary disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
@@ -83,7 +88,7 @@ export function CalendarWritebackSection({
           <button
             type="button"
             onClick={() => void requestWritebackIntent('update', true)}
-            disabled={isProviderExecutionDisabled}
+            disabled={isExecutionActionDisabled}
             aria-describedby={writebackControlStatusId}
             aria-busy={isExecutePending}
             className="inline-flex items-center justify-center rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
