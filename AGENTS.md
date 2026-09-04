@@ -34,11 +34,11 @@ in this repo.
 
 ### Code exploration
 
-- This repo has no `.codegraph/` index, so use normal search (grep/find/ripgrep).
-  If a `.codegraph/` index is later added at the repo root, prefer CodeGraph
-  (`codegraph explore "<query>"`, or the code-review-graph MCP tools) before
-  grep/find when understanding or locating code — it surfaces callers, callees,
-  and impact that text search misses.
+- When CodeGraph is available, check `codegraph status` before architecture or
+  symbol exploration. Initialize a missing index with `codegraph init`, repair a
+  stale or unhealthy index with `codegraph sync`, and use `codegraph explore`
+  before broad searches. Otherwise use focused `rg` and file reads. Keep graph
+  artifacts local unless repository policy requires them.
 
 ### Config & secrets (KV, not env)
 
@@ -195,7 +195,13 @@ in this repo.
   protected-merge observation, `github-robot-review-gate` for robot evidence,
   and `git-commit-format` before committing. Use CodeGraph before broad source
   searches when an index exists; apply `humanize-korean` to Korean prose when
-  that shared skill is available.
+  that shared skill is available. Prefer repository-local
+  `fix-development-mistakes`, `github-actions-privileged-pr-scan`, and
+  `github-robot-review-gate` skills for their matching repair, privileged
+  scanner, and review-gate work; read the selected `SKILL.md` completely.
+- Apply the mutation loop only to implementation, remediation, and landing
+  tasks. Review-only agents stop after publishing evidence-backed findings and
+  must not edit, execute project code, push, approve, or merge.
 - For every open PR, repeat: fetch the exact remote base and head, inspect
   current-head reviews and unresolved threads, reproduce failed checks from
   their logs, repair the canonical owner, run focused tests plus the applicable
@@ -205,6 +211,11 @@ in this repo.
   with the local remote-tracking ref and start from the verified 40-character
   SHA. Never guess or manually extend abbreviated SHAs in commits, PR bodies,
   release evidence, or gap baselines.
+- Create a signed conventional commit with truthful agent attribution and the
+  required `Signed-off-by` footer. Immediately before a non-force push, fetch
+  the branch and require its remote head to equal the reviewed parent. Generated
+  GitHub merge refs are transport evidence, not authored commits; verify their
+  parent and tree SHAs rather than rewriting them.
 - Treat concurrent commits and pushes as lineage to reconcile, not as grounds
   for force-pushing. Merge the updated prerequisite into the same stacked
   branch, preserve its complete delta, rerun focused checks, and retarget only
@@ -227,9 +238,20 @@ in this repo.
   and base, live rulesets, required checks, unresolved threads, and applicable
   current-head CodeRabbit or structured OpenCode fallback evidence. After the
   merge, verify the merge commit and protected target branch.
+- On GitHub 401, 403, rate limit, or repeatedly truncated responses, fail closed
+  instead of inferring current state. Use bounded retry and archive validation,
+  then continue only work grounded in already fetched exact SHAs until access is
+  restored.
 - Do not close a PR merely to reach zero open PRs. Close only with explicit user
   direction, no valid delta, a malicious change, or a verified successor that
   carries the predecessor's complete delta and records the lineage.
+
+Evidence basis: Souppaya, M., Scarfone, K., & Dodson, D. (2022). *Secure
+Software Development Framework (SSDF) Version 1.1: Recommendations for
+Mitigating the Risk of Software Vulnerabilities* (NIST SP 800-218). National
+Institute of Standards and Technology. https://doi.org/10.6028/NIST.SP.800-218.
+SSDF PS.1 and PS.3 ground accountable protected changes and retained integrity
+and provenance evidence without prescribing repository-specific tooling.
 
 - Follow `docs/development/merge-gate-policy.md` for PR gate interpretation.
 - PR Governance must stay metadata-only: no PR-head checkout, no admin merge, no
@@ -749,14 +771,17 @@ in this repo.
 
 ## Phase 10 development rules
 
-- **Stepwise execution**: Each phase requires an atomic PR, GitHub PR Tracking, Push, and Robot Review. A phase only ends when merged. Do not proceed without merge.
+- **Stepwise execution**: Each phase requires an atomic PR, GitHub PR Tracking,
+  Push, and Robot Review. A phase only ends when merged; while it waits, continue
+  independent work that does not consume or contradict the pending delta.
 - **TDD + DDD**: Practice TDD, micro TDD, nano TDD, Domain Driven Development, and Context Driven Development.
 - **API Wiring**: Always work with API wiring completed.
 - **Collaboration**: Respect other agents' concurrent work; do not overwrite or dismiss unfamiliar changes.
 - **Subagent Delegation**: Actively delegate tasks to Subagents.
 - **UI/Browser Testing**: Use a real browser for testing (do not rely on assumptions).
 - **Strict Errors**: Treat `Timeout`, `Fatal`, `Warn`, and `Denied` outputs as hard failures.
-- **Goal**: Actively manage tasks to ensure open PR counts converge to 0.
+- **Goal**: Converge open PRs through protected merges or verified full-delta
+  succession, never by count-only closure.
 
 - When the gate exhausts fallbacks after the primary model produces a finding at or above threshold and then fails with a retryable error (like `NOT_FOUND`), ensure the final output explicitly reports `Strix quick scan failed with a non-recoverable error.` to prevent downgrading the finding to pass or misleadingly reporting an unavailability error.
 
