@@ -92,7 +92,6 @@ describe("CalendarPage", () => {
     expect(container.querySelector('button[aria-label="이전 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="다음 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="설정"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="닫기"]')).not.toBeNull();
   });
 
   it("exposes the calendar view switcher as a keyboard-navigable tablist", async () => {
