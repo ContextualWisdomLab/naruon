@@ -5,12 +5,19 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app:/app/backend
 
+COPY backend/requirements-hashes.txt /app/backend/requirements-hashes.txt
 COPY connector/requirements-hashes.txt /app/connector/requirements-hashes.txt
 RUN PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ONLY_BINARY=:all: \
-    pip install --no-cache-dir --require-hashes -r /app/connector/requirements-hashes.txt
+    pip install --no-cache-dir --require-hashes \
+      -r /app/backend/requirements-hashes.txt \
+      -r /app/connector/requirements-hashes.txt
 
 COPY connector /app/connector
-COPY backend/runner/connector.py /app/backend/runner/connector.py
+COPY backend /app/backend
+
+RUN DATABASE_URL=postgresql+asyncpg://connector:connector@db.invalid/naruon \
+    AUTH_SESSION_HMAC_SECRET='q7V!3mZ#9Lp@2Rx$8Kd&5Hs*1Wn%6BcF4GjT0YuE' \
+    python -c "from runner.local_dav_adapters import LocalDavAdapters; from runner.local_mail_adapters import LocalMailAdapters"
 
 RUN useradd --system --create-home --home-dir /home/connector --shell /usr/sbin/nologin connector \
     && chown -R connector:connector /app
