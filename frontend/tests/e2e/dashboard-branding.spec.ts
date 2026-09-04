@@ -1330,6 +1330,36 @@ test('renders unique email canonical thread intent with signed API headers', asy
   await page.screenshot({ path: testInfo.outputPath('data-unique-thread-intent-mobile-scroll.png'), fullPage: false });
 });
 
+test('keeps the unavailable relationship explanation inspectable and dismissible', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'The keyboard tooltip behavior is viewport-independent.');
+  await mockDashboardApi(page);
+  await page.route('**/api/network/graph', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ nodes: [{ id: 'sender-1', label: '김지현 PM' }], edges: [] }),
+  }));
+
+  await page.goto('/search');
+
+  const button = page.getByRole('button', { name: '첫 관계 보기' });
+  const tooltip = page.getByRole('tooltip', { name: '표시할 관계 데이터가 없습니다.' });
+  await expect(button).toHaveAttribute('aria-disabled', 'true');
+  await expect(button).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') ?? 'missing-tooltip-id');
+  await expect(tooltip).toHaveCSS('opacity', '0');
+  const adjacentButton = page.getByRole('button', { name: '그래프 확대' });
+  await adjacentButton.focus();
+  await expect(adjacentButton).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(button).toBeFocused();
+  await expect(tooltip).toHaveCSS('opacity', '1');
+  await page.keyboard.press('Escape');
+  await expect(button).toBeFocused();
+  await expect(tooltip).toHaveCSS('opacity', '0');
+  await button.hover();
+  await expect(tooltip).toHaveCSS('opacity', '1');
+  await tooltip.hover();
+  await expect(tooltip).toHaveCSS('opacity', '1');
+});
+
 test('renders API-backed context search sender DAG and reply tracking', async ({ page }, testInfo) => {
   const expectedNaruonToken = 'signed-search.e2e.token';
   const publicIdentityHeaders = [
