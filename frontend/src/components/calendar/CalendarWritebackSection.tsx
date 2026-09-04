@@ -34,7 +34,8 @@ export function CalendarWritebackSection({
   const isCreatePending = pendingWritebackAction === 'create';
   const isUpdatePending = pendingWritebackAction === 'update';
   const isExecutePending = pendingWritebackAction === 'execute';
-  const hasWritableSelectedSource = selectedWritebackSource !== null;
+  const hasWritableSelectedSource = selectedWritebackSource !== null
+    && isCustomerOwnedWritableSource(selectedWritebackSource);
   const areIntentActionsDisabled = isWritebackActionDisabled || !hasWritableSelectedSource;
   const isExecutionActionDisabled = isProviderExecutionDisabled || !hasWritableSelectedSource;
   const writebackControlStatus = isWritebackActionDisabled
@@ -111,7 +112,8 @@ export function CalendarWritebackSection({
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {writebackSources.map((source, index) => {
           const sourceWritable = isCustomerOwnedWritableSource(source);
-          const sourceSelected = selectedWritebackSource?.source_id === source.source_id;
+          const sourceSelected = sourceWritable
+            && selectedWritebackSource?.source_id === source.source_id;
           const sourceLabel = getCalendarSourceLabel(index);
           return (
             <button

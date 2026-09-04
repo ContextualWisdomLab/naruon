@@ -130,7 +130,7 @@ describe('CalendarWritebackSection accessibility contract', () => {
   it('keeps read-only sources non-interactive and names the write restriction in visible content', () => {
     const { setSelectedSourceId } = renderSection({
       writebackSources: [readOnlySource],
-      selectedWritebackSource: null,
+      selectedWritebackSource: readOnlySource,
       isProviderExecutionDisabled: true,
     });
     const sourceButton = container?.querySelector<HTMLButtonElement>('button[aria-label="일정 원본 1 읽기 전용 선택"]');
@@ -153,7 +153,7 @@ describe('CalendarWritebackSection accessibility contract', () => {
   it('disables intent checks when the ready registry has no writable source', () => {
     const { requestWritebackIntent } = renderSection({
       writebackSources: [readOnlySource],
-      selectedWritebackSource: null,
+      selectedWritebackSource: readOnlySource,
       sourceLoadStatus: 'ready',
       isWritebackActionDisabled: false,
       isProviderExecutionDisabled: true,
