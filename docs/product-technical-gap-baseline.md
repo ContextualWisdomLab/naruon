@@ -23,7 +23,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Exact-head execution refresh (2026-09-04T13:33Z):** protected `develop`
+**Exact-head execution refresh (2026-09-04T13:37Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 (`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) carries the exact-head PR
 completion playbook. It now distinguishes AI-authored commits from generated
@@ -54,9 +54,12 @@ scheduler main does not yet prove the structured adversarial fallback contract,
 so it is not a complete successor for #1531 and must not delete that delta yet.
 #1522 (`aa606d23becfb029be572bd07bc59f2d7c2c7152`) remains the bounded
 NetworkGraph option-materialization parent. #1526
-(`aebfcd6f9304a53375cd3b616274a5263365b1a9`) is non-force restacked on that
-exact parent and retains only the memoization delta; three combined Vitest
-files (five tests), TypeScript, ESLint, and diff checks pass.
+(`ade58f379e0c6b6cda6cfc720618c48095cf95f3`) is non-force restacked on that
+exact parent. A concurrent follow-up deleted the bounded parent implementation
+and both behavioral regression files; a signed non-force repair preserves its
+history and restores tree `9e200125fc5dacad2d2f6a23369835016953ff61`.
+The child retains only the memoization delta; three combined Vitest files (five
+tests), TypeScript, ESLint, and diff checks pass.
 #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
