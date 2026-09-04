@@ -170,9 +170,10 @@ in this repo.
   capability routing, and fallback remain with `contextual-orchestrator`.
 - Naruon guidance does not select provider names, model names, endpoint groups,
   or paid fallbacks. Production adoption requires an immutable released owner API/client/schema;
-  an open PR or unreleased branch is only Proposed evidence.
-- Do not add a shared application/agent/gateway wall-clock timeout. Model work ends
-  only on user cancellation, an administrator limit, or provider terminal completion.
+  an open PR or unreleased branch is only proposed evidence.
+- Bound the shared application/agent/gateway wall-clock timeout to at most three
+  hours. Nested model or transport deadlines must fit inside that budget and
+  report their terminal reason instead of surfacing a generic 900-second error.
 - Keep private-source review fail-closed and ZDR-only. Never log or copy bearer
   tokens, provider credentials, request payloads, or secret-derived values.
 - Do not add direct-provider fallback credentials to repository workflows.
