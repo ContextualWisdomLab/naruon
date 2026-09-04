@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import services.email_writing_judge as judge_module
 from services.email_writing_judge import (
     EmailWritingIndependentJudge,
     EmailWritingJudgeError,
@@ -159,3 +160,44 @@ def test_terminal_output_guard_preserves_command_failure_status() -> None:
         text=True,
     )
     assert failed.returncode == 23
+
+
+def test_daemon_judge_executor_skips_cancelled_queued_work() -> None:
+    """Cancelled queued work must not invoke its provider callback."""
+    executor = judge_module._DaemonJudgeRunnerExecutor()
+    started = threading.Event()
+    release = threading.Event()
+    cancelled_call_ran = threading.Event()
+
+    def block_worker() -> None:
+        started.set()
+        release.wait(timeout=2.0)
+
+    first = executor.submit(block_worker)
+    assert started.wait(timeout=1.0)
+    cancelled = executor.submit(cancelled_call_ran.set)
+    assert cancelled.cancel()
+    release.set()
+    first.result(timeout=1.0)
+    executor.submit(lambda: None).result(timeout=1.0)
+
+    assert not cancelled_call_ran.is_set()
+
+
+def test_judge_executor_lock_reuses_instance_created_by_another_caller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The inner lock check must preserve an executor installed concurrently."""
+    installed = judge_module._DaemonJudgeRunnerExecutor()
+
+    class InstallingLock:
+        def __enter__(self) -> None:
+            judge_module._JUDGE_RUNNER_EXECUTOR = installed
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+    monkeypatch.setattr(judge_module, "_JUDGE_RUNNER_EXECUTOR", None)
+    monkeypatch.setattr(judge_module, "_JUDGE_RUNNER_EXECUTOR_LOCK", InstallingLock())
+
+    assert judge_module._get_judge_runner_executor() is installed
