@@ -401,34 +401,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "egress-policy: block" in mail_smoke_workflow
     assert "allowed-endpoints:" in mail_smoke_workflow
 
-    # dependency-review.yml is now a thin caller into the org-level central
-    # reusable workflow (see the comment above), not a standalone workflow
-    # with its own hardened action pin/env vars -- assert the caller shape
-    # instead of the old local implementation details this test previously
-    # checked, which no longer exist in this file (Devin Review).
-    dependency_review_workflow = read_repo_text(
-        ".github/workflows/dependency-review.yml"
-    )
-    # Structured equality, not substring/regex checks: a substring check for
-    # "contents: read" still passes if a "contents: write" line is added
-    # alongside it, and neither substring nor the SHA-pin regex say anything
-    # about fail_on_severity or comment_summary_in_pr regressing to weaker
-    # values (CodeRabbit, 2026-09-03).
-    dependency_review_config = yaml.safe_load(dependency_review_workflow)
-    dependency_review_job = dependency_review_config["jobs"]["dependency-review"]
-    assert re.fullmatch(
-        r"ContextualWisdomLab/\.github/\.github/workflows/dependency-review\.yml@[0-9a-f]{40}",
-        dependency_review_job["uses"],
-    ), "the reusable workflow must be pinned to a full commit SHA, not a mutable ref"
-    assert dependency_review_config["permissions"] == {
-        "contents": "read",
-        "pull-requests": "read",
-    }
-    assert dependency_review_job["with"] == {
-        "fail_on_severity": "moderate",
-        "comment_summary_in_pr": "never",
-    }
-
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
     assert "rev: v8.16.3" in pre_commit
@@ -440,6 +412,14 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "rev: v4.4.0" in pre_commit
     assert "https://github.com/pylint-dev/pylint" in pre_commit
     assert "rev: v2.17.2" in pre_commit
+
+
+def test_dependency_review_is_owned_by_the_central_required_workflow() -> None:
+    assert not (WORKFLOW_DIR / "dependency-review.yml").exists()
+
+    agent_guidance = read_repo_text("AGENTS.md")
+    assert "central **Security Scan** required gate" in agent_guidance
+    assert "`dependency-review` (diff-scoped)" in agent_guidance
 
 
 def test_actionlint_recognizes_the_mail_egress_runner_label() -> None:
