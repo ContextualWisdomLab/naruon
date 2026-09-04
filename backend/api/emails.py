@@ -731,7 +731,7 @@ async def send_email_endpoint(
             references=request.references,
         )
         try:
-            rate_limit_decision = await enforce_send_email_rate_limit(db, auth_context)
+            rate_limit_decision = await enforce_send_email_rate_limit(auth_context)
         except EmailSendRateLimitUnavailable as exc:
             raise HTTPException(
                 status_code=503,

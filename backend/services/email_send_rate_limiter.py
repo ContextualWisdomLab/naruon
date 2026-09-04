@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Literal
 from sqlalchemy import bindparam, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import EmailSendRateBucket, SecurityAuditEvent
+from db.models import SecurityAuditEvent
+from db.session import AsyncSessionLocal
 
 if TYPE_CHECKING:
     from api.auth import AuthContext
@@ -50,24 +51,6 @@ def _utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
-def _next_bucket_state(
-    bucket: EmailSendRateBucket | None,
-    now: datetime.datetime,
-) -> tuple[bool, int, datetime.datetime, datetime.datetime]:
-    """Calculate the next state without storing individual attempts."""
-    expires_at = now + datetime.timedelta(seconds=SEND_RATE_LIMIT_WINDOW_SECONDS)
-    if bucket is None or now >= bucket.expires_at:
-        return True, 1, now, expires_at
-    if bucket.attempt_count >= SEND_RATE_LIMIT_MAX_ATTEMPTS:
-        return False, bucket.attempt_count, bucket.window_started_at, bucket.expires_at
-    return (
-        True,
-        bucket.attempt_count + 1,
-        bucket.window_started_at,
-        bucket.expires_at,
-    )
-
-
 def _session_uses_postgresql(session: AsyncSession) -> bool:
     try:
         bind = session.get_bind()
@@ -81,6 +64,7 @@ def _audit_event(
     *,
     scope_hash: str,
     decision: EmailSendRateLimitDecision,
+    observed_at: datetime.datetime,
 ) -> SecurityAuditEvent:
     return SecurityAuditEvent(
         actor_user_id=auth_context.user_id,
@@ -91,6 +75,7 @@ def _audit_event(
         resource_type="email_send_rate_limit",
         resource_uid=f"email_send_scope:{scope_hash}",
         evidence_source="services.email_send_rate_limiter",
+        observed_at=observed_at,
         detail_text=(
             f"decision={decision.reason};"
             f"window_seconds={SEND_RATE_LIMIT_WINDOW_SECONDS};"
@@ -100,80 +85,68 @@ def _audit_event(
 
 
 async def enforce_send_email_rate_limit(
-    session: AsyncSession,
     auth_context: AuthContext,
     *,
     now: datetime.datetime | None = None,
 ) -> EmailSendRateLimitDecision:
-    """Atomically reserve one send attempt in the shared PostgreSQL bucket.
+    """Atomically reserve one send attempt in a rolling PostgreSQL window.
 
-    PostgreSQL transaction advisory locking serializes the read/update/insert
-    decision across workers. A single row per scope plus ``expires_at`` keeps
-    attempts bounded; unavailable shared state fails closed instead of using a
-    process-local fallback.
+    A limiter-owned transaction prevents committing unrelated request work.
+    PostgreSQL advisory locking serializes the count-and-record decision across
+    workers; existing audit rows provide the exact rolling-window history.
     """
-    if not _session_uses_postgresql(session):
-        raise EmailSendRateLimitUnavailable
-
     observed_at = now or _utc_now()
     scope_hash = rate_limit_scope_hash(
         auth_context.user_id, auth_context.organization_id
     )
-    try:
-        await session.execute(
-            select(func.pg_advisory_xact_lock(bindparam("lock_key"))),
-            {"lock_key": _lock_key(scope_hash)},
-        )
-        result = await session.execute(
-            select(EmailSendRateBucket)
-            .where(EmailSendRateBucket.bucket_scope_hash == scope_hash)
-            .with_for_update()
-        )
-        bucket = result.scalar_one_or_none()
-        allowed, attempt_count, window_started_at, expires_at = _next_bucket_state(
-            bucket, observed_at
-        )
-        if bucket is None:
-            session.add(
-                EmailSendRateBucket(
-                    bucket_scope_hash=scope_hash,
-                    window_started_at=window_started_at,
-                    attempt_count=attempt_count,
-                    expires_at=expires_at,
-                    created_at=observed_at,
-                    updated_at=observed_at,
+    async with AsyncSessionLocal() as session:
+        if not _session_uses_postgresql(session):
+            raise EmailSendRateLimitUnavailable
+        try:
+            await session.execute(
+                select(func.pg_advisory_xact_lock(bindparam("lock_key"))),
+                {"lock_key": _lock_key(scope_hash)},
+            )
+            window_started_at = observed_at - datetime.timedelta(
+                seconds=SEND_RATE_LIMIT_WINDOW_SECONDS
+            )
+            result = await session.execute(
+                select(func.count())
+                .select_from(SecurityAuditEvent)
+                .where(
+                    SecurityAuditEvent.resource_uid
+                    == f"email_send_scope:{scope_hash}",
+                    SecurityAuditEvent.event_action
+                    == "email_send_rate_limit.allowed",
+                    SecurityAuditEvent.observed_at > window_started_at,
                 )
             )
-        else:
-            bucket.window_started_at = window_started_at
-            bucket.attempt_count = attempt_count
-            bucket.expires_at = expires_at
-            bucket.updated_at = observed_at
-
-        decision = EmailSendRateLimitDecision(
-            allowed=allowed,
-            reason="allowed" if allowed else "quota_exhausted",
-        )
-        session.add(
-            _audit_event(
-                auth_context,
-                scope_hash=scope_hash,
-                decision=decision,
+            allowed = result.scalar_one() < SEND_RATE_LIMIT_MAX_ATTEMPTS
+            decision = EmailSendRateLimitDecision(
+                allowed=allowed,
+                reason="allowed" if allowed else "quota_exhausted",
             )
-        )
-        await session.commit()
-        return decision
-    except Exception as exc:
-        try:
-            await session.rollback()
-        except Exception as rollback_exc:
+            session.add(
+                _audit_event(
+                    auth_context,
+                    scope_hash=scope_hash,
+                    decision=decision,
+                    observed_at=observed_at,
+                )
+            )
+            await session.commit()
+            return decision
+        except Exception as exc:
+            try:
+                await session.rollback()
+            except Exception as rollback_exc:
+                logger.warning(
+                    "Email send rate limiter rollback failed; error_type=%s",
+                    type(rollback_exc).__name__,
+                )
             logger.warning(
-                "Email send rate limiter rollback failed; error_type=%s",
-                type(rollback_exc).__name__,
+                "Email send rate limiter decision unavailable; "
+                "event_action=email_send_rate_limit.unavailable error_type=%s",
+                type(exc).__name__,
             )
-        logger.warning(
-            "Email send rate limiter decision unavailable; "
-            "event_action=email_send_rate_limit.unavailable error_type=%s",
-            type(exc).__name__,
-        )
-        raise EmailSendRateLimitUnavailable from exc
+            raise EmailSendRateLimitUnavailable from exc

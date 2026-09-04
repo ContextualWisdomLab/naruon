@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from api.auth import AuthContext
-from db.models import EmailSendRateBucket, SecurityAuditEvent
+from db.models import SecurityAuditEvent
+import services.email_send_rate_limiter as limiter_module
 from services.email_send_rate_limiter import (
     EmailSendRateLimitUnavailable,
     enforce_send_email_rate_limit,
@@ -14,16 +15,16 @@ from services.email_send_rate_limiter import (
 
 
 class _Result:
-    def __init__(self, row=None):
+    def __init__(self, row=0):
         self.row = row
 
-    def scalar_one_or_none(self):
+    def scalar_one(self):
         return self.row
 
 
-class _SharedBucketStore:
+class _SharedAttemptStore:
     def __init__(self):
-        self.buckets = {}
+        self.events = []
         self.lock = asyncio.Lock()
 
 
@@ -33,6 +34,15 @@ class _PostgresSession:
         self.added = []
         self.queries = []
         self.lock_held = False
+        self.pending = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        if self.lock_held:
+            self.store.lock.release()
+            self.lock_held = False
 
     def get_bind(self):
         return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
@@ -44,26 +54,34 @@ class _PostgresSession:
             await self.store.lock.acquire()
             self.lock_held = True
             return _Result()
-        if "email_send_rate_buckets" in query_text:
-            scope_hash = next(
-                value
-                for key, value in query.compile().params.items()
-                if "bucket_scope_hash" in key
+        if "security_audit_events" in query_text:
+            values = tuple(query.compile().params.values())
+            resource_uid = next(value for value in values if str(value).startswith("email_send_scope:"))
+            window_started_at = next(value for value in values if isinstance(value, datetime.datetime))
+            return _Result(
+                sum(
+                    event.resource_uid == resource_uid
+                    and event.event_action == "email_send_rate_limit.allowed"
+                    and event.observed_at > window_started_at
+                    for event in self.store.events
+                )
             )
-            return _Result(self.store.buckets.get(scope_hash))
         raise AssertionError(f"unexpected query: {query_text}")
 
     def add(self, item):
         self.added.append(item)
-        if isinstance(item, EmailSendRateBucket):
-            self.store.buckets[item.bucket_scope_hash] = item
+        if isinstance(item, SecurityAuditEvent):
+            self.pending.append(item)
 
     async def commit(self):
+        self.store.events.extend(self.pending)
+        self.pending.clear()
         if self.lock_held:
             self.store.lock.release()
             self.lock_held = False
 
     async def rollback(self):
+        self.pending.clear()
         if self.lock_held:
             self.store.lock.release()
             self.lock_held = False
@@ -80,13 +98,14 @@ def _context(user_id="user-1", organization_id="org-1"):
 
 
 @pytest.mark.asyncio
-async def test_shared_bucket_limits_concurrent_workers_without_cross_scope_leakage():
-    store = _SharedBucketStore()
+async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leakage(monkeypatch):
+    store = _SharedAttemptStore()
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: _PostgresSession(store))
     observed_at = datetime.datetime(2026, 8, 19, tzinfo=datetime.timezone.utc)
 
     async def attempt(user_id):
         return await enforce_send_email_rate_limit(
-            _PostgresSession(store), _context(user_id), now=observed_at
+            _context(user_id), now=observed_at
         )
 
     same_scope = await asyncio.gather(*(attempt("user-1") for _ in range(11)))
@@ -97,32 +116,47 @@ async def test_shared_bucket_limits_concurrent_workers_without_cross_scope_leaka
     assert all(decision.allowed for decision in other_scope)
 
     rollover = await enforce_send_email_rate_limit(
-        _PostgresSession(store),
         _context("user-1"),
         now=observed_at + datetime.timedelta(seconds=61),
     )
     assert rollover.allowed is True
-    assert store.buckets[rate_limit_scope_hash("user-1", "org-1")].attempt_count == 1
+    scope_uid = f'email_send_scope:{rate_limit_scope_hash("user-1", "org-1")}'
+    assert sum(event.resource_uid == scope_uid for event in store.events) == 12
 
 
 @pytest.mark.asyncio
-async def test_shared_bucket_uses_transaction_lock_and_non_sensitive_audit_state():
-    store = _SharedBucketStore()
+async def test_sliding_window_blocks_boundary_burst(monkeypatch):
+    store = _SharedAttemptStore()
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: _PostgresSession(store))
+    started_at = datetime.datetime(2026, 8, 19, tzinfo=datetime.timezone.utc)
+
+    for offset_seconds in range(50, 60):
+        decision = await enforce_send_email_rate_limit(
+            _context(),
+            now=started_at + datetime.timedelta(seconds=offset_seconds),
+        )
+        assert decision.allowed is True
+
+    blocked = await enforce_send_email_rate_limit(
+        _context(),
+        now=started_at + datetime.timedelta(seconds=61),
+    )
+    assert blocked.allowed is False
+
+
+@pytest.mark.asyncio
+async def test_limiter_uses_owned_transaction_and_non_sensitive_audit_state(monkeypatch):
+    store = _SharedAttemptStore()
     session = _PostgresSession(store)
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: session)
     decision = await enforce_send_email_rate_limit(
-        session,
         _context(),
         now=datetime.datetime(2026, 8, 19, tzinfo=datetime.timezone.utc),
     )
 
     assert decision.allowed is True
     assert any("pg_advisory_xact_lock" in query for query in session.queries)
-    assert any("for update" in query for query in session.queries)
-    bucket = next(item for item in session.added if isinstance(item, EmailSendRateBucket))
     audit = next(item for item in session.added if isinstance(item, SecurityAuditEvent))
-    assert bucket.bucket_scope_hash == rate_limit_scope_hash("user-1", "org-1")
-    assert "user-1" not in repr(bucket)
-    assert "org-1" not in repr(bucket)
     assert "user-1" not in repr(audit)
     assert "org-1" not in repr(audit)
     assert audit.event_action == "email_send_rate_limit.allowed"
@@ -131,8 +165,19 @@ async def test_shared_bucket_uses_transaction_lock_and_non_sensitive_audit_state
 @pytest.mark.asyncio
 async def test_rate_limiter_fails_closed_when_shared_state_is_unavailable():
     class _UnavailableSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
         def get_bind(self):
             return SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
 
-    with pytest.raises(EmailSendRateLimitUnavailable):
-        await enforce_send_email_rate_limit(_UnavailableSession(), _context())
+    original_factory = limiter_module.AsyncSessionLocal
+    limiter_module.AsyncSessionLocal = lambda: _UnavailableSession()
+    try:
+        with pytest.raises(EmailSendRateLimitUnavailable):
+            await enforce_send_email_rate_limit(_context())
+    finally:
+        limiter_module.AsyncSessionLocal = original_factory
