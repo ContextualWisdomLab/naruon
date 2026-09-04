@@ -166,13 +166,21 @@ in this repo.
   `contextual-orchestrator` using `orchestrator/free`. Verify the requested
   model, API base, served-model metadata, and terminal response on the same
   execution; configuration text or a healthy sidecar alone is insufficient.
-- Central workflows provide only the gateway token; provider discovery,
-  capability routing, and fallback remain with `contextual-orchestrator`.
-- Naruon guidance does not select provider names, model names, endpoint groups,
-  or paid fallbacks. Production adoption requires an immutable released owner API/client/schema;
-  an open PR or unreleased branch is only Proposed evidence.
-- Do not add a shared application/agent/gateway wall-clock timeout. Model work ends
-  only on user cancellation, an administrator limit, or provider terminal completion.
+- Central model-backed Actions are owned by `ContextualWisdomLab/.github` and
+  request only the logical `orchestrator/free` pool with a gateway token. Thin
+  callers in this repository must not select or forward provider names, model
+  names, provider groups, endpoints, or paid fallback credentials.
+- `ContextualWisdomLab/contextual-orchestrator` owns provider discovery,
+  capability-based routing, free-pool membership, and fallback. Naruon owns
+  product/domain truth, authorization, tools, and context assembly. Production
+  use requires an immutable released owner API/client/schema; verify protected
+  release evidence before adoption and fail closed when that contract or a
+  required capability is unavailable. Do not copy owner source, query owner
+  storage, or treat an open PR or unreleased branch as a consumable contract.
+- Do not impose a shared application/agent/gateway wall-clock timeout on model
+  work. A configured administrator limit, explicit user cancellation, or the
+  upstream provider's terminal result may end it; reasoning, streaming, and
+  tool calls are not failed merely because elapsed time is long.
 - Keep private-source review fail-closed and ZDR-only. Never log or copy bearer
   tokens, provider credentials, request payloads, or secret-derived values.
 - Do not add direct-provider fallback credentials to repository workflows.
