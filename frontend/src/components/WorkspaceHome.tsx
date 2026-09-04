@@ -18,6 +18,8 @@ const NetworkGraph = dynamic(() => import('@/components/NetworkGraph'), { ssr: f
 
 type WorkspaceActionCommand = { id: number; action: string; target: 'desktop' | 'tablet'; modeVersion: number };
 type MobileActionCommand = { id: number; action: string; modeVersion: number };
+type DashboardDataStatus = 'loading' | 'ready' | 'error';
+type PrimaryDashboardDataStatus = Record<'emails' | 'pendingReplies' | 'tasks', DashboardDataStatus>;
 type StartupSearchResult = {
   id: number;
   subject: string | null;
@@ -153,39 +155,56 @@ function useDashboardData() {
   const [calendarSources, setCalendarSources] = useState<CalendarWritebackSource[]>([]);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [primaryDataStatus, setPrimaryDataStatus] = useState<PrimaryDashboardDataStatus>({
+    emails: 'loading',
+    pendingReplies: 'loading',
+    tasks: 'loading',
+  });
   const [sourceEvidenceStatus, setSourceEvidenceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const requestVersionRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     let pendingRequests = 2;
+    const requestVersion = reloadVersion;
+    const isStaleRequest = () => cancelled || requestVersion !== requestVersionRef.current;
     const finishRequest = () => {
       pendingRequests -= 1;
-      if (pendingRequests === 0 && !cancelled) {
+      if (pendingRequests === 0 && !isStaleRequest()) {
         setLoading(false);
       }
     };
 
-    Promise.all([
-      apiClient.get<{ emails: EmailItem[] }>('/api/emails').catch(() => ({ emails: [] })),
-      apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3').catch(() => ({ emails: [] })),
-      apiClient.get<TaskItem[]>('/api/tasks').catch(() => []),
-    ]).then(([emailRes, pendingReplyRes, tasksRes]) => {
-      if (cancelled) return;
-      setEmails(Array.isArray(emailRes.emails) ? emailRes.emails : []);
-      setPendingReplies(Array.isArray(pendingReplyRes.emails) ? pendingReplyRes.emails : []);
-      setTasks(Array.isArray(tasksRes) ? tasksRes : []);
+    Promise.allSettled([
+      apiClient.get<{ emails: EmailItem[] }>('/api/emails'),
+      apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3'),
+      apiClient.get<TaskItem[]>('/api/tasks'),
+    ]).then(([emailResult, pendingReplyResult, tasksResult]) => {
+      if (isStaleRequest()) return;
+      const emailRows = emailResult.status === 'fulfilled' ? emailResult.value.emails : [];
+      const pendingReplyRows = pendingReplyResult.status === 'fulfilled' ? pendingReplyResult.value.emails : [];
+      const taskRows = tasksResult.status === 'fulfilled' ? tasksResult.value : [];
+      setEmails(Array.isArray(emailRows) ? emailRows : []);
+      setPendingReplies(Array.isArray(pendingReplyRows) ? pendingReplyRows : []);
+      setTasks(Array.isArray(taskRows) ? taskRows : []);
+      setPrimaryDataStatus({
+        emails: emailResult.status === 'fulfilled' ? 'ready' : 'error',
+        pendingReplies: pendingReplyResult.status === 'fulfilled' ? 'ready' : 'error',
+        tasks: tasksResult.status === 'fulfilled' ? 'ready' : 'error',
+      });
     }).finally(finishRequest);
 
     Promise.all([
       apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources'),
       apiClient.get<ProjectFolder[]>('/api/webdav/folders'),
     ]).then(([calendarSourceRows, projectFolderRows]) => {
-      if (cancelled) return;
+      if (isStaleRequest()) return;
       setCalendarSources(Array.isArray(calendarSourceRows) ? calendarSourceRows : []);
       setProjectFolders(Array.isArray(projectFolderRows) ? projectFolderRows : []);
       setSourceEvidenceStatus('ready');
     }).catch(() => {
-      if (cancelled) return;
+      if (isStaleRequest()) return;
       setCalendarSources([]);
       setProjectFolders([]);
       setSourceEvidenceStatus('error');
@@ -194,9 +213,17 @@ function useDashboardData() {
     return () => {
       cancelled = true;
     };
+  }, [reloadVersion]);
+
+  const retryDashboardData = useCallback(() => {
+    setLoading(true);
+    setPrimaryDataStatus({ emails: 'loading', pendingReplies: 'loading', tasks: 'loading' });
+    setSourceEvidenceStatus('loading');
+    requestVersionRef.current += 1;
+    setReloadVersion(requestVersionRef.current);
   }, []);
 
-  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, loading, sourceEvidenceStatus };
+  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, loading, primaryDataStatus, sourceEvidenceStatus, retryDashboardData };
 }
 
 function formatStartupDate(value: string) {
@@ -239,7 +266,7 @@ function StartupResultList({ results }: { results: StartupSearchResult[] }) {
 }
 
 function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupView) => void }) {
-  const { emails, pendingReplies, tasks, setTasks: setDashboardTasks, calendarSources, projectFolders, loading, sourceEvidenceStatus } = useDashboardData();
+  const { emails, pendingReplies, tasks, setTasks: setDashboardTasks, calendarSources, projectFolders, loading, primaryDataStatus, sourceEvidenceStatus, retryDashboardData } = useDashboardData();
   const calendarCandidateEvidence = useStartupSearch('일정 충돌 일정 조율 회의 후보', 3);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState('');
@@ -252,13 +279,14 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
   const taskCompletionRate = buildCompletionRate(tasks);
   const sourceEvidenceLoading = sourceEvidenceStatus === 'loading';
   const sourceEvidenceError = sourceEvidenceStatus === 'error';
+  const primaryDataError = Object.values(primaryDataStatus).includes('error');
   const dashboardStats = useMemo(() => ([
-    { title: '받은 메일', value: loading ? '-' : emails.length.toString(), diff: unreadCount > 0 ? `+${unreadCount}` : '-', diffText: '안 읽음', icon: Inbox, color: 'text-primary' },
-    { title: '답변 대기', value: loading ? '-' : pendingReplyCount.toString(), diff: pendingReplyCount > 0 ? `${pendingReplyCount}건` : '-', diffText: '보낸 메일', icon: Send, color: 'text-rose-500' },
+    { title: '받은 메일', value: primaryDataStatus.emails === 'error' ? '오류' : loading ? '-' : emails.length.toString(), diff: primaryDataStatus.emails === 'error' ? '확인 필요' : unreadCount > 0 ? `+${unreadCount}` : '-', diffText: '안 읽음', icon: Inbox, color: primaryDataStatus.emails === 'error' ? 'text-red-500' : 'text-primary' },
+    { title: '답변 대기', value: primaryDataStatus.pendingReplies === 'error' ? '오류' : loading ? '-' : pendingReplyCount.toString(), diff: primaryDataStatus.pendingReplies === 'error' ? '확인 필요' : pendingReplyCount > 0 ? `${pendingReplyCount}건` : '-', diffText: '보낸 메일', icon: Send, color: primaryDataStatus.pendingReplies === 'error' ? 'text-red-500' : 'text-rose-500' },
     { title: '일정 원본', value: sourceEvidenceError ? '오류' : sourceEvidenceLoading ? '-' : calendarSources.length.toString(), diff: sourceEvidenceError ? '확인 필요' : sourceEvidenceLoading ? '-' : `${writableCalendarSourceCount}개`, diffText: sourceEvidenceError ? '원본 확인' : '반영 가능', icon: CalendarDays, color: sourceEvidenceError ? 'text-red-500' : 'text-blue-500' },
-    { title: '대기 작업', value: loading ? '-' : pendingTasks.length.toString(), diff: '-', diffText: 'source-linked', icon: CheckCircle2, color: 'text-green-500' },
+    { title: '대기 작업', value: primaryDataStatus.tasks === 'error' ? '오류' : loading ? '-' : pendingTasks.length.toString(), diff: primaryDataStatus.tasks === 'error' ? '확인 필요' : '-', diffText: 'source-linked', icon: CheckCircle2, color: primaryDataStatus.tasks === 'error' ? 'text-red-500' : 'text-green-500' },
     { title: '프로젝트 원본', value: sourceEvidenceError ? '오류' : sourceEvidenceLoading ? '-' : projectFolders.length.toString(), diff: sourceEvidenceError ? '확인 필요' : sourceEvidenceLoading ? '-' : `${projectFolders.length}개`, diffText: 'WebDAV 폴더', icon: Network, color: sourceEvidenceError ? 'text-red-500' : 'text-purple-500' },
-    { title: '작업 완료율', value: loading ? '-' : `${taskCompletionRate}%`, diff: loading ? '-' : `${completedTaskCount}/${tasks.length}`, diffText: '완료', icon: CheckCircle2, color: 'text-emerald-500' },
+    { title: '작업 완료율', value: primaryDataStatus.tasks === 'error' ? '오류' : loading ? '-' : `${taskCompletionRate}%`, diff: primaryDataStatus.tasks === 'error' ? '확인 필요' : loading ? '-' : `${completedTaskCount}/${tasks.length}`, diffText: '완료', icon: CheckCircle2, color: primaryDataStatus.tasks === 'error' ? 'text-red-500' : 'text-emerald-500' },
   ]), [
     calendarSources.length,
     completedTaskCount,
@@ -266,6 +294,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
     loading,
     pendingReplyCount,
     pendingTasks.length,
+    primaryDataStatus,
     projectFolders.length,
     sourceEvidenceError,
     sourceEvidenceLoading,
@@ -339,6 +368,22 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
           </div>
         </div>
 
+        {primaryDataError ? (
+          <div role="alert" className="flex flex-col gap-3 border border-destructive/40 bg-destructive/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-bold text-destructive">업무 현황을 모두 불러오지 못했습니다.</p>
+              <p className="mt-1 text-muted-foreground">연결을 확인한 뒤 다시 시도하세요. 확인된 항목은 그대로 표시됩니다.</p>
+            </div>
+            <button
+              type="button"
+              onClick={retryDashboardData}
+              className="shrink-0 border border-border bg-background px-3 py-2 font-semibold text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : null}
+
         {/* KPI Cards */}
         <div aria-label="홈 지표" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {dashboardStats.map((stat) => (
@@ -362,7 +407,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="flex gap-4">
               <div className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-600"><Send className="size-5" /></div>
               <div>
-                <p className="break-keep font-bold">답변 대기 {loading ? '-' : pendingReplyCount}건</p>
+                <p className="break-keep font-bold">답변 대기 {primaryDataStatus.pendingReplies === 'error' ? '확인 필요' : loading ? '-' : `${pendingReplyCount}건`}</p>
                 <p className="text-xs text-muted-foreground mt-1">보낸 메일 중 회신 확인이 필요한 항목입니다.</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <a href="/mail?folder=sent" className="inline-flex text-xs font-semibold text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">보낸 메일 보기</a>
@@ -402,7 +447,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="flex gap-4 pt-4 md:pl-6 md:pt-0">
               <div className="grid size-10 shrink-0 place-items-center rounded-full bg-green-100 text-green-600"><CheckCircle2 className="size-5" /></div>
               <div>
-                <p className="break-keep font-bold">완료 가능 작업 {loading ? '-' : pendingTasks.length}건</p>
+                <p className="break-keep font-bold">완료 가능 작업 {primaryDataStatus.tasks === 'error' ? '확인 필요' : loading ? '-' : `${pendingTasks.length}건`}</p>
                 <p className="text-xs text-muted-foreground mt-1">오늘 마감 전 완료해보세요.</p>
                 <a href="/tasks" className="mt-2 inline-flex rounded-sm text-xs font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">작업 바로가기</a>
               </div>
@@ -421,6 +466,8 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
               <div className="text-xs font-bold text-muted-foreground">답변 대기 메일</div>
               {loading ? (
                 <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 불러오는 중...</div>
+              ) : primaryDataStatus.pendingReplies === 'error' ? (
+                <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 확인하지 못했습니다.</div>
               ) : pendingReplies.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">답변 대기 중인 보낸 메일이 없습니다.</div>
               ) : pendingReplies.map((reply) => {
@@ -450,6 +497,8 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="space-y-3">
               {loading ? (
                 <div className="text-sm text-muted-foreground p-2">작업을 불러오는 중...</div>
+              ) : primaryDataStatus.tasks === 'error' ? (
+                <div className="text-sm text-muted-foreground p-2">작업 현황을 확인하지 못했습니다.</div>
               ) : pendingTasks.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">대기 작업이 없습니다.</div>
               ) : pendingTasks.slice(0, 3).map((task) => {
@@ -551,6 +600,8 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="space-y-3">
               {loading ? (
                 <div className="text-sm text-muted-foreground p-2">메일을 불러오는 중...</div>
+              ) : primaryDataStatus.emails === 'error' ? (
+                <div className="text-sm text-muted-foreground p-2">최근 메일을 확인하지 못했습니다.</div>
               ) : emails.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">수신된 메일이 없습니다.</div>
               ) : emails.slice(0, 5).map((mail) => (
@@ -650,7 +701,7 @@ export function WorkspaceHome({
   const [mobileWorkspaceOverride, setMobileWorkspaceOverride] = useState(false);
   const [mobileWorkspaceOverrideReady, setMobileWorkspaceOverrideReady] = useState(false);
   const activeStartupView = startupViewOverride ?? startupView;
-  const showMobileDashboard = activeStartupView === 'dashboard' && mobileWorkspaceOverrideReady && !mobileWorkspaceOverride;
+  const showMobileDashboard = activeStartupView === 'dashboard' && mobileWorkspaceOverrideReady && isMobileViewport && !mobileWorkspaceOverride;
 
   const mobileView = useMobileWorkspaceView();
   const effectiveMobileView = mobileView === 'detail' && selectedEmail === null ? 'inbox' : mobileView;
