@@ -14,6 +14,22 @@ async function flushAsyncWork() {
   }
 }
 
+const mockEvent: CalendarDetailEvent = {
+  id: "1",
+  calendarId: "cal-1",
+  dayIndex: 1,
+  title: "Meeting",
+  source: "CalDAV",
+  badgeLabel: "Work",
+  badgeClassName: "bg-blue-100",
+  dotClassName: "bg-blue-500",
+  time: "10:00",
+  duration: "1h",
+  location: "Room A",
+  description: "Discuss project",
+  monthClassName: "bg-blue-50",
+};
+
 describe("CalendarSidebarRight", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
@@ -51,23 +67,7 @@ describe("CalendarSidebarRight", () => {
     expect((editBtn as HTMLButtonElement)?.disabled).toBe(true);
   });
 
-  it("renders correctly with an event", async () => {
-    const mockEvent: CalendarDetailEvent = {
-      id: "1",
-      calendarId: "cal-1",
-      dayIndex: 1,
-      title: "Meeting",
-      source: "CalDAV",
-      badgeLabel: "Work",
-      badgeClassName: "bg-blue-100",
-      dotClassName: "bg-blue-500",
-      time: "10:00",
-      duration: "1h",
-      location: "Room A",
-      description: "Discuss project",
-      monthClassName: "bg-blue-50",
-    };
-
+  it("requests an update only when the selected event is writable", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -87,10 +87,28 @@ describe("CalendarSidebarRight", () => {
     expect(container.textContent).toContain("Meeting (Naruon 2.0)");
     expect(container.textContent).toContain("Room A");
 
-    const editBtn = container.querySelector('button[aria-label="Meeting 일정 수정 점검"]');
-    expect((editBtn as HTMLButtonElement)?.disabled).toBe(false);
+    const editBtn = container.querySelector('button[aria-label="Meeting 일정 수정 점검"]') as HTMLButtonElement;
+    expect(editBtn.disabled).toBe(false);
     await act(async () => {
-      (editBtn as HTMLButtonElement).click();
+      editBtn.click();
+    });
+    expect(onRequestUpdate).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      root?.render(
+        <CalendarSidebarRight
+          selectedDetailEvent={mockEvent}
+          isWritebackDisabled
+          onRequestUpdate={onRequestUpdate}
+        />,
+      );
+    });
+    await flushAsyncWork();
+
+    const disabledEditBtn = container.querySelector('button[aria-label="Meeting 일정 수정 점검"]') as HTMLButtonElement;
+    expect(disabledEditBtn.disabled).toBe(true);
+    await act(async () => {
+      disabledEditBtn.click();
     });
     expect(onRequestUpdate).toHaveBeenCalledOnce();
   });
