@@ -248,6 +248,12 @@ fork head could not materialize long-running required review. Actionlint,
 thirteen security metadata tests, and diff checks pass. #1060 remains open until
 #1066 reaches protected main and exact-tree equivalence is verified; queued
 hosted Checks and review are wait states, not protected integration evidence.
+Contextual-orchestrator successor #1067
+(`845d09dc666bee4a212710f517b0f1c9f38a0c52`) likewise preserves fork PR
+#1058's complete psychometric-routing performance and research delta on a
+trusted base-repository branch. Both heads resolve to tree
+`db3ee97813c93df4bdebae41eb335523e882039f`; #1058 remains open until the
+successor is protected-main integrated and that equivalence is reverified.
 Draft PR #1549 (`a8c35039b250195ed8c223f9223eb38b183cae13`) removes stale
 provider/model-specific routing policy from Naruon's agent guidance. Central
 model-backed Actions now name only the `.github`-owned `orchestrator/free`
