@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import re
 from typing import List, Optional
 
@@ -114,8 +115,6 @@ async def execute_prompt_with_llm(
         content = response.choices[0].message.content
         return {"result": content if content else ""}
     except Exception as exc:
-        import logging
-
         logging.getLogger(__name__).error(
             "Prompt execution failed",
             extra={"error_type": type(exc).__name__},
@@ -125,7 +124,13 @@ async def execute_prompt_with_llm(
             detail="Failed to execute prompt with AI provider. Check provider status.",
         )
     finally:
-        await client.close()
+        try:
+            await client.close()
+        except Exception as exc:
+            logging.getLogger(__name__).error(
+                "Prompt provider client cleanup failed",
+                extra={"error_type": type(exc).__name__},
+            )
 
 
 def _render_prompt_test_variable(name: str, value: str) -> str:
