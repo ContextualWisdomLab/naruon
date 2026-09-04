@@ -442,6 +442,19 @@ wheels = [
 ]
 
 [[package]]
+name = "egressweave"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpcore" },
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/23/98/2302136a7f35d216b4e019d1f3b4b9688bed488a06c1cd9b2022e68aded7/egressweave-0.1.0.tar.gz", hash = "sha256:e1e3a6dbabd4084fb03f19a95931ab96e4beeef96bc8fc7cf0d8e5b91e266057", size = 15680, upload-time = "2026-07-12T03:57:42.218Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/5a/ec82b385d2997796fabaaa3f827b4dc0fe46b466d5a99003e3f69d0a0065/egressweave-0.1.0-py3-none-any.whl", hash = "sha256:6bcb07109bdee25a6d49e5516f4c99ecd172ffe8536455d2cac860c44a4492f6", size = 15089, upload-time = "2026-07-12T03:57:40.989Z" },
+]
+
+[[package]]
 name = "email-validator"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -986,6 +999,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "cryptography" },
     { name = "defusedxml" },
+    { name = "egressweave" },
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "google-api-python-client" },
@@ -1032,6 +1046,7 @@ requires-dist = [
     { name = "asyncpg", specifier = "==0.31.0" },
     { name = "cryptography", specifier = "==50.0.0" },
     { name = "defusedxml", specifier = "==0.7.1" },
+    { name = "egressweave", specifier = "==0.1.0" },
     { name = "email-validator", specifier = "==2.3.0" },
     { name = "fastapi", specifier = "==0.139.0" },
     { name = "google-api-python-client", specifier = "==2.198.0" },
