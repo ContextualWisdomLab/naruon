@@ -489,15 +489,19 @@ protected merge still requires its own required workflow evidence.
 Governance owner #1531
 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) retains the CodeRabbit/OpenCode
 fallback and stacked-base contract. Trigger repair #1562
-(`f20917099dced7acfc14d02224072ab558a2e40a`) is non-force restacked on that
-owner as a five-file child. It removes pull-request base
+(`bc91b36dec70c14e0cde526e2330638f5e0ce352`) is non-force restacked on that
+owner. It removes pull-request base
 filters from Application CI, Bandit, and image validation, scopes validation
 concurrency by workflow/repository/PR, and keeps tag publication
 non-cancellable. Its authoritative merge-gate policy now matches that behavior;
 it also installs the repository-pinned `pnpm@11.5.3` before `setup-node` asks
 for the cache path. This removes the mutable `pnpm/latest` lookup that failed
-#1502's frontend job on `ECONNRESET`. The inherited governance harness, 40
-release/stacked-workflow tests, actionlint, and diff checks pass.
+#1502's frontend job on `ECONNRESET`. The current head also completely inherits
+#1554's rerun-isolation delta while preserving #1562's stacked-base identity.
+Its first-attempt current-head Application CI, Bandit, and image-validation runs
+were externally cancelled together while queued; attempts 2 of runs
+`33927276046`, `33927276079`, and `33927276320` are now queued on the same exact
+head. Earlier-head local and hosted results do not transfer.
 Bandit-only PR #1554
 (`6b7ad6ccb4a7a021d74381781f40af7cc97233f8`) removes the undeclared
 Application CI and image-validation experiment from its effective delta and
@@ -506,9 +510,9 @@ PR runs share the PR-number lane and cancel only superseded first attempts;
 manual reruns use a `run_id` lane, so GitHub's pending-run replacement cannot
 evict newer current-head evidence. The focused test and actionlint pass, all
 current-head review threads are resolved, and fresh hosted evidence remains
-pending. #1562 is a separate broader trigger/concurrency child and does not
-carry this rerun guard, so neither PR may be closed as a complete successor of
-the other and no check or review evidence transfers.
+pending. #1554 remains predecessor provenance until #1562 protected-merges and
+an exact merge-result comparison proves complete succession; no check or review
+evidence transfers.
 PR #1500 (`dfee7c12a535a79ca43daa14b17c9580bcbf2658`) is likewise Draft after
 repeated empty CI-trigger commits kept replacing its exact head while retaining
 tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
