@@ -24,6 +24,6 @@ def test_bandit_cancels_only_superseded_pull_request_runs() -> None:
 
     assert isinstance(concurrency, dict)
     assert concurrency == {
-        "group": "bandit-security-scan-${{ github.event.pull_request.number || github.run_id }}",
+        "group": "bandit-security-scan-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}",
         "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
     }
