@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { CalendarWritebackActionKey, CalendarWritebackSource, CalendarWritebackIntentResponse, WritebackStatus } from './types';
 import { getCalendarSourceLabel, getProtocolLabel, getCapabilityLabel, getEtagLabel, getWritebackModeLabel, getIntentProtocolLabel, getProviderExecutionLabel, getProviderRetryLabel } from './helpers';
 import { Loader2 } from 'lucide-react';
@@ -16,8 +17,6 @@ type Props = {
   writebackResult: CalendarWritebackIntentResponse | null;
 };
 
-const WRITEBACK_CONTROL_STATUS_ID = 'calendar-writeback-control-status';
-
 export function CalendarWritebackSection({
   requestWritebackIntent,
   isWritebackActionDisabled,
@@ -31,6 +30,7 @@ export function CalendarWritebackSection({
   writebackStatus,
   writebackResult,
 }: Props) {
+  const writebackControlStatusId = useId();
   const isCreatePending = pendingWritebackAction === 'create';
   const isUpdatePending = pendingWritebackAction === 'update';
   const isExecutePending = pendingWritebackAction === 'execute';
@@ -62,7 +62,7 @@ export function CalendarWritebackSection({
             type="button"
             onClick={() => void requestWritebackIntent('create')}
             disabled={isWritebackActionDisabled}
-            aria-describedby={WRITEBACK_CONTROL_STATUS_ID}
+            aria-describedby={writebackControlStatusId}
             aria-busy={isCreatePending}
             className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
           >
@@ -73,7 +73,7 @@ export function CalendarWritebackSection({
             type="button"
             onClick={() => void requestWritebackIntent('update')}
             disabled={isWritebackActionDisabled}
-            aria-describedby={WRITEBACK_CONTROL_STATUS_ID}
+            aria-describedby={writebackControlStatusId}
             aria-busy={isUpdatePending}
             className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-4 py-2 text-sm font-bold hover:bg-secondary disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
@@ -84,7 +84,7 @@ export function CalendarWritebackSection({
             type="button"
             onClick={() => void requestWritebackIntent('update', true)}
             disabled={isProviderExecutionDisabled}
-            aria-describedby={WRITEBACK_CONTROL_STATUS_ID}
+            aria-describedby={writebackControlStatusId}
             aria-busy={isExecutePending}
             className="inline-flex items-center justify-center rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
@@ -95,7 +95,7 @@ export function CalendarWritebackSection({
       </div>
 
       <p
-        id={WRITEBACK_CONTROL_STATUS_ID}
+        id={writebackControlStatusId}
         role="status"
         aria-live="polite"
         className="mt-3 text-xs font-semibold leading-5 text-muted-foreground"
