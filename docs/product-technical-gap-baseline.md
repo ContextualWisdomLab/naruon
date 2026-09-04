@@ -50,10 +50,15 @@ combined tests, Ruff, and diff checks. No predecessor gate evidence transfers
 after these base/head changes. PR #1502
 (`6ec2aa444ffdd8f884b887b3531fbe1ca758c00c`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
-PR #1530 (`fbf32aaf67e53fcb00e640e48df62c22b2eb4f41`) remains a Draft Task-8
+PR #1530 (`91813e60948e070ca3734ec4634adf28cb5daadd`) remains a Draft Task-8
 email-writing policy lane behind immutable dependency prerequisites. Its real
-79% coverage failure is repaired without weakening the gate: 22 focused tests
-cover all 353 owned statements and 170 branches (100%), with Ruff passing.
+79% coverage failure is repaired without weakening the gate. The current head
+also closes the publication-integrity finding at Naruon's consumer boundary:
+the schema requires validated calibration and complete evidence identities,
+while the loader resolves immutable evidence bytes, recomputes every digest,
+binds evaluation artifacts to the preregistered protocol, and rejects missing,
+modified, or pre-protocol holdout evidence. Thirty-four focused contract tests
+pass with warnings treated as errors; Ruff and diff checks pass.
 PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
 local Dependency Review after confirming the central Security Scan retains the
 exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
