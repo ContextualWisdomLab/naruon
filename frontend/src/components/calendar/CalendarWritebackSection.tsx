@@ -47,30 +47,30 @@ export function CalendarWritebackSection({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void requestWritebackIntent('create')}
-            disabled={isWritebackActionDisabled}
+            onClick={(e) => { if (isWritebackActionDisabled) { e.preventDefault(); return; } void requestWritebackIntent('create'); }}
+            aria-disabled={isWritebackActionDisabled}
             aria-busy={isCreatePending}
-            className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 aria-disabled:cursor-wait aria-disabled:opacity-60"
           >
             {isCreatePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
             {isCreatePending ? '새 일정 처리 중' : '새 일정 intent 점검'}
           </button>
           <button
             type="button"
-            onClick={() => void requestWritebackIntent('update')}
-            disabled={isWritebackActionDisabled}
+            onClick={(e) => { if (isWritebackActionDisabled) { e.preventDefault(); return; } void requestWritebackIntent('update'); }}
+            aria-disabled={isWritebackActionDisabled}
             aria-busy={isUpdatePending}
-            className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-4 py-2 text-sm font-bold hover:bg-secondary disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-4 py-2 text-sm font-bold hover:bg-secondary aria-disabled:cursor-wait aria-disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {isUpdatePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
             {isUpdatePending ? 'ETag 업데이트 처리 중' : 'ETag 업데이트 점검'}
           </button>
           <button
             type="button"
-            onClick={() => void requestWritebackIntent('update', true)}
-            disabled={isProviderExecutionDisabled}
+            onClick={(e) => { if (isProviderExecutionDisabled) { e.preventDefault(); return; } void requestWritebackIntent('update', true); }}
+            aria-disabled={isProviderExecutionDisabled}
             aria-busy={isExecutePending}
-            className="inline-flex items-center justify-center rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex items-center justify-center rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/15 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {isExecutePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
             {isExecutePending ? 'ETag 실행 처리 중' : 'ETag 실행 요청'}
@@ -88,10 +88,10 @@ export function CalendarWritebackSection({
               key={source.source_id}
               type="button"
               aria-label={`${sourceLabel} ${sourceWritable ? '일정 반영 가능' : '읽기 전용'} 선택`}
-              disabled={!sourceWritable}
+              aria-disabled={!sourceWritable}
               aria-pressed={sourceSelected}
-              onClick={() => setSelectedSourceId(source.source_id)}
-              className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-70 ${
+              onClick={(e) => { if (!sourceWritable) { e.preventDefault(); return; } setSelectedSourceId(source.source_id); }}
+              className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 aria-disabled:cursor-not-allowed aria-disabled:opacity-70 ${
                 sourceSelected
                   ? 'border-primary bg-primary/10 shadow-sm'
                   : 'border-border bg-background/70 hover:border-primary/40'
