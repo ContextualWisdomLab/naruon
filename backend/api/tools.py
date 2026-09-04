@@ -1020,7 +1020,6 @@ registry.register(
     first_last_sentence_handler,
 )
 
-
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
