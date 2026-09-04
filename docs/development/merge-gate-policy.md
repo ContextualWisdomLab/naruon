@@ -8,9 +8,11 @@ awaited by default.
 ## Required gate contract
 
 - Required status checks must pass on the current head SHA.
-- Application CI must run backend pytest and frontend test/lint/build checks on
-  pull requests to `master` and `release/**`, while release-branch pushes must
-  not create duplicate check noise; push checks are scoped to `master`.
+- Application CI, Bandit, and pull-request image validation run on every pull
+  request base, including stacked branches. Application CI and Bandit retain
+  direct push checks for `develop` and `master`; image publication remains
+  tag-only for `v*`. Validation concurrency is scoped by workflow, repository,
+  and PR, while tag publication is never cancelled by a newer run.
 - The robot-review gate prefers CodeRabbit evidence. When the current head has
   CodeRabbit check-run evidence, it satisfies the gate only when current-head
   blocking findings, warnings, and failures are fixed, rebutted with evidence,

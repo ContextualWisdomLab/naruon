@@ -690,6 +690,14 @@ def test_pr_validation_workflows_run_for_stacked_base_branches(
     ) in workflow_text
 
 
+def test_merge_gate_policy_documents_stacked_base_validation() -> None:
+    policy = read_repo_text("docs/development/merge-gate-policy.md")
+
+    assert "run on every pull\n  request base, including stacked branches" in policy
+    assert "direct push checks for `develop` and `master`" in policy
+    assert "tag publication is never cancelled" in policy
+
+
 def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_tags() -> (
     None
 ):
