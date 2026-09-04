@@ -2,6 +2,7 @@ name: Application CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, closed]
     branches:
       - develop
       - master
@@ -15,11 +16,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: application-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
+    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'closed') }}
     name: backend (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
@@ -77,6 +79,7 @@ jobs:
           fi
 
   frontend:
+    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'closed') }}
     name: frontend
     runs-on: ubuntu-latest
     steps:
