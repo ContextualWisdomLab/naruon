@@ -76,14 +76,18 @@ independent review remain pending, so the inference-confidence Gap is not yet
 closed on protected `develop`.
 
 **Mail-list performance evidence refresh (2026-09-04T17:18Z):** Naruon PR
-#1542 exact head `6113f76e1f7c1c56adc89f932ef423f34ef83566` now
+#1542 exact head `91857975c61fafb0353358dd318f56df5e6bd43f` now
 contains an observable memoization acceptance test rather than only functional
 selection coverage. It instruments the fetched email array's `map`, triggers an
 unrelated search-input state rerender, and proves the stable list is mapped only
 once; the existing test separately verifies selection and callback dependency
 changes. Unmeasured fixed claims about 50-plus rows and exactly two rerenders
-were removed. Seven focused tests, TypeScript, ESLint, and diff checks pass. The
-PR is Ready, but current-head hosted checks and CodeRabbit review are pending;
+were removed. The current forward repair also deletes four completed
+self-modifying patch scripts, restores the stronger two regression tests, and
+removes unrelated Jules/E2E drift; its tree matches verified predecessor
+`6113f76e1f7c1c56adc89f932ef423f34ef83566`. The complete frontend suite (51
+files, 439 tests), TypeScript, ESLint, and diff checks pass. The PR is Draft
+while current-head hosted checks and independent review are pending;
 no buyer-visible latency claim or protected-branch completion is recorded.
 
 **Backend test-runtime dependency refresh (2026-09-04T17:35Z):** Minimal
