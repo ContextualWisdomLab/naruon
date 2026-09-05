@@ -253,4 +253,64 @@ describe("SearchLayout product events", () => {
     expect(resultLookupCount).toBe(lookupCountAfterResults);
     findSpy.mockRestore();
   });
+
+  it("keeps the first search result authoritative when duplicate ids arrive", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({
+          results: [
+            {
+              id: 303,
+              source_message_id: "<first-source@example.com>",
+              subject: "첫 번째 중복 ID 결과",
+              sender: "first@example.com",
+              date: "2026-05-20T09:00:00Z",
+              snippet: "첫 번째 검색 근거",
+              thread_id: "thread-first",
+              reply_count: 2,
+              score: 0.91,
+            },
+            {
+              id: 303,
+              source_message_id: "<second-source@example.com>",
+              subject: "두 번째 중복 ID 결과",
+              sender: "second@example.com",
+              date: "2026-05-20T09:01:00Z",
+              snippet: "두 번째 검색 근거",
+              thread_id: "thread-second",
+              reply_count: 3,
+              score: 0.82,
+            },
+          ],
+        }));
+      }
+      if (url.endsWith("/api/search/answer")) {
+        return Promise.resolve(jsonResponse({ answer: null, citations: [] }));
+      }
+      if (url.includes("/api/ontology/relationships?")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+
+    await waitForCondition(() =>
+      container?.querySelector("section[aria-label='맥락 검색 결과 상세'] h2") !== null,
+    );
+    expect(
+      container.querySelector("section[aria-label='맥락 검색 결과 상세'] h2")?.textContent,
+    ).toBe("첫 번째 중복 ID 결과");
+    expect(getRecordedProductEvents().some((event) =>
+      event.name === "context_search_result_opened" &&
+      event.payload.result_id === 303 &&
+      event.payload.rank_bucket === "top_1",
+    )).toBe(true);
+  });
 });

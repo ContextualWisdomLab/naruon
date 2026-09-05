@@ -462,12 +462,19 @@ export function SearchLayout() {
     return results;
   }, [activeFilter, results]);
 
-  // ⚡ Bolt: Memoize activeResult to prevent O(N) re-renders
-  const activeResult = useMemo(() => (
-    filteredResults.find((result) => result.id === activeResultId) ??
+  const resultById = useMemo(() => {
+    const map = new Map<number, { result: SearchResultItem; index: number }>();
+    filteredResults.forEach((result, index) => {
+      // Preserve the first-match semantics of the previous find/findIndex path.
+      if (!map.has(result.id)) map.set(result.id, { result, index });
+    });
+    return map;
+  }, [filteredResults]);
+
+  const activeResult =
+    (activeResultId !== null ? resultById.get(activeResultId)?.result : null) ??
     filteredResults[0] ??
-    null
-  ), [filteredResults, activeResultId]);
+    null;
   const activeOntologySourceKey = ontologySourceKey(activeResult);
   const activeOntologyUrl = activeResult
     ? buildOntologyUrl(activeResult)
@@ -496,7 +503,7 @@ export function SearchLayout() {
   useEffect(() => {
     if (!activeResult || loading) return;
 
-    const resultIndex = filteredResults.findIndex((result) => result.id === activeResult.id);
+    const resultIndex = resultById.get(activeResult.id)?.index ?? -1;
     const eventKey = `${searchSessionIdRef.current}:${activeResult.id}`;
     if (lastOpenedResultKeyRef.current === eventKey) return;
     lastOpenedResultKeyRef.current = eventKey;
@@ -509,7 +516,7 @@ export function SearchLayout() {
       rank_bucket: bucketSearchRank(resultIndex < 0 ? 0 : resultIndex),
       confidence: activeConfidence,
     });
-  }, [activeConfidence, activeResult, filteredResults, loading]);
+  }, [activeConfidence, activeResult, resultById, loading]);
 
   useEffect(() => {
     if (!activeOntologyUrl || !activeOntologySourceKey) return;
