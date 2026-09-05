@@ -29,7 +29,7 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Governed review evidence refresh (2026-09-04T23:47Z):** Naruon PR #1564
+**Governed review evidence refresh (2026-09-05T04:31Z):** Naruon PR #1564
 (`24a2a46eaa3bca6c67b604f1c2cc224a495950f7`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
 procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
@@ -50,7 +50,8 @@ contract pins the token destination to the owner's documented loopback endpoint,
 removes the arbitrary base-URL environment input, and disables the supported
 client request timeout so long-running model work is not cut off at the default
 limit. Exact-head focused proof is `36 passed`; all 15 current review threads
-are resolved, while 21 fresh hosted checks remain queued.
+are resolved. With no source failure or merge conflict, the PR is Ready for
+independent review while nine hosted checks remain queued.
 Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
