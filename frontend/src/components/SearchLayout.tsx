@@ -462,8 +462,19 @@ export function SearchLayout() {
     return results;
   }, [activeFilter, results]);
 
+  // ⚡ Bolt: Wrap search results map in useMemo to prevent O(N) array traversals
+  // 🎯 Why: Using Array.prototype.find() and findIndex() inside render cycles blocks the main thread when searching large sets.
+  // 📊 Impact: Converts O(N) lookups to O(1), significantly reducing re-render latency for search results.
+  const resultById = useMemo(() => {
+    const map = new Map<number, { result: SearchResultItem; index: number }>();
+    filteredResults.forEach((result, index) => {
+      map.set(result.id, { result, index });
+    });
+    return map;
+  }, [filteredResults]);
+
   const activeResult =
-    filteredResults.find((result) => result.id === activeResultId) ??
+    (activeResultId !== null ? resultById.get(activeResultId)?.result : null) ??
     filteredResults[0] ??
     null;
   const activeOntologySourceKey = ontologySourceKey(activeResult);
@@ -494,7 +505,7 @@ export function SearchLayout() {
   useEffect(() => {
     if (!activeResult || loading) return;
 
-    const resultIndex = filteredResults.findIndex((result) => result.id === activeResult.id);
+    const resultIndex = resultById.get(activeResult.id)?.index ?? -1;
     const eventKey = `${searchSessionIdRef.current}:${activeResult.id}`;
     if (lastOpenedResultKeyRef.current === eventKey) return;
     lastOpenedResultKeyRef.current = eventKey;
@@ -507,7 +518,7 @@ export function SearchLayout() {
       rank_bucket: bucketSearchRank(resultIndex < 0 ? 0 : resultIndex),
       confidence: activeConfidence,
     });
-  }, [activeConfidence, activeResult, filteredResults, loading]);
+  }, [activeConfidence, activeResult, resultById, loading]);
 
   useEffect(() => {
     if (!activeOntologyUrl || !activeOntologySourceKey) return;

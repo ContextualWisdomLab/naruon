@@ -26,3 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2026-08-27 - [Search result lookups]
+**Learning:** Frequent `.find()` and `.findIndex()` calls inside component body or side effects over long lists cause O(N) bottlenecks in React rendering cycles, especially as data grows.
+**Action:** Pre-compute O(N) maps (`Map<K, V>`) within `useMemo` hooks before the loop or lookups to optimize subsequent operations to O(1).
