@@ -47,9 +47,13 @@ _FAILED_PARSE_STATUSES = frozenset(
 )
 _DOCUMENT_PENDING_STATUSES = frozenset(
     {
-        "embedding_pending",
         "hwp_conversion_pending",
         "pdf_dom_recognition_pending",
+    }
+)
+_DOCUMENT_FAILED_STATUSES = frozenset(
+    {
+        "pdf_dom_recognition_failed",
     }
 )
 
@@ -229,6 +233,15 @@ def build_document_preview(
     """Map one workspace document onto a buyer-visible read-only preview."""
 
     document_status = str(getattr(document, "document_status", "") or "")
+    if document_status in _DOCUMENT_FAILED_STATUSES:
+        return _blocked_preview(
+            asset_key=asset_key,
+            asset_type="workspace_document",
+            preview_state="failed",
+            parser_family=None,
+            next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
+            error_code=document_status,
+        )
     if document_status in _DOCUMENT_PENDING_STATUSES:
         return _blocked_preview(
             asset_key=asset_key,
