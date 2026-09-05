@@ -117,9 +117,15 @@ export function DocumentRepositoryTab({
   const restoreWebdavWriteFocusRef = useRef(false);
 
   useEffect(() => {
-    if (webdavWriteConfirmationKey !== null) {
-      webdavWriteCancelRef.current?.focus();
-    }
+    if (webdavWriteConfirmationKey === null) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    webdavWriteCancelRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
   }, [webdavWriteConfirmationKey]);
 
   useEffect(() => {
@@ -488,22 +494,32 @@ return (
                       </button>
                     </div>
                     {webdavWriteConfirmationKey === currentWebdavWriteConfirmationKey && documentActionPendingAction === null ? (
-                      <div role="alertdialog" aria-modal="true" aria-labelledby="webdav-write-confirmation-title" aria-describedby="webdav-write-confirmation-description" onKeyDown={handleWebdavWriteConfirmationKeyDown} className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
-                        <p id="webdav-write-confirmation-title" className="font-bold">고객 WebDAV에 문서를 쓰시겠습니까?</p>
-                        <p id="webdav-write-confirmation-description" className="mt-1 text-sm leading-6">
-                          {selectedWebdavAccountLabel}에 현재 문서를 기록합니다. 기존 파일이 있으면 충돌 조건을 확인하며, 이 작업은 고객 원본 저장소를 변경합니다.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button ref={webdavWriteCancelRef} type="button" onClick={closeWebdavWriteConfirmation} className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold">취소</button>
-                          <button
-                            ref={webdavWriteConfirmRef}
-                            type="button"
-                            onClick={() => {
-                              closeWebdavWriteConfirmation();
-                              void requestDocumentAction('webdav-materialization-intent');
-                            }}
-                            className="min-h-10 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground"
-                          >WebDAV 쓰기 확인</button>
+                      <div className="fixed inset-0 z-50">
+                        <div aria-hidden="true" className="absolute inset-0 bg-slate-950/30 backdrop-blur-[1px]" />
+                        <div
+                          role="alertdialog"
+                          aria-modal="true"
+                          aria-labelledby="webdav-write-confirmation-title"
+                          aria-describedby="webdav-write-confirmation-description"
+                          onKeyDown={handleWebdavWriteConfirmationKeyDown}
+                          className="absolute left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-2xl"
+                        >
+                          <p id="webdav-write-confirmation-title" className="font-bold">고객 WebDAV에 문서를 쓰시겠습니까?</p>
+                          <p id="webdav-write-confirmation-description" className="mt-1 text-sm leading-6">
+                            {selectedWebdavAccountLabel}에 현재 문서를 기록합니다. 기존 파일이 있으면 충돌 조건을 확인하며, 이 작업은 고객 원본 저장소를 변경합니다.
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button ref={webdavWriteCancelRef} type="button" onClick={closeWebdavWriteConfirmation} className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold">취소</button>
+                            <button
+                              ref={webdavWriteConfirmRef}
+                              type="button"
+                              onClick={() => {
+                                closeWebdavWriteConfirmation();
+                                void requestDocumentAction('webdav-materialization-intent');
+                              }}
+                              className="min-h-10 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground"
+                            >WebDAV 쓰기 확인</button>
+                          </div>
                         </div>
                       </div>
                     ) : null}
