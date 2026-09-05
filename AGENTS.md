@@ -440,9 +440,11 @@ in this repo.
   reusable business identifier such as `document_ref`, `model_id`, `topic_id`,
   or `label_id` as an unscoped primary or foreign key. Use an opaque immutable
   reference that binds the full scope or an explicit composite identity with the
-  required snapshot revision, model version, request/result scope, and label
-  version. Never join snapshots, model artifacts, topic components, or label
-  evidence by a bare document, model, topic, rank, label, or display value.
+  applicable snapshot revision, model version, request/result scope, or label
+  version. Define the required identity tuple for each entity; require only the
+  dimensions relevant to that entity. Never join snapshots, model artifacts,
+  topic components, or label evidence by a bare document, model, topic, rank,
+  label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
 - Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
   `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
@@ -508,17 +510,6 @@ in this repo.
   configured, fail closed with `adapter_not_configured` and
   `provider_write_executed=false`; if an adapter is configured, wrap only the
   adapter's actual result in the standard runner response envelope.
-- Dynamic `/api/tools` `POST`/`PATCH`/`DELETE` mutations must remain fail closed
-  until tool metadata and handlers are durably scoped by signed-session tenant
-  and workspace, restricted to an administrative role, and backed by an actual
-  webhook or provider execution target. Never attach a mock handler or report
-  successful execution when no external or local tool work occurred.
-- Spam/phishing verdicts must be grounded in source-bound evidence and carry the
-  provider, evidence, and versioned provenance needed to audit the decision. Do
-  not advertise keyword matching or sender-domain suffix heuristics as a
-  phishing/spam detector. When the required provider or evidence is unavailable,
-  fail closed with an explicit typed `unknown`/unavailable result; never return a
-  benign boolean, risk score, or heuristic fallback.
 - Calendar UI actions must request `/api/calendar/writeback-intent` with
   server-authoritative source selection and provenance. Do not wire browser
   actions back to legacy `/api/calendar/sync` unless a trusted backend credential
