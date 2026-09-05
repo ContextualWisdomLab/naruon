@@ -1,8 +1,9 @@
 # Doctoring record: bounded PDF DOM upload contract
 
 **Observed gap:** The signed Data workspace PDF upload rejected files above
-20MiB even though the aligned email-import and NewsDOM transport contracts
-accept up to 64MiB.
+20MiB while Naruon's planned shared admission bound is 64MiB. The current
+NewsDOM immutable release and an exact Naruon pin proving 64MiB support have
+not been verified; this record must not present that proposal as provider runtime.
 
 **Proposed correction:** After NewsDOM publishes an immutable 64MiB release and
 Naruon pins it exactly, the upload endpoint and pending-payload decoder will
@@ -13,6 +14,10 @@ stays Draft until that owner evidence exists.
 **Evidence:** `backend/tests/test_data_api.py` asserts the 64MiB contract and
 keeps the over-limit test monkeypatched to a small fixture. The NewsDOM sidecar
 alignment is tracked separately in its own ADR and PR.
+The four existing focused PDF tests use mocks and reduced over-limit fixtures;
+they do not prove a real 64MiB PDF processed by a released NewsDOM service.
+[ADR-0021](../adr/0021-bounded-pdf-dom-upload-contract.md) preserves the
+proposal formerly numbered 0005, whose number collided with unrelated PRs.
 
 **References (APA 7th):**
 

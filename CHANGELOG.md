@@ -1,13 +1,14 @@
 ## [Unreleased]
-- 수동 PDF DOM 인식 업로드도 이메일 첨부 및 NewsDOM sidecar와 같은 64MiB
-  bounded transport 계약을 사용합니다. 한도를 넘으면 PDF를 저장하거나
-  sidecar에 전달하지 않고 `413`을 반환하므로 고객은 파일을 분할해
-  다시 업로드할 수 있습니다. 이 변경은 NewsDOM의 64MiB immutable release를
-  Naruon이 exact pin한 뒤에만 병합합니다.
-- PostgreSQL bootstrap now creates the owner/date index only on the canonical
-  `email_records` table after email-model reconciliation, and real smoke seeds
-  provide the required `is_read` state. Fresh-schema bootstrap and data-quality
-  smoke checks no longer fail on the removed legacy `emails` table.
+- Proposed: accept manual PDF uploads up to 64MiB after the required processing
+  service release is verified and pinned. Larger files are rejected before
+  storage or processing with HTTP 413; split the file and upload it again.
+  This limit is not yet a released capability.
+- Proposed: repair fresh-install and upgrade failures while retaining existing
+  mail and its read state. Real database smoke tests preserve the complete
+  historical upgrade path and verify the repaired installation.
+- Proposed: repair storage failures for long email and document content while
+  retaining complete text and search scores. Search latency and deployment
+  validation remain required before this change is released.
 - Starlette `TestClient`의 기존 `httpx2==2.5.0` pin을 core 개발·테스트 의존성으로 승격하고, deprecated `httpx` fallback 경고 억제를 제거했습니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
