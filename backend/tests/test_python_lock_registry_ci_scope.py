@@ -47,5 +47,8 @@ def test_registry_scope_fails_safe_when_base_cannot_be_compared() -> None:
     scope_block = workflow[scope_index:registry_index]
 
     assert "required=true" in scope_block
-    assert 'BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}' in scope_block
+    base_sha_expression = (
+        'BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}'
+    )
+    assert base_sha_expression in scope_block
     assert '"0000000000000000000000000000000000000000"' in scope_block
