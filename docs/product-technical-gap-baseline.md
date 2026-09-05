@@ -1,10 +1,55 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.30
+**Baseline version:** 1.31
 **Observed on:** 2026-09-05 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Reply-task scheduler and conflict recovery refresh (2026-09-05):** Existing
+Draft [#1486](https://github.com/ContextualWisdomLab/naruon/pull/1486) advances
+without force from `b32954dbf6066bc0d953887e8ca06820588f2c5f` to
+`1709ebb8d79f55c688a141aa932fa00468bf836d`, tree
+`5a39d4eef5a936969b14f649af21638df24a90f1`, retaining its full calendar,
+attachment, migration and Noema proposal. The direct base remains
+`develop@042b0c70531b229af3acbd0421a2f23098d848b3`.
+Its own actual PostgreSQL RED reproduced a stranded lease after task commit
+(worker and reader PID 79), owner rollback failures, and lost-backend continuation.
+Independent review then exposed real competing task-insert failures at bulk
+commit and savepoint boundaries, plus stale configuration after deletion between
+workspaces. Each was reproduced and repaired; no sibling worker pass was reused
+as scheduler evidence.
+
+The exact corrected head passes **165 tests, zero failures/errors/skips, 2.49 s**,
+after locked dependency synchronization and fresh/repeated migrations to
+`0022_noema_orchestrator_gateway`. Both changed runtime modules measure
+**259/259 statements, 82/82 branches, zero exclusions**, with **24/24 documented
+class/function/method definitions**. Twelve real PostgreSQL cases cover the
+observed-mail replay, independent replicas, one-slot execution, cancellation,
+connection loss, commit/savepoint races and committed configuration deletion.
+Twelve additional scripted edge cases remain unit-only evidence. Existing API
+smoke fixtures do not establish live signed-auth or realistic inbox accuracy.
+
+| Requirement / owner | Current evidence | Remaining action |
+| --- | --- | --- |
+| PRD: saved follow-ups must not halt later work; Naruon scheduler | Replica excluded during work and admitted after cleanup; later owners recover after healthy rollback | Signed browser behavior, deployment interruption, realistic workload/capacity |
+| TRD: coordination and source-task identity survive concurrent writes; Naruon task service | Existing task UID preserved, both source workspaces processed, no work after observed mailbox deletion | Hosted contract/security checks, manual API authorization and broader proposal validation |
+| Operability: no unleased continuation or hidden test-client fallback | Lost backend aborts; one-slot cleanup verified; dev-only `httpx2==2.5.0` declared and obsolete warning ignore removed | Protected integration and immutable release; direct/session-affine PostgreSQL deployment contract |
+
+- Exact JUnit SHA-256: `7ab943b0ceffcb26a72c802272cde48f410282c4cfe6e76bee5905725333a69f`.
+- Two-module coverage JSON SHA-256: `207cd65f29b945c2f9f3d40f75bcb081f29da0c4e1744648edd7ebdea24a4c5d`.
+- [Decision, UML sequence, APA references and failed-receipt history](https://github.com/ContextualWisdomLab/naruon/blob/1709ebb8d79f55c688a141aa932fa00468bf836d/docs/doctoring/reply_sla_physical_lease.md).
+
+ADR-0005's premature Accepted label is corrected to Proposed without dropping
+its history or allocating a new identity. An intermediate test-only import
+rename failed collection and is explicitly not GREEN; the forward correction
+was fully rerun on the pushed head. Fresh REST enumeration finds 26 check-runs
+(queued work and skipped non-applicable jobs), no current-head reviews, and an
+open Draft PR, not a merge-ready or released product. GraphQL quota failure was
+handled with REST, not interpreted as an empty gate. Test-owned DB and network
+cleanup is verified. Repository default-branch security alerts remain separate
+work; this repair does not claim alert closure, whole-product 100% coverage,
+exactly-once processing or realistic latency acceptance.
 
 **Physical-connection lease and interruption recovery refresh (2026-09-05):**
 Draft [#1469](https://github.com/ContextualWisdomLab/naruon/pull/1469) advances
@@ -41,7 +86,7 @@ final read-only re-review found no remaining actionable finding in that scope.
 | --- | --- | --- |
 | PRD: pending files resume after interruption; Naruon recognition | Independent-replica reacquisition and original-byte retention; unattempted cursor recovery | Signed browser recovery, actionable retry states, live interruption evidence |
 | TRD: lease covers the complete sweep; Naruon worker | One held connection, supported one-slot pool, explicit unlock, fail-closed disconnect | Pool capacity and representative concurrent load; external provider idempotency is not proved |
-| Sibling root repair; import #1317 / scheduler #1486 | Read-only trace identifies related connection-lifetime patterns; existing owners preserved | Reproduce and repair each owner's actual contention/cancellation paths; do not transfer worker tests as sibling GREEN |
+| Sibling root repair; import #1317 / scheduler #1486 | #1486 now has its own exact-head migrated PostgreSQL receipt above; #1317 remains a source-bound owner handoff | Reproduce import-owner contention/cancellation; do not transfer either worker's tests as import GREEN |
 
 No new dependency, shared model timeout, mutable provider adoption, schema/index
 removal, or protection change was introduced. Test-owned PostgreSQL/network
@@ -174,20 +219,22 @@ open. No delta or PR was discarded to reduce the queue, and these local passes
 do not transfer approval or hosted evidence between stack heads.
 
 **AGENTS operating knowledge refresh (2026-09-05):** Draft #1566 exact head
-`162c0df8049126944c60041c3374b4e47d8c16b4` preserves `498cf0ca7d25b777a7dafa6bcc839df164babfd0`
+`54e79d054f6f13c639f30d89882ed079e0122752` preserves `162c0df8049126944c60041c3374b4e47d8c16b4`
 and adds physical lease ownership, invalidate-before-close cancellation,
 last-completed cursor recovery, real independent-replica checks, and explicit
 source-only/runtime boundaries. It also retains the recurrence rule to test
 application behavior on the actually migrated database, retaining indexes,
 constraints, full-size high-entropy content, and portable identities across
-rollback. Its **45 focused source/governance tests pass in 0.26 s** with `-W error` and
+rollback. It now also records conflict rollback refresh, savepoint detachment,
+fresh configuration-authority checks and actual between-operation interleavings.
+Its **45 focused source/governance tests pass in 0.11 s** with `-W error` and
 `--noconftest` in the existing environment; this is not a clean-lock, database,
 or browser receipt. Exact JUnit SHA-256 is
-`8638ac125122626cb722bb3d67a23812abc1bd6ba3453df0f893693964097fd9`.
-CodeRabbit and Devin status contexts are successful, but fresh enumeration found
+`0ebdd903f8ca1697f3187dad484d6dc6e97f28fb774e90ceadeef19ee3ca88fa`.
+Fresh REST enumeration found
 zero qualifying current-head reviews and zero required check-runs.
 The PR remains Draft on #1564; required hosted evidence is not inferred from
-those two contexts. Confidence (#1559) and fail-closed tool mutation (#1300)
+historical status contexts. Confidence (#1559) and fail-closed tool mutation (#1300)
 rules formerly recorded only in its body are now proposed AGENTS source.
 Strict confidence rejection is scoped to frontend consumers; backend coercion
 is not claimed fixed. Tool registration/update/delete restrictions explicitly
@@ -1395,7 +1442,7 @@ and defines the inventory that must be completed before GA.
 | #1468 | PostgreSQL smoke fixture schema alignment | Draft head `53ce38ed6683d01a9d113069f5ac5a8f17e133a2` non-force consumes #1572 at `cd8ff413d4ed8a5f2855c47a21a31db5661cd487`, preserving its unique bootstrap assertion; exact sync, fresh/repeat migration 0020, and 131 strict PostgreSQL/search tests pass without skips. Owner performance acceptance, protected integration, and fresh exact-head hosted review/Checks remain required |
 | #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; the predecessor Strix provider failure is historical, while the current head requires fresh queued Checks and a qualifying independent approval |
 | #1448 | stacked governance regression coverage | merged normally into #1443's stack branch at `62a0d645…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures passed locally; merge-result hosted Checks remain queued and are post-merge canary evidence |
-| #1469 | deferred attachment parse-source admission and worker recovery | current `1b757d5aa25c469157f8f03301964eb3061ed0fe` preserves #1427, concurrent `facadfb1`, and `db083c9`; full migrated 277-test suite passes without skips, including unchanged real-PDF retention, a two-item transaction-failure regression and provider HTTP 413 classification; ADR-0023 remains Proposed, full old proposal and parent CHANGELOG survive; required Checks/review, released provider pin, real 64 MiB recognition and representative capacity remain open |
+| #1469 | deferred attachment parse-source admission and worker recovery | current `a312ea5e516fe1d696cfb35ffff7d3a731ad9cd2` preserves #1427 and the full `1b757d5` delta; exact migrated 305-test receipt and worker 258 statements/58 branches 100% are recorded above, including real-PDF retention, lease contention/cancellation, transaction recovery and HTTP 413 classification; ADR-0023 remains Proposed; required Checks/review, released provider pin, real 64 MiB recognition and representative capacity remain open |
 | #1427 | bounded PDF DOM upload | Draft head `cb08b1c3ea2aba8844fc29ef703c34368cc55e47` non-force consumes #1468 at `53ce38ed6683d01a9d113069f5ac5a8f17e133a2`, preserving PDF admission and deferred-worker contracts. Exact sync, fresh/repeat migration 0020, and 132 strict PostgreSQL/search tests pass without skips. Proposed ADR-0021 retains the former 0005 identity; the 64 MiB Naruon proposal is not actual NewsDOM release proof. Owner performance/release and fresh exact-head review/Checks remain required |
 | #1572 | complete-document search storage | Draft head `cd8ff413d4ed8a5f2855c47a21a31db5661cd487` on #1503 replaces four overflowing GiST indexes through forward migration 0020; four RED regressions become 131 passing strict migrated-PostgreSQL tests. The unchanged large archive case also passes in descendant #1497's 345-test integration. Exact ranking SQL is retained, but GIN does not accelerate distance-only ordering; measured p95, migration cost, and current-head protected gates remain open |
 | #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `aba77cf5…` preserves first-instance duplicate-ID selection, removes the dead `describeEdge` input, and deletes the tracked pre-refactor `NetworkGraph.tsx.out` copy; local 11-test, TypeScript, zero-warning ESLint, and diff checks passed, while hosted Checks and independent approval remain required |
