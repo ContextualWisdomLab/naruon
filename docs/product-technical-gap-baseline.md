@@ -452,15 +452,16 @@ only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
 discovery, capability routing, free-pool membership, and fallback remain with
 the canonical owner. Consumer adoption still requires an immutable protected
 owner release, and open PRs or unreleased branches remain Proposed evidence.
-Stacked PR #1566 (`73e7d7c1f135410b692ab16c2faa53d40c45645f`)
-preserves the operating playbook and restores #1549's canonical gateway,
-released-owner, and no-shared-timeout block after conflict resolution had
-deleted it. Child PR #1567 (`0505afd0c598f447db20edad46ff7e83d71cfb77`)
-now differs from #1566 only by its documentation authority regression test;
-it is not a second policy writer or a full successor. Fifty-five
-focused documentation/governance contracts and diff checks pass. Fresh
-exact-head hosted Checks and independent review remain required; no predecessor
-evidence transfers.
+Stacked PR #1566 (`93e99fa3bac6671e58d099f74a23cc5c300a8863`)
+is now non-force restacked directly on canonical AGENTS writer #1564. Its
+verified child-only delta is one file: it adds `agents-md`, Context7, DeepWiki,
+sequential-thinking, remote-MCP ZDR handling, truthful `Co-Authored-By`
+attribution, and current `contextual-orchestrator/orchestrator/free` wording.
+The duplicate 140-line operating procedure and unrelated entry-point/test
+delta were removed instead of creating a parallel policy owner. Thirty-six
+focused governance contracts, Ruff, and diff checks pass. #1566 remains Draft
+until #1564 reaches protected merge; fresh exact-head hosted Checks and
+independent review remain required after restacking on `develop`.
 Contextual-orchestrator PR #911
 (`e80949188f0afa86052f10f5a9b627da1ee1ef0b`) is non-force restacked on #1068
 and repairs durable routing-observation invariants found in current-head review:
