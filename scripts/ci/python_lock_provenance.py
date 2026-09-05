@@ -237,42 +237,54 @@ def _validate_generation(
             )
             return "uv", violations
 
-        source_path = repository_root / source_paths[-1]
-        resolved_source = _resolve_repository_path(source_path, repository_root)
-        if resolved_source is None:
-            violations.append(
-                _violation(
-                    "generation-input-outside-repository",
-                    relative_path,
-                    "declared source resolves outside repository root",
-                )
-            )
-            return "uv", violations
-        if not resolved_source.is_file():
-            violations.append(
-                _violation(
-                    "generation-input-missing",
-                    relative_path,
-                    "declared source requirements file is missing",
-                )
-            )
-            return "uv", violations
-
-        source_pins = _parse_source_pins(resolved_source.read_text(encoding="utf-8"))
-        for name, version in sorted(source_pins.items()):
-            locked_version = pins.get(name)
-            if locked_version != version:
-                locked_description = locked_version or "missing"
+        for source_reference in source_paths:
+            source_path = repository_root / source_reference
+            resolved_source = _resolve_repository_path(source_path, repository_root)
+            if resolved_source is None:
                 violations.append(
                     _violation(
-                        "generation-version-mismatch",
+                        "generation-input-outside-repository",
                         relative_path,
-                        (
-                            f"source pin {name}=={version} is locked as "
-                            f"{locked_description}"
-                        ),
+                        "declared source resolves outside repository root",
                     )
                 )
+                continue
+            if not resolved_source.is_file():
+                violations.append(
+                    _violation(
+                        "generation-input-missing",
+                        relative_path,
+                        "declared source requirements file is missing",
+                    )
+                )
+                continue
+            try:
+                source_text = resolved_source.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                violations.append(
+                    _violation(
+                        "generation-input-unreadable",
+                        relative_path,
+                        "declared source is not readable as repository UTF-8 text",
+                    )
+                )
+                continue
+
+            source_pins = _parse_source_pins(source_text)
+            for name, version in sorted(source_pins.items()):
+                locked_version = pins.get(name)
+                if locked_version != version:
+                    locked_description = locked_version or "missing"
+                    violations.append(
+                        _violation(
+                            "generation-version-mismatch",
+                            relative_path,
+                            (
+                                f"source pin {name}=={version} is locked as "
+                                f"{locked_description}"
+                            ),
+                        )
+                    )
         return "uv", violations
 
     pip_command = _header_command(header_lines, "pip download")
@@ -343,8 +355,21 @@ def _validate_lock_tree(
             code="lock-path-outside-repository",
             detail="lock path resolves outside repository root",
         )
+    if not resolved_lock.is_file():
+        return _failed_lock_receipt(
+            relative_path=relative_path,
+            code="lock-read-failed",
+            detail="lock path is missing or not a regular file",
+        )
+    try:
+        text = resolved_lock.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return _failed_lock_receipt(
+            relative_path=relative_path,
+            code="lock-read-failed",
+            detail="lock is not readable as repository UTF-8 text",
+        )
 
-    text = resolved_lock.read_text(encoding="utf-8")
     (
         header_lines,
         pins,
