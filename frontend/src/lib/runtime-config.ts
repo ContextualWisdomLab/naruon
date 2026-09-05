@@ -10,6 +10,15 @@ interface RuntimeConfigWire {
   features: Record<string, boolean>;
 }
 
+function isRuntimeConfigWire(value: unknown): value is RuntimeConfigWire {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.product_name !== 'string' || !candidate.product_name.trim()) return false;
+  if (typeof candidate.version !== 'string' || !candidate.version.trim()) return false;
+  if (!candidate.features || typeof candidate.features !== 'object' || Array.isArray(candidate.features)) return false;
+  return Object.values(candidate.features).every((featureValue) => typeof featureValue === 'boolean');
+}
+
 let configCache: RuntimeConfig | null = null;
 let fetchPromise: Promise<RuntimeConfig> | null = null;
 
@@ -19,7 +28,8 @@ function getRuntimeConfigErrorLogMetadata(error: unknown) {
   };
 }
 
-function translateRuntimeConfigWire(runtimeConfigWire: RuntimeConfigWire): RuntimeConfig {
+function translateRuntimeConfigWire(runtimeConfigWire: unknown): RuntimeConfig {
+  if (!isRuntimeConfigWire(runtimeConfigWire)) throw new Error('Invalid runtime config');
   return {
     product_name: runtimeConfigWire.product_name,
     product_version: runtimeConfigWire.version,
@@ -36,7 +46,7 @@ export async function fetchRuntimeConfig(baseUrl: string = ''): Promise<RuntimeC
   fetchPromise = fetch(configUrl)
     .then((response) => {
       if (!response.ok) throw new Error('Failed to fetch runtime config');
-      return response.json() as Promise<RuntimeConfigWire>;
+      return response.json() as Promise<unknown>;
     })
     .then((runtimeConfigWire) => {
       const runtimeConfig = translateRuntimeConfigWire(runtimeConfigWire);

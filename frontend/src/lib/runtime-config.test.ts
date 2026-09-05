@@ -121,6 +121,16 @@ describe("fetchRuntimeConfig", () => {
     expect(runtimeConfig).toEqual(fallbackRuntimeConfig);
   });
 
+  it("returns fallback config for a malformed successful payload", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ product_name: "Naruon", version: "1.0.0", features: { llm_enabled: "yes" } }),
+    }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(fetchRuntimeConfig()).resolves.toEqual(fallbackRuntimeConfig);
+  });
+
   it("returns fallback config when fetch throws a network error", async () => {
     const networkError = new Error("Network Error");
     const fetchMock = vi.fn().mockRejectedValue(networkError);
