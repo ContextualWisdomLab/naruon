@@ -180,15 +180,18 @@ auto-merge, and branch updates disabled. Cancelled predecessor checks and local
 tests do not transfer as merge evidence for either Ready head.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
-(`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
+(`a9f0bf97ce8bec2d518824c1c0a25b162e6a1155`) is the current customer-facing
 README and public Pages lane. Its latest repair restores the tested ownership
 boundary: repository workflows own product tests, while the
 ContextualWisdomLab central required workflows own OpenCode review, Strix
 analysis, branch updates, auto-merge, and mechanical merge actions. The same
 head preserves reviewed dotenv duplicate-assignment handling and applies mode
-`0600` before generated local secrets are written. Forty-one focused setup and
-release-governance tests pass, but the new hosted checks are queued and the
-earlier requested review does not transfer to this head.
+`0600` before generated local secrets are written. The current repair also
+opens the dotenv target with `O_NOFOLLOW`, so an existing symbolic link cannot
+redirect generated credentials into an operator-owned file. Seven focused
+setup tests, including target-preservation on symbolic-link rejection, and Ruff
+pass. The PR is Ready with 21 fresh hosted jobs queued; the prior 41-test result
+and earlier requested review do not transfer to this head.
 
 **Authentication owner prerequisite refresh (2026-09-04T16:27Z):** Naruon
 Draft PR #1532 remains a consumer lane and must not restore ROPC. Keyverse Draft
