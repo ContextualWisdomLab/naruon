@@ -350,14 +350,17 @@ pass with warnings as errors; eight disposable PostgreSQL 16 + pgvector tests
 also pass across empty, pre-registry, stamped-repair, and legacy document-scope
 histories. The exact head remains Draft until hosted PostgreSQL, security, and
 independent review evidence replace stale central-workflow failures.
-Draft PR #1497 (`152d1998c4e8024be9dc7026c8789d343c884fd0`)
+Draft PR #1497 (`705d8ece2c97edc8575ea59766fd8f68bf4cdb82`)
 implements Naruon's bounded tenant provenance archive: deterministic BagIt,
 RO-Crate 1.3, and PROV metadata; OIDC-authoritative export/import; tenant and
 workspace closure; portable identity remapping; transactional conflict checks;
 and bounded archive parsing. CodeGraph review traced the shared service and API
-authority paths. One hundred fifty-four focused fast contracts and Ruff pass;
-the 115 database-marked contracts also pass against a disposable localhost-only
-PostgreSQL 16 + pgvector instance with warnings as errors. Binary payloads,
+authority paths. The delta is non-force stacked after #1427 in the prerequisite
+chain #1565 -> #1468 -> #1427 -> #1497; its conflicting ADR number is repaired
+as Proposed ADR-0007 rather than prematurely accepted ADR-0005. One hundred
+fifty-seven focused fast contracts and Ruff pass; 117 database-marked contracts
+also pass against a disposable PostgreSQL 16 + pgvector instance with warnings
+as errors. Binary payloads,
 credentials, provider state, embeddings, and audit-history portability remain
 explicit non-goals. The head stays Draft until fresh central review controls and
 protected checks replace historical malformed/absent reviewer evidence.
