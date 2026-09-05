@@ -119,6 +119,10 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         and "user_id, organization_id, date" in statement
         for statement in statements
     )
+    assert sum(
+        "on emails (user_id, organization_id, date)" in statement
+        for statement in statements
+    ) == 1
     assert any(
         "drop index if exists ix_email_records_message_id" in statement
         for statement in statements

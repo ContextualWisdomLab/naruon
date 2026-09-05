@@ -1,6 +1,6 @@
-# ADR-0005: Package tenant provenance as a deterministic integrity envelope
+# ADR-0007: Package tenant provenance as a deterministic integrity envelope
 
-**Status:** Accepted for the workspace project-evidence closure
+**Status:** Proposed for the workspace project-evidence closure
 **Date:** 2026-08-31
 **Decision owner:** Naruon maintainers
 **Scope:** Export and reimport of the email-derived provenance records cited by

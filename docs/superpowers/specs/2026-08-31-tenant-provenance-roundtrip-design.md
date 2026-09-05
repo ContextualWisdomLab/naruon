@@ -1,7 +1,7 @@
 # Tenant Provenance Round-Trip Design
 
 **Status:** Accepted design for the first GA-1 portability slice.
-**Decision:** [ADR-0005](../../adr/0005-tenant-provenance-portability.md)
+**Decision:** [ADR-0007](../../adr/0007-tenant-provenance-portability.md)
 
 ## Outcome
 
