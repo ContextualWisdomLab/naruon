@@ -261,10 +261,13 @@ keeps `usedforsecurity=False`, and identifies SHA-256 as the security-capable
 output. The release note now names only the two implemented tools rather than
 the removed URL extractor. Seventy-three focused tool/API/privacy/dependency
 tests, Ruff, and diff checks pass, and the review thread is resolved. Draft PR #1496
-(`260db8f3d328e52ce340de33a60af13c0e3edfc4`) was non-force restacked on
-that current owner head after GitHub reported a dirty stack. The merge preserves
-the URL-extractor delta and the parent's complete masking/security contract;
-98 combined tool/privacy tests pass without warnings. Draft PR #1512
+(`542c1b9a562c77e9c8cc53b788b9574901bff5f5`) is non-force restacked on
+current owner head `9ae498ec9f866d0cbd44691ca2a247091eae35ff`.
+The exact parent is an ancestor and the four-file delta preserves the
+URL extractor plus the parent's complete masking/security contract; 100 combined
+tool/privacy/dependency tests pass without warnings. GitHub still reports
+`dirty`, contrary to the local exact ancestry, so no merge-ready claim is made
+until hosted metadata recalculates. Draft PR #1512
 (`6a66a9b0d1fa106c19c0fbf51031aaba41ba6415`) follows #1496, removes its
 permissive duplicate email regex, consumes the canonical matcher, rejects empty
 domain labels and trailing ellipses, and records its RFC 5322 ASCII subset. Its
