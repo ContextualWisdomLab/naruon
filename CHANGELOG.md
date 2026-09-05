@@ -1,38 +1,7 @@
 ## [Unreleased]
 - 텍스트 본문에서 유효한 ASCII 이메일 주소를 찾아 최초 출현 순서로 중복을 제거하는 "이메일 주소 추출기 (Email Address Extractor)" 도구를 추가했습니다.
 - 텍스트 본문에서 HTTP 및 HTTPS URL을 추출하여 중복 없이 반환하는 유틸리티 도구인 `url_extractor` (URL 추출기)를 추가했습니다.
-- 분석·유틸리티 도구 2종(`hash_generator`, `email_phone_masker`)을 추가했습니다. 해시 도구는 MD5·SHA-1 호환 fingerprint와 SHA-256을 구분하고, 연락처 도구는 제한된 길이 안에서 이메일 주소와 전화번호를 단순 마스킹합니다.
-### Source-bound 요약·업무·관계·일정 경계
-
-- 입력과 무관한 고정 2023 fixture로 결정 사항과 미해결 질문, 업무와 마감일,
-  발신자 조직 관계와 중요도, 회의 시간·장소 후보를 성공 응답으로 반환하던
-  `thread_summarizer`, `action_item_extractor`, `sender_dag_analytics`,
-  `meeting_candidate_finder`를 내장 도구 레지스트리에서 제거했습니다. 이를
-  대신하는 고정값·템플릿 fallback은 없습니다. source-bound evidence와 선언된
-  provider가 없는 동안 catalog에 노출하지 않으며 상세 조회와 실행은 `404`로
-  fail closed 합니다. 아래의 과거 기능 추가 기록은 당시 변경 이력으로 보존하며
-  현재 지원 계약을 뜻하지 않습니다.
-
-### 이메일 보안 판정 경계 (Email Security Verdict Boundary)
-
-- 고정 키워드와 발신자 도메인 suffix만으로 확정적 spam/phishing boolean과
-  risk score를 반환하던 `spam_phishing_detector`를 내장 도구 레지스트리에서
-  제거했습니다. 이를 대신하는 keyword·suffix fallback은 없으며, source-bound
-  evidence, provider verdict, provenance가 없는 경우에는 보안 판정을 생성하지 않고
-  fail closed/unknown으로 처리해야 합니다. 아래의 과거 기능 추가 기록은 당시 변경
-  이력으로 보존하며 현재 지원 계약을 뜻하지 않습니다.
-
-### 도구 변경 경계 (Tool Mutation Boundary)
-
-- 프로세스 전역·비영속 레지스트리를 모든 인증 사용자가 변경할 수 있었던
-  `POST /api/tools`, `PATCH /api/tools/{code}`, `DELETE /api/tools/{code}`를
-  OpenAPI에서 숨긴 fail-closed tombstone으로 전환했습니다. 세 경로는 인증 후
-  `501 tool_mutation_not_supported`를 반환하며, 요청 body를 검증하거나 레지스트리를
-  변경하거나 webhook DNS/egress를 시작하지 않습니다. webhook이 없는 사용자 정의
-  도구에 실제 작업 없이 성공을 반환하던 mock handler도 제거했습니다. 도구 목록·상세
-  조회와 기존 내장 도구 실행 계약은 변경하지 않았습니다.
-
-- Starlette `TestClient`의 기존 `httpx2==2.5.0` pin을 core 개발·테스트 의존성으로 승격하고, deprecated `httpx` fallback 경고 억제를 제거했습니다.
+- 새로운 유틸리티 도구 2종(`hash_generator`, `email_phone_masker`)을 추가하여 텍스트의 호환성 지문/해시값을 생성하고, ASCII 이메일 주소와 일부 한국·북미 전화번호를 단순 마스킹 처리할 수 있도록 지원합니다. 완전한 개인정보 비식별화를 보장하지 않으며, `hash_generator`는 보안 목적의 SHA-256과 호환성 목적의 MD5/SHA-1을 명확히 구분합니다. 모든 도구는 입력 텍스트 길이 제한을 엄격히 준수합니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
