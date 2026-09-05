@@ -46,6 +46,49 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-hashes.txt
 
+      - name: Validate Python lock provenance
+        run: |
+          status=0
+          receipt="$(python scripts/ci/python_lock_provenance.py --json)" || status=$?
+          printf '%s\n' "$receipt"
+          {
+            echo '### Python lock provenance'
+            echo '```json'
+            printf '%s\n' "$receipt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Determine whether PyPI registry provenance is required
+        id: registry_scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          required=true
+          if [[ -n "${BASE_SHA:-}" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            changed_files="$(git diff --name-only "$BASE_SHA" HEAD)"
+            if ! grep -Eq '(^|/)requirements[^/]*\.txt$|^scripts/ci/python_lock_(registry_)?provenance\.py$|^backend/tests/test_python_lock_|^docs/doctoring/python-lock-|^\.github/workflows/app-ci\.yml$' <<<"$changed_files"; then
+              required=false
+            fi
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+
+      - name: Validate PyPI release hash provenance
+        if: steps.registry_scope.outputs.required == 'true'
+        run: |
+          status=0
+          receipt="$(python scripts/ci/python_lock_registry_provenance.py --json)" || status=$?
+          printf '%s\n' "$receipt"
+          {
+            echo '### PyPI release hash provenance'
+            echo '```json'
+            printf '%s\n' "$receipt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
       - name: Install backend dependencies
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
