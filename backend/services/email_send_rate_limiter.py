@@ -51,10 +51,6 @@ def _lock_key(scope_hash: str) -> int:
     return int.from_bytes(bytes.fromhex(scope_hash[:16]), byteorder="big", signed=True)
 
 
-def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
-
-
 def _session_uses_postgresql(session: AsyncSession) -> bool:
     try:
         bind = session.get_bind()
@@ -97,9 +93,11 @@ async def enforce_send_email_rate_limit(
 
     A limiter-owned transaction prevents committing unrelated request work.
     PostgreSQL advisory locking serializes the count-and-record decision across
-    workers; existing audit rows provide the exact rolling-window history.
+    workers. Production timestamps come from PostgreSQL after the scope lock so
+    worker clock skew and lock wait do not weaken the real-time quota. ``now``
+    remains an explicit deterministic test seam.
     """
-    observed_at = now or _utc_now()
+    observed_at = now
     scope_hash = rate_limit_scope_hash(
         auth_context.user_id,
         auth_context.organization_id,
@@ -116,6 +114,9 @@ async def enforce_send_email_rate_limit(
                 select(func.pg_advisory_xact_lock(bindparam("lock_key"))),
                 {"lock_key": _lock_key(scope_hash)},
             )
+            if observed_at is None:
+                database_clock = await session.execute(select(func.clock_timestamp()))
+                observed_at = database_clock.scalar_one()
             window_started_at = observed_at - datetime.timedelta(
                 seconds=SEND_RATE_LIMIT_WINDOW_SECONDS
             )
