@@ -16,6 +16,12 @@ LLM_BASE_URL_NOT_ALLOWED = "LLM provider base URL is not allowed"
 _DNS_RESOLUTION_TIMEOUT_SECONDS = 5.0
 _LOCAL_DEV_HOSTNAMES = {"localhost", "localhost.localdomain"}
 _LOCAL_DEV_IP_LITERALS = {"127.0.0.1", "::1"}
+_LOCAL_PROVIDER_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("fc00::/7"),
+)
 
 
 def _has_url_control_character(value: str) -> bool:
@@ -74,6 +80,15 @@ def _is_allowlisted_local_provider_host(hostname: str) -> bool:
     )
 
 
+def _is_local_provider_network_address(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    return any(
+        address.version == network.version and address in network
+        for network in _LOCAL_PROVIDER_NETWORKS
+    )
+
+
 def _format_normalized_netloc(hostname: str, port: int, *, explicit_port: bool) -> str:
     host_part = f"[{hostname}]" if ":" in hostname else hostname
     if not explicit_port:
@@ -82,16 +97,15 @@ def _format_normalized_netloc(hostname: str, port: int, *, explicit_port: bool) 
 
 
 def _validate_global_address(address: str, *, hostname: str | None = None) -> str:
-    """Validate that an IP address is globally routable, or explicitly allowed.
+    """Validate a globally routable address or an explicitly scoped local one.
 
-    When ``ALLOW_LOCAL_LLM_PROVIDERS`` is enabled the address is accepted if:
-    - the IP is a loopback address, **or**
-    - the *original* hostname (before DNS resolution) is present in
-      ``ALLOWED_LLM_BASE_URL_HOSTS``.
-
-    This second condition is necessary because Docker container names (e.g.
-    ``ollama``) resolve to RFC-1918 private IPs that would otherwise be
-    rejected by the global-address check.
+    ``ALLOW_LOCAL_LLM_PROVIDERS`` admits loopback only when the original URL
+    hostname is itself an explicit local-development identity such as
+    ``localhost`` or a configured loopback literal. An exact,
+    operator-allowlisted single-label provider hostname may additionally
+    resolve only into RFC 1918 IPv4 or RFC 4193 IPv6 unique-local space.
+    Link-local, reserved, unspecified, multicast, and other non-global address
+    classes never become reachable merely because a hostname is allowlisted.
     """
     try:
         ip_address = ipaddress.ip_address(address)
@@ -100,9 +114,13 @@ def _validate_global_address(address: str, *, hostname: str | None = None) -> st
 
     is_allowed_local = False
     if settings.ALLOW_LOCAL_LLM_PROVIDERS:
-        if ip_address.is_loopback:
+        if ip_address.is_loopback and hostname and _is_local_dev_host(hostname):
             is_allowed_local = True
-        elif hostname and _is_allowlisted_local_provider_host(hostname):
+        elif (
+            hostname
+            and _is_allowlisted_local_provider_host(hostname)
+            and _is_local_provider_network_address(ip_address)
+        ):
             is_allowed_local = True
 
     if not is_allowed_local:
@@ -130,8 +148,8 @@ def _resolve_all_global_addresses(hostname: str, port: int) -> tuple[str, ...]:
     addresses: list[str] = []
     seen_addresses: set[str] = set()
     for address_info in address_infos:
-        # Pass the original hostname so that Docker container names listed in
-        # ALLOWED_LLM_BASE_URL_HOSTS are matched before checking the resolved IP.
+        # Pass the original hostname so that explicitly allowlisted local-provider
+        # names can be bound to their permitted private container addresses.
         address = _validate_global_address(str(address_info[4][0]), hostname=hostname)
         if address not in seen_addresses:
             seen_addresses.add(address)
@@ -269,8 +287,7 @@ class _PinnedLLMProviderNetworkBackend(httpcore.AsyncNetworkBackend):
             raise ValueError(LLM_BASE_URL_NOT_ALLOWED)
         self._hostname = hostname
         self._port = port
-        # Re-validate each address; pass the hostname so Docker-container names
-        # in ALLOWED_LLM_BASE_URL_HOSTS are accepted.
+        # Re-validate each address against the same hostname-scoped local boundary.
         self._addresses = tuple(
             _validate_global_address(address, hostname=hostname)
             for address in addresses
