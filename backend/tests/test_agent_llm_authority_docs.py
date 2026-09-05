@@ -13,17 +13,19 @@ def _read(path: str) -> str:
 
 
 def test_agent_guidance_does_not_reintroduce_direct_model_routing_authority() -> None:
-    """Current agent guidance must not prescribe direct provider/model routing."""
+    """Current agent and architecture guidance must not prescribe direct routing."""
     agents = _read("AGENTS.md")
     claude = _read("CLAUDE.md")
+    architecture = _read("ARCHITECTURE.md")
 
     forbidden_current_guidance = (
         "STRIX_GITHUB_MODELS_TOKEN",
         "https://models.github.ai/inference",
         "Direct OpenAI GPT-5.4-or-newer",
         "OpenAI-compatible LLM providers",
+        "API --> LLM[OpenAI APIs when configured]",
     )
-    combined = f"{agents}\n{claude}"
+    combined = f"{agents}\n{claude}\n{architecture}"
     for phrase in forbidden_current_guidance:
         assert phrase not in combined
 
@@ -32,6 +34,7 @@ def test_agent_guidance_names_canonical_llm_owner_and_fail_closed_boundary() -> 
     """Guidance must preserve product ownership while delegating LLM routing."""
     agents = _read("AGENTS.md")
     claude = _read("CLAUDE.md")
+    architecture = _read("ARCHITECTURE.md")
 
     assert "ContextualWisdomLab/.github" in agents
     assert "contextual-orchestrator" in agents
@@ -45,6 +48,10 @@ def test_agent_guidance_names_canonical_llm_owner_and_fail_closed_boundary() -> 
     assert "immutable released owner API/client/schema" in agents
     assert "open PR or unreleased branch" in agents
     assert "shared application/agent/gateway wall-clock timeout" in agents
+    assert "contextual-orchestrator" in architecture
+    assert "provider discovery" in architecture
+    assert "immutable released" in architecture
+    assert "fails closed" in architecture
 
 
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
