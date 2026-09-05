@@ -166,20 +166,21 @@ def test_normalize_message_id_handles_empty_and_none():
     assert normalize_message_id("<>") is None
 
 
-def test_normalize_message_id_collapses_interior_unfolding_whitespace():
-    # RFC 5322 section 2.2.3 header unfolding can leave interior whitespace when
-    # a folded Message-ID is rejoined; RFC 5322 section 3.6.4 msg-id carries
-    # none, so the folded and unfolded forms must normalize to the same value or
-    # dedup/threading would treat one message as two.
+def test_normalize_message_id_unfolds_only_explicit_header_folds():
+    # RFC 5322 section 2.2.3 removes an explicit CRLF fold and its following WSP.
+    # Other interior whitespace is rejected instead of collapsed, preventing two
+    # distinct attacker-controlled identifiers from becoming one lookup key.
     canonical = normalize_message_id("<abc@example.com>")
-    assert normalize_message_id("<abc@ example.com>") == canonical
-    assert normalize_message_id("<abc @example.com>") == canonical
+    assert normalize_message_id("<abc@ example.com>") is None
+    assert normalize_message_id("<abc @example.com>") is None
     assert normalize_message_id("<abc@\r\n example.com>") == canonical
-    assert normalize_message_id("<abc@\texample.com>") == canonical
+    assert normalize_message_id("<abc@\n example.com>") is None
+    assert normalize_message_id("<abc@\r\nexample.com>") is None
+    assert normalize_message_id("<abc@\texample.com>") is None
 
 
 def test_extract_reference_ids_normalizes_folded_whitespace_and_dedupes():
-    header = "<a@x.com> <a@ x.com>\r\n <b@x.com>"
+    header = "<a@x.com> <a@\r\n x.com> <b@x.com>"
     # The first two are the same id split over a fold boundary, so only two
     # distinct references remain, in header order.
     assert extract_reference_ids(header) == ["a@x.com", "b@x.com"]

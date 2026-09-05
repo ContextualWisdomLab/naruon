@@ -6,7 +6,9 @@
 
 ## Header normalization
 
-- Persisted `thread_id` strips surrounding angle brackets and whitespace.
+- Persisted `thread_id` strips surrounding angle brackets and outer whitespace;
+  an explicit RFC 5322 CRLF fold is unfolded, while ambiguous interior
+  whitespace is rejected instead of collapsed into another message ID.
 - `Message-ID`, `In-Reply-To`, and `References` are retained on the email row for outbound replies and debugging.
 - `Reply-To` is captured separately and used before the display `From` value when drafting replies.
 

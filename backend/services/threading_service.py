@@ -33,19 +33,20 @@ def generate_email_fingerprint(
 def normalize_message_id(value: str | None) -> str | None:
     """Return the canonical persisted form for a Message-ID-like header.
 
-    A Message-ID (RFC 5322 section 3.6.4) carries no interior whitespace, but
-    header unfolding (RFC 5322 section 2.2.3) can leave interior spaces or tabs
-    when a folded header is rejoined -- e.g. ``<abc@\\r\\n example.com>`` unfolds
-    to ``<abc@ example.com>``. Collapsing all interior whitespace keeps the
-    folded and unfolded forms of the same Message-ID equal, so de-duplication
-    and threading never split one message into two over a fold boundary.
+    A Message-ID (RFC 5322 section 3.6.4) carries no interior whitespace. The
+    only whitespace removed here is an explicit CRLF header fold and its
+    following WSP (RFC 5322 section 2.2.3). Any remaining whitespace is
+    ambiguous or malformed and is rejected rather than collapsed: collapsing
+    it could make two attacker-controlled identifiers address the same record.
     """
     if value is None:
         return None
 
-    stripped = str(value).strip().strip("<>")
-    normalized = "".join(stripped.split())
-    return normalized or None
+    stripped = str(value).strip().strip("<>").strip()
+    unfolded = re.sub(r"\r\n[ \t]+", "", stripped)
+    if not unfolded or any(character.isspace() for character in unfolded):
+        return None
+    return unfolded
 
 
 def extract_reference_ids(value: str | None) -> list[str]:
