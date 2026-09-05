@@ -51,16 +51,24 @@ def test_text_structure_statistics_are_descriptive_not_readability_scores() -> N
     assert result.character_count == 30
     assert result.non_whitespace_character_count == 26
     assert result.whitespace_token_count == 5
-    assert result.sentence_boundary_count == 2
-    assert result.segmentation_contract == "whitespace-and-terminal-punctuation-v1"
+    assert result.terminal_punctuation_run_count == 2
+    assert result.segmentation_contract == "whitespace-and-terminal-punctuation-runs-v2"
+    assert not hasattr(result, "sentence_boundary_count")
     assert not hasattr(result, "readability_score")
+
+
+def test_text_structure_statistics_do_not_label_punctuation_runs_as_sentences() -> None:
+    result = measure_text_structure("Version 3.14... https://example.com/a.")
+
+    assert result.terminal_punctuation_run_count == 4
+    assert not hasattr(result, "sentence_boundary_count")
 
 
 def test_text_structure_statistics_keep_cjk_contract_explicit() -> None:
     result = measure_text_structure("첫 문장입니다. 次の文です。")
 
     assert result.whitespace_token_count == 3
-    assert result.sentence_boundary_count == 2
+    assert result.terminal_punctuation_run_count == 2
 
 
 def test_text_structure_statistics_handle_empty_input() -> None:
@@ -69,7 +77,7 @@ def test_text_structure_statistics_handle_empty_input() -> None:
     assert result.character_count == 0
     assert result.non_whitespace_character_count == 0
     assert result.whitespace_token_count == 0
-    assert result.sentence_boundary_count == 0
+    assert result.terminal_punctuation_run_count == 0
 
 
 def test_text_structure_statistics_reject_oversized_input() -> None:
