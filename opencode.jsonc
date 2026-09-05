@@ -41,14 +41,18 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "Contextual Orchestrator",
       "options": {
-        "baseURL": "{env:CONTEXTUAL_ORCHESTRATOR_BASE_URL}",
-        "apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}"
+        "baseURL": "http://127.0.0.1:8100/v1",
+        "apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}",
+        "timeout": false
       },
       "models": {
         "orchestrator/free": {
           "name": "Orchestrator Free",
           "tool_call": true,
           "reasoning": true,
+          "options": {
+            "reasoningEffort": "high"
+          },
           "limit": {
             "context": 200000,
             "output": 32768
