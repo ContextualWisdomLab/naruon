@@ -251,7 +251,7 @@ remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 which carries its complete valid delta plus the newer exact-head repair rules.
 #1558 remains open until #1564 reaches protected merge or an independent
 equivalence check confirms succession; no count-only closure is authorized. #1538
-(`b3e1cdddc7161e630404aa94d7aab6c5dbf40cf0`)
+(`adddd507111ff17b6a235bdcedad9a68d1842080`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
@@ -265,28 +265,28 @@ tests, Ruff, and diff checks pass. The tool single-writer chain is now #1565 ->
 fail-closed mutation and source-bound removals. The shared matcher now rejects
 malformed empty domain labels and restores selected North American phone forms;
 84 combined contracts pass. Draft PR #1496
-(`46ff31d2f1f24526e164b37936374b22198576de`)
+(`a0e877e159dff39f32de120bc408aa277dd6b306`)
 is non-force restacked on that current owner head. Its three-file, 226-addition
 delta contains only the URL extractor and tests; 103 combined contracts pass
 without warnings. GitHub reports the stack clean, while protected parent integration and fresh exact-head
 review/Checks remain required. Draft PR #1512
-(`d9bafb61491aa131ca44075b9fe14b5ec57f56b8`) follows current #1496 head
-`46ff31d2f1f24526e164b37936374b22198576de`, consumes the canonical matcher,
+(`ecf40d8390e8f60a94ac248a679f999ef817bb52`) follows current #1496 head
+`a0e877e159dff39f32de120bc408aa277dd6b306`, consumes the canonical matcher,
 rejects empty domain labels and trailing ellipses, and records its RFC 5322
 ASCII subset. A review acknowledgement had deleted the parent URL implementation
 and regressions, causing a reproduced 404; the repaired head restores the exact
 parent files and leaves a four-file, 131-addition email-extractor delta with no
 deletion. The combined 106 tests pass with warnings as errors, alongside Ruff
 and diff checks. Draft PR #1555
-(`1b37eeb7558733f1312df65f45166510218246df`) follows #1512 and carries
+(`ccd386ee86dd54b06b8957bfa794597336675294`) follows #1512 and carries
 only the first/last-sentence extractor. It consumes both parent matchers and
 preserves U+FF0E, decimal/title periods, URL/email periods, repeated terminators,
 and trailing quotation or bracket punctuation. After a non-force parent merge,
 the current stack passes 117
 combined tests, Ruff, and diff checks. No predecessor gate evidence transfers
 after these base/head changes. Draft PR #1482
-(`cb6b718e5c019b3d1313a178c1e5f8656122e786`) is restacked last on exact #1555
-head `1b37eeb7558733f1312df65f45166510218246df`,
+(`9ca53299ef88165b4e6fae21af55e73004735a41`) is restacked last on exact #1555
+head `ccd386ee86dd54b06b8957bfa794597336675294`,
 reuses the canonical email and phone matchers, and adds bounded Unicode-email,
 French-phone, and separator-optional Korean resident-registration masking. Its
 catalog claim excludes complete de-identification, and NIST SP 800-188 grounds
