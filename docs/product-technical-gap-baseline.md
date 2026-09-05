@@ -650,15 +650,16 @@ all four read-only actions remain disabled, the reason is visible, no selected
 badge appears, no writeback request fires, and a screenshot is produced. The
 non-default-base head remains Draft until #1562 supplies required hosted
 validation and independent review evidence.
-PR #1559 (`9c90dea4832275aa5e127de5def1471f31c44ce9`) independently succeeds the
+PR #1559 (`4d6b697e97f7f0d98700292680970b41e7b12c48`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
-percentage contract. The shared display boundary now rejects non-finite and
-out-of-range values instead of turning malformed `150` into a false `100%`
-claim. Its unit and EmailDetail fixtures, pilot and full-product smokes, and
-AGENTS.md recurrence rule share that unit; 30 focused tests, TypeScript, lint,
-and diff validation pass on the current head. Twenty-two hosted checks were
-regenerated, so predecessor GREEN does not transfer. Independent review and
+percentage contract. The shared display boundary now rejects non-finite,
+non-integer, and out-of-range values instead of rounding malformed `0.856` to
+`1%`, `85.5` to `86%`, or `150` to a false `100%` claim. Its unit and
+EmailDetail fixtures, pilot and full-product smokes, and AGENTS.md recurrence
+rule share that unit; 28 focused tests, TypeScript, lint, and diff validation
+pass on the current head. Twenty-six hosted checks were regenerated, so
+predecessor GREEN does not transfer. Independent review and
 current-head hosted success are still required; this remains Draft.
 
 PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) remains predecessor provenance
