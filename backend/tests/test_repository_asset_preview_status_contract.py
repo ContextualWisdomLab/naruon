@@ -1,8 +1,8 @@
 """Focused status contracts for repository document previews.
 
-These tests keep recognition state separate from unrelated embedding work and
+These tests keep recognition state separate from unrelated embedding work,
 prevent retained binary payloads from being rendered after PDF recognition
-failure.
+failure, and keep preview responses within a bounded buyer-facing payload.
 """
 
 from types import SimpleNamespace
@@ -51,3 +51,17 @@ def test_embedding_pending_keeps_existing_text_readable() -> None:
     )
     assert preview.preview_text == "Readable source text\n\nSecond paragraph."
     assert preview.error_code is None
+
+
+def test_oversized_document_preview_fails_closed_without_returning_partial_text() -> None:
+    """Oversized recognized text must not become a multi-megabyte preview payload."""
+
+    preview = build_document_preview(
+        "doc-too-large-for-inline-preview",
+        _document(status="uploaded", content="A" * 65_537),
+    )
+
+    assert preview.preview_state == "unavailable"
+    assert preview.paragraph_texts == ()
+    assert preview.preview_text is None
+    assert preview.error_code == "repository_asset_preview_too_large"
