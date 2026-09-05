@@ -195,14 +195,14 @@ single behavior owner. Forty-six naming, Tasks API, and reply-SLA tests pass wit
 one skipped, and Ruff/diff checks pass. Twenty-one hosted jobs are queued for the
 new exact head; predecessor review and check evidence does not transfer.
 Draft agent-registry PR #1537
-(`8bb4648a34e29c41e10581f14e21f95bfc7123e1`) similarly keeps legacy generic
+(`7665a2efaeaae75b3123a73a6291a1c2abba2b87`) similarly keeps legacy generic
 JSON keys only in its anti-corruption loader and publishes semantic fields to
-application callers. A fresh CodeGraph/caller audit found no stale generic-field
-consumer; 21 registry and Noema tests pass with one skipped, and Ruff and diff
-checks pass. Its prior central revalidation runs do not transfer; replacement
-run `33938970171` is queued on the current protected central workflow with
-merge, auto-merge, and branch updates disabled. Cancelled predecessor checks
-and local tests do not transfer as merge evidence for either head.
+application callers. Its latest repair rejects an entry when canonical and
+legacy names carry different values instead of guessing which value controls
+dispatch; exact duplicate values remain accepted during staged migration.
+Eight focused registry tests, Ruff, and diff checks pass. Twenty-one hosted
+jobs are queued for the new exact head; predecessor checks, reviews, and local
+tests do not transfer as merge evidence for either head.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`a9f0bf97ce8bec2d518824c1c0a25b162e6a1155`) is the current customer-facing
