@@ -2,8 +2,11 @@
 
 - **Status:** Proposed; #1469 is unmerged and depends on the owner stack
 - **Date:** 2026-08-25
+- **Evidence updated:** 2026-09-05; remains Proposed
 - **Figma file ID:** N/A — backend ingestion and evidence contract; no UX surface
 - **Owners:** Naruon ingestion and data-quality maintainers
+- **Depends on:** ADR-0021 and a verified immutable NewsDOM release before
+  increasing the provider transport bound.
 - **Former proposal ID:** ADR-0006 in #1469, renamed because unrelated open
   proposals already use 0006. This is the same proposal, not an accepted
   superseding decision. No external service decision is accepted here.
@@ -71,6 +74,13 @@ unexpected configuration/recognition failures retain their distinct handling.
 Customer guidance should ask for a smaller PDF or an approved service upgrade;
 actionable document error detail and retry after an upgrade remain follow-up work.
 
+One failed database transaction must not stop the remaining admitted sources in
+the current bounded batch. Cache primitive record IDs before processing and,
+only after rollback, explicitly reload the remaining pending records with their
+required relationships. This preserves per-item transaction isolation without
+adding queries to successful batches. A new session framework or whole-queue
+reload is unnecessary; retaining expired ORM attributes reproduces the failure.
+
 ## Consequences
 
 - The proposal retains attachments larger than 20 MiB through 64 MiB, but does
@@ -98,7 +108,9 @@ actionable document error detail and retry after an upgrade remain follow-up wor
 - `backend/tests/test_attachment_source_postgres.py` uses the unchanged,
   hash-verified 40,758,835-byte NASA *Earth at Night* PDF on freshly migrated
   PostgreSQL, preserving full bytes and identity through committed pending and
-  rejected outcomes and transaction rollback. This is not recognition evidence.
+  rejected outcomes and transaction rollback. Two-record worker sweeps also
+  abort the first real transaction and verify that the next record is processed
+  without expired-attribute I/O. This is not recognition evidence.
 - The import transport remains covered by
   `backend/tests/test_email_import_service.py`.
 - The PDF DOM upload contract is being integrated separately by stacked PR

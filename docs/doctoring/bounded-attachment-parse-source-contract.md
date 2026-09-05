@@ -42,12 +42,23 @@ forward migration, complete-text search storage, and PDF admission proposals.
 No migration is stamped around a failure, no legacy table is fabricated, and
 no index or constraint is removed to make the source fit.
 
+Concurrent remote merge `05c6fb2460ee69c3ce7dccd66b2b2ec0e2c66658` and
+follow-up `facadfb1ce535c5d124e2a463a844942a7704ba5` independently restacked
+the same original attachment delta on #1427 and restored the prerequisite
+CHANGELOG. Preserve both commits by normal integration. Their admission versus
+provider distinction, Proposed ADR-0023/0021 dependency, pre-network size guard,
+and prerequisite release notes remain; the full-payload/database/rollback tests
+and historical proposal snapshot supplement that intent. Statements calling a
+source-only 20 MiB guard deployed or released are corrected using the explicit
+provider receipt below, not retained as runtime claims.
+
 ### Failure, cause, correction
 
 | Observation | Cause and correction | Evidence boundary |
 |---|---|---|
 | Fresh #1469 migration failed in `0001_initial_control_plane.py` with `relation "emails" does not exist` | Inherit the existing database-owner repair through #1427, including forward read-state and search-storage revisions; do not duplicate a local schema workaround | The pre-merge migration log is RED before any attachment test runs |
 | Actual 20 MiB + 1 byte document rejection logged a warning; attachment sibling already handled it as expected admission | `process_pending_document` lacked the `NewsdomPayloadTooLargeError` branch. Add the specific failure/INFO branch before general request errors, retaining bytes | Reproduced 1 failed / 62 passed; corrected 63 passed in the strict unit suite |
+| A first-item database failure stopped the actual attachment and document sweeps with `MissingGreenlet` | Rollback expired all prefetched ORM objects; reading an ID in error logging and reading later items attempted implicit async I/O. Cache primitive IDs before transactions and reload only remaining pending items after rollback | Two real-PDF PostgreSQL cases failed on checkpoint `8664cf7`; the corrected real-DB/worker suite passed 29 tests |
 | New real-PDF test setup errored on `LocalPath.write_bytes` | Convert the existing pytest cache path to stdlib `Path` | Harness error, not a product RED or passing DB test |
 | New real-PDF test referenced a nonexistent validation function | Use the actual `validate_newsdom_base_url_details_async` boundary, matching the existing client and unit tests | Harness error; test must subsequently reach real persistence and worker execution |
 
@@ -67,8 +78,16 @@ Git refs rechecked at 2026-09-05 09:33 UTC:
 The Naruon guard stays 20 MiB. NewsDOM must provide its protected merge,
 immutable bounded release, and compatibility evidence before Naruon pins and
 adopts a larger contract. No deployed capacity is inferred from these refs.
-API quota failures during the fresh PR/ADR inventory are unknown evidence, not
-an empty PR set or proof that ADR-0023 is free.
+Earlier API quota failures were unknown evidence, not an empty PR set. The
+completed REST inventory at 2026-09-05 09:40:34–09:41:58 UTC covered all 161 open
+PRs, 162 changed-file pages, and 161 non-truncated head trees. Initial/final
+head/base snapshots matched, with zero API errors or file caps. ADR-0023 was
+unused; 0005 and 0006 each named multiple unrelated proposals. Recheck changed
+heads and newly opened PRs before publishing; the snapshot is not an ID lock.
+The 10:00:25–10:00:31 UTC incremental recheck found all 160 other PR head/base
+pairs unchanged. Only #1469 moved to `facadfb1`; its ADR-0023 is the same proposal,
+not a new unrelated identity collision. Its complete tree and changed-file list
+were inspected, and the ending open-PR snapshot again matched the starting one.
 
 ### Real corpus and reproducibility
 
@@ -112,11 +131,45 @@ The migrated GIN attachment search index remains valid during the real writes.
 This verifies retention, not successful PDF recognition, signed browser upload,
 cross-tenant authorization, provider-network behavior, or a latency target.
 
+### Actual worker rollback regression
+
+An independent read-only review identified a gap in the manual rollback check:
+it did not run the worker's exception handler. The existing one-item mock sweep
+test also had no SQLAlchemy expiration behavior. With two persisted real-PDF
+records, the first transaction is intentionally aborted by `SELECT 1 / 0` and
+the actual `NewsdomRecognitionWorker._sweep()` must continue to the second item.
+Both attachment and document variants failed with `MissingGreenlet` against
+checkpoint `8664cf7fdaa60c81e34f056f0031fd12fd92adb2`: **2 failed in 41.98 s**.
+This is a new product RED, separate from the earlier fixture setup errors.
+
+SQLAlchemy rollback expires loaded objects even with `expire_on_commit=False`;
+ordinary attribute access can therefore require forbidden implicit I/O under
+AsyncSession. Both sweep methods now capture primitive IDs before processing.
+After a rollback, each remaining cached ID is queried explicitly with the
+existing pending-status filter and attachment email eager loading. Deleted or
+no-longer-pending items are skipped. The failed item is not retried within that
+sweep, the cursor remains the original batch tail, and normal successful
+batches incur no new queries. Requerying the whole queue or changing the global
+session configuration was rejected: either broadens a bounded sweep or leaves
+rollback expiration unresolved (SQLAlchemy Authors, n.d.-a, n.d.-b).
+
+After the fix, the two real-DB cases and the existing worker suite passed
+**29 tests, 0 failures, 0 errors, 0 skips in 52.83 s** with `-W error`. Each case
+asserts one captured, intentional database-fault log, no `MissingGreenlet`, two
+processor attempts, first-source pending status, second-source actual size
+rejection, and complete bytes/identity in fresh sessions. The controlled fault
+is not clean provider execution or a hidden warning waiver. PostgreSQL/network
+cleanup completed. The broader exact-head rerun is recorded in the PR receipt;
+the older 276-test receipt below did not cover this worker error path.
+
+- RED JUnit SHA-256: `58f37fb95be510995b3cf4df6a5158d3c4e3cca5a0e4e68ca0daa801a8f0677e`.
+- GREEN JUnit SHA-256: `13cca9c4fac9f9053719fde2d3578f7c52d63cd68ff3068a87d82bfd44756874`.
+
 Exact 20 MiB, 20 MiB + 1 byte, 64 MiB, and 64 MiB + 1 byte payloads are separately
 exercised by the parser/client/worker **unit** tests. They use deterministic
 synthetic bytes and are not presented as structurally valid real-PDF evidence.
 
-### Combined local execution receipt
+### Earlier combined local execution receipt
 
 On 2026-09-05 the merged working tree passed **276 tests, 0 failures, 0 errors,
 0 skips**, in **98.81 seconds**, with `-W error`. This combines the six files in
@@ -183,6 +236,17 @@ https://www.nasa.gov/ebooks/earth-at-night/
 Encode OSS. (n.d.). *QuickStart: Streaming responses*. HTTPX.
 https://www.python-httpx.org/quickstart/#streaming-responses
 
-Context7 quota was exhausted and DeepWiki had no repository wiki during this
-repair. Official HTTPX/RFC/NASA sources and exact Git refs were used instead;
-neither unavailable tool is claimed as executed verification.
+SQLAlchemy Authors. (n.d.-a). *Asynchronous I/O (asyncio): Preventing implicit IO
+when using AsyncSession*. SQLAlchemy 2.0 documentation.
+https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html#preventing-implicit-io-when-using-asyncsession
+
+SQLAlchemy Authors. (n.d.-b). *Session basics: Rolling back*. SQLAlchemy 2.0 documentation.
+https://docs.sqlalchemy.org/en/20/orm/session_basics.html#rolling-back
+
+Context7 quota was exhausted and DeepWiki had no repository wiki during the
+initial repair. Official HTTPX/RFC/NASA sources and exact Git refs were used
+instead. The later rollback review also checked SQLAlchemy's official 2.0
+documentation; the project pins SQLAlchemy 2.0.51. Documentation supports the
+causal explanation but does not substitute for the real database regression.
+Context7 became available during the continuation and returned the same
+SQLAlchemy rollback/explicit-loading contract; no private source was submitted.

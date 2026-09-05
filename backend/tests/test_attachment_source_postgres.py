@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from db.models import Attachment, Document, Email, Workspace
 from services.attachment_parser import parse_email_attachment
 import services.newsdom_client as newsdom_client_module
+import services.newsdom_worker as newsdom_worker_module
 from services.newsdom_pdf_recognition import NewsdomRuntimeConfig
 from services.newsdom_worker import process_pending_attachment, process_pending_document
 from tests.test_email_read_state_migration_postgres import (
@@ -57,7 +59,7 @@ def published_pdf_bytes(pytestconfig):
 @pytest.mark.parametrize("source_kind", ["attachment", "document"])
 @pytest.mark.asyncio
 async def test_published_pdf_survives_pending_rejection_and_transaction_rollback(
-    fresh_database_url, published_pdf_bytes, source_kind, monkeypatch,
+    fresh_database_url, published_pdf_bytes, source_kind, monkeypatch, caplog,
 ):
     """Catch discarded/truncated bytes and identity changes across committed sessions."""
     _run_migrations(fresh_database_url)
@@ -162,5 +164,61 @@ async def test_published_pdf_survives_pending_rejection_and_transaction_rollback
             assert retained_bytes == published_pdf_bytes
             assert getattr(persisted_source, source_key.key) == source_identity
             assert getattr(persisted_source, status_field) == "pdf_dom_recognition_failed"
+
+        async with session_factory.begin() as session:
+            persisted_source = (await session.scalars(source_statement)).one()
+            setattr(persisted_source, status_field, "pdf_dom_recognition_pending")
+            if source_kind == "attachment":
+                persisted_source.parse_error_code = None
+                next_source = Attachment(
+                    email=persisted_source.email, filename=parsed_source.filename,
+                    content=parsed_source.content, content_type="application/pdf",
+                    parse_status="pdf_dom_recognition_pending", parser_key=parsed_source.parser_key,
+                    parse_content_type=parsed_source.parse_content_type,
+                )
+            else:
+                next_source = Document(
+                    document_id=f"{source_identity}_next", workspace_id=persisted_source.workspace_id,
+                    organization_id=persisted_source.organization_id,
+                    document_name=parsed_source.filename, document_type="pdf",
+                    document_content=parsed_source.content, document_status="pdf_dom_recognition_pending",
+                )
+            session.add(next_source)
+            await session.flush()
+            next_identity = getattr(next_source, source_key.key)
+
+        resolve_count = 0
+
+        async def fail_first_transaction(session, organization_id):
+            """Abort the real first transaction; the next item must still be processed."""
+            nonlocal resolve_count
+            resolve_count += 1
+            if resolve_count == 1:
+                await session.execute(text("SELECT 1 / 0"))
+            return await configured_provider(session, organization_id)
+
+        monkeypatch.setattr(newsdom_worker_module, "AsyncSessionLocal", session_factory)
+        worker = newsdom_worker_module.NewsdomRecognitionWorker(
+            config_resolver=fail_first_transaction,
+        )
+        with caplog.at_level(logging.ERROR, logger="services.newsdom_worker"):
+            await worker._sweep()
+        assert resolve_count == 2
+        error_records = [
+            record for record in caplog.records
+            if record.name == "services.newsdom_worker" and record.levelno >= logging.ERROR
+        ]
+        assert len(error_records) == 1
+        assert "MissingGreenlet" not in caplog.text
+        for record_identity, expected_status in (
+            (source_identity, "pdf_dom_recognition_pending"),
+            (next_identity, "pdf_dom_recognition_failed"),
+        ):
+            async with session_factory() as session:
+                persisted_source = await session.get(type(source_record), record_identity)
+                retained_bytes = base64.b64decode(getattr(persisted_source, content_field), validate=True)
+                assert retained_bytes == published_pdf_bytes
+                assert getattr(persisted_source, source_key.key) == record_identity
+                assert getattr(persisted_source, status_field) == expected_status
     finally:
         await engine.dispose()

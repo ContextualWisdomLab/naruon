@@ -105,7 +105,11 @@ retains PDF source bytes through 64 MiB while enforcing the separate verified
 20 MiB NewsDOM request bound before network validation. Missing configuration
 leaves the source pending; size rejection records failure without discarding
 bytes. Real PostgreSQL tests cover committed outcomes and rollback with an
-unchanged published PDF. This does not establish released recognition capacity;
+unchanged published PDF. Sweep IDs are captured before transactions; after
+rollback, remaining pending records are explicitly reloaded with their required
+relationships so one failed item does not abort the prefetched batch. Normal
+successful batches retain their existing query path.
+This does not establish released recognition capacity;
 the [PDF upload owner](docs/adr/0021-bounded-pdf-dom-upload-contract.md), immutable
 provider release, exact consumer pin, and capacity evidence remain prerequisites.
 

@@ -479,10 +479,21 @@ class NewsdomRecognitionWorker:
     async def _sweep_attachments(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of pending attachments."""
         rows = await self._load_pending_attachments(session)
-        if rows:
-            self._attachment_cursor = rows[-1].id
-        for attachment in rows:
+        pending_rows = [(attachment.id, attachment) for attachment in rows]
+        if pending_rows:
+            self._attachment_cursor = pending_rows[-1][0]
+        reload_pending_rows = False
+        for attachment_id, attachment in pending_rows:
             try:
+                if reload_pending_rows:
+                    result_rows = await session.execute(
+                        self._pending_attachment_statement(None).where(
+                            Attachment.id == attachment_id
+                        )
+                    )
+                    attachment = result_rows.scalar_one_or_none()
+                    if attachment is None:
+                        continue
                 result = await process_pending_attachment(
                     session=session,
                     attachment=attachment,
@@ -493,14 +504,17 @@ class NewsdomRecognitionWorker:
                 if result != RESULT_PENDING:
                     logger.info(
                         "NewsDOM attachment %s recognition result: %s",
-                        attachment.id,
+                        attachment_id,
                         result,
                     )
             except Exception:
                 await session.rollback()
+                # Rollback expires the entire prefetched batch, including IDs
+                # and email relationships; later rows need explicit async loads.
+                reload_pending_rows = True
                 logger.error(
                     "NewsDOM attachment %s recognition raised.",
-                    getattr(attachment, "id", "?"),
+                    attachment_id,
                     exc_info=True,
                 )
 
@@ -546,10 +560,21 @@ class NewsdomRecognitionWorker:
     async def _sweep_documents(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of pending documents."""
         rows = await self._load_pending_documents(session)
-        if rows:
-            self._document_cursor = rows[-1].document_id
-        for document in rows:
+        pending_rows = [(document.document_id, document) for document in rows]
+        if pending_rows:
+            self._document_cursor = pending_rows[-1][0]
+        reload_pending_rows = False
+        for document_id, document in pending_rows:
             try:
+                if reload_pending_rows:
+                    result_rows = await session.execute(
+                        self._pending_document_statement(None).where(
+                            Document.document_id == document_id
+                        )
+                    )
+                    document = result_rows.scalar_one_or_none()
+                    if document is None:
+                        continue
                 result = await process_pending_document(
                     session=session,
                     document=document,
@@ -560,14 +585,15 @@ class NewsdomRecognitionWorker:
                 if result != RESULT_PENDING:
                     logger.info(
                         "NewsDOM document %s recognition result: %s",
-                        document.document_id,
+                        document_id,
                         result,
                     )
             except Exception:
                 await session.rollback()
+                reload_pending_rows = True
                 logger.error(
                     "NewsDOM document %s recognition raised.",
-                    getattr(document, "document_id", "?"),
+                    document_id,
                     exc_info=True,
                 )
 
