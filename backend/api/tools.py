@@ -770,7 +770,7 @@ registry.register(
     ToolInfo(
         code="hash_generator",
         name="지문/해시 생성기 (Fingerprint/Hash Generator)",
-        description="텍스트의 호환성 지문(MD5, SHA-1) 및 보안 해시(SHA-256) 값을 생성합니다.",
+        description="텍스트의 호환성 지문(MD5) 및 보안 해시(SHA-256) 값을 생성합니다.",
         category="유틸리티",
         parameters={"text": "string"},
     ),
