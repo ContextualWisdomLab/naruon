@@ -17,6 +17,7 @@ PreviewState = Literal["recognized", "pending", "failed", "unavailable"]
 AssetType = Literal["email_attachment", "workspace_document"]
 
 ERROR_REPOSITORY_ASSET_NOT_FOUND = "repository_asset_not_found"
+ERROR_REPOSITORY_ASSET_PREVIEW_TOO_LARGE = "repository_asset_preview_too_large"
 ERROR_HWPX_RECOGNITION_PENDING = "hwpx_recognition_pending"
 ERROR_HWPX_RECOGNITION_FAILED = "hwpx_recognition_failed"
 
@@ -28,6 +29,8 @@ HWPX_PENDING_STATUS = "hwpx_xml_package_pending"
 HWPX_PARSED_STATUS = "hwpx_xml_package_parsed"
 HWPX_FAILED_STATUS = "hwpx_xml_package_failed"
 HWPX_PARSER_FAMILY = "hwpx"
+
+REPOSITORY_ASSET_PREVIEW_MAX_CHARACTERS = 64 * 1024
 
 _DEFERRED_PENDING_STATUSES = frozenset(
     {
@@ -116,6 +119,59 @@ def _paragraphs_from_segments(source: object) -> tuple[str, ...]:
     )
 
 
+def _source_text_is_oversized(value: object) -> bool:
+    """Reject source text that cannot fit the bounded inline preview contract."""
+
+    return len(str(value or "")) > REPOSITORY_ASSET_PREVIEW_MAX_CHARACTERS
+
+
+def _segment_source_is_oversized(source: object) -> bool:
+    """Bound content-graph source text before sanitizing or joining paragraphs."""
+
+    if isinstance(source, (list, tuple)):
+        segments = source
+    else:
+        segments = getattr(source, "content_segments", None) or ()
+    total_characters = 0
+    for segment in segments:
+        total_characters += len(str(getattr(segment, "safe_text_content", "") or ""))
+        if total_characters > REPOSITORY_ASSET_PREVIEW_MAX_CHARACTERS:
+            return True
+    return False
+
+
+def _paragraph_payload_is_oversized(paragraph_texts: tuple[str, ...]) -> bool:
+    """Bound the serialized recognized text, including paragraph separators."""
+
+    if not paragraph_texts:
+        return False
+    total_characters = sum(len(paragraph) for paragraph in paragraph_texts)
+    total_characters += 2 * (len(paragraph_texts) - 1)
+    return total_characters > REPOSITORY_ASSET_PREVIEW_MAX_CHARACTERS
+
+
+def _unavailable_preview(
+    *,
+    asset_key: str,
+    asset_type: AssetType,
+    parser_family: str | None,
+    error_code: str,
+) -> RepositoryAssetPreview:
+    """Return an explicit unavailable state without partial or duplicated text."""
+
+    return RepositoryAssetPreview(
+        asset_key=asset_key,
+        asset_type=asset_type,
+        preview_state="unavailable",
+        parser_family=parser_family,
+        paragraph_texts=(),
+        preview_text=None,
+        next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
+        error_code=error_code,
+        provider_write_executed=False,
+    )
+
+
 def _recognized_preview(
     *,
     asset_key: str,
@@ -123,8 +179,15 @@ def _recognized_preview(
     parser_family: str | None,
     paragraph_texts: tuple[str, ...],
 ) -> RepositoryAssetPreview:
-    """Build a recognized preview only when paragraph text is actually present."""
+    """Build a recognized preview only when bounded paragraph text is present."""
 
+    if _paragraph_payload_is_oversized(paragraph_texts):
+        return _unavailable_preview(
+            asset_key=asset_key,
+            asset_type=asset_type,
+            parser_family=parser_family,
+            error_code=ERROR_REPOSITORY_ASSET_PREVIEW_TOO_LARGE,
+        )
     return RepositoryAssetPreview(
         asset_key=asset_key,
         asset_type=asset_type,
@@ -200,13 +263,25 @@ def build_attachment_preview(
             ),
         )
 
-    paragraph_texts = _paragraphs_from_segments(
-        content_segments if content_segments is not None else attachment
-    )
-    if not paragraph_texts and parse_status in {HWPX_PARSED_STATUS, "parsed"}:
-        paragraph_texts = _paragraphs_from_text(
-            str(getattr(attachment, "content", "") or "")
+    segment_source = content_segments if content_segments is not None else attachment
+    if _segment_source_is_oversized(segment_source):
+        return _unavailable_preview(
+            asset_key=asset_key,
+            asset_type="email_attachment",
+            parser_family=parser_family,
+            error_code=ERROR_REPOSITORY_ASSET_PREVIEW_TOO_LARGE,
         )
+    paragraph_texts = _paragraphs_from_segments(segment_source)
+    if not paragraph_texts and parse_status in {HWPX_PARSED_STATUS, "parsed"}:
+        raw_content = str(getattr(attachment, "content", "") or "")
+        if _source_text_is_oversized(raw_content):
+            return _unavailable_preview(
+                asset_key=asset_key,
+                asset_type="email_attachment",
+                parser_family=parser_family,
+                error_code=ERROR_REPOSITORY_ASSET_PREVIEW_TOO_LARGE,
+            )
+        paragraph_texts = _paragraphs_from_text(raw_content)
     if paragraph_texts:
         return _recognized_preview(
             asset_key=asset_key,
@@ -251,9 +326,15 @@ def build_document_preview(
             next_action=NEXT_ACTION_WAIT_FOR_RECOGNITION,
             error_code="recognition_pending",
         )
-    paragraph_texts = _paragraphs_from_text(
-        getattr(document, "document_content", None)
-    )
+    document_content = getattr(document, "document_content", None)
+    if _source_text_is_oversized(document_content):
+        return _unavailable_preview(
+            asset_key=asset_key,
+            asset_type="workspace_document",
+            parser_family=None,
+            error_code=ERROR_REPOSITORY_ASSET_PREVIEW_TOO_LARGE,
+        )
+    paragraph_texts = _paragraphs_from_text(document_content)
     if paragraph_texts:
         return _recognized_preview(
             asset_key=asset_key,
