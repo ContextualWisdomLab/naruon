@@ -629,19 +629,16 @@ four read-only actions remain disabled, the reason is visible, no selected badge
 appears, no writeback request fires, and a screenshot is produced. The
 non-default-base head remains Draft until #1562 supplies required hosted
 validation and independent review evidence.
-PR #1559 (`d75cfe7f5dbf82a0244c961db455baa748c66d2d`) independently succeeds the
+PR #1559 (`9c90dea4832275aa5e127de5def1471f31c44ce9`) independently succeeds the
 confidence-boundary finding from conflicted #1436: it removes the frontend's
 unit-guessing discontinuity and follows the backend's documented 0--100
-percentage contract. Its unit and EmailDetail fixtures, pilot and full-product
-smokes, and AGENTS.md recurrence rule now share that unit; 65 focused tests,
-TypeScript, lint, and both smokes pass locally. Both findings are resolved on
-the exact head, and Application CI, Bandit, image validation, and the initial
-CodeQL/Semgrep/security admission jobs are green. Noema, Strix, Semgrep, Trivy,
-Scorecard, and the OpenCode admission step also passed on the same head. The
-long-running CodeQL compatibility analysis and OpenCode evidence job were
-externally cancelled without a source failure and have been rerun once as
-attempt 2; they remain queued. Independent approval is still required, so this
-remains a Draft candidate rather than protected-branch evidence.
+percentage contract. The shared display boundary now rejects non-finite and
+out-of-range values instead of turning malformed `150` into a false `100%`
+claim. Its unit and EmailDetail fixtures, pilot and full-product smokes, and
+AGENTS.md recurrence rule share that unit; 30 focused tests, TypeScript, lint,
+and diff validation pass on the current head. Twenty-two hosted checks were
+regenerated, so predecessor GREEN does not transfer. Independent review and
+current-head hosted success are still required; this remains Draft.
 
 PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) remains predecessor provenance
 for the Today-dashboard recovery lane. Draft successor #1570
