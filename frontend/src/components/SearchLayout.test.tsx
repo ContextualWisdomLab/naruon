@@ -80,6 +80,7 @@ describe("SearchLayout product events", () => {
     root = null;
     container?.remove();
     container = null;
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     clearRecordedProductEvents();
   });
@@ -192,5 +193,64 @@ describe("SearchLayout product events", () => {
       event.payload.source_backlink_present === true,
     )).toBe(true);
     expect(JSON.stringify(getRecordedProductEvents())).not.toContain("계약");
+  });
+
+  it("does not repeat the active-result lookup for unrelated input state", async () => {
+    const originalFind = Array.prototype.find;
+    let resultLookupCount = 0;
+    const findSpy = vi.spyOn(Array.prototype, "find").mockImplementation(function (
+      this: unknown[],
+      predicate: (value: unknown, index: number, obj: unknown[]) => unknown,
+      thisArg?: unknown,
+    ) {
+      if (this.some((value) =>
+        typeof value === "object" && value !== null && "id" in value && "subject" in value
+      )) {
+        resultLookupCount += 1;
+      }
+      return originalFind.call(this, predicate, thisArg);
+    });
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({
+          results: [{
+            id: 101,
+            source_message_id: "<source@example.com>",
+            subject: "런칭 캠페인 결과",
+            sender: "pm@example.com",
+            date: "2026-05-20T09:00:00Z",
+            snippet: "검색 결과",
+            thread_id: "thread-launch",
+            reply_count: 2,
+            score: 0.93,
+          }],
+        }));
+      }
+      if (url.endsWith("/api/search/answer")) {
+        return Promise.resolve(jsonResponse({ answer: null, citations: [] }));
+      }
+      if (url.includes("/api/ontology/relationships?")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("런칭 캠페인 결과") ?? false);
+    const lookupCountAfterResults = resultLookupCount;
+    const input = container.querySelector<HTMLInputElement>("#search-input");
+
+    await act(async () => {
+      setInputValue(input as HTMLInputElement, "무관한 입력 상태");
+    });
+
+    expect(resultLookupCount).toBe(lookupCountAfterResults);
+    findSpy.mockRestore();
   });
 });
