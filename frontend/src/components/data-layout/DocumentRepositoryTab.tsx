@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import React, { useState, type ChangeEvent } from 'react';
 import { HardDrive, Upload, Loader2, FileText, FolderOpen, Database, RefreshCw, CheckCircle2, Server } from 'lucide-react';
 import { toSafeReactText } from '@/lib/safe-text';
 import {
@@ -111,51 +111,6 @@ export function DocumentRepositoryTab({
   isUniqueThreadLoading,
 }: DocumentRepositoryTabProps) {
   const [webdavWriteConfirmationKey, setWebdavWriteConfirmationKey] = useState<string | null>(null);
-  const webdavWriteTriggerRef = useRef<HTMLButtonElement>(null);
-  const webdavWriteCancelRef = useRef<HTMLButtonElement>(null);
-  const webdavWriteConfirmRef = useRef<HTMLButtonElement>(null);
-  const restoreWebdavWriteFocusRef = useRef(false);
-
-  useEffect(() => {
-    if (webdavWriteConfirmationKey !== null) {
-      webdavWriteCancelRef.current?.focus();
-    }
-  }, [webdavWriteConfirmationKey]);
-
-  useEffect(() => {
-    if (
-      webdavWriteConfirmationKey === null
-      && documentActionPendingAction === null
-      && restoreWebdavWriteFocusRef.current
-    ) {
-      restoreWebdavWriteFocusRef.current = false;
-      webdavWriteTriggerRef.current?.focus();
-    }
-  }, [documentActionPendingAction, webdavWriteConfirmationKey]);
-
-  const closeWebdavWriteConfirmation = () => {
-    restoreWebdavWriteFocusRef.current = true;
-    setWebdavWriteConfirmationKey(null);
-  };
-
-  const handleWebdavWriteConfirmationKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeWebdavWriteConfirmation();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-
-    const first = webdavWriteCancelRef.current;
-    const last = webdavWriteConfirmRef.current;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
-  };
 
   const selectedRepositoryAsset = repositoryAssets.find((asset) => asset.asset_key === selectedRepositoryAssetKey)
     ?? repositoryAssets[0]
@@ -472,7 +427,6 @@ return (
                         {documentActionPendingAction === 'hwp-conversion-intent' ? '요청 등록 중' : 'HWP 변환 요청 등록'}
                       </button>
                       <button
-                        ref={webdavWriteTriggerRef}
                         type="button"
                         onClick={() => setWebdavWriteConfirmationKey(currentWebdavWriteConfirmationKey)}
                         disabled={documentActionPendingAction !== null || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}
@@ -488,18 +442,17 @@ return (
                       </button>
                     </div>
                     {webdavWriteConfirmationKey === currentWebdavWriteConfirmationKey && documentActionPendingAction === null ? (
-                      <div role="alertdialog" aria-labelledby="webdav-write-confirmation-title" aria-describedby="webdav-write-confirmation-description" onKeyDown={handleWebdavWriteConfirmationKeyDown} className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                      <div role="alertdialog" aria-modal="true" aria-labelledby="webdav-write-confirmation-title" aria-describedby="webdav-write-confirmation-description" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
                         <p id="webdav-write-confirmation-title" className="font-bold">고객 WebDAV에 문서를 쓰시겠습니까?</p>
                         <p id="webdav-write-confirmation-description" className="mt-1 text-sm leading-6">
                           {selectedWebdavAccountLabel}에 현재 문서를 기록합니다. 기존 파일이 있으면 충돌 조건을 확인하며, 이 작업은 고객 원본 저장소를 변경합니다.
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <button ref={webdavWriteCancelRef} type="button" onClick={closeWebdavWriteConfirmation} className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold">취소</button>
+                          <button type="button" onClick={() => setWebdavWriteConfirmationKey(null)} className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold">취소</button>
                           <button
-                            ref={webdavWriteConfirmRef}
                             type="button"
                             onClick={() => {
-                              closeWebdavWriteConfirmation();
+                              setWebdavWriteConfirmationKey(null);
                               void requestDocumentAction('webdav-materialization-intent');
                             }}
                             className="min-h-10 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground"
