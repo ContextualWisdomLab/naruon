@@ -491,6 +491,10 @@ CLAUDE/architecture owner boundary while retaining #1564's loopback-only
 OpenCode endpoint and unset request timeout. Thirty-nine focused governance
 contracts, Ruff, and diff checks pass. Current-head hosted suites remain absent
 because leaf branch filters do not attach them to this stacked base. #1566
+therefore has one bounded central exact-head scheduler dispatch, run
+`33941908363`, queued with review enabled and merge, auto-merge, and branch
+updates disabled; duplicate current-head dispatch was absent before enqueue.
+The dispatch is wait-state evidence, not an approval or hosted-check substitute.
 remains Draft until #1564 reaches protected merge; fresh exact-head hosted
 Checks and independent review remain required after restacking on `develop`.
 Former child #1567 was restacked to
