@@ -34,6 +34,9 @@ _DNS_RESOLUTION_TIMEOUT_SECONDS = 5.0
 _LOCAL_DEV_HOSTNAMES = {"localhost", "localhost.localdomain"}
 _LOCAL_DEV_IP_LITERALS = {"127.0.0.1", "::1"}
 _DEFAULT_PARSE_TIMEOUT_SECONDS = 300.0
+# NewsDOM's verified protected-source ``/parse`` guard is 20 MiB; this does not
+# prove a deployed version. Raise only after an immutable owner release is pinned.
+NEWSDOM_MAX_PARSE_UPLOAD_BYTES = 20 * 1024 * 1024
 
 
 class NewsdomConfigurationError(RuntimeError):
@@ -42,6 +45,10 @@ class NewsdomConfigurationError(RuntimeError):
 
 class NewsdomRequestError(RuntimeError):
     """Raised when the NewsDOM sidecar cannot fulfil a parse request."""
+
+
+class NewsdomPayloadTooLargeError(NewsdomRequestError):
+    """Raised when the payload exceeds the local or provider-side contract."""
 
 
 class NewsdomEmptyRecognitionError(NewsdomRequestError):
@@ -393,6 +400,10 @@ async def request_pdf_dom(
     """
     if not pdf_bytes:
         raise NewsdomRequestError("Cannot recognize an empty PDF payload")
+    if len(pdf_bytes) > NEWSDOM_MAX_PARSE_UPLOAD_BYTES:
+        raise NewsdomPayloadTooLargeError(
+            "NewsDOM PDF payload exceeds the 20 MiB parse upload contract"
+        )
 
     validated = await validate_newsdom_base_url_details_async(base_url)
     if validated is None:
@@ -423,6 +434,8 @@ async def request_pdf_dom(
         except httpx.HTTPError as exc:
             raise NewsdomRequestError(f"NewsDOM request failed: {exc}") from exc
 
+    if response.status_code == 413:
+        raise NewsdomPayloadTooLargeError("NewsDOM returned HTTP 413 for /parse")
     if response.status_code >= 400:
         raise NewsdomRequestError(
             f"NewsDOM returned HTTP {response.status_code} for /parse"

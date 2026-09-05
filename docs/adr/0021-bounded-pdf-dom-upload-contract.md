@@ -9,6 +9,9 @@
 open-PR inventory found unrelated 0005 proposals; the decision content and
 immutable-release prerequisite are retained. Existing #1469 inherits this
 proposal and must take the rename by ancestry, not publish a second decision.
+The attachment branch's complete earlier deferral wording is preserved as a
+[historical proposal](../doctoring/pdf_dom_proposal_history.md), not a second
+numbered ADR or a new accepted decision.
 
 ## Context
 

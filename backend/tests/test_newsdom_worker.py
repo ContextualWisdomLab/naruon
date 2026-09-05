@@ -1,20 +1,25 @@
 """Unit tests for the NewsDOM recognition worker's per-item processing.
 
-Fully mocked: in-memory models, an injected async config resolver, and a canned
-sidecar ``request_fn`` — no database, no network. Covers the fail-closed
+In-memory models, an injected async config resolver, and canned sidecar
+responses or the real pre-network size guard — no database, no network. Covers the fail-closed
 outcomes (unconfigured -> pending, bad payload -> failed, empty response ->
 failed) that keep a pending PDF from ever masquerading as parsed.
 """
 
 import asyncio
 import base64
+import logging
+from random import Random
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.exc import DBAPIError
 
 from db.models import Attachment, Document, Email
 from services.content_graph import ContentSegment, ParseResult
 from services.newsdom_client import NewsdomConfigurationError
+import services.newsdom_client as newsdom_client_module
 from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_FAILED_STATUS,
     PDF_DOM_RECOGNITION_PENDING_STATUS,
@@ -77,14 +82,17 @@ def _pending_attachment(
     return attachment
 
 
-def _pending_document(document_id: str, *, organization_id: str = "org-1") -> Document:
+def _pending_document(
+    document_id: str, *, organization_id: str = "org-1", payload: bytes = b"%PDF-1.7 fake"
+) -> Document:
+    """Create an in-memory pending document with the supplied unit-test bytes."""
     return Document(
         document_id=document_id,
         workspace_id="ws-1",
         organization_id=organization_id,
         document_name="news.pdf",
         document_type="pdf",
-        document_content=base64.b64encode(b"%PDF-1.7 fake").decode("ascii"),
+        document_content=base64.b64encode(payload).decode("ascii"),
         document_status=PDF_DOM_RECOGNITION_PENDING_STATUS,
     )
 
@@ -98,6 +106,10 @@ class _RowsResult:
 
     def all(self):
         return self._rows
+
+    def scalar_one_or_none(self):
+        """Return the optional row from a controlled pending-record reload."""
+        return self._rows[0] if self._rows else None
 
 
 class _SequenceSession:
@@ -218,6 +230,85 @@ async def test_attachment_failed_on_empty_sidecar_response():
     assert attachment.parse_error_code == "recognition_failed"
     # Never landed as parsed with empty content.
     assert attachment.parse_status != "parsed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+async def test_large_source_is_retained_when_real_provider_guard_rejects(
+    source_kind, caplog, monkeypatch
+):
+    """Both worker paths retain actual over-limit bytes after bounded rejection."""
+    payload = b"%PDF-" + Random(1469).randbytes(20 * 1024 * 1024 - 4)
+    source_record = (
+        _pending_attachment(payload)
+        if source_kind == "attachment"
+        else _pending_document("doc-size-boundary", payload=payload)
+    )
+    process_source = (
+        process_pending_attachment if source_kind == "attachment" else process_pending_document
+    )
+
+    async def reject_validation(_base_url):
+        """Fail if an oversized retained source reaches DNS validation."""
+        pytest.fail("oversized retained source reached address validation")
+
+    monkeypatch.setattr(
+        newsdom_client_module, "validate_newsdom_base_url_details_async", reject_validation
+    )
+
+    with caplog.at_level(logging.INFO, logger="services.newsdom_worker"):
+        result = await process_source(
+            session=object(),
+            **{source_kind: source_record},
+            config_resolver=await _resolver_with(_config()),
+            request_fn=newsdom_client_module.request_pdf_dom,
+        )
+
+    assert result == RESULT_FAILED
+    if source_kind == "attachment":
+        assert source_record.parse_status == PDF_DOM_RECOGNITION_FAILED_STATUS
+        assert source_record.parse_error_code == "provider_payload_size_exceeded"
+        retained_content = source_record.content
+    else:
+        assert source_record.document_status == PDF_DOM_RECOGNITION_FAILED_STATUS
+        retained_content = source_record.document_content
+    assert base64.b64decode(retained_content, validate=True) == payload
+    records = [record for record in caplog.records if record.name == "services.newsdom_worker"]
+    assert records and all(record.levelno == logging.INFO for record in records)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+async def test_full_size_source_stays_pending_and_intact_without_provider(source_kind):
+    """Absence of a provider must not destroy or process a retained 64 MiB source."""
+    payload = b"%PDF-" + Random(1469).randbytes(64 * 1024 * 1024 - 5)
+    source_record = (
+        _pending_attachment(payload)
+        if source_kind == "attachment"
+        else _pending_document("doc-unconfigured-boundary", payload=payload)
+    )
+    process_source = (
+        process_pending_attachment if source_kind == "attachment" else process_pending_document
+    )
+
+    async def reject_request(**_kwargs):
+        """Fail if an unconfigured record reaches recognition."""
+        pytest.fail("unconfigured source reached recognition")
+
+    result = await process_source(
+        session=object(),
+        **{source_kind: source_record},
+        config_resolver=await _resolver_with(None),
+        request_fn=reject_request,
+    )
+    assert result == RESULT_PENDING
+    if source_kind == "attachment":
+        assert source_record.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+        retained_content = source_record.content
+    else:
+        assert source_record.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+        retained_content = source_record.document_content
+    assert base64.b64decode(retained_content, validate=True) == payload
 
 
 @pytest.mark.asyncio
@@ -498,7 +589,7 @@ async def test_sweeps_rollback_one_item_failure_and_continue_isolation():
 
 @pytest.mark.asyncio
 async def test_postgresql_lease_helpers_and_non_postgresql_fallback():
-    postgres = _LeaseSession(scalar_result=1)
+    postgres = _LeaseSession(scalar_result=True)
     sqlite = _LeaseSession(dialect_name="sqlite")
 
     assert await newsdom_worker_module._try_acquire_sweep_lease(postgres) is True
@@ -522,7 +613,8 @@ async def test_postgresql_lease_helpers_and_non_postgresql_fallback():
 async def test_worker_sweep_honors_lease_outcome(
     monkeypatch, lease, expected_sweeps, expected_releases
 ):
-    session = object()
+    session = SimpleNamespace(rollback=AsyncMock())
+    connection = SimpleNamespace(invalidate=AsyncMock())
     calls = []
     releases = []
     worker = NewsdomRecognitionWorker()
@@ -530,7 +622,11 @@ async def test_worker_sweep_honors_lease_outcome(
     monkeypatch.setattr(
         newsdom_worker_module,
         "AsyncSessionLocal",
-        lambda: _AsyncSessionContext(session),
+        lambda **kwargs: _AsyncSessionContext(session) if kwargs.get("bind", connection) is connection else None,
+    )
+    monkeypatch.setattr(
+        newsdom_worker_module, "engine",
+        SimpleNamespace(connect=lambda: _AsyncSessionContext(connection)), raising=False,
     )
 
     async def acquire(actual_session):
@@ -555,6 +651,137 @@ async def test_worker_sweep_honors_lease_outcome(
 
     assert len(calls) == expected_sweeps
     assert len(releases) == expected_releases
+    assert session.rollback.await_count == expected_releases
+    connection.invalidate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_phase", ["acquire", "attachments", "documents", "release"])
+@pytest.mark.parametrize("failure_type", [RuntimeError, asyncio.CancelledError])
+async def test_worker_discards_connection_when_lease_lifecycle_is_uncertain(
+    monkeypatch, failure_phase, failure_type,
+):
+    """Errors and cancellation must not return a potentially locked backend to the pool."""
+    session = SimpleNamespace(rollback=AsyncMock())
+    connection = SimpleNamespace(invalidate=AsyncMock())
+    monkeypatch.setattr(
+        newsdom_worker_module, "engine",
+        SimpleNamespace(connect=lambda: _AsyncSessionContext(connection)), raising=False,
+    )
+    monkeypatch.setattr(
+        newsdom_worker_module, "AsyncSessionLocal",
+        lambda **kwargs: _AsyncSessionContext(session) if kwargs.get("bind", connection) is connection else None,
+    )
+    worker = NewsdomRecognitionWorker()
+    acquire = AsyncMock(return_value=True)
+    attachments = AsyncMock()
+    documents = AsyncMock()
+    release = AsyncMock()
+    failure = failure_type("controlled lease lifecycle failure")
+    phases = {"acquire": acquire, "attachments": attachments, "documents": documents, "release": release}
+    phases[failure_phase].side_effect = failure
+    monkeypatch.setattr(newsdom_worker_module, "_try_acquire_sweep_lease", acquire)
+    monkeypatch.setattr(newsdom_worker_module, "_release_sweep_lease", release)
+    monkeypatch.setattr(worker, "_sweep_attachments", attachments)
+    monkeypatch.setattr(worker, "_sweep_documents", documents)
+
+    with pytest.raises(failure_type) as raised_error:
+        await worker._sweep()
+
+    assert raised_error.value is failure
+    connection.invalidate.assert_awaited_once_with()
+    if failure_phase in {"acquire", "attachments"}:
+        documents.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unlock_result", [False, None, 1, "true"])
+async def test_sweep_unlock_requires_explicit_ownership_confirmation(unlock_result):
+    """A missing lease or unverifiable response must not count as a successful unlock."""
+    with pytest.raises(RuntimeError, match="lease release could not be confirmed"):
+        await newsdom_worker_module._release_sweep_lease(_LeaseSession(scalar_result=unlock_result))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+async def test_item_disconnect_aborts_sweep_instead_of_reconnecting_without_lease(source_kind):
+    """A lost backend loses its session lock; later rows need a new leased cycle."""
+    failure = DBAPIError(None, None, RuntimeError("controlled disconnect"), connection_invalidated=True)
+    resolver = AsyncMock(side_effect=failure)
+    worker = NewsdomRecognitionWorker(config_resolver=resolver)
+    if source_kind == "attachment":
+        session = _SequenceSession([[_pending_attachment(attachment_id=1), _pending_attachment(attachment_id=2)]])
+        sweep = worker._sweep_attachments
+    else:
+        session = _SequenceSession([[_pending_document("doc-1"), _pending_document("doc-2")]])
+        sweep = worker._sweep_documents
+
+    with pytest.raises(DBAPIError) as raised_error:
+        await sweep(session)
+
+    assert raised_error.value is failure
+    resolver.assert_awaited_once()
+    assert session.commit_count == session.rollback_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+@pytest.mark.parametrize("completed_count", [0, 1])
+async def test_disconnect_cursor_retries_unattempted_rows_before_newer_work(
+    source_kind, completed_count,
+):
+    """Resume at the last completed item, not the tail of an abandoned prefetched batch."""
+    worker = NewsdomRecognitionWorker()
+    if source_kind == "attachment":
+        pending_rows = [_pending_attachment(attachment_id=index) for index in (1, 2, 3)]
+        cursor_name, completed_identity = "_attachment_cursor", 1
+        sweep = worker._sweep_attachments
+    else:
+        pending_rows = [_pending_document(f"doc-{index}") for index in (1, 2, 3)]
+        cursor_name, completed_identity = "_document_cursor", "doc-1"
+        sweep = worker._sweep_documents
+    session = _SequenceSession([pending_rows, pending_rows[completed_count:]])
+    failure = DBAPIError(None, None, RuntimeError("controlled disconnect"), connection_invalidated=True)
+    worker._config_resolver = AsyncMock(side_effect=[None] * completed_count + [failure])
+
+    with pytest.raises(DBAPIError):
+        await sweep(session)
+
+    assert getattr(worker, cursor_name) == (completed_identity if completed_count else None)
+    worker._config_resolver = AsyncMock(return_value=None)
+    await sweep(session)
+    assert worker._config_resolver.await_count == 3 - completed_count
+    assert session.commit_count == 3
+    resumed_query = session.statements[1].compile()
+    if completed_count:
+        assert completed_identity in resumed_query.params.values()
+    else:
+        assert " > " not in str(resumed_query)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+async def test_rollback_reload_skips_missing_or_no_longer_pending_source(source_kind):
+    """Do not process a vanished pending row; continue with the next valid cached identity."""
+    worker = NewsdomRecognitionWorker(
+        config_resolver=AsyncMock(side_effect=[RuntimeError("controlled item failure"), None]),
+    )
+    if source_kind == "attachment":
+        pending_rows = [_pending_attachment(attachment_id=index) for index in (1, 2, 3)]
+        cursor_name, final_identity = "_attachment_cursor", 3
+        sweep = worker._sweep_attachments
+    else:
+        pending_rows = [_pending_document(f"doc-{index}") for index in (1, 2, 3)]
+        cursor_name, final_identity = "_document_cursor", "doc-3"
+        sweep = worker._sweep_documents
+    session = _SequenceSession([pending_rows, [], [pending_rows[2]]])
+
+    await sweep(session)
+
+    assert worker._config_resolver.await_count == 2
+    assert session.commit_count == session.rollback_count == 1
+    assert getattr(worker, cursor_name) == final_identity
+    assert final_identity in session.statements[2].compile().params.values()
 
 
 @pytest.mark.asyncio

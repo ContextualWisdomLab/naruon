@@ -41,10 +41,9 @@ from services.workspace_scope import get_or_create_workspace
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 DATA_VECTOR_DIMENSIONS = 1536
-# Upper bound for the binary PDF DOM recognition upload variant. Keep this in
-# step with NewsDOM's MAX_PARSE_UPLOAD_BYTES and the signed email-import
-# transport ceiling so large customer PDFs are not accepted by one path and
-# rejected by the next.
+# Proposed Naruon admission ceiling inherited from the PDF upload owner.
+# Provider calls enforce their separate bound in request_pdf_dom; this constant
+# is not evidence of a released NewsDOM 64 MiB recognition capability.
 _MAX_PDF_DOM_UPLOAD_BYTES = 64 * 1024 * 1024
 ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
     "email_attachments.content_type, "

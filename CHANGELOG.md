@@ -1,4 +1,13 @@
 ## [Unreleased]
+- Proposed: retain PDF attachments up to 64 MiB for deferred processing and
+  preserve admitted source bytes when the processing service rejects the size.
+  Files above 64 MiB and unsupported binary formats remain metadata-only.
+  Recognition above the processing service's verified limit is not released;
+  split the PDF to fit that limit or wait for an approved service upgrade.
+  A processing failure for one file no longer stops the remaining files in its
+  batch; the original files remain available for a later attempt.
+  Background processing also releases its coordination claim when interrupted,
+  so a later worker can resume pending files. This repair remains proposed.
 - Proposed: accept manual PDF uploads up to 64MiB after the required processing
   service release is verified and pinned. Larger files are rejected before
   storage or processing with HTTP 413; split the file and upload it again.
