@@ -124,7 +124,7 @@ digest match the lock; the Starlette release history, exact provenance, rollback
 and APA 7th references are recorded in
 `docs/doctoring/starlette-httpx2-testclient-dependency.md`. This
 was found while validating utility consumer PR
-#1538 (`732cc4b2037e2e09b9cef0b3953862a47dc665ea`): its source tests could not
+#1538 (`c0eeca396904ec8baa1ec90d22986e94734567fd`): its source tests could not
 collect under Python 3.14 with warnings as
 errors because protected `develop` omitted the direct test dependency. Frozen
 sync and the predecessor's 65 focused tests passed without the warning; the
@@ -251,7 +251,7 @@ remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 which carries its complete valid delta plus the newer exact-head repair rules.
 #1558 remains open until #1564 reaches protected merge or an independent
 equivalence check confirms succession; no count-only closure is authorized. #1538
-(`732cc4b2037e2e09b9cef0b3953862a47dc665ea`)
+(`c0eeca396904ec8baa1ec90d22986e94734567fd`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
@@ -260,16 +260,13 @@ hash-generator contract labels MD5 and SHA-1 as compatibility fingerprints,
 keeps `usedforsecurity=False`, and identifies SHA-256 as the security-capable
 output. The release note now names only the two implemented tools rather than
 the removed URL extractor. Seventy-three focused tool/API/privacy/dependency
-tests, Ruff, and diff checks pass. A concurrent acknowledgement commit removed
-the #1565 dependency delta and revived the stale three-tool claim; exact head
-`732cc4b2037e2e09b9cef0b3953862a47dc665ea` reverts that deletion without
-rewriting history. Draft PR #1496
-(`2e25b1649c5ac46d238e540d411555b00851d0db`) is non-force restacked on
-that current owner head.
-The exact parent is an ancestor and the four-file delta preserves the
-URL extractor plus the parent's complete masking/security contract; 100 combined
-tool/privacy/dependency tests pass without warnings. GitHub now reports the
-four-file stack clean, while protected parent integration and fresh exact-head
+tests, Ruff, and diff checks pass. The tool single-writer chain is now #1565 ->
+#1300 -> #1301 -> #1302 -> #1538; the four-file feature delta preserves all
+fail-closed mutation and source-bound removals, and 82 combined contracts pass.
+Draft PR #1496 (`4a465d38623ea5df9048a161559b942b470bd25d`)
+is non-force restacked on that current owner head. Its three-file, 226-addition
+delta contains only the URL extractor and tests; 101 combined contracts pass
+without warnings. GitHub reports the stack clean, while protected parent integration and fresh exact-head
 review/Checks remain required. Draft PR #1512
 (`d77a2567ecba8e63d3c70c8caf147cc37f0382de`) follows current #1496 head
 `2e25b1649c5ac46d238e540d411555b00851d0db`, consumes the canonical matcher,
