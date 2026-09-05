@@ -675,6 +675,16 @@ subject to U.S. copyright, while attribution remains required.
   cleanup ordering, connection loss, strict unlock confirmation, and resumption
   of unattempted work while retaining representative source bytes. Source-only
   checks do not prove these runtime outcomes or exactly-once provider execution.
+- A conflict rollback expires loaded ORM records even when commit expiration is
+  disabled. Await refresh/reload before fallback reads; savepoint rollback already
+  removes failed new inserts, so do not expunge them again. A cached `get()` is
+  not a fresh authority check: revalidate configuration in the database before
+  processing another workspace when deletion must revoke further work.
+- Reproduce competing manual writes and configuration deletion with a second
+  real database session. Assert lease exclusion during work and availability
+  after cleanup; keep assertions outside handlers that intentionally catch
+  per-item errors. A test named "between workspaces" must finish the first
+  workspace before injecting its failure, not only execute a matching branch.
 - When a backend container reports missing `DATABASE_URL` or
   `AUTH_SESSION_HMAC_SECRET`, verify the runtime path injects the operator env
   through `scripts/naruon_compose.sh`, Kubernetes secrets, or an explicit
