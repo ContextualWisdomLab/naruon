@@ -94,7 +94,7 @@ def test_release_version_sources_are_synchronized() -> None:
 
     assert frontend_package["version"] == version
     assert "version=get_release_version()" in backend_main
-    assert "version=get_release_version()" in runtime_config
+    assert "product_version=get_release_version()" in runtime_config
     assert "COPY VERSION /app/VERSION" in dockerfile
     assert 'ARG OCI_IMAGE_TITLE="naruon"' in dockerfile
     assert 'org.opencontainers.image.title="${OCI_IMAGE_TITLE}"' in dockerfile

@@ -1,7 +1,22 @@
 export interface RuntimeConfig {
   product_name: string;
+  product_version: string;
+  feature_flags: Record<string, boolean>;
+}
+
+interface RuntimeConfigWire {
+  product_name: string;
   version: string;
   features: Record<string, boolean>;
+}
+
+function isRuntimeConfigWire(value: unknown): value is RuntimeConfigWire {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.product_name !== 'string' || !candidate.product_name.trim()) return false;
+  if (typeof candidate.version !== 'string' || !candidate.version.trim()) return false;
+  if (!candidate.features || typeof candidate.features !== 'object' || Array.isArray(candidate.features)) return false;
+  return Object.values(candidate.features).every((featureValue) => typeof featureValue === 'boolean');
 }
 
 let configCache: RuntimeConfig | null = null;
@@ -13,32 +28,45 @@ function getRuntimeConfigErrorLogMetadata(error: unknown) {
   };
 }
 
+function translateRuntimeConfigWire(runtimeConfigWire: unknown): RuntimeConfig {
+  if (!isRuntimeConfigWire(runtimeConfigWire)) throw new Error('Invalid runtime config');
+  return {
+    product_name: runtimeConfigWire.product_name,
+    product_version: runtimeConfigWire.version,
+    feature_flags: runtimeConfigWire.features,
+  };
+}
+
 export async function fetchRuntimeConfig(baseUrl: string = ''): Promise<RuntimeConfig> {
   if (configCache) return configCache;
   if (fetchPromise) return fetchPromise;
 
   const configUrl = baseUrl ? `${baseUrl}/api/runtime-config` : '/api/runtime-config';
-  
+
   fetchPromise = fetch(configUrl)
-    .then((res) => {
-      if (!res.ok) throw new Error('Failed to fetch runtime config');
-      return res.json();
+    .then((response) => {
+      if (!response.ok) throw new Error('Failed to fetch runtime config');
+      return response.json() as Promise<unknown>;
     })
-    .then((config) => {
-      configCache = config;
+    .then((runtimeConfigWire) => {
+      const runtimeConfig = translateRuntimeConfigWire(runtimeConfigWire);
+      configCache = runtimeConfig;
       fetchPromise = null;
-      return config;
+      return runtimeConfig;
     })
-    .catch((err) => {
-      console.error('Runtime config fetch failed, using fallback', getRuntimeConfigErrorLogMetadata(err));
-      const fallback: RuntimeConfig = {
+    .catch((fetchError) => {
+      console.error(
+        'Runtime config fetch failed, using fallback',
+        getRuntimeConfigErrorLogMetadata(fetchError),
+      );
+      const fallbackConfig: RuntimeConfig = {
         product_name: 'Naruon',
-        version: 'fallback',
-        features: {}
+        product_version: 'fallback',
+        feature_flags: {},
       };
-      configCache = fallback;
+      configCache = fallbackConfig;
       fetchPromise = null;
-      return fallback;
+      return fallbackConfig;
     });
 
   return fetchPromise;
