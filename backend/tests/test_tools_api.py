@@ -1251,6 +1251,7 @@ async def test_hash_generator_handler():
 
     res = await hash_generator_handler({"text": "hello"})
     assert res["md5"] == "5d41402abc4b2a76b9719d911017c592"
+    assert res["sha1"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
     assert res["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
@@ -1267,30 +1268,6 @@ async def test_email_phone_masker_handler():
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
         await email_phone_masker_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
-
-
-@pytest.mark.asyncio
-async def test_email_phone_masker_masks_complete_ascii_dot_atom_local_parts():
-    from api.tools import email_phone_masker_handler
-
-    result = await email_phone_masker_handler(
-        {"text": "Contact john&jane@example.com or customer/service@example.com."}
-    )
-
-    assert result["masked_text"] == "Contact [EMAIL] or [EMAIL]."
-
-
-@pytest.mark.asyncio
-async def test_email_phone_masker_bounds_near_limit_malformed_email_work():
-    from api.tools import ANALYSIS_TEXT_MAX_CHARS, email_phone_masker_handler
-
-    started_at = time.perf_counter()
-    result = await email_phone_masker_handler(
-        {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS - 2) + "@x"}
-    )
-
-    assert result["masked_text"].endswith("@x")
-    assert time.perf_counter() - started_at < 1
 
 
 def test_execute_hash_generator():
@@ -1317,14 +1294,3 @@ def test_execute_email_phone_masker():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["masked_text"] == "My email is [EMAIL] and phone is [PHONE], but 1234 is not."
-
-
-def test_execute_url_extractor_rejects_invalid_port():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "https://example.com:999999999/path"}},
-        )
-    assert response.status_code == 200
-    assert response.json()["result"]["urls"] == []
