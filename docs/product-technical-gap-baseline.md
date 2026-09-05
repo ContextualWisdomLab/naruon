@@ -169,15 +169,15 @@ the resulting metadata/Noema gate response, not a demonstrated source defect.
 Its old central run `33902484641` was cancelled before the queue-sweep repair;
 replacement run `33934902852` is queued on protected `.github@b5efbc2` with all
 write modes disabled.
-Ready agent-registry PR #1537
+Draft agent-registry PR #1537
 (`8bb4648a34e29c41e10581f14e21f95bfc7123e1`) similarly keeps legacy generic
 JSON keys only in its anti-corruption loader and publishes semantic fields to
-application callers. Its 41 focused registry/governance tests pass with
-warnings as errors, Ruff and diff checks pass. Its prior central revalidation
-run `33902596826` was cancelled on the unrepaired queue-sweep head; replacement
-run `33934850629` is queued on protected `.github@b5efbc2` with merge,
-auto-merge, and branch updates disabled. Cancelled predecessor checks and local
-tests do not transfer as merge evidence for either Ready head.
+application callers. A fresh CodeGraph/caller audit found no stale generic-field
+consumer; 21 registry and Noema tests pass with one skipped, and Ruff and diff
+checks pass. Its prior central revalidation runs do not transfer; replacement
+run `33938970171` is queued on the current protected central workflow with
+merge, auto-merge, and branch updates disabled. Cancelled predecessor checks
+and local tests do not transfer as merge evidence for either head.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`a9f0bf97ce8bec2d518824c1c0a25b162e6a1155`) is the current customer-facing
