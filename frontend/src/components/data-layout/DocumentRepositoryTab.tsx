@@ -296,9 +296,13 @@ return (
                         <button
                           key={account.source_id}
                           type="button"
-                          disabled={!account.writeback_enabled}
+                          disabled={!account.writeback_enabled || documentActionPendingAction !== null}
                           aria-pressed={accountSelected}
-                          onClick={() => setSelectedWebdavSourceId(account.source_id)}
+                          onClick={() => {
+                            if (documentActionPendingAction === null) {
+                              setSelectedWebdavSourceId(account.source_id);
+                            }
+                          }}
                           className={`flex min-w-0 items-start gap-2 rounded-lg border p-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-70 ${
                             accountSelected ? 'border-primary bg-primary/10' : 'border-transparent bg-secondary/50 hover:border-primary/40'
                           }`}
@@ -356,6 +360,7 @@ return (
                   )}
                   {repositoryAssets.map((asset) => {
                     const assetSelected = selectedRepositoryAsset?.asset_key === asset.asset_key;
+                    const assetSelectionLocked = documentActionPendingAction !== null;
 
 
 
@@ -363,17 +368,27 @@ return (
                     <article
                       key={asset.asset_key}
                       role="button"
-                      tabIndex={0}
+                      tabIndex={assetSelectionLocked ? -1 : 0}
                       aria-pressed={assetSelected}
-                      onClick={() => setSelectedRepositoryAssetKey(asset.asset_key)}
+                      aria-disabled={assetSelectionLocked}
+                      onClick={() => {
+                        if (!assetSelectionLocked) {
+                          setSelectedRepositoryAssetKey(asset.asset_key);
+                        }
+                      }}
                       onKeyDown={(event) => {
+                        if (assetSelectionLocked) return;
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
                           setSelectedRepositoryAssetKey(asset.asset_key);
                         }
                       }}
-                      className={`cursor-pointer rounded-xl border bg-background p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                        assetSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                      className={`rounded-xl border bg-background p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                        assetSelectionLocked
+                          ? 'cursor-not-allowed opacity-60'
+                          : assetSelected
+                            ? 'cursor-pointer border-primary bg-primary/5'
+                            : 'cursor-pointer border-border hover:border-primary/40'
                       }`}
                     >
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
