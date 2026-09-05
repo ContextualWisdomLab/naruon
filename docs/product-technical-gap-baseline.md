@@ -1,7 +1,7 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.23
-**Observed on:** 2026-09-04 (Asia/Seoul)
+**Baseline version:** 1.24
+**Observed on:** 2026-09-05 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
@@ -29,18 +29,30 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Tenant provenance portability evidence (2026-09-05T06:22Z):** stacked
+**Tenant provenance portability evidence (2026-09-05T06:57Z):** stacked
 Naruon PR #1497 (`705d8ece2c97edc8575ea59766fd8f68bf4cdb82`)
 keeps export/import identity mappings scoped by target user, organization, and
 workspace, validates archive closure before mutation, and restores records in
 one transaction with PostgreSQL advisory locks for portable identities and
 email imports. Global content identifiers remain collision-detecting rather
-than silently overwriting another tenant's records. Focused provenance and data
-API proof is `93 passed, 114 skipped, 17 deselected`; the skips are PostgreSQL
-environment paths, so this is not real-database restore evidence. The PR remains
-Draft and Proposed because prerequisite #1427 is Draft and current-head hosted
-checks/review are pending. Required successor work is a real PostgreSQL
-bootstrap/import/re-import/rollback receipt before protected merge.
+than silently overwriting another tenant's records. The previous
+`93 passed, 114 skipped, 17 deselected` observation is superseded by a disposable
+PostgreSQL 16.15 + pgvector run: `224 passed, 0 skipped`, including import,
+re-import, rollback, scope isolation, and concurrent successful imports. An
+explicit pytest `-W error` rerun also passes 224 tests. These fixtures create
+the schema through ORM metadata; the API success tests mock the import/export
+service, so they do not prove an end-to-end HTTP restore or deployment.
+The actual fresh Alembic path on this same head fails at
+`0011_email_read_state` with `relation "emails" does not exist` before reaching
+the provenance migration. The repair owner is existing #1503, now non-force
+stacked on #1565 at `19d5860bc27e860acba940390f5792721cd99e5e`: exact-lock
+fresh/repeated migrations and 75 strict PostgreSQL/dependency tests pass.
+#1497 has not yet inherited that repair. It remains Draft/Proposed, with
+current-head checks queued and no protected completion claim. Propagate the
+owner through #1468 -> #1427 -> #1497, reconcile bootstrap conflicts, merge
+the two resulting Alembic heads without rewriting history, and verify fresh,
+historical, rollback, and conflicting-concurrent import paths. See the
+[reproducible evidence and dependency decision](doctoring/provenance_migration_evidence.md).
 
 **Governed review evidence refresh (2026-09-05T06:08Z):** Naruon PR #1564
 (`615be4514add6a21eef743f591a65a5f8fef4dee`) records the reusable exact-head,
@@ -64,8 +76,8 @@ removes the arbitrary base-URL environment input, and disables the supported
 client request timeout so long-running model work is not cut off at the default
 limit. The current repair also replaces the provider's implicit API-key option
 with an explicit standard `Authorization` header. The fixed loopback origin and
-Fetch credential stripping on cross-origin redirects keep the short-lived owner
-token from following a redirect to another origin. Exact-head focused proof is
+header configuration are source evidence only; this run did not verify the
+effective transport's redirect behavior or prove token non-forwarding. Exact-head focused proof is
 `36 passed`; CodeRabbit and hosted checks are pending on the repaired head. With
 no source failure or merge conflict, the PR remains Ready for independent review.
 Canonical workflow
@@ -374,17 +386,22 @@ product events consume the semantic identity. Seventeen backend tests plus the
 frontend SearchLayout regression, TypeScript, ESLint, Ruff, and diff checks
 pass. Fresh hosted evidence is required because earlier failed review runs do
 not transfer to this head.
-Draft PR #1503 (`9c1851336fa04bcdc77c1c6e531afdb882583af1`)
+Draft PR #1503 (`19d5860bc27e860acba940390f5792721cd99e5e`)
 repairs the persisted Data workspace registry. Incremental databases that had
 already run the original bootstrap lacked `workspace_entities` and
 `workspace_documents`, while document creation did not provision the signed
 workspace foreign-key row. Structured idempotent migrations and the shared
 race-safe PostgreSQL provisioning service now cover both document creation
-paths without accepting client workspace authority. Sixty-three fast contracts
-pass with warnings as errors; eight disposable PostgreSQL 16 + pgvector tests
-also pass across empty, pre-registry, stamped-repair, and legacy document-scope
-histories. The exact head remains Draft until hosted PostgreSQL, security, and
-independent review evidence replace stale central-workflow failures.
+paths without accepting client workspace authority. The earlier 73-test rerun
+used an undeclared local `httpx2` installation and is not clean-lock evidence.
+Exact synchronization exposed the missing dependency; a normal merge of #1565
+preserves both parent deltas and supplies the declared TestClient dependency.
+On the resulting exact tree, fresh and repeated Alembic upgrade reach
+`0019_email_read_state_repair`, and 75 tests pass with explicit `-W error`,
+including historical, stamped-repair, and data-preserving downgrade cases.
+Ruff and diff checks pass. #1565 is now its direct prerequisite; the historical
+#1502-before-#1503 proposal is superseded, not a mutual dependency. Hosted
+PostgreSQL, security, and independent review evidence remain required.
 Draft PR #1497 (`705d8ece2c97edc8575ea59766fd8f68bf4cdb82`)
 implements Naruon's bounded tenant provenance archive: deterministic BagIt,
 RO-Crate 1.3, and PROV metadata; OIDC-authoritative export/import; tenant and
@@ -392,10 +409,11 @@ workspace closure; portable identity remapping; transactional conflict checks;
 and bounded archive parsing. CodeGraph review traced the shared service and API
 authority paths. The delta is non-force stacked after #1427 in the prerequisite
 chain #1565 -> #1468 -> #1427 -> #1497; its conflicting ADR number is repaired
-as Proposed ADR-0007 rather than prematurely accepted ADR-0005. One hundred
-fifty-seven focused fast contracts and Ruff pass; 117 database-marked contracts
-also pass against a disposable PostgreSQL 16 + pgvector instance with warnings
-as errors. Binary payloads,
+as Proposed ADR-0007 rather than prematurely accepted ADR-0005. Earlier
+157-fast/117-database receipts are historical scope-specific runs, not evidence
+that the deployment migration chain succeeded. The current combined suite
+passes 224 tests on real PostgreSQL, but fresh Alembic deployment fails; the
+owner integration and remaining acceptance paths are recorded above. Binary payloads,
 credentials, provider state, embeddings, and audit-history portability remain
 explicit non-goals. The head stays Draft until fresh central review controls and
 protected checks replace historical malformed/absent reviewer evidence.
