@@ -195,17 +195,17 @@ and earlier requested review do not transfer to this head.
 
 **Authentication owner prerequisite refresh (2026-09-04T16:27Z):** Naruon
 Draft PR #1532 remains a consumer lane and must not restore ROPC. Keyverse Draft
-PR #128 (`737624f4ad6e63a5cbbc7b926fdf329c0851fc1a`) disables that path while a
+PR #128 (`e1cf0807d6b15e8d8300eb252533aa05b20b93c9`) disables that path while a
 standards-compliant headless session contract is unfinished. Its merge-ref
-account-unification failure was traced to Keyverse `main`: workflow consolidation
-removed the repo-local hourly PR steward but retained five tests that opened the
-deleted workflow. Canonical prerequisite Keyverse PR #145
-(`239e362c95d48894a10841ec8a087f9107f3f90c`) removes only that retired
-self-modifying workflow contract; the full account-unification suite and diff
-check pass locally. #128 now non-force merges that exact prerequisite and targets
-#145 as its base; its full account-unification suite also passes. Both heads need
-their own hosted current-head checks and independent review before #145 can
-merge and #128 can be retargeted to protected `main`.
+account-unification failure was traced to a retired repo-local hourly PR steward
+test. Closed PR #145's deletion is fully preserved by Ready owner PR #146
+(`e6da5dd3762b45acf4e0a70b672327f38f4ba04b`). PR #128 is now ordinary-merged
+above #146 and retargeted from the closed #145 branch to
+`codex/keyverse-orchestrator-free-development`; the deleted test no longer
+appears in the child-unique diff. The complete account-unification suite, realm
+validation, actionlint, and child diff check pass. #146 must reach protected
+`main` first; then #128 must be non-force restacked and retargeted to `main`,
+with fresh owner-contract Checks and independent review on that resulting head.
 
 **Exact-head execution refresh (2026-09-04T17:03Z):** protected `develop`
 remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
