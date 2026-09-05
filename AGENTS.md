@@ -596,12 +596,12 @@ subject to U.S. copyright, while attribution remains required.
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
 - `/api/llm/summarize` confidence uses an integer percentage in `0..100`, not
-  a `0..1` ratio: `1` means `1%`. Reject fractional, non-finite, out-of-range,
-  and non-number values without rounding, coercion, or unit inference; absent
-  or invalid confidence must remain unavailable, not become `0%`. Frontend
-  unit/E2E fixtures and pilot/full-product smoke data must use the same backend
-  contract. Keep boundary and rendered-output tests with the product consumer;
-  a documentation update is not proof that the consumer fix has been released.
+  a `0..1` ratio: `1` means `1%`. Frontend consumers must reject fractional,
+  non-finite, out-of-range, and non-number values without rounding, coercion,
+  or unit inference; absent or invalid confidence stays unavailable, not `0%`.
+  Unit/E2E fixtures and pilot/full-product smoke data must use this contract.
+  Keep boundary and rendered-output tests with the product consumer; guidance
+  does not prove that the consumer fix has been released.
 - Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
   `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
   desynchronizes first-wins label maps from the selected node or edge when
