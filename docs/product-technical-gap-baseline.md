@@ -570,9 +570,9 @@ button, form, navigation, chart, or asynchronous data surface.
 |---|---|---|---|---|
 | Binary object lifecycle | large/deferred document bytes cannot remain an inline database strategy | S3-compatible implementation is Draft | #1076, #1364 | upload/read/recognize/retain/delete/backfill/orphan round trip with real integration |
 | Disaster recovery | a release is not enterprise-ready without restore evidence | HA evaluation exists; production WAL/PITR policy remains incomplete | #1428 | WAL archive/PITR, failover fencing, backup and clean restore rehearsal |
-| Tenant export/reimport | customers need exit and migration without losing provenance | no single demonstrated full tenant round trip | #1428 | export → clean instance import preserving source, opaque IDs, history, evidence, policy |
+| Tenant export/reimport | customers need exit and migration without losing provenance | Branch-local proposed ADR-0007 slice provides authoritative-session GET/import APIs for a bounded deterministic workspace project-evidence closure: cited email, parser-admitted textual attachment, content/KG, project objects/edges, and corrections round-trip with fresh database keys. Ruff, 151 focused warnings-as-errors tests, 2 fresh/legacy bootstrap tests, and the full backend suite (`1972 passed, 3 skipped`) pass. The slice excludes uncited/mailbox-only mail, binary objects, credentials, provider/connector state, embeddings, and audit history. | #1428, `feat/tenant-provenance-roundtrip` | extend the bounded slice to full tenant/mailbox/binary/credential/provider/connector/audit portability; rehearse clean-instance export/import preserving source, opaque IDs, history, evidence, and policy |
 | Retention/legal hold/disposition | deletion and evidence preservation conflict unless modeled | partial security/key/retention work exists across repository history | #1428, #1364 | purpose-scoped retention, legal hold, verified disposition, object/DB reconciliation |
-| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit, while unsupported binaries are not searchable | Naruon import transport and generic deferred parser admission are bounded at 64 MiB; the NewsDOM `/parse` provider contract remains 20 MiB, so PDF bytes from 20–64 MiB are admitted and retained fail-closed but are not sent to NewsDOM; unsupported types remain metadata-only | #1427, #1469, #1353, #1419, NewsDOM #682/#707 | one documented bounded admission contract, provider-side PDF limit alignment or an explicit large-PDF fallback, parser/status evidence, deferred recognition, and object-backed retention before increasing the bound again |
+| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit, while unsupported binaries are not searchable | Naruon upload and deferred parser paths are bounded at 64 MiB in the proposed stack; canonical NewsDOM owner PR #665 was reopened after an unmerged close and proposes the matching `/parse` bound, but no immutable owner release exists yet; unsupported types remain metadata-only | #1427, #1469, #1353, #1419, NewsDOM #665 | protect-merge and release the owner contract, pin the consumer to that immutable release, retain parser/status evidence and deferred recognition, and move large bytes to object-backed lifecycle before increasing the bound again |
 
 ### P0 — Evidence-based AI and document intelligence
 
@@ -658,7 +658,7 @@ review approval, hidden manual database edits, or an unreleased sibling branch.
 1. Implement typed temporal/multi-membership Person/Event/Commitment graph.
 2. Complete status-weighted scheduling (#978/#988/#989/#990).
 3. Complete evidence-based mail/document/media resolution (#1350).
-4. Add tenant export/reimport and customer-exit evidence.
+4. Extend the bounded workspace project-evidence bundle to full tenant export/reimport and customer-exit evidence.
 5. Run the full buyer journey and failure/restore variants.
 
 ### Wave 3 — North-star platform

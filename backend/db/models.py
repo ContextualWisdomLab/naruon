@@ -1293,6 +1293,45 @@ class ProjectGraphCorrectionRecord(Base):
     )
 
 
+class ProvenanceIdentityMapping(Base):
+    __tablename__ = "provenance_identity_mappings"
+    __table_args__ = (
+        UniqueConstraint(
+            "target_user_id",
+            "target_organization_id",
+            "target_workspace_id",
+            "source_user_uid",
+            "source_organization_uid",
+            "source_workspace_uid",
+            "entity_kind",
+            "portable_uid",
+            name="uq_provenance_identity_source_target",
+        ),
+        UniqueConstraint(
+            "entity_kind",
+            "target_database_uid",
+            name="uq_provenance_identity_target_uid",
+        ),
+        Index(
+            "ix_provenance_identity_target_scope",
+            "target_user_id",
+            "target_organization_id",
+            "target_workspace_id",
+        ),
+    )
+
+    provenance_identity_id: Mapped[int] = mapped_column(primary_key=True)
+    target_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    target_organization_id: Mapped[str] = mapped_column(String, nullable=False)
+    target_workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    source_user_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_organization_uid: Mapped[str] = mapped_column(String, nullable=False)
+    source_workspace_uid: Mapped[str] = mapped_column(String, nullable=False)
+    entity_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    portable_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    target_database_uid: Mapped[str] = mapped_column(String(96), nullable=False)
+
+
 class TenantConfig(Base):
     __tablename__ = "tenant_configs"
 

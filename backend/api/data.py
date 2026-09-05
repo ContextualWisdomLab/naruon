@@ -7,7 +7,7 @@ import json
 import re
 from typing import Literal, NamedTuple
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.engine import Row
@@ -35,6 +35,13 @@ from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_PENDING_STATUS,
 )
 from services.ontology_service import ontology_service
+from services.tenant_provenance_bundle import (
+    ARCHIVE_MAX_BYTES,
+    ProvenanceArchiveError,
+    TenantProvenanceScope,
+    export_tenant_provenance,
+    import_tenant_provenance,
+)
 from services.webdav_service import webdav_service
 from services.workspace_scope import get_or_create_workspace
 
@@ -46,6 +53,7 @@ DATA_VECTOR_DIMENSIONS = 1536
 # transport ceiling so large customer PDFs are not accepted by one path and
 # rejected by the next.
 _MAX_PDF_DOM_UPLOAD_BYTES = 64 * 1024 * 1024
+_PROVENANCE_ARCHIVE_MAX_BYTES = ARCHIVE_MAX_BYTES
 ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
     "email_attachments.content_type, "
     "email_attachments.parse_content_type, "
@@ -3190,6 +3198,86 @@ def _quality_checks(
         _check_source_registry_coverage(source_count),
         _check_connector_signal_coverage(connector_event_count),
     ]
+
+
+def _provenance_scope(auth_context: AuthContext) -> TenantProvenanceScope:
+    return TenantProvenanceScope(
+        user_id=auth_context.user_id,
+        organization_id=auth_context.organization_id,
+        workspace_id=auth_context.workspace_id,
+    )
+
+
+def _require_authoritative_provenance_scope(auth_context: AuthContext) -> None:
+    if auth_context.session_verifier != "oidc":
+        raise HTTPException(
+            status_code=403,
+            detail="Authoritative workspace membership is required for provenance bundles",
+        )
+
+
+async def _read_provenance_archive(request: Request) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        if not content_length.isdigit():
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        try:
+            declared_bytes = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Invalid Content-Length"
+            ) from exc
+        if declared_bytes > _PROVENANCE_ARCHIVE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Provenance archive too large")
+    archive = bytearray()
+    async for chunk in request.stream():
+        if len(chunk) > _PROVENANCE_ARCHIVE_MAX_BYTES - len(archive):
+            raise HTTPException(status_code=413, detail="Provenance archive too large")
+        archive.extend(chunk)
+    return bytes(archive)
+
+
+@router.get("/provenance-bundle")
+async def download_provenance_bundle(
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    _require_authoritative_provenance_scope(auth_context)
+    try:
+        archive = await export_tenant_provenance(db, _provenance_scope(auth_context))
+    except ProvenanceArchiveError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid provenance archive"
+        ) from exc
+    return Response(
+        content=archive,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="naruon-provenance.zip"'},
+    )
+
+
+@router.post("/provenance-bundle/import")
+async def upload_provenance_bundle(
+    request: Request,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    _require_authoritative_provenance_scope(auth_context)
+    archive = await _read_provenance_archive(request)
+    try:
+        receipt = await import_tenant_provenance(
+            db, _provenance_scope(auth_context), archive
+        )
+    except ProvenanceArchiveError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid provenance archive"
+        ) from exc
+    return {
+        "bundle_uid": receipt.bundle_uid,
+        "manifest_digest": receipt.manifest_digest,
+        "created": receipt.created,
+        "skipped": receipt.skipped,
+    }
 
 
 @router.post("/documents", response_model=DataDocumentActionResponse)

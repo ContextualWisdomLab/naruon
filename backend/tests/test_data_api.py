@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import asyncpg
 import httpx
 import pytest
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
@@ -17,7 +18,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import api.data as data_api
-from api.auth import get_auth_context, get_current_user
+from api.auth import AuthContext, get_auth_context, get_current_user
 from core.config import settings
 from db.models import (
     get_fernet,
@@ -32,6 +33,7 @@ from db.models import (
 )
 from db.session import get_db
 from main import app
+from services.tenant_provenance_bundle import ImportReceipt, ProvenanceArchiveError
 
 TEST_SESSION_HMAC_SECRET = "data-quality-surface-hmac-material-32-bytes"  # noqa: S105
 
@@ -420,8 +422,24 @@ def _with_signed_auth(mock_db, token: str):
     return client, previous_secret, original_overrides
 
 
+def _with_authoritative_auth(mock_db, auth_context: AuthContext):
+    async def override_get_db():
+        yield mock_db
+
+    original_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_auth_context] = lambda: auth_context
+    app.dependency_overrides.pop(get_current_user, None)
+    return TestClient(app), original_overrides
+
+
 def _restore_overrides(previous_secret, original_overrides):
     settings.AUTH_SESSION_HMAC_SECRET = previous_secret
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(original_overrides)
+
+
+def _restore_authoritative_overrides(original_overrides):
     app.dependency_overrides.clear()
     app.dependency_overrides.update(original_overrides)
 
@@ -429,6 +447,399 @@ def _restore_overrides(previous_secret, original_overrides):
 def _expected_sample_key(prefix: str, value: str) -> str:
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
     return f"{prefix}_{digest[:16]}"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/data/provenance-bundle"),
+        ("post", "/api/data/provenance-bundle/import"),
+    ],
+)
+def test_provenance_bundle_endpoints_require_signed_session(method, path, mock_db):
+    async def override_get_db():
+        yield mock_db
+
+    original_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides.pop(get_auth_context, None)
+    app.dependency_overrides.pop(get_current_user, None)
+    try:
+        with TestClient(app) as client:
+            response = client.request(
+                method.upper(),
+                path,
+                content=b"archive" if method == "post" else b"",
+            )
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(original_overrides)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required"}
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/data/provenance-bundle"),
+        ("post", "/api/data/provenance-bundle/import"),
+    ],
+)
+def test_provenance_bundle_endpoints_reject_hmac_workspace_claims_before_service(
+    method, path, mock_db, monkeypatch
+):
+    async def forbidden_service(*args, **kwargs):
+        raise AssertionError("provenance service must not run")
+
+    monkeypatch.setattr(data_api, "export_tenant_provenance", forbidden_service)
+    monkeypatch.setattr(data_api, "import_tenant_provenance", forbidden_service)
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.request(
+            method.upper(),
+            path,
+            content=b"attacker archive" if method == "post" else b"",
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Authoritative workspace membership is required for provenance bundles"
+    }
+
+
+@pytest.mark.parametrize("session_verifier", ["server", "override"])
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/data/provenance-bundle"),
+        ("post", "/api/data/provenance-bundle/import"),
+    ],
+)
+def test_provenance_bundle_endpoints_reject_non_oidc_contexts_before_service(
+    session_verifier, method, path, mock_db, monkeypatch
+):
+    async def forbidden_service(*args, **kwargs):
+        raise AssertionError("provenance service must not run")
+
+    monkeypatch.setattr(data_api, "export_tenant_provenance", forbidden_service)
+    monkeypatch.setattr(data_api, "import_tenant_provenance", forbidden_service)
+    client, original_overrides = _with_authoritative_auth(
+        mock_db,
+        AuthContext(
+            user_id="unverified-user",
+            role="member",
+            organization_id="unverified-org",
+            group_ids=(),
+            workspace_id="unverified-workspace",
+            session_verifier=session_verifier,
+        ),
+    )
+    try:
+        response = client.request(
+            method.upper(),
+            path,
+            content=b"attacker archive" if method == "post" else b"",
+        )
+    finally:
+        client.close()
+        _restore_authoritative_overrides(original_overrides)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Authoritative workspace membership is required for provenance bundles"
+    }
+
+
+def test_provenance_bundle_download_uses_signed_scope_and_zip_response(
+    mock_db, monkeypatch
+):
+    captured = {}
+
+    async def fake_export(session, scope):
+        captured.update(session=session, scope=scope)
+        return b"PK\x03\x04bundle"
+
+    monkeypatch.setattr(data_api, "export_tenant_provenance", fake_export)
+    client, original_overrides = _with_authoritative_auth(
+        mock_db,
+        AuthContext(
+            user_id="signed-user",
+            role="member",
+            organization_id="signed-org",
+            group_ids=(),
+            workspace_id="signed-workspace",
+            session_verifier="oidc",
+        ),
+    )
+    try:
+        response = client.get("/api/data/provenance-bundle")
+    finally:
+        client.close()
+        _restore_authoritative_overrides(original_overrides)
+
+    assert response.status_code == 200
+    assert response.content == b"PK\x03\x04bundle"
+    assert response.headers["content-type"] == "application/zip"
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="naruon-provenance.zip"'
+    )
+    assert captured["session"] is mock_db
+    assert captured["scope"].user_id == "signed-user"
+    assert captured["scope"].organization_id == "signed-org"
+    assert captured["scope"].workspace_id == "signed-workspace"
+
+
+def test_provenance_bundle_download_returns_fixed_safe_archive_error(
+    mock_db, monkeypatch
+):
+    async def fake_export(session, scope):
+        raise ProvenanceArchiveError("private export detail")
+
+    monkeypatch.setattr(data_api, "export_tenant_provenance", fake_export)
+    client, original_overrides = _with_authoritative_auth(
+        mock_db,
+        AuthContext(
+            user_id="admin",
+            role="member",
+            organization_id="org-acme",
+            group_ids=(),
+            workspace_id="workspace-org-acme",
+            session_verifier="oidc",
+        ),
+    )
+    try:
+        response = client.get("/api/data/provenance-bundle")
+    finally:
+        client.close()
+        _restore_authoritative_overrides(original_overrides)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid provenance archive"}
+    assert "private export detail" not in response.text
+
+
+def test_provenance_bundle_import_rewrites_target_scope_from_signed_session(
+    mock_db, monkeypatch
+):
+    captured = {}
+
+    async def fake_import(session, scope, archive_bytes):
+        captured.update(session=session, scope=scope, archive_bytes=archive_bytes)
+        return ImportReceipt(
+            bundle_uid="bundle_portable_1",
+            manifest_digest="a" * 128,
+            created={"emails": 1},
+            skipped={"emails": 0},
+        )
+
+    monkeypatch.setattr(data_api, "import_tenant_provenance", fake_import)
+    client, original_overrides = _with_authoritative_auth(
+        mock_db,
+        AuthContext(
+            user_id="target-user",
+            role="member",
+            organization_id="target-org",
+            group_ids=(),
+            workspace_id="target-workspace",
+            session_verifier="oidc",
+        ),
+    )
+    try:
+        response = client.post(
+            "/api/data/provenance-bundle/import",
+            content=b"PK\x03\x04portable",
+            headers={"Content-Type": "application/zip"},
+        )
+    finally:
+        client.close()
+        _restore_authoritative_overrides(original_overrides)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "bundle_uid": "bundle_portable_1",
+        "manifest_digest": "a" * 128,
+        "created": {"emails": 1},
+        "skipped": {"emails": 0},
+    }
+    assert captured["session"] is mock_db
+    assert captured["archive_bytes"] == b"PK\x03\x04portable"
+    assert captured["scope"].user_id == "target-user"
+    assert captured["scope"].organization_id == "target-org"
+    assert captured["scope"].workspace_id == "target-workspace"
+
+
+def test_provenance_bundle_import_rejects_oversize_before_service_mutation(
+    mock_db, monkeypatch
+):
+    called = False
+
+    async def fake_import(session, scope, archive_bytes):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(data_api, "_PROVENANCE_ARCHIVE_MAX_BYTES", 4)
+    monkeypatch.setattr(data_api, "import_tenant_provenance", fake_import)
+    client, original_overrides = _with_authoritative_auth(
+        mock_db,
+        AuthContext(
+            user_id="admin",
+            role="member",
+            organization_id="org-acme",
+            group_ids=("group-data",),
+            workspace_id="workspace-org-acme",
+            session_verifier="oidc",
+        ),
+    )
+    try:
+        response = client.post(
+            "/api/data/provenance-bundle/import",
+            content=b"12345",
+            headers={"Content-Type": "application/zip"},
+        )
+    finally:
+        client.close()
+        _restore_authoritative_overrides(original_overrides)
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Provenance archive too large"}
+    assert called is False
+
+
+@pytest.mark.parametrize("attacker_detail", ["bad local path", "signature secret"])
+def test_provenance_bundle_import_returns_fixed_safe_archive_errors(
+    attacker_detail, mock_db, monkeypatch
+):
+    async def fake_import(session, scope, archive_bytes):
+        raise ProvenanceArchiveError(attacker_detail)
+
+    monkeypatch.setattr(data_api, "import_tenant_provenance", fake_import)
+    client, original_overrides = _with_authoritative_auth(
+        mock_db,
+        AuthContext(
+            user_id="admin",
+            role="member",
+            organization_id="org-acme",
+            group_ids=("group-data",),
+            workspace_id="workspace-org-acme",
+            session_verifier="oidc",
+        ),
+    )
+    try:
+        response = client.post(
+            "/api/data/provenance-bundle/import",
+            content=b"not-a-valid-archive",
+            headers={"Content-Type": "application/zip"},
+        )
+    finally:
+        client.close()
+        _restore_authoritative_overrides(original_overrides)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid provenance archive"}
+    assert attacker_detail not in response.text
+
+
+def _stream_request(*chunks: bytes, content_length: str | None = None) -> Request:
+    messages = [
+        {
+            "type": "http.request",
+            "body": chunk,
+            "more_body": index < len(chunks) - 1,
+        }
+        for index, chunk in enumerate(chunks)
+    ]
+
+    async def receive():
+        return messages.pop(0)
+
+    headers = []
+    if content_length is not None:
+        headers.append((b"content-length", content_length.encode("ascii")))
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/api/data/provenance-bundle/import",
+            "raw_path": b"/api/data/provenance-bundle/import",
+            "query_string": b"",
+            "headers": headers,
+            "client": ("127.0.0.1", 1),
+            "server": ("testserver", 80),
+        },
+        receive,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content_length", "status_code", "detail"),
+    [
+        ("invalid", 400, "Invalid Content-Length"),
+        ("-1", 400, "Invalid Content-Length"),
+        ("5", 413, "Provenance archive too large"),
+    ],
+)
+async def test_provenance_archive_rejects_invalid_or_oversize_length_before_stream(
+    content_length, status_code, detail, monkeypatch
+):
+    monkeypatch.setattr(data_api, "_PROVENANCE_ARCHIVE_MAX_BYTES", 4)
+    request = _stream_request(content_length=content_length)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await data_api._read_provenance_archive(request)
+
+    assert exc_info.value.status_code == status_code
+    assert exc_info.value.detail == detail
+
+
+@pytest.mark.asyncio
+async def test_provenance_archive_checks_oversize_chunk_before_buffer_copy(monkeypatch):
+    class GuardedBuffer:
+        def __len__(self):
+            return 0
+
+        def extend(self, chunk):
+            raise AssertionError("oversize chunk was copied")
+
+    monkeypatch.setattr(data_api, "_PROVENANCE_ARCHIVE_MAX_BYTES", 4)
+    monkeypatch.setattr(data_api, "bytearray", GuardedBuffer, raising=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await data_api._read_provenance_archive(_stream_request(b"12345"))
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail == "Provenance archive too large"
+
+
+@pytest.mark.asyncio
+async def test_provenance_archive_accepts_absent_length_boundary_chunks(monkeypatch):
+    monkeypatch.setattr(data_api, "_PROVENANCE_ARCHIVE_MAX_BYTES", 4)
+
+    archive = await data_api._read_provenance_archive(
+        _stream_request(b"12", b"34")
+    )
+
+    assert archive == b"1234"
+
+
+@pytest.mark.asyncio
+async def test_provenance_archive_rejects_streamed_body_over_max_bytes(monkeypatch):
+    monkeypatch.setattr(data_api, "_PROVENANCE_ARCHIVE_MAX_BYTES", 4)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await data_api._read_provenance_archive(
+            _stream_request(b"12", b"345", content_length="2")
+        )
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail == "Provenance archive too large"
 
 
 def _expected_acquisition_readiness_kpis():

@@ -15,6 +15,7 @@ govern implementation.
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
 | [ADR-0020](0020-full-document-trigram-storage.md) | Repair whole-document trigram persistence without changing ranking; measure latency before rollout | Proposed | Storage candidate; no protected integration or performance acceptance |
 | [ADR-0021](0021-bounded-pdf-dom-upload-contract.md) | Propose 64MiB direct PDF admission only after the required NewsDOM release is pinned | Proposed | `BLOCKED-UPSTREAM`; requires an immutable NewsDOM 64MiB release and exact Naruon pin |
+| [ADR-0022](0022-tenant-provenance-portability.md) | Package workspace project evidence as a deterministic BagIt/RO-Crate provenance closure | Proposed | First portability slice; full tenant export remains incomplete |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at

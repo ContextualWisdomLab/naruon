@@ -1,4 +1,11 @@
 ## [Unreleased]
+- Proposed: export and restore the project evidence cited in one verified
+  workspace, preserving source links and stable identities. This first slice
+  excludes full mailbox, binary documents, credentials, provider and connector
+  state, embeddings, and audit history. Archives remain bounded to 64 MiB
+  compressed and total uncompressed content, 64 entries, 32 MiB per entry, and
+  a 100:1 compression ratio; invalid archives are rejected before changes.
+  Full customer-exit portability and deployment verification remain open.
 - Proposed: accept manual PDF uploads up to 64MiB after the required processing
   service release is verified and pinned. Larger files are rejected before
   storage or processing with HTTP 413; split the file and upload it again.

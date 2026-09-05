@@ -207,13 +207,11 @@ def test_schema_backfill_adds_prompt_template_scope_columns_and_indexes(monkeypa
         for statement in statements
     )
     assert any(
-        "alter table prompt_templates alter column prompt_uid set not null"
-        in statement
+        "alter table prompt_templates alter column prompt_uid set not null" in statement
         for statement in statements
     )
     assert any(
-        "create unique index if not exists uq_prompt_templates_prompt_uid"
-        in statement
+        "create unique index if not exists uq_prompt_templates_prompt_uid" in statement
         for statement in statements
     )
     assert any(
@@ -301,8 +299,7 @@ def test_schema_backfill_creates_ai_hub_workflow_tables(monkeypatch):
         "ix_agent_run_records_scope_time" in statement for statement in statements
     )
     assert any(
-        "ix_agent_run_records_workflow_uid" in statement
-        and "workflow_uid" in statement
+        "ix_agent_run_records_workflow_uid" in statement and "workflow_uid" in statement
         for statement in statements
     )
     assert any(
@@ -747,6 +744,51 @@ def test_schema_backfill_creates_connector_signal_events():
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        conn = await engine.connect()
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+    try:
+        async with conn.begin():
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(
+                text(
+                    "CREATE TEMP TABLE emails ("
+                    "user_id varchar, organization_id varchar, date timestamptz"
+                    ") ON COMMIT DROP"
+                )
+            )
+            await conn.run_sync(execute_schema_backfill)
+            await conn.run_sync(execute_schema_backfill)
+            result = await conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE tablename = 'emails' "
+                    "AND indexname = 'ix_emails_owner_date'"
+                )
+            )
+            assert result.scalar_one() == "ix_emails_owner_date"
+    finally:
+        try:
+            await conn.close()
+        finally:
+            await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_connector_signal_events_real_postgres_bootstrap_smoke():
     engine = create_async_engine(settings.DATABASE_URL)
     duplicate_count = 0
@@ -771,14 +813,14 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
             )
             email_result = await conn.execute(
                 text("""
-                    INSERT INTO email_records (
-                        user_id, organization_id, message_id, sender, recipients,
-                        subject, "date", body, is_read
-                    )
-                    VALUES (
-                        :user_id, :organization_id, :message_id, :sender,
-                        :recipients, :subject, now(), :body, true
-                    )
+                        INSERT INTO email_records (
+                            user_id, organization_id, message_id, sender, recipients,
+                            subject, "date", body, is_read
+                        )
+                        VALUES (
+                            :user_id, :organization_id, :message_id, :sender,
+                            :recipients, :subject, now(), :body, false
+                        )
                     RETURNING id
                     """),
                 {

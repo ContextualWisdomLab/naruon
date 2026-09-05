@@ -28,6 +28,7 @@ from db.models import (
     ContentSegmentRecord,
     Email,
     ProjectGraphObjectRecord,
+    ProvenanceIdentityMapping,
 )
 
 pytestmark = pytest.mark.postgres
@@ -162,6 +163,75 @@ async def test_upgrade_adds_is_read_to_a_historical_email_records_table(
     _run_migrations(fresh_database_url)
 
     assert await _column_exists(fresh_database_url, "email_records", "is_read") is True
+
+
+@pytest.mark.parametrize(
+    "starting_revision",
+    [
+        "base",
+        "0017_merge_newsdom_carddav_heads",
+        "0018_provenance_identity",
+        "0019_email_read_state_repair",
+    ],
+)
+@pytest.mark.asyncio
+async def test_provenance_upgrade_and_rollback_preserve_portable_identity(
+    fresh_database_url, starting_revision
+):
+    """Catch ambiguous heads, skipped table creation, and destructive rollback."""
+    mapping_table = ProvenanceIdentityMapping.__table__
+    engine = create_async_engine(fresh_database_url)
+    try:
+        if starting_revision != "base":
+            _run_migrations(fresh_database_url, starting_revision)
+            if starting_revision != "0018_provenance_identity":
+                # Historical bootstrap predates this model. Force the incremental
+                # create-table path, not a pass from today's Base.create_all().
+                async with engine.begin() as connection:
+                    await connection.run_sync(
+                        lambda sync_conn: mapping_table.drop(sync_conn, checkfirst=True)
+                    )
+
+        _run_migrations(fresh_database_url)
+        async with engine.begin() as connection:
+            assert list(
+                await connection.scalars(text("SELECT version_num FROM alembic_version"))
+            ) == ["0021_merge_provenance_workspace"]
+            await connection.execute(
+                mapping_table.insert().values(
+                    target_user_id="restore_target_user",
+                    target_organization_id="restore_target_org",
+                    target_workspace_id="restore_target_workspace",
+                    source_user_uid="0" * 64,
+                    source_organization_uid="restore_source_org",
+                    source_workspace_uid="restore_source_workspace",
+                    entity_kind="project_objects",
+                    portable_uid="restore_source_object",
+                    target_database_uid="restore_target_object",
+                )
+            )
+
+        _run_migrations(fresh_database_url)
+        _run_downgrade(fresh_database_url, "0017_merge_newsdom_carddav_heads")
+        async with engine.connect() as connection:
+            assert await connection.run_sync(
+                lambda sync_conn: inspect(sync_conn).has_table(mapping_table.name)
+            ), "rollback destroyed imported portable-identity mappings"
+            assert (
+                await connection.execute(
+                    select(mapping_table.c.portable_uid, mapping_table.c.target_database_uid)
+                )
+            ).all() == [("restore_source_object", "restore_target_object")]
+
+        _run_migrations(fresh_database_url)
+        async with engine.connect() as connection:
+            assert (
+                await connection.execute(
+                    select(mapping_table.c.portable_uid, mapping_table.c.target_database_uid)
+                )
+            ).all() == [("restore_source_object", "restore_target_object")]
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

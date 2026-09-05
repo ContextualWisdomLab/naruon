@@ -119,7 +119,7 @@ KNOWLEDGE PLANE   (dense semantic KG — the product)   [PARTIAL]
   + typed, evidence-cited, confidence-weighted relations
 ```
 
-Scaffolding exists (`project_graph_objects` generic strings) but first-class Person/Event/Commitment entities are `[NEW]`; the semantic extractor is **test-only**, not wired into ingest.
+Scaffolding exists (`project_graph_objects` generic strings) but first-class Person/Event/Commitment entities are `[NEW]`; email import invokes the semantic projection path when `PROJECT_GRAPH_EXTRACTION_ENABLED` is enabled (the default remains disabled).
 
 ### 4.3 Core entity model
 
@@ -694,7 +694,7 @@ Hooks are **typed and ordered** (each point has a Pydantic input/output contract
 
 **Two tiers, evolving to three:**
 1. **Content graph (LIVE)** — `content_nodes` + `content_segments` + `knowledge_graph_edges`: DOM decomposition of every email/attachment into structural nodes (`node_path`/`ordinal`) with **structural** edges (parent/child/sibling). Wired into ingest (alembic 0005–0007), built in one transaction with the email.
-2. **Semantic/project graph (PARTIAL)** — `project_graph_objects` / `_edges` / `_corrections` (alembic 0009) with a full read/confirm/correct/traceability API. Today entities are generic `object_type` **strings** and the graph is **unpopulated in production** because `extract_project_semantics` / `persist_project_graph_projection` are **test-only** (verified: `callers_of(extract_project_semantics)` → not_found as a graph node; only test callers). Closing this is the single highest-leverage gap.
+2. **Semantic/project graph (PARTIAL)** — `project_graph_objects` / `_edges` / `_corrections` (alembic 0009) with a full read/confirm/correct/traceability API. Today entities are generic `object_type` **strings**. Email import calls `persist_project_graph_projection` after content persistence when `PROJECT_GRAPH_EXTRACTION_ENABLED` is enabled; the default remains disabled, so deployment enablement and extraction-quality evidence remain open.
 3. **Entity graph (TARGET)** — first-class typed entities and cross-entity relations, promoted from generic object strings.
 
 **Node & edge taxonomy.** Node types: `person`, `org`, `norm_group`, `project` (incl. Band), `thread`, `message`, `attachment`, `content_node`, `event`, `commitment`, `deliverable`, `requirement`, `wbs_item`, `erd_candidate`. Edge axes (density comes from many *simultaneous* relation axes): Social (`person—person`, `person—org`, `person—norm_group` **multi-membership**), Communication (`message—thread`, in_reply_to/references, sender/recipient), Temporal/event (`event—event` **enables/conflicts/unrelated**, resolved by density not asking; `event—commitment`), Commitment (status axis {confirmed|tentative|desired} + RSVP direction), Provenance (`object—content_segment` cited evidence, `object—extractor`, `correction—object`). Every semantic node/edge stores `confidence`, `extractor_name`, `extractor_version`, and cited `source_segment_uids` — auditable back to the exact DOM segment.
@@ -734,7 +734,7 @@ Hooks are **typed and ordered** (each point has a Pydantic input/output contract
 
 Postgres is the system of record. **All new object names are 2+ word `snake_case`** (existing Camel/Pascal names left as-is). 38 SQLAlchemy tables today.
 
-*Current core tables by domain:* **Identity/tenant** (`user_accounts`, `provider_accounts`, `organization_entities`, `organization_groups`, `scoped_role_assignments`, `workspace_entities`, `project_folders`, `tenant_configs`, `workspace_documents`); **Email live/legacy** (`email_records`, `email_attachments`); **Email normalized/in-progress** (`email_raws`, `email_messages`, `email_instances`, `email_threads`, `email_thread_edges` — not yet linked to `email_records`); **Content graph live** (`content_nodes`, `content_segments`, `knowledge_graph_edges`); **Project/semantic graph** (read-side live, extraction test-only: `project_graph_objects`, `project_graph_edges`, `project_graph_corrections`); **Tasks/workflow** (`ticket_tasks`, `workflow_definitions`, `agent_run_records`, `prompt_templates`); **Connectors/DAV/scheduling** (`caldav_accounts`, `webdav_accounts`, `calendar_writeback_sources`, `reply_trackers`, `sender_relationships`, `connector_signal_events`, `provider_writeback_retry_items`, `workspace_runner_configs`); **LLM/governance** (`llm_providers`, `audit_logs`, `security_audit_events`).
+*Current core tables by domain:* **Identity/tenant** (`user_accounts`, `provider_accounts`, `organization_entities`, `organization_groups`, `scoped_role_assignments`, `workspace_entities`, `project_folders`, `tenant_configs`, `workspace_documents`); **Email live/legacy** (`email_records`, `email_attachments`); **Email normalized/in-progress** (`email_raws`, `email_messages`, `email_instances`, `email_threads`, `email_thread_edges` — not yet linked to `email_records`); **Content graph live** (`content_nodes`, `content_segments`, `knowledge_graph_edges`); **Project/semantic graph** (read-side live, feature-gated ingest projection: `project_graph_objects`, `project_graph_edges`, `project_graph_corrections`); **Tasks/workflow** (`ticket_tasks`, `workflow_definitions`, `agent_run_records`, `prompt_templates`); **Connectors/DAV/scheduling** (`caldav_accounts`, `webdav_accounts`, `calendar_writeback_sources`, `reply_trackers`, `sender_relationships`, `connector_signal_events`, `provider_writeback_retry_items`, `workspace_runner_configs`); **LLM/governance** (`llm_providers`, `audit_logs`, `security_audit_events`).
 
 *Proposed additions (TARGET, all 2+word snake_case):*
 
@@ -789,11 +789,13 @@ This section is the honest reconciliation of vision against the code as it stand
 - Reply-SLA escalation → TicketTask; self-sent-note → TicketTask; sender-relationship ontology → next_action.
 - ABAC owner-scoping + `EncryptedString` secrets; Prometheus/OTEL flags + operational-signal API; audit + security-audit events.
 - Live screens (`/mail`, `/calendar`, `/tasks`, `/projects`, `/data`, `/search`, `/ai-hub`, `/prompt-studio`, `/tools`, `/security`, `/settings`) + the BFF proxy; `NetworkGraph.tsx` and `DecisionPointCard.tsx` components.
+- Branch-local GA-1 portability slice: authoritative OIDC/server sessions can export or import a bounded deterministic BagIt/RO-Crate ZIP for the exact workspace's cited email, textual attachment, content/KG, project-graph, and correction closure. It is not full tenant portability and is not protected-branch evidence until merged.
+- Exact branch verification: Ruff passed, the combined provenance service/API suite passed 151 tests, fresh-schema and legacy-table PostgreSQL bootstrap paths passed 2 tests, and the full backend suite passed 1,972 tests with 3 skipped. All Python runs promoted warnings to errors.
 
 ### 8.2 `[PARTIAL]` — exists but incomplete, **reconcile / wire**
-- **Semantic project graph:** a full read/confirm/correct/traceability API over `project_graph_objects`/`_edges`/`_corrections` is live, but its extractor (`extract_project_semantics`/`persist_project_graph_projection`) is **test-only** — no ingest worker or API calls it, so the semantic graph is **unpopulated in production**. (Verified via `callers_of` → not_found + grep showing only test callers.) *Highest-leverage gap: the dense KG is built but empty.*
+- **Semantic project graph:** a full read/confirm/correct/traceability API over `project_graph_objects`/`_edges`/`_corrections` is live. Email import calls `persist_project_graph_projection` after content-graph persistence when the feature flag is enabled; the default is disabled. Remaining gaps include deployment enablement, extraction-quality evidence, full portability, and complete multi-account ownership reconciliation.
 - **Multi-account model:** a normalized `email_messages/instances/raws/threads` model exists in parallel to the live `email_records` model and is **not reconciled**; live ingest still writes the legacy model.
-- **Project-graph curation UI** (`/projects`) is read/confirm/correct only; extraction not wired.
+- **Project-graph curation UI** (`/projects`) is read/confirm/correct only; ingest extraction is feature-gated and disabled by default.
 
 ### 8.3 `[NEW]` / `[PLANNED]` — net-new, **build**
 - First-class typed entities: **Person / NormGroup / Event / Commitment / Approval-outcome / DisclosureConsent** (today only generic `object_type` strings) and their typed, evidence-cited relations.
@@ -813,9 +815,9 @@ This section is the honest reconciliation of vision against the code as it stand
 
 Ordered for maximum leverage against the vision while keeping each phase independently shippable. Every phase moves a concrete current-state gap toward the mission and preserves all five cross-cutting principles.
 
-### Phase 0 — MVP: make the dense KG real (populate what's already built)
-The single highest-leverage move: the semantic graph exists but is empty.
-1. **Wire semantic extraction into ingest** — call `extract_project_semantics` / `persist_project_graph_projection` from the ingest worker so `project_graph_objects` populate in production (today they are test-only).
+### Phase 0 — MVP: make the dense KG real (operate what's already built)
+The single highest-leverage move is to enable and prove the existing semantic projection path on production-shaped data.
+1. **Verify semantic extraction quality in ingest** — preserve the live `persist_project_graph_projection` call and add source-backed quality, correction, and portability evidence instead of describing production wiring as absent.
 2. **Reconcile the multi-account email model** enough to have one source of truth for threads/messages feeding the graph.
 3. **Extend hybrid search** to `content_segments` and populated `project_graph_objects` (search meaning, not just bodies).
 4. Wire the existing `DecisionPointCard` to real synthesized thread cards (Epic 1 / UC-08) — first visible "judgment-ready structure."
