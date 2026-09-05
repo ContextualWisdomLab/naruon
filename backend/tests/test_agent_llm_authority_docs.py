@@ -72,6 +72,23 @@ def test_agent_guidance_preserves_product_contract_recurrence_rules() -> None:
     assert "do not substitute a process-global registry or placeholder success" in normalized_agents
 
 
+def test_agent_guidance_requires_physical_lease_ownership_and_interruption_checks() -> None:
+    """Keep the concurrency repair procedure discoverable without claiming runtime proof."""
+    normalized_agents = " ".join(_read("AGENTS.md").lower().split())
+    for required_phrase in (
+        "session-level advisory lock",
+        "held physical connection",
+        "one-slot pool",
+        "invalidate before session-close rollback",
+        "reconnecting without a lease",
+        "last completed item",
+        "independent replica",
+        "actual task cancellation",
+        "source-only checks do not prove these runtime outcomes",
+    ):
+        assert required_phrase in normalized_agents
+
+
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     """Repository OpenCode model work must use only the canonical logical pool."""
     raw_config = _read("opencode.jsonc")

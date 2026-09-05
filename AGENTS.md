@@ -660,6 +660,21 @@ subject to U.S. copyright, while attribution remains required.
   A successful command or an empty schema proves no data preservation. Retain
   non-rebuildable identity/provenance history; destructive retirement requires
   a separately authorized migration with recovery evidence.
+- A session-level advisory lock that spans item commits or rollbacks needs a
+  held physical connection; keeping the ORM session object does not preserve
+  backend ownership. Budget any separate lease connection explicitly and test
+  a supported one-slot pool. Do not replace the lock with a transaction-level
+  lock that ends coordination at the first item commit.
+- On uncertain acquisition, work cancellation, or unconfirmed unlock,
+  invalidate before session-close rollback can wait on a broken connection.
+  Abort a disconnected cycle instead of reconnecting without a lease. Advance
+  recovery cursors only through the last completed item or healthy item
+  rollback, so unattempted prefetched rows are not skipped after interruption.
+- Test lease lifetime on real PostgreSQL across commit and rollback with a
+  same-pool reader and an independent replica. Cover actual task cancellation,
+  cleanup ordering, connection loss, strict unlock confirmation, and resumption
+  of unattempted work while retaining representative source bytes. Source-only
+  checks do not prove these runtime outcomes or exactly-once provider execution.
 - When a backend container reports missing `DATABASE_URL` or
   `AUTH_SESSION_HMAC_SECRET`, verify the runtime path injects the operator env
   through `scripts/naruon_compose.sh`, Kubernetes secrets, or an explicit
