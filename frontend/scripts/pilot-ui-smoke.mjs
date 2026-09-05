@@ -212,7 +212,7 @@ async function installRoutes(page) {
       return respond({
         summary: "근거 원본을 확인해야 하는 맥락 종합입니다.",
         todos: ["원본 확인"],
-        confidence: 0.86,
+        confidence: 86,
         provenance: "mail-thread",
       });
     }
