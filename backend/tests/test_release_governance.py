@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -1103,7 +1104,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
-    assert "CHANGES_REQUESTED" in gate_script
     assert "gh pr merge" not in gate_script
     assert "--match-head-commit" not in gate_script
     assert "actions/checkout" not in combined
@@ -1114,6 +1114,21 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "continue-on-error: true" not in combined
     assert "/dismissals" not in combined.lower()
     assert "dismisspullrequestreview" not in combined.lower()
+
+
+def test_pr_governance_shell_regression_covers_stale_review_decision() -> None:
+    """Execute the focused gate scenarios, including stale review metadata."""
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts/ci/test_pr_governance_gate.sh")],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, (
+        "governance shell regression failed:\n"
+        f"{result.stdout}\n{result.stderr}"
+    )
 
 
 def test_20b_kpi_roi_claim_gate_separates_measurements_from_assumptions() -> None:

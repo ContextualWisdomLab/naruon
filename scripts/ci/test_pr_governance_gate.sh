@@ -309,6 +309,7 @@ run_gate() {
   PATH="$temp_dir/bin:$PATH" \
   GITHUB_REPOSITORY="owner/repo" \
   GH_TOKEN="fake" \
+  GITHUB_ACTIONS="" \
   EVENT_NAME="pull_request_target" \
   TARGET_PR_NUMBER="42" \
   DIRECT_PR_NUMBER="" \
@@ -828,14 +829,15 @@ assert_coderabbit_stale_review_comment_does_not_block() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_changes_requested_creates_marker_comment() {
+assert_stale_changes_requested_does_not_block_current_evidence() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate changes_requested "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
-  assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_not_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/output.txt"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=success' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -909,6 +911,7 @@ assert_workflow_separates_controller_from_required_check() {
   assert_in_file "github.event_name == 'pull_request_review'" "$workflow"
   assert_in_file '^    name: PR governance metadata controller$' "$workflow"
   assert_not_in_file '^    name: metadata-only gate evaluation$' "$workflow"
+  assert_in_file '^      - OpenCode Review$' "$workflow"
 }
 
 assert_current_head_check_lookup_uses_maximum_page_size() {
@@ -955,7 +958,7 @@ assert_truncated_review_thread_metadata_blocks
 assert_truncated_review_thread_comments_metadata_blocks
 assert_github_code_quality_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
-assert_changes_requested_creates_marker_comment
+assert_stale_changes_requested_does_not_block_current_evidence
 assert_passing_gate_is_metadata_only_without_merge
 assert_no_required_checks_waits_without_hard_comment
 assert_self_gate_failure_does_not_recurse
