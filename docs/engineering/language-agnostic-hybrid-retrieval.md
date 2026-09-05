@@ -6,6 +6,17 @@ bullet of ContextualWisdomLab/naruon#975. Disciplines: **G6**
 (KG is the product), **CP-2** (surface evidence + calibrated
 confidence).
 
+## Proposed storage repair (2026-09-05)
+
+[ADR-0020](../adr/0020-full-document-trigram-storage.md) records a forward
+full-content GIN replacement for the four whole-document GiST indexes. Large,
+diverse inputs can exceed GiST's leaf-size limit even at maximum `siglen`.
+The candidate preserves normalized text, scores, ordering, and scope, but GIN
+does not accelerate distance-only top-k queries. Keep this change Draft until
+representative latency, lock/build cost, and current-head hosted gates are
+verified; unit data is not production performance evidence. See the
+[real PostgreSQL receipt](../doctoring/search_trigram_storage.md).
+
 ## What changed
 
 Context Search (`POST /api/search`) previously scored with
@@ -18,7 +29,7 @@ It now runs two channels per query and fuses them per candidate:
 
 | Channel | Mechanism | Language handling |
 |---|---|---|
-| Lexical | `pg_trgm` character-trigram `word_similarity` over `search_normalized_text(document)` with GiST `gist_trgm_ops(siglen=256)` kNN (`<->>`) | Character n-grams — no tokenizer, no per-language config; NFC + `unaccent` + `lower` fold both sides |
+| Lexical | Exact `pg_trgm` `word_similarity` over `search_normalized_text(document)`, ordered by `<->>`; the Proposed GIN storage repair does not provide indexed kNN | Character n-grams — no tokenizer, no per-language config; NFC + `unaccent` + `lower` fold both sides |
 | Dense | pgvector cosine over stored multilingual embeddings | Multilingual embedding space (provider-routed) |
 
 Search surfaces (naruon#975): `email_records` (subject+body),
@@ -37,7 +48,8 @@ as an `IMMUTABLE` SQL wrapper (the documented pattern for making
 Korean input (macOS file names, some webmail clients emit NFD) match
 composed storage; `unaccent` makes `hop ban nhac` match `họp ban
 nhạc`. The Python query path applies the identical NFC step
-(`services/hybrid_retrieval/query_normalization.py`).
+through the pinned `rankweave` dependency re-exported by
+`services/hybrid_retrieval/__init__.py`.
 
 Degradation: with no LLM provider (or embedding failure) search runs
 lexical-only instead of failing — the previous behavior returned HTTP
@@ -118,23 +130,16 @@ is intentionally not used.
   `sparsevec`) can be added without touching fusion.
 - **SQL-side fusion (UNION + ORDER BY)** — the old approach; fusing in
   Python keeps the fusion function pure, unit-tested, and
-  strategy-swappable, and lets each channel use its own index-served
-  ordering.
+  strategy-swappable. Index-served lexical ordering does not hold for the
+  Proposed GIN storage repair; the measured performance gate remains open.
 
 ## OSMU spin-off assessment (one source, multi use)
 
-`services/hybrid_retrieval/score_fusion.py` +
-`query_normalization.py` are deliberately naruon-free (no model /
-framework imports) and could ship as a standalone "Postgres hybrid
-retrieval fusion" micro-library; `retrieval_channels.py` is the only
-schema-coupled file. Assessment this round: **below the extraction
-threshold** — ~175 lines of generic code with exactly one consumer.
-Extraction (own repo + submodule import per the 따로-또-같이 rule)
-becomes justified when a second consumer materializes
-(semantic-data-portal / scopeweave hybrid search, or the pg_bigm /
-SPLADE `sparsevec` channel). Revisit then, including product naming
-and domain availability; the package boundary already makes the move
-mechanical.
+The earlier extraction assessment is historical. Current source imports fusion
+and query normalization from the pinned `rankweave` package and re-exports them
+through `services/hybrid_retrieval/__init__.py`. Naruon owns the schema-bound
+`retrieval_channels.py` statements and migrations, not a copied fusion runtime.
+This storage repair changes no RankWeave contract or model-routing authority.
 
 ## Operational notes
 
@@ -143,6 +148,11 @@ mechanical.
   the deploy image), the `search_normalized_text` function, and four
   GiST expression indexes. Downgrade drops indexes + function, keeps
   extensions.
+- The Proposed `0020_search_trigram_storage` revision replaces those four
+  indexes with GIN in the existing migration transaction. Its downgrade keeps
+  the corrected indexes so newly valid large records do not make rollback fail.
+  Published revision 0010 remains unchanged; plan storage and lock time before
+  any production migration.
 - The channel SQL expressions in
   `services/hybrid_retrieval/retrieval_channels.py` must stay
   textually identical to the indexed expressions.
