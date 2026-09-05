@@ -462,6 +462,11 @@ delta were removed instead of creating a parallel policy owner. Thirty-six
 focused governance contracts, Ruff, and diff checks pass. #1566 remains Draft
 until #1564 reaches protected merge; fresh exact-head hosted Checks and
 independent review remain required after restacking on `develop`.
+Former child #1567 was restacked to
+`4456fabe0d4906f29d07f2b54fbf374462108798`; its sole prior child test failed
+three current parent contracts and was removed rather than weakening the
+canonical guidance. The resulting #1567 and #1566 tree SHAs are identical, so
+#1567 was closed only after exact-head zero-valid-delta succession was proven.
 Contextual-orchestrator PR #911
 (`e80949188f0afa86052f10f5a9b627da1ee1ef0b`) is non-force restacked on #1068
 and repairs durable routing-observation invariants found in current-head review:
