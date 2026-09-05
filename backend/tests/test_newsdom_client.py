@@ -154,6 +154,39 @@ async def test_request_pdf_dom_sends_exactly_twenty_mib_to_transport(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_request_pdf_dom_maps_provider_413_to_payload_limit(monkeypatch):
+    """A stricter deployed provider limit must remain a persistent size rejection."""
+    async def validated_base_url(base_url):
+        """Return a fixed validated identity without external DNS."""
+        return newsdom_client_module.ValidatedNewsdomBaseURL(
+            normalized_url=base_url,
+            hostname="newsdom.example.com",
+            port=443,
+            addresses=("93.184.216.34",),
+        )
+
+    async def reject_payload(request):
+        """Model a deployed provider whose accepted payload is smaller than ours."""
+        await request.aread()
+        return httpx.Response(413)
+
+    monkeypatch.setattr(
+        newsdom_client_module, "validate_newsdom_base_url_details_async", validated_base_url
+    )
+    monkeypatch.setattr(
+        newsdom_client_module, "_PinnedNewsdomAsyncTransport",
+        lambda _validated: httpx.MockTransport(reject_payload),
+    )
+
+    with pytest.raises(NewsdomPayloadTooLargeError):
+        await request_pdf_dom(
+            base_url="https://newsdom.example.com",
+            api_token=None,
+            pdf_bytes=b"%PDF-1.7",
+        )
+
+
+@pytest.mark.asyncio
 async def test_request_pdf_dom_raises_config_error_without_base_url(newsdom_allowlist):
     with pytest.raises(NewsdomConfigurationError):
         await request_pdf_dom(
