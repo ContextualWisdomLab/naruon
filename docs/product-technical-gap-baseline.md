@@ -1,10 +1,971 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.2
-**Observed on:** 2026-08-26 (Asia/Seoul)
-**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
+**Baseline version:** 1.31
+**Observed on:** 2026-09-05 (Asia/Seoul)
+**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Reply-task scheduler and conflict recovery refresh (2026-09-05):** Existing
+Draft [#1486](https://github.com/ContextualWisdomLab/naruon/pull/1486) advances
+without force from `b32954dbf6066bc0d953887e8ca06820588f2c5f` to
+`1709ebb8d79f55c688a141aa932fa00468bf836d`, tree
+`5a39d4eef5a936969b14f649af21638df24a90f1`, retaining its full calendar,
+attachment, migration and Noema proposal. The direct base remains
+`develop@042b0c70531b229af3acbd0421a2f23098d848b3`.
+Its own actual PostgreSQL RED reproduced a stranded lease after task commit
+(worker and reader PID 79), owner rollback failures, and lost-backend continuation.
+Independent review then exposed real competing task-insert failures at bulk
+commit and savepoint boundaries, plus stale configuration after deletion between
+workspaces. Each was reproduced and repaired; no sibling worker pass was reused
+as scheduler evidence.
+
+The exact corrected head passes **165 tests, zero failures/errors/skips, 2.49 s**,
+after locked dependency synchronization and fresh/repeated migrations to
+`0022_noema_orchestrator_gateway`. Both changed runtime modules measure
+**259/259 statements, 82/82 branches, zero exclusions**, with **24/24 documented
+class/function/method definitions**. Twelve real PostgreSQL cases cover the
+observed-mail replay, independent replicas, one-slot execution, cancellation,
+connection loss, commit/savepoint races and committed configuration deletion.
+Twelve additional scripted edge cases remain unit-only evidence. Existing API
+smoke fixtures do not establish live signed-auth or realistic inbox accuracy.
+
+| Requirement / owner | Current evidence | Remaining action |
+| --- | --- | --- |
+| PRD: saved follow-ups must not halt later work; Naruon scheduler | Replica excluded during work and admitted after cleanup; later owners recover after healthy rollback | Signed browser behavior, deployment interruption, realistic workload/capacity |
+| TRD: coordination and source-task identity survive concurrent writes; Naruon task service | Existing task UID preserved, both source workspaces processed, no work after observed mailbox deletion | Hosted contract/security checks, manual API authorization and broader proposal validation |
+| Operability: no unleased continuation or hidden test-client fallback | Lost backend aborts; one-slot cleanup verified; dev-only `httpx2==2.5.0` declared and obsolete warning ignore removed | Protected integration and immutable release; direct/session-affine PostgreSQL deployment contract |
+
+- Exact JUnit SHA-256: `7ab943b0ceffcb26a72c802272cde48f410282c4cfe6e76bee5905725333a69f`.
+- Two-module coverage JSON SHA-256: `207cd65f29b945c2f9f3d40f75bcb081f29da0c4e1744648edd7ebdea24a4c5d`.
+- [Decision, UML sequence, APA references and failed-receipt history](https://github.com/ContextualWisdomLab/naruon/blob/1709ebb8d79f55c688a141aa932fa00468bf836d/docs/doctoring/reply_sla_physical_lease.md).
+
+ADR-0005's premature Accepted label is corrected to Proposed without dropping
+its history or allocating a new identity. An intermediate test-only import
+rename failed collection and is explicitly not GREEN; the forward correction
+was fully rerun on the pushed head. Fresh REST enumeration finds 26 check-runs
+(queued work and skipped non-applicable jobs), no current-head reviews, and an
+open Draft PR, not a merge-ready or released product. GraphQL quota failure was
+handled with REST, not interpreted as an empty gate. Test-owned DB and network
+cleanup is verified. Repository default-branch security alerts remain separate
+work; this repair does not claim alert closure, whole-product 100% coverage,
+exactly-once processing or realistic latency acceptance.
+
+**Physical-connection lease and interruption recovery refresh (2026-09-05):**
+Draft [#1469](https://github.com/ContextualWisdomLab/naruon/pull/1469) advances
+normally to `a312ea5e516fe1d696cfb35ffff7d3a731ad9cd2`, tree
+`83bf3605c961dc7be1c304585762a58de0124ba7`, preserving the complete
+`1b757d5` delta and direct #1427 base `cb08b1c3ea2aba8844fc29ef703c34368cc55e47`.
+Actual PostgreSQL commit/rollback contention exposed two stranded leases: an
+unrelated pool reader received the worker's still-locked backend, and another
+replica could not acquire after the worker completed. The repair holds one
+physical connection across both phases and per-item transactions. It requires
+confirmed unlock, aborts a disconnected cycle without unleased reconnection,
+invalidates before session-close rollback, and resumes after the last completed
+item rather than skipping unattempted prefetched rows.
+
+The exact final head passes **305 tests, zero failures/errors/skips, in 225.30 s**
+with clean-lock synchronization, fresh/repeated migrations, the complete 17-file
+suite, and `-W error`. The worker measures **258/258 statements, 58/58 branches,
+zero exclusions, and 22/22 documented function/class definitions**. The unchanged
+40,758,835-byte NASA PDF remains intact in migrated PostgreSQL with active
+indexes. Real DB cases cover commit/rollback contention, one-slot completion,
+acquisition/processing cancellation, backend termination, and failed release.
+An actual task-cancellation case gates session close to verify invalidation
+ordering; the gate simulates blocked cleanup, not a real network black hole.
+The two independent review findings first failed five tests and then passed;
+final read-only re-review found no remaining actionable finding in that scope.
+
+- Final JUnit SHA-256: `a7bf4bab7352c8c1fd9e720b48f59d63057de29a5fdf049ebe2faef8ff3d6ea2`.
+- Worker coverage JSON SHA-256: `025ff2ea21aa66efc15bdbc9afc8ab3499591d085219b327d278b240a60b7363`.
+- [Exact-head doctoring and sequence](https://github.com/ContextualWisdomLab/naruon/blob/a312ea5e516fe1d696cfb35ffff7d3a731ad9cd2/docs/doctoring/bounded-attachment-parse-source-contract.md)
+  records RED/GREEN, rejected alternatives, primary PostgreSQL/SQLAlchemy
+  references, and retained source/ADR lineage. ADR-0023 remains Proposed.
+
+| Requirement / owner | Verified scope | Remaining action |
+| --- | --- | --- |
+| PRD: pending files resume after interruption; Naruon recognition | Independent-replica reacquisition and original-byte retention; unattempted cursor recovery | Signed browser recovery, actionable retry states, live interruption evidence |
+| TRD: lease covers the complete sweep; Naruon worker | One held connection, supported one-slot pool, explicit unlock, fail-closed disconnect | Pool capacity and representative concurrent load; external provider idempotency is not proved |
+| Sibling root repair; import #1317 / scheduler #1486 | #1486 now has its own exact-head migrated PostgreSQL receipt above; #1317 remains a source-bound owner handoff | Reproduce import-owner contention/cancellation; do not transfer either worker's tests as import GREEN |
+
+No new dependency, shared model timeout, mutable provider adoption, schema/index
+removal, or protection change was introduced. Test-owned PostgreSQL/network
+cleanup completed. Required hosted checks and qualifying current-head review,
+the protected prerequisite stack, immutable NewsDOM release/pin, actual 64 MiB
+recognition, and realistic p95/capacity evidence remain open. Passing this worker
+module's coverage does not establish whole-product 100% coverage, exactly-once
+external execution, security-alert closure, or a protected/released product.
+
+**Historical bounded source retention and worker recovery receipt (2026-09-05):** Draft
+[#1469](https://github.com/ContextualWisdomLab/naruon/pull/1469), exact head
+`1b757d5aa25c469157f8f03301964eb3061ed0fe`, tree
+`6b520c3cbe824d4017b97c39ef61fa702434e04a`, normally inherits #1427
+`cb08b1c3ea2aba8844fc29ef703c34368cc55e47` and concurrent remote
+`facadfb1ce535c5d124e2a463a844942a7704ba5`. Neither history nor the
+prerequisite CHANGELOG was discarded. The former attachment ADR-0006 remains
+Proposed as ADR-0023; the complete old ADR-0005 body is preserved as a historical
+snapshot alongside canonical ADR-0021. All 161 open PRs were inventoried; a
+10:07:23 UTC recheck found the other 160 head/base pairs unchanged and no
+unrelated ADR-0023 collision.
+
+Actual PostgreSQL fault injection exposed a separate worker defect after the
+size-boundary fix: rollback expired every prefetched row, and the error logger
+and next item attempted implicit I/O. Two real-PDF cases failed with
+`MissingGreenlet`. Cached primitive IDs plus explicit recovery-only reloads
+produce 29 focused passes. Subsequent test/fix commits `220c7d0` and `1b757d5`
+preserve provider HTTP 413 as the same size-rejection category when the provider
+has a smaller limit; this transport check uses MockTransport, not a live provider.
+The exact pushed commit passes **277 tests, zero
+failures/errors/skips, in 73.71 s**, after clean-lock synchronization and fresh
+and repeated migrations to `0020_search_trigram_storage`. The unmodified,
+hash-verified NASA PDF is 40,758,835 bytes. Fresh sessions compare complete
+bytes and identities through pending, actual size rejection, transaction
+rollback, and processing the next item. Full-size synthetic boundaries remain
+unit-only. JUnit SHA-256 is
+`5ec09d7152e0f3551fa670ac15567282ae02ac71170cd51eb5e3e51433abab10`;
+task-owned PostgreSQL and network cleanup completed. The
+[exact-head doctoring](https://github.com/ContextualWisdomLab/naruon/blob/1b757d5aa25c469157f8f03301964eb3061ed0fe/docs/doctoring/bounded-attachment-parse-source-contract.md)
+records the primary SQLAlchemy/NASA evidence, RED/GREEN distinction, full test
+command, retained proposal history, and concurrent-delta reconciliation.
+The prior `db083c9` 276-pass receipt remains historical; no earlier test or
+review was transferred to the later head without re-execution.
+
+| Requirement and owner | Current evidence | Remaining acceptance action |
+| --- | --- | --- |
+| PRD: preserve an admitted original and continue unrelated files after one failure; Naruon ingestion | Real-PDF persistence and two-item rollback regression; no source truncation or identity replacement | Signed upload/browser recovery and actionable document failure/retry states |
+| TRD: bounded admission, per-item transaction recovery, and separate provider transport; Naruon worker / NewsDOM provider | Proposed 64 MiB retention; existing 20 MiB client guard rejects before network; successful batches have no added query | Protected owner integration, immutable bounded NewsDOM release, exact consumer pin, actual 64 MiB recognition |
+| Operability: retain full-size indexes and measure realistic capacity; Naruon storage/runtime | Migrated indexes stay enabled; complete bytes survive writes and rollback | Concurrent heap/storage/index/lock costs, tenant quotas, representative p95 ≤ 20 ms; no performance claim from test duration |
+
+Fresh post-push required check-run enumeration returned zero checks and no
+current-head approval. Keep Draft; earlier checks do not transfer. The push
+also reported six default-branch dependency advisories (four high, two
+moderate), which require independent owner diagnosis and are not negated by
+this local suite. PR count, provider release, security readiness, and protected
+merge are not claimed complete.
+
+**Default-branch dependency triage (2026-09-05 10:15 UTC):** all six GitHub
+alerts remain open with `fixed_at: null`. The protected source remains
+`develop@042b0c70531b229af3acbd0421a2f23098d848b3`. Read-only alert and manifest
+checks identify the following existing repair lanes; no alert was dismissed.
+
+| Alerts and current source | Existing owner / next action |
+| --- | --- |
+| Alerts [88](https://github.com/ContextualWisdomLab/naruon/security/dependabot/88)/[89](https://github.com/ContextualWisdomLab/naruon/security/dependabot/89)/[90](https://github.com/ContextualWisdomLab/naruon/security/dependabot/90): `aiohttp==3.14.1` in `requirements-strix-ci-hashes.txt`; the strictest first-patched version is 3.14.3 | #1244 `50351e8cacc65b4124ba2145e00d41aeceef0775` proposes the 3.14.3 hashed lock. Repair its exact CodeQL/noema evidence; do not duplicate the dependency PR or count it as protected-patched |
+| Alert [91](https://github.com/ContextualWisdomLab/naruon/security/dependabot/91): frontend `js-yaml@4.3.0`; first patched 4.3.1 | Draft #1571 `c3cf4efc478a264a0a010df82d1ea90b48776610` owns the override/lock update. Complete exact-head security/review gates; #1459's inspected 4.3.0 lock is not this repair |
+| Alerts [87](https://github.com/ContextualWisdomLab/naruon/security/dependabot/87)/[86](https://github.com/ContextualWisdomLab/naruon/security/dependabot/86): alert ranges exclude `cryptography==50.0.0` and `pyasn1==0.6.4`, already present in protected manifest/locks, but alerts are still open | Reconcile dependency-graph/manifests and the security record; do not call these closed or suppress them. #1494's 50.0.1 proposal is separate and retains pyasn1 0.6.4 |
+
+**Noema owner-boundary refresh (2026-09-04):** Noema protected
+`main@e1ac9d50f6c646f04be8c137c8acdc7200182fcd` defines Noema as the
+credential and maintenance control plane for governed GitHub automation and
+assigns provider discovery and routing to `contextual-orchestrator`. Naruon
+PR #1384 (`0fd330137cdd19068fa8903dc70e1dc88f42cdc9`) and #1486
+(`b32954dbf6066bc0d953887e8ca06820588f2c5f`) remain draft consumer lanes.
+Noema #536 (`5531a5327d822028c4be59e290b4d101b34d49db`, verified
+2026-09-04T13:38Z; supersedes the earlier `a14cbe02` observation) is a draft
+shared-package proposal, not a released dependency. Naruon #1527
+(`23680b13b443bb4eb7659b9a75073ecc1b67e133`) has no common Git history with
+current `develop` and contains mutually contradictory owner claims; ADR-0006
+therefore records the repair as Proposed rather than transferring its evidence.
+Its supersession record preserves the predecessor's valid implementation and
+stack-overlap observations, rejects the unproven shared-runtime conclusion, and
+replaces the absent directive, edited-as-verbatim text, and mutable line-number
+references with exact owner evidence. #1527 stays open until protected merge and
+exact merge-result verification prove full-delta succession.
+Contextual Orchestrator #1004
+(`6a992538b6efcc34b957f72fc599bb33ac40c152`) is the current owner candidate
+for distinct-provider structured-output recovery; its focused 31-test suite
+passes after a non-force merge of current `main`, while hosted current-head
+checks and independent review remain pending.
+
+**Search storage and owner propagation refresh (2026-09-05):** Naruon Draft
+[#1572](https://github.com/ContextualWisdomLab/naruon/pull/1572), exact head
+`cd8ff413d4ed8a5f2855c47a21a31db5661cd487`, is the bounded search-schema
+owner on #1503 `19d5860bc27e860acba940390f5792721cd99e5e`. Real migrated
+PostgreSQL exposed whole-document GiST leaf overflow on all four search
+surfaces. A forward GIN candidate preserves complete text and exact ranking
+SQL: four regression failures before repair become 131 passed, zero
+failed/skipped, after exact dependency synchronization and fresh/repeated
+migration. A catalog assertion prevents a false pass from removing all indexes.
+GIN does not accelerate the existing distance-only top-k query. Representative
+search p95, migration lock/build/storage costs, current-head required Checks,
+and qualifying independent review remain acceptance gates; this is not a
+released search-performance repair. Proposed ADR-0020 and the
+[exact-head doctoring receipt](https://github.com/ContextualWisdomLab/naruon/blob/cd8ff413d4ed8a5f2855c47a21a31db5661cd487/docs/doctoring/search_trigram_storage.md)
+record the alternatives, primary PostgreSQL evidence, and retained-data rollback.
+ADR-0008 was already present in #1418; all 160 then-open PR file lists were
+checked before selecting the unused local proposal number 0020.
+
+The search prerequisite is now non-force propagated and pushed through the
+existing stack: #1468 `53ce38ed6683d01a9d113069f5ac5a8f17e133a2` passes
+131 strict PostgreSQL/search tests; #1427
+`cb08b1c3ea2aba8844fc29ef703c34368cc55e47` passes 132. Both fresh/repeated
+migrations reach `0020_search_trigram_storage` without skipped tests. #1468
+retains its unique bootstrap assertion. #1427's 64 MiB PDF admission remains
+a Naruon proposal, not proof of an immutable NewsDOM release; its colliding
+ADR-0005 proposal is preserved as ADR-0021.
+
+Draft #1497 `69f50ae684f50c501ff2f49be2969f1d211d7f3c` now normally
+inherits that chain and passes **345 tests, zero failed/skipped**, with exact
+dependency sync, fresh/repeated migration to `0021_merge_provenance_workspace`,
+and `-W error`. The unchanged 8 MiB-class cited-segment regression now passes.
+Retained portable identities survive rollback/re-upgrade; forced incompatible
+imports leave one successful writer and no losing rows/mappings. Proposed
+ADR-0022 preserves the former ADR-0007 lineage, which collided with #1361.
+The earlier unpushed checkpoint's 288-pass/1-failure result is historical.
+See the [exact-head combined receipt](https://github.com/ContextualWisdomLab/naruon/blob/69f50ae684f50c501ff2f49be2969f1d211d7f3c/docs/doctoring/tenant_provenance_integration.md).
+Current-head required Checks, independent approval, signed HTTP/browser restore,
+representative search/migration performance, and owner release gates remain
+open. No delta or PR was discarded to reduce the queue, and these local passes
+do not transfer approval or hosted evidence between stack heads.
+
+**AGENTS operating knowledge refresh (2026-09-05):** Draft #1566 exact head
+`54e79d054f6f13c639f30d89882ed079e0122752` preserves `162c0df8049126944c60041c3374b4e47d8c16b4`
+and adds physical lease ownership, invalidate-before-close cancellation,
+last-completed cursor recovery, real independent-replica checks, and explicit
+source-only/runtime boundaries. It also retains the recurrence rule to test
+application behavior on the actually migrated database, retaining indexes,
+constraints, full-size high-entropy content, and portable identities across
+rollback. It now also records conflict rollback refresh, savepoint detachment,
+fresh configuration-authority checks and actual between-operation interleavings.
+Its **45 focused source/governance tests pass in 0.11 s** with `-W error` and
+`--noconftest` in the existing environment; this is not a clean-lock, database,
+or browser receipt. Exact JUnit SHA-256 is
+`0ebdd903f8ca1697f3187dad484d6dc6e97f28fb774e90ceadeef19ee3ca88fa`.
+Fresh REST enumeration found
+zero qualifying current-head reviews and zero required check-runs.
+The PR remains Draft on #1564; required hosted evidence is not inferred from
+historical status contexts. Confidence (#1559) and fail-closed tool mutation (#1300)
+rules formerly recorded only in its body are now proposed AGENTS source.
+Strict confidence rejection is scoped to frontend consumers; backend coercion
+is not claimed fixed. Tool registration/update/delete restrictions explicitly
+preserve supported built-in execution and catalog reads. Normal merges retain
+concurrent remote heads `847ef38ce09ba7deea7b10b3eda731b66d90c1ac` and
+`10ee05c7b1b50b205560fd147ba0c67237a966b0`; their source-guard intent is
+preserved while duplicate wording is consolidated. The combined suite first
+failed one stale wording assertion, then passed 44 tests after alignment.
+An independent consuming-agent scenario review clarified the frontend scope;
+it is not a GitHub approval or product-runtime test.
+
+**Historical tenant provenance portability evidence (2026-09-05T06:57Z;
+current propagation and remaining acceptance gates are above):** stacked
+Naruon PR #1497 (`705d8ece2c97edc8575ea59766fd8f68bf4cdb82`)
+keeps export/import identity mappings scoped by target user, organization, and
+workspace, validates archive closure before mutation, and restores records in
+one transaction with PostgreSQL advisory locks for portable identities and
+email imports. Global content identifiers remain collision-detecting rather
+than silently overwriting another tenant's records. The previous
+`93 passed, 114 skipped, 17 deselected` observation is superseded by a disposable
+PostgreSQL 16.15 + pgvector run: `224 passed, 0 skipped`, including import,
+re-import, rollback, scope isolation, and concurrent successful imports. An
+explicit pytest `-W error` rerun also passes 224 tests. These fixtures create
+the schema through ORM metadata; the API success tests mock the import/export
+service, so they do not prove an end-to-end HTTP restore or deployment.
+The actual fresh Alembic path on this same head fails at
+`0011_email_read_state` with `relation "emails" does not exist` before reaching
+the provenance migration. The repair owner is existing #1503, now non-force
+stacked on #1565 at `19d5860bc27e860acba940390f5792721cd99e5e`: exact-lock
+fresh/repeated migrations and 75 strict PostgreSQL/dependency tests pass.
+That observation predates the now-pushed owner propagation and combined repair
+described above. #1497 remains Draft/Proposed. See the
+[reproducible evidence and dependency decision](doctoring/provenance_migration_evidence.md).
+
+**Governed review evidence refresh (2026-09-05T06:08Z):** Naruon PR #1564
+(`615be4514add6a21eef743f591a65a5f8fef4dee`) records the reusable exact-head,
+non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
+procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
+evidence from post-merge commit verification and names the applicable
+current-head CodeRabbit or structured OpenCode fallback contract. It also
+inherits PR #1558's unique valid delta: repository-local security-skill routing,
+review-only mutation boundaries, existing-branch remote-head equality plus the
+verified absent-ref initial-push path, fail-closed GitHub API handling, truthful
+commit attribution, NIST SSDF grounding, and safe independent work during gate
+waits. Shared lifecycle skills now have direct procedural fallbacks, signing is
+tied to actual repository policy, and metadata-only PR Governance is explicitly
+excluded from canceling review concurrency. The repository OpenCode config now
+uses only `contextual-orchestrator/orchestrator/free`; the stale-context exception
+matches the reversible merge-gate procedure, verified complete-delta succession
+is an explicit phase terminal state, and the public-domain NIST SP 800-218 PDF is
+retained with a focused governance regression test. The OpenCode gateway
+contract pins the token destination to the owner's documented loopback endpoint,
+removes the arbitrary base-URL environment input, and disables the supported
+client request timeout so long-running model work is not cut off at the default
+limit. The current repair also replaces the provider's implicit API-key option
+with an explicit standard `Authorization` header. The fixed loopback origin and
+header configuration are source evidence only; this run did not verify the
+effective transport's redirect behavior or prove token non-forwarding. Exact-head focused proof is
+`36 passed`; CodeRabbit and hosted checks are pending on the repaired head. With
+no source failure or merge conflict, the PR remains Ready for independent review.
+Canonical workflow
+owner PR ContextualWisdomLab/.github #1850
+(`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
+retains only allowlisted, secret-free gateway failure fields and stops creating
+a line-1 source receipt when a deletion-only or unchanged file has no real
+current-head changed-side line. The exact-line validator remains fail closed.
+After review, a changed file with two receipt candidates now proves that
+`max_receipts=1` returns exactly one while unchanged files still produce none.
+The head is non-force restacked on protected
+`main@f871694a4e5bbfaca75d999354d7944787e9340f`; 12 focused receipt tests and
+the full owner suite (2,817 passed, one skipped, 21 subtests) pass. Both heads
+are mergeable but their required
+current-head checks and independent review remain pending, so neither local
+result is protected-branch evidence yet.
+
+**Utility boundary refresh (2026-09-04T17:06Z):** Naruon Draft PR #1505 is
+the verified full-delta successor of closed PR #1547 for URL encoding/decoding
+and JSON formatting. Exact head
+`3bf2f42ab8c854046f16b516073c13b13af77c6b` closes a remaining RFC 3986
+contract gap: Python `urllib.parse.unquote(errors="strict")` rejects invalid
+UTF-8 but preserves incomplete or non-hexadecimal percent escapes, so the
+canonical handler now rejects `%`, `%2`, `%ZZ`, and `value%4G` before decoding.
+The focused backend suite passes 87 tests with warnings as errors; Ruff, seven
+frontend console tests, TypeScript, and diff checks pass. The central scheduler
+dispatch is run `33898524781`, currently queued. Hosted exact-head checks and
+current-head independent review remain pending; this is not protected-branch or
+release evidence.
+
+**Structured-output confidence refresh (2026-09-05T02:43Z):** Naruon Draft
+PR #1553 exact head `4643e3404e01a3c860cdbddb225000493357bb07`
+repairs the product-owned project-graph response schema. The predecessor accepted
+negative, greater-than-one, `NaN`, and infinite confidence and heuristically
+clamped finite outliers downstream, allowing a provider value such as `7.5` to
+become maximum confidence. Object and relation payloads now reject every
+non-finite or out-of-range value at the provider boundary and projection uses
+only the validated 0.0–1.0 value. Seventy-seven focused structured-output,
+project-graph, LLM, and grounded-answer tests pass with warnings as errors, plus
+Ruff and diff checks. The superseded hosted runs were cancelled; central review
+run `33939894339` is queued for this exact head. Current-head hosted Checks and
+independent review remain pending, so the inference-confidence Gap is not yet
+closed on protected `develop`.
+
+**Mail-list performance evidence refresh (2026-09-04T18:03Z):** Naruon PR
+#1542 exact head `918579729e3153f0b3b8c1c8d0dfcaf8aa12f025` now
+contains an observable memoization acceptance test rather than only functional
+selection coverage. It instruments the fetched email array's `map`, triggers an
+unrelated search-input state rerender, and proves the stable list is mapped only
+once; the existing test separately verifies selection and callback dependency
+changes. Unmeasured fixed claims about 50-plus rows and exactly two rerenders
+were removed. The current forward repair also deletes four completed
+self-modifying patch scripts, restores the stronger two regression tests, and
+removes unrelated Jules/E2E drift; its tree matches verified predecessor
+`6113f76e1f7c1c56adc89f932ef423f34ef83566`. The current audit revalidated
+seven focused tests, TypeScript, ESLint, and diff checks; all review threads are
+resolved. Exact-head central review run `33940551294` is queued while the older
+hosted runs remain cancelled. The PR stays Draft pending current-head hosted
+checks and independent review;
+no buyer-visible latency claim or protected-branch completion is recorded.
+
+**Backend test-runtime dependency refresh (2026-09-05T04:42Z):** Minimal
+protected-base prerequisite PR #1565 exact head
+`52dfc863d1a5d6e4e80b6366f719dd09f2aa6172` removes the Starlette `TestClient`
+warning suppression and promotes the already used optional-agent
+`httpx2==2.5.0` pin into the core development, direct test, project lock, and
+hash lock contracts. The current head also includes that pin in the shared
+SHA-256 digest-format assertion instead of checking only record presence, and
+a runtime test proves Starlette selects the `httpx2` module rather than its
+deprecated fallback. PyPI's 2.5.0 trusted-publishing attestation and wheel
+digest match the lock; the Starlette release history, exact provenance, rollback,
+and APA 7th references are recorded in
+`docs/doctoring/starlette-httpx2-testclient-dependency.md`. This
+was found while validating utility consumer PR
+#1538 (`c0eeca396904ec8baa1ec90d22986e94734567fd`): its source tests could not
+collect under Python 3.14 with warnings as
+errors because protected `develop` omitted the direct test dependency. Frozen
+sync and the predecessor's 65 focused tests passed without the warning; the
+current head independently passes the two focused manifest/runtime tests with
+warnings as errors, Ruff, and diff checks. Broad dependency-upgrade PR #1494 exact head
+`8ac9cfbe882bddfb85c44e84aca5c8ee841a3453` remains the successor owner for
+`httpx2==2.12.0` and its other package migrations; it also removes the
+suppression rather than reviving it. PR #1538 remains Draft until the minimal
+prerequisite is protected-merged and its own unchanged-head review and Checks
+complete. Its release note now names only the two effective tools and does not
+claim the removed URL extractor. It distinguishes MD5/SHA-1 compatibility
+fingerprints from the SHA-256 security hash and retains `usedforsecurity=False`
+at that boundary. Seventy-three focused tests, Ruff, and diff checks pass, while
+current-head hosted checks are queued. A fresh frozen-sync run also passes the
+pin contract and a real FastAPI `TestClient` API path (`7 passed`) with warnings
+as errors. With no unresolved thread, source failure, or merge conflict, PR
+#1565 is Ready; 21 exact-head checks are queued and five are skipped. No gate
+evidence transfers between the owner, upgrade, and consumer heads.
+
+**Frontend dependency security refresh (2026-09-05T02:38Z):** Dependabot alert
+#91 identifies GHSA-5p4m-2wfm-xmqj in transitive `js-yaml@4.3.0`. Draft PR
+#1571 (`c3cf4efc478a264a0a010df82d1ea90b48776610`) uses the existing pnpm-native
+workspace override to require patched 4.3.1 and carries an executable lock
+contract. Pinned pnpm 11.5.3 reproduced lock hash
+`018f0382c815ea7a35899e64ddb6c3645399fcb6` byte-for-byte; a narrower update
+command was rejected because it changed unrelated Vite and WASM closure entries.
+Both focused tests and diff validation pass. Hosted Checks remain queued, so
+protected completion and independent current-head review are pending.
+
+**DAV authorization boundary refresh (2026-09-05T01:08Z):** Ready PR #1345
+(`8146c56587acea5c4aa859ba9366eef0f39540d7`) is now non-force merged with
+`develop@042b0c70531b229af3acbd0421a2f23098d848b3`. It preserves the framework's
+single decode, rejects nested encodings that would expose traversal dots,
+separators, backslashes, or control octets, and keeps owner and organization
+scope on DAV and document reads. The 82 focused authorization/network tests and
+Ruff pass. Both information-only review threads are resolved. The previous
+Strix failure was fail-closed provider evidence (NVIDIA rate limiting and an
+unsupported direct-OpenAI request contract), not a completed vulnerability
+finding; fresh exact-head Checks and independent review remain required before
+protected merge.
+
+**CardDAV and identity successor boundary (2026-09-05T01:23Z):** Draft PR
+#1206 (`aba2a03f3ca87914fcf1ca1c751b173097852bca`) remains a separate successor
+for CardDAV TXT discovery single-decode semantics, opaque Prompt Catalog API
+identity, and OIDC-only administrator authority. Its unique delta does not copy
+#1345's DAV route, document-scope, or local-provider network changes. Sixty-one
+focused tests and Ruff pass on `develop@042b0c70531b229af3acbd0421a2f23098d848b3`;
+the current head has an independent approval. Keep it Draft until #1345 reaches
+protected `develop`, then non-force restack, rerun both prerequisite and unique
+contracts, and collect fresh exact-head Checks before Ready promotion.
+
+**Semantic configuration naming refresh (2026-09-05T02:34Z):** Draft runtime-config
+PR #1521 (`1269f6d8f09d54b24795ad32dc2fc05ec220491d`) preserves the published
+`version` and `features` wire keys while translating them to qualified internal
+product fields. The frontend now rejects malformed successful wire payloads
+before caching and uses the existing fail-closed fallback. Thirteen frontend and
+39 backend focused tests plus ESLint, TypeScript, Ruff, and diff validation pass;
+21 hosted jobs are queued for the exact head. The aggregate changes-requested
+state predates this head and is not completion evidence; keep the PR Draft until
+current-head review and required Checks pass.
+Connector schema PR #1520
+(`e2043884a34fd08a5c2cc17726a6a615fa29d647`) confines legacy `capabilities`
+and `status` names to JSON aliases while using semantic owned fields internally.
+Both wire and owned names validate independently, conflicting duplicate inputs
+fail closed, and default serialization preserves the legacy keys. Two focused
+tests, Ruff, and diff validation pass; central exact-head review run
+`33940315065` is queued after predecessor review lanes were cancelled.
+Tasks bounded-context PR #1515
+(`8a532ef30b295f59daa890ca82aa3eeaf4e5077e`) preserves established HTTP aliases
+while exposing ticket-task semantic names internally. A fresh CodeGraph audit
+found three dead reply-SLA helpers duplicated in the API after behavior moved to
+`reply_sla_escalation_service`; the API copies are removed so the service is the
+single behavior owner. Forty-six naming, Tasks API, and reply-SLA tests pass with
+one skipped, and Ruff/diff checks pass. Twenty-one hosted jobs are queued for the
+new exact head; predecessor review and check evidence does not transfer.
+Draft agent-registry PR #1537
+(`7665a2efaeaae75b3123a73a6291a1c2abba2b87`) similarly keeps legacy generic
+JSON keys only in its anti-corruption loader and publishes semantic fields to
+application callers. Its latest repair rejects an entry when canonical and
+legacy names carry different values instead of guessing which value controls
+dispatch; exact duplicate values remain accepted during staged migration.
+Eight focused registry tests, Ruff, and diff checks pass. Twenty-one hosted
+jobs are queued for the new exact head; predecessor checks, reviews, and local
+tests do not transfer as merge evidence for either head.
+
+**Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
+(`a9f0bf97ce8bec2d518824c1c0a25b162e6a1155`) is the current customer-facing
+README and public Pages lane. Its latest repair restores the tested ownership
+boundary: repository workflows own product tests, while the
+ContextualWisdomLab central required workflows own OpenCode review, Strix
+analysis, branch updates, auto-merge, and mechanical merge actions. The same
+head preserves reviewed dotenv duplicate-assignment handling and applies mode
+`0600` before generated local secrets are written. The current repair also
+opens the dotenv target with `O_NOFOLLOW`, so an existing symbolic link cannot
+redirect generated credentials into an operator-owned file. Seven focused
+setup tests, including target-preservation on symbolic-link rejection, and Ruff
+pass. The PR is Ready with 21 fresh hosted jobs queued; the prior 41-test result
+and earlier requested review do not transfer to this head.
+
+**Authentication owner prerequisite refresh (2026-09-04T16:27Z):** Naruon
+Draft PR #1532 (`d93aabcc134ae461cf7f42d6cf26c6ca29deb9f5`)
+remains a consumer lane and must not restore ROPC. Its login and signup routes
+fail closed before parsing credentials, while Authorization Code with PKCE uses
+a nonce-bound same-origin popup completion channel. Thirty focused frontend
+authentication tests, TypeScript, and ESLint pass with the repository-pinned
+pnpm 11.5.3. The previous seven review findings targeted predecessor code;
+current-head source preserves their security outcomes without implementing an
+unreleased password/session contract. Keyverse Draft
+PR #128 (`e1cf0807d6b15e8d8300eb252533aa05b20b93c9`) disables that path while a
+standards-compliant headless session contract is unfinished. Its merge-ref
+account-unification failure was traced to a retired repo-local hourly PR steward
+test. Closed PR #145's deletion is fully preserved by Ready owner PR #146
+(`e6da5dd3762b45acf4e0a70b672327f38f4ba04b`). PR #128 is now ordinary-merged
+above #146 and retargeted from the closed #145 branch to
+`codex/keyverse-orchestrator-free-development`; the deleted test no longer
+appears in the child-unique diff. The complete account-unification suite, realm
+validation, actionlint, and child diff check pass. #146 must reach protected
+`main` first; then #128 must be non-force restacked and retargeted to `main`,
+with fresh owner-contract Checks and independent review on that resulting head.
+
+**Exact-head execution refresh (2026-09-04T17:03Z):** protected `develop`
+remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
+(`e5c5eee14050db40ae54ac1b33319b8c2feb7478`) is now a predecessor of #1564,
+which carries its complete valid delta plus the newer exact-head repair rules.
+#1558 remains open until #1564 reaches protected merge or an independent
+equivalence check confirms succession; no count-only closure is authorized. #1538
+(`6a09b3ab90325a9045e90495e77a88b0f58fad27`)
+is the single writer for bounded ASCII email and selected Korean/North American
+phone masking. A second remote acknowledgement commit again removed verified
+behavior; the non-force corrective head restores the complete ASCII dot-atom
+boundary, bounded malformed-input regression, and North American cases. Its
+hash-generator contract labels MD5 and SHA-1 as compatibility fingerprints,
+keeps `usedforsecurity=False`, and identifies SHA-256 as the security-capable
+output. The release note now names only the two implemented tools rather than
+the removed URL extractor. Seventy-three focused tool/API/privacy/dependency
+tests, Ruff, and diff checks pass. The tool single-writer chain is now #1565 ->
+#1300 -> #1301 -> #1302 -> #1538; the four-file feature delta preserves all
+fail-closed mutation and source-bound removals. The shared matcher now rejects
+malformed empty domain labels and restores selected North American phone forms;
+84 combined contracts pass. Draft PR #1496
+(`17b732a71dd9f77fd8cce083e1cd065774380665`)
+is non-force restacked on that current owner head. Its three-file, 226-addition
+delta contains only the URL extractor and tests; 103 combined contracts pass
+without warnings. GitHub reports the stack clean, while protected parent integration and fresh exact-head
+review/Checks remain required. Draft PR #1512
+(`c5582d64ad096e68079799d992dedba44ef8f55e`) follows current #1496 head
+`17b732a71dd9f77fd8cce083e1cd065774380665`, consumes the canonical matcher,
+rejects empty domain labels and trailing ellipses, and records its RFC 5322
+ASCII subset. A review acknowledgement had deleted the parent URL implementation
+and regressions, causing a reproduced 404; the repaired head restores the exact
+parent files and leaves a four-file, 131-addition email-extractor delta with no
+deletion. The combined 106 tests pass with warnings as errors, alongside Ruff
+and diff checks. Draft PR #1555
+(`369b7a3a862390ec168c7b0565e44ecd679de322`) follows #1512 and carries
+only the first/last-sentence extractor. It consumes both parent matchers and
+preserves U+FF0E, decimal/title periods, URL/email periods, repeated terminators,
+and trailing quotation or bracket punctuation. After a non-force parent merge,
+the current stack passes 117
+combined tests, Ruff, and diff checks. No predecessor gate evidence transfers
+after these base/head changes. Draft PR #1482
+(`052f79e11da8f1d465cbf95dbdcc44be3f44f519`) is restacked last on exact #1555
+head `369b7a3a862390ec168c7b0565e44ecd679de322`,
+reuses the canonical email and phone matchers, and adds bounded Unicode-email,
+French-phone, and separator-optional Korean resident-registration masking. Its
+catalog claim excludes complete de-identification, and NIST SP 800-188 grounds
+that boundary. A concurrent acknowledgement ancestry was absorbed without a
+force-push while preserving the validated tree. The effective child delta is
+three files with 163 additions and no deletion; the combined tool and privacy
+contract suite passes 120 tests with warnings as errors, plus Ruff and diff
+checks. Timeline evidence on #1538, #1496, and #1482 shows that posting repair
+evidence as an issue comment caused `google-labs-jules[bot]` to reply and was
+followed by an unsigned, user-attributed rewrite from a stale agent workspace.
+Those rewrites deleted validated parent security and dependency contracts.
+Until the bound Jules sessions are terminated, this stack records evidence in
+the PR body and this baseline instead of posting new trigger comments. PR #1502
+(`0b9e324a91fd2148b2b2759cca875ac7d50c86a0`) pins its PostgreSQL service
+image by digest and has local migration, real PostgreSQL, and 97-test evidence.
+Its previous frontend failure occurred before tests because Corepack resolved
+mutable `pnpm/latest` and received `ECONNRESET`. The PR now non-force inherits
+workflow prerequisite #1562 and targets its exact branch; the effective
+database/bootstrap delta remains eleven files. Actionlint, 40 governance and
+stacked-workflow tests, and 62 focused migration/bootstrap/data tests pass
+locally, with two PostgreSQL-service tests explicitly skipped in that focused
+no-service run. Fresh hosted exact-head evidence is queued. The PR was returned
+to Draft because its #1562 foundation, current-head review, and terminal hosted
+evidence are not complete; the database/bootstrap delta remains preserved.
+The Draft email-writing stack now carries every prerequisite delta by non-force
+merge. Task 7 PR #1524
+(`cc1da5125e761d80caa7b0e81bd346e1004fad2e`) adds deterministic race coverage
+for cancelled queued Judge work and concurrent lazy executor creation; 65
+focused tests and all 250 statements/54 branches pass. Task 8 PR #1530
+(`e7bc7b5dc97b312ca907d2e1def15b399a51cd48`) consumes that head and closes the
+publication-integrity boundary: the schema requires validated calibration and
+complete evidence identities, while the loader resolves immutable evidence
+bytes, recomputes every digest, binds artifacts to the preregistered protocol,
+and rejects missing, malformed, mislabeled, modified, self-referential, or
+pre-protocol evidence. Twenty-four focused tests and all 396 statements/188
+branches pass. Task 9 PR #1535
+(`d07c68ff36c7ed7fb1022138ac10134aa5654128`) consumes Task 8, initializes only
+ephemeral isolated-test bootstrap values, and covers owner, clock, context,
+Candidate, Judge, policy, confidence, cancellation, timeout, persistence, and
+rollback failure paths; 32 focused tests and all 274 statements/64 branches
+pass. Task 10 PR #1536
+(`59fe843e0c04c6e8d920967ee73f16fceed5a5da`) consumes Task 9 and verifies the
+production route through FastAPI's public reverse-routing contract; 11 focused
+tests and all 39 statements/8 branches pass. All four lanes pass Ruff and diff
+checks without warning output. GitHub had not materialized Actions runs for
+these new heads at the observation time, so local results are not protected
+merge evidence and predecessor checks or reviews do not transfer.
+Draft PR #1563 (`b1169e26949e7f75ebdccbdb9bb1f07eeacc163b`) repairs the prompt-provider
+error boundary. Provider-controlled exception messages and tracebacks no longer
+enter application logs; operations retain only a fixed event name and exception
+class, while the signed API returns fixed actionable copy. Client cleanup
+failure cannot replace that response or leak a second exception message.
+Provider URL/client setup failures now use the same fixed boundary, and an SDK
+constructor failure closes the already-created safe HTTP client. The PR
+non-force inherits and targets prerequisite #1565
+(`52dfc863d1a5d6e4e80b6366f719dd09f2aa6172`) instead of copying its dependency
+manifest. The effective child delta remains three files: the prompt boundary,
+four focused regressions, and its doctoring record. The combined prompt, pin,
+and release-governance suites pass 41 tests with warnings as errors; Ruff and
+parent-base diff checks also pass. Doctoring connects the contract to OWASP
+logging guidance and NIST SP 800-92. GitHub had not materialized a Check Run for
+the new exact head at observation time, so the PR remains Draft and local
+results are not protected-merge evidence.
+PR #1511 (`f78222dda6ac961fa3c1c4fb2acd9d7625e7b672`) repairs Context Search
+identifier language end to end. Backend and frontend runtime models use
+`email_id`; the legacy `id` exists only at the `/api/search` wire boundary and
+is translated once on receipt. Selection, React keys, ontology lookup, and
+product events consume the semantic identity. Seventeen backend tests plus the
+frontend SearchLayout regression, TypeScript, ESLint, Ruff, and diff checks
+pass. Fresh hosted evidence is required because earlier failed review runs do
+not transfer to this head.
+Draft PR #1503 (`19d5860bc27e860acba940390f5792721cd99e5e`)
+repairs the persisted Data workspace registry. Incremental databases that had
+already run the original bootstrap lacked `workspace_entities` and
+`workspace_documents`, while document creation did not provision the signed
+workspace foreign-key row. Structured idempotent migrations and the shared
+race-safe PostgreSQL provisioning service now cover both document creation
+paths without accepting client workspace authority. The earlier 73-test rerun
+used an undeclared local `httpx2` installation and is not clean-lock evidence.
+Exact synchronization exposed the missing dependency; a normal merge of #1565
+preserves both parent deltas and supplies the declared TestClient dependency.
+On the resulting exact tree, fresh and repeated Alembic upgrade reach
+`0019_email_read_state_repair`, and 75 tests pass with explicit `-W error`,
+including historical, stamped-repair, and data-preserving downgrade cases.
+Ruff and diff checks pass. #1565 is now its direct prerequisite; the historical
+#1502-before-#1503 proposal is superseded, not a mutual dependency. Hosted
+PostgreSQL, security, and independent review evidence remain required.
+Draft PR #1497 (`69f50ae684f50c501ff2f49be2969f1d211d7f3c`)
+implements Naruon's bounded tenant provenance archive: deterministic BagIt,
+RO-Crate 1.3, and PROV metadata; OIDC-authoritative export/import; tenant and
+workspace closure; portable identity remapping; transactional conflict checks;
+and bounded archive parsing. CodeGraph review traced the shared service and API
+authority paths. The delta is non-force stacked after #1427 in the prerequisite
+chain #1565 -> #1503 -> #1572 -> #1468 -> #1427 -> #1497; its conflicting
+ADR proposal is now ADR-0022, with former 0007 and 0005 history retained,
+not prematurely Accepted. Earlier
+157-fast/117-database receipts are historical scope-specific runs, not evidence
+that the deployment migration chain succeeded. The new combined suite passes
+345 tests after fresh/repeated real Alembic migration; the unchanged large-content
+failure is repaired, and remaining acceptance paths are recorded above. Binary payloads,
+credentials, provider state, embeddings, and audit-history portability remain
+explicit non-goals. The head stays Draft until fresh central review controls and
+protected checks replace historical malformed/absent reviewer evidence.
+Ready PR #1493 (`997e18cf51ed7e8265a111c7637274a1f097db08`)
+updates the self-hosted connector to websockets 17.1 and repairs the missing
+runtime release boundary discovered during review. The existing image workflow
+validated only backend, combined, and frontend images, so the connector change
+could pass without building or publishing its owner runtime. PR and semver-tag
+matrices now build `naruon-connector` for amd64 and arm64. The first arm64 build
+failed on the x86-only hash lock; the verified Python 3.14 arm64 wheel digest is
+now pinned alongside amd64. A second review found that the image copied only the
+WebSocket client: configuring `DATABASE_URL` would fail before loading the
+canonical database-backed mail and DAV adapters. The image now installs the
+shared backend lock, copies that owner runtime, and verifies seeded adapter
+imports at build time without embedding a credential-shaped test value; both
+backend and connector locks resolve websockets 17.1.
+Seventy-five focused tests, Ruff, actionlint, and warning-free adapter import
+smoke pass for both platforms. After the central queue-owner repair, Application
+CI, Bandit, and Docker attempt 2 plus bounded central review run `33934191278`
+were requested on the unchanged head and remain queued. Deleted or dynamic
+workflows that GitHub refuses to rerun remain non-passing; fresh hosted
+`validate connector image` and protected review evidence are still required.
+Canonical workflow-owner PR `ContextualWisdomLab/.github#1871`
+(`25083c8b006db8ec8234aa02661d0c23a05c44df`) repairs stale schedule and
+inactive-review test oracles against current protected main, closes Python 3.14
+HTTP-error response leaks in the Noema, GitHub policy, Pages, and sandbox
+readiness paths, and completes missing CodeQL rollout, admission, scheduler,
+and direct-import contracts. A current-head P1 review exposed a daily-cadence
+regression in the consolidated 18-repository recovery caller; the owner now
+restores all 17 staggered cron triggers to hourly execution and rejects that
+regression across the focused and full contract suites. The warning-fatal full suite passes with 2,900
+tests, one skip, and 21 subtests; all 13,115 production statements and 5,294
+branches are covered with no missing or partial branch. The PR remains Draft
+until fresh hosted checks and exact-current-head independent review complete.
+Attempts 1 and 2 of eleven current-head workflows were each cancelled in a
+single timestamp cluster without a source-failure log; on attempt 2 the current
+head coalescer itself remained queued. No third rerun or cancellation-cause
+claim is made until authoritative runner or cancellation audit evidence exists.
+PR #1539 (`acd8a8412475a38a86c2749958b59e589de6d1e6`) removes only the duplicate
+local Dependency Review after confirming the central Security Scan retains the
+exact-base/head moderate-severity hard gate; 36 governance tests and actionlint
+pass. #1543 (`4d84882bc6864ab2ba63d068e1b2252a93dfc57a`) remains Draft and keeps the
+trusted-base local evaluator for non-default bases. Synchronize workflow runs
+cancel only older synchronize evaluations, while every same-PR event publishes
+through one non-cancelling job lane so stale same-head snapshots cannot race on
+the shared check/comment. Thirty-eight governance tests, the shell harness,
+actionlint, and diff checks pass. Central scheduler main still does not prove the
+structured adversarial fallback contract, so #1543 is not a complete successor
+for #1531 and must not delete that delta.
+Contextual-orchestrator successor #1066
+(`6e7a08fc1a77f8be6a536f2de5426dad2fbb5225`) carries the complete #1060
+stacked-security trigger delta on a trusted base-repository branch after the
+fork head could not materialize long-running required review. Actionlint,
+thirteen security metadata tests, and diff checks pass. #1060 remains open until
+#1066 reaches protected main and exact-tree equivalence is verified; queued
+hosted Checks and review are wait states, not protected integration evidence.
+Contextual-orchestrator successor #1067
+(`845d09dc666bee4a212710f517b0f1c9f38a0c52`) likewise preserves fork PR
+#1058's complete psychometric-routing performance and research delta on a
+trusted base-repository branch. Both heads resolve to tree
+`db3ee97813c93df4bdebae41eb335523e882039f`; #1058 remains open until the
+successor is protected-main integrated and that equivalence is reverified.
+Contextual-orchestrator #1068
+(`fa5446294ae7ae69f1c2958aa1ab6c071fa760bc`) carries fork #1063's current
+NVIDIA hosted-access evidence above #1066. The predecessor/main and
+successor/#1066 effective diffs share SHA-256
+`2a79c5600dd54b3a47a27f70d9e75daeba80d5b886a9ab93005ce47d65c7d7f5`;
+139 NIM, release-acceptance, and stacked-workflow contracts pass. EgressWeave
+consumer PR #1046 (`7ebe9128245c3ad212f8f2d6456bd6d968cc5139`)
+is stacked on #1068 with only its six owner-boundary files in the three-dot
+diff; 47 focused tests and the exact stacked full suite (`3396 passed, 2
+skipped`) pass. Both PRs remain open and mergeable while hosted Checks and
+current-head review are pending; neither is protected-main or release evidence.
+Contextual-orchestrator PR #1044
+(`95bc9a7e7b9ad0b455c44715724c2998ad93868d`) removes a provider-embedding
+batch test race by waiting on the existing completion contract before reading
+terminal usage. Source, security, Strix, and quality Checks pass; the remaining
+Noema failure is a 96.4-second gateway 502 with no source finding, so central
+review retry run `33910613120` is queued without changing the exact head.
+Contextual-orchestrator PR #1043
+(`414e2340f5c23d2bca732ecd53234d69b941df42`) corrects the stale proposal to
+cap the entire serial provider loop: the shared application, agent, and gateway
+default remains unbounded, while upstream termination and durable candidate
+health evidence govern failover. Its review thread is resolved and source,
+security, quality, CodeQL, Semgrep, and Strix gates pass or are policy-skipped;
+Noema retry `33910784180` is queued after an 1814.3-second gateway 502.
+Admin-state PR #1039 (`ae9a331994bc075b2c2148c9f5ff29c53dd8fe9e`)
+keeps successful model-group mutations distinct from refresh failures and
+rerenders current agent assignments without erasing client-enriched analytics
+or readiness state. All review threads are resolved and the current source,
+quality, CodeQL, Semgrep, and repository-security evidence passes; central
+review retry `33910863565` is queued after Noema infrastructure failure.
+Contextual-orchestrator PR #1034
+(`b03f3b10211e188e81313cba5e1cf641991a6f71`) is stacked on #1068 and uses
+Thompson-sampled per-member stability for live model-group serving while admin
+and report reads remain deterministic. Integer outcome counts survive
+fractional-prior floating drift; zero-observation cold start retains static
+order. Thompson (1933), Chapelle and Li (2011), and Agrawal and Goyal (2012)
+ground the sampling mechanism, but do not prove optimality for the product's
+composite stability-sample/EWMA-latency score. Ninety-three focused contracts
+and the exact stacked full suite (`3399 passed, 2 skipped`) pass; hosted Checks
+are queued and no protected-main or buyer-traffic optimality claim is made.
+Contextual-orchestrator PR #1032
+(`95b164542ba462d8015107ae6492fa36f22cc357`) is non-force restacked on #1068
+and feeds successful `orchestrator/free` synthesis into the existing realtime
+fast-mlsirm judge as observation-only routing evidence. Request eligibility,
+ZDR, file-replica, and operator-budget boundaries remain in force; rejected
+observations preserve incurred provider usage and never replace the served
+answer. CodeGraph confirms the serving path from orchestrated completion through
+`conduct` to model-judge verification. Two hundred three focused contracts and
+the exact stacked full suite (`3426 passed, 2 skipped`) pass. The six-file delta
+remains Proposed while current-head CodeRabbit and hosted Checks are pending;
+it is not protected-main, release, or buyer-quality evidence. The live PR was
+returned to Draft after its successor contract identified #1564 as a predecessor
+whose full exact-head succession is still unproven; its delta remains intact.
+AGENTS entry PR #1528 (`57254cb61ecc67dd593ea96ae878bf651682a501`)
+adds verifiable read-first product, Project, gap, issue, Figma-decision, and
+organization-governance links plus a regression contract. Reopened foundation
+PR #1549 (`4c31028fa3e058515bd7203001de8ad05fc951b1`) is non-force stacked on #1528
+and removes direct provider/model
+routing from Naruon guidance and OpenCode configuration. Central workflows pass
+only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
+discovery, capability routing, free-pool membership, and fallback remain with
+the canonical owner. Consumer adoption still requires an immutable protected
+owner release, and open PRs or unreleased branches remain Proposed evidence.
+Historical stacked PR #1566 (`104ecf39d6affae7716ca81b4d167bf09abafcb1`)
+was non-force restacked directly on canonical AGENTS writer #1564 and
+normally merges current LLM-owner foundation #1549
+(`f038377d7d95d445a0e9f3e37707278d792213a2`). Its operating delta adds
+`agents-md`, Context7, DeepWiki,
+sequential-thinking, remote-MCP ZDR handling, Superpowers test-first debugging,
+the Ponytail minimal-solution ladder, truthful `Co-Authored-By` attribution,
+and current `contextual-orchestrator/orchestrator/free` wording to `AGENTS.md`,
+with two assertions in the existing lifecycle contract test.
+That repair restores #1549's deleted LLM-authority regression and missing
+CLAUDE/architecture owner boundary while retaining #1564's loopback-only
+OpenCode endpoint and unset request timeout. Thirty-nine focused governance
+contracts, Ruff, and diff checks passed on that head. Hosted suites were absent
+because leaf branch filters do not attach them to this stacked base. #1566
+therefore has one bounded central exact-head scheduler dispatch, run
+`33941908363`, queued with review enabled and merge, auto-merge, and branch
+updates disabled; duplicate current-head dispatch was absent before enqueue.
+The dispatch is wait-state evidence, not an approval or hosted-check substitute.
+#1566 remains Draft; the newer exact head and 44-test source-only scope are
+recorded at the top of this baseline. #1564 protected merge, fresh exact-head hosted
+Checks and independent review remain required after restacking on `develop`.
+Former child #1567 was restacked to
+`4456fabe0d4906f29d07f2b54fbf374462108798`; its sole prior child test failed
+three current parent contracts and was removed rather than weakening the
+canonical guidance. The resulting #1567 and #1566 tree SHAs are identical, so
+#1567 was closed only after exact-head zero-valid-delta succession was proven.
+Contextual-orchestrator PR #911
+(`e80949188f0afa86052f10f5a9b627da1ee1ef0b`) is non-force restacked on #1068
+and repairs durable routing-observation invariants found in current-head review:
+successful batches need not invent latency, failed startup leaves no retention
+lease, embedding failover contains persistence faults, and batch quality stays
+bound to the execution-time routing context. Active unexpired leases govern
+pruning; the historical maximum-window row is compatibility/audit metadata,
+not live retention authority. One hundred ninety focused contracts and the
+exact stacked full suite (`3452 passed, 2 skipped`) pass. The five verified
+review threads are resolved, but hosted exact-head Checks and independent
+approval remain pending; this is Proposed owner evidence, not a released
+consumer contract.
+Naruon PR #1553 (`4643e3404e01a3c860cdbddb225000493357bb07`)
+keeps product-owned structured payloads fail closed for unknown fields,
+implicit scalar coercion, and non-finite or out-of-range project-graph
+confidence. A later OpenAI SDK namespace migration and private serializer test
+were removed because transport selection belongs to the released
+contextual-orchestrator consumer contract, not this six-file payload slice.
+Seventy-one focused contracts and the full backend suite (`1820 passed, 33
+skipped`) pass. The PR remains Draft while current-head hosted Checks and
+independent approval are pending; existing direct SDK seams remain explicit
+migration debt rather than an approved owner-boundary exception.
+Canonical owner release PR contextual-orchestrator #1030
+(`f753f453ce4fc3dbc612bb9bdbb8db4cbfd93c16`) now implements the missing
+immutable publication mechanism: exact tag-namespace identity, annotated-tag
+peeling, protected-main freshness, read-only verification, mandatory
+exact-commit CycloneDX SBOM, and resumable asset attachment. It non-force
+inherits Python/fast-mlsirm prerequisite #995 and the current NVIDIA hosted
+prototype evidence from #1063; official NVIDIA guidance still separates free
+prototype access from production licensing. Actionlint, Ruff, 83 focused
+release contracts, 209 combined release/NIM contracts, and the full suite
+(`3477 passed, 2 skipped`) pass. The PR remains Draft, ADR 0129 remains
+Proposed, hosted exact-head evidence is pending, and the owner still has zero
+published GitHub Releases; consumers therefore remain fail closed.
+Draft PR #1525 (`8225123257400be29f72fe0e3039512e6c95ac78`) repairs the
+project-graph selector boundary and its executable tests. `keyword` remains an
+explicit deterministic mode; `llm` and `orchestrator` neither choose provider
+details nor substitute keyword output when their requested capability is
+unavailable. Stale tests that still constructed deleted authority-bearing
+fields or monkeypatched the removed raw transport are gone. Ruff, 68 focused
+tests, and the full warning-as-error backend suite (`1801 passed, 33 skipped`)
+pass. The predecessor Strix artifact failed before scanning because its central
+compatibility launcher lacked `httpx2`; canonical `.github` PR #1851 has since
+merged the hash-locked dependency into protected main
+`769691526f8c73cf714de8fe8ba51ae6cfa2901a`. Fresh #1525 exact-head hosted
+evidence must prove that owner repair; prior failure evidence does not transfer.
+Draft PR #1514 (`22a3ddff94c29f51a4f56590a85a7b723c454ecc`)
+repairs Naruon's Relationship Context naming boundary while preserving the
+published network-graph JSON keys. Current-head review also found that set and
+database encounter order leaked into response arrays, so equivalent email
+evidence could perturb client layout, cache, screenshot, and incident evidence.
+The shared endpoint now emits nodes in email-identity order and edges in
+source/target order. Eleven focused warning-as-error tests and Ruff pass; fresh
+hosted Checks and independent review remain required, and no p95 improvement is
+claimed without a measured buyer path.
+PR #1522 (`d65b05992cee54964114c9011a2bbbddd663062f`) remains the bounded
+NetworkGraph option-materialization parent and owns its repository-local Strix
+lock prerequisite. Failed job `101062515199` proved the scanner stopped before
+analysis with `ModuleNotFoundError: No module named 'httpx2'`; the target lock
+now directly pins `httpx2==2.12.0`, its generated hash lock is unchanged, and
+a hash-required Python 3.13 install imports that exact version. Its merged
+#1568 child contributes behavioral cap and ordering tests without a duplicate
+source owner; all review threads are resolved and 21 hosted jobs are queued.
+#1526 was
+repaired non-force at
+`cd99fef3245d1097a0422e9b1f48cb42d51ab6e0`: it restored early-terminating
+option loops, executable option-limit coverage, and a real parent-rerender
+memoization assertion. Its current exact head `9a6be24a30c76497510b1de19f7cabe1254864a9`
+then overwrote those repairs with full-array materialization and a private
+React-marker assertion. The PR remains open for lineage; the overwrite does not
+invalidate the verified delta. Stable successor #1560
+(`e9e356c054d9935fa7918e980644bbd377c0eed4`) now inherits the repaired #1526
+commit and current parent #1522 by non-force merge, removes the duplicate
+private-marker assertion, and restores a behavioral parent-rerender regression
+test in a focused test file. Its validated tree is
+`e76963913d102ed3059ce790f1655110b52cb9d5`. The complete frontend suite (53
+files, 439 tests), TypeScript, focused ESLint, and diff checks pass. No
+predecessor gate evidence transfers, and #1526 may close only after #1560 merges
+and exact protected-main equivalence is reverified. #1560 remains Draft while
+non-default-base hosted review and validation evidence are incomplete.
+Stacked successor #1568 merged into canonical parent #1522 at
+`d65b05992cee54964114c9011a2bbbddd663062f` on 2026-09-05. The parent now owns
+the first-wins lookup implementation plus empty, under-limit, exact-limit, and
+over-limit relationship/node option tests covering insertion order, public ids,
+user-visible labels, and the five-relationship/eight-node caps. The focused
+21-test file, TypeScript, and ESLint pass. This is stack integration only:
+#1522 remains Draft against `develop`, and its new exact-head hosted Checks and
+independent review are still required before protected integration.
+Governance owner #1531
+(`550798ccafebea4b1a9a65018e63b9661ff25a53`) retains the CodeRabbit/OpenCode
+fallback and stacked-base contract. Trigger repair #1562
+(`bc91b36dec70c14e0cde526e2330638f5e0ce352`) is non-force restacked on that
+owner. It removes pull-request base
+filters from Application CI, Bandit, and image validation, scopes validation
+concurrency by workflow/repository/PR, and keeps tag publication
+non-cancellable. Its authoritative merge-gate policy now matches that behavior;
+it also installs the repository-pinned `pnpm@11.5.3` before `setup-node` asks
+for the cache path. This removes the mutable `pnpm/latest` lookup that failed
+#1502's frontend job on `ECONNRESET`. The current head also completely inherits
+#1554's rerun-isolation delta while preserving #1562's stacked-base identity.
+Its first-attempt current-head Application CI, Bandit, and image-validation runs
+were externally cancelled together while queued; attempts 2 of runs
+`33927276046`, `33927276079`, and `33927276320` are now queued on the same exact
+head. Earlier-head local and hosted results do not transfer.
+Bandit-only PR #1554
+(`6b7ad6ccb4a7a021d74381781f40af7cc97233f8`) removes the undeclared
+Application CI and image-validation experiment from its effective delta and
+keeps only the Bandit workflow plus parsed-YAML regression test. First-attempt
+PR runs share the PR-number lane and cancel only superseded first attempts;
+manual reruns use a `run_id` lane, so GitHub's pending-run replacement cannot
+evict newer current-head evidence. The focused test and actionlint pass, all
+current-head review threads are resolved, and fresh hosted evidence remains
+pending. #1554 remains predecessor provenance until #1562 protected-merges and
+an exact merge-result comparison proves complete succession; no check or review
+evidence transfers.
+PR #1500 (`dfee7c12a535a79ca43daa14b17c9580bcbf2658`) is likewise Draft after
+repeated empty CI-trigger commits kept replacing its exact head while retaining
+tree `9014b174aa1a07a2b6fee60c7211e1f3e9b09b4c`. Stable successor #1561
+(`dea8edb64d4ae492aec8815798edad8b4200c1dd`) carries the full source delta
+directly on protected `develop` and now inherits both current predecessor
+findings: the explanation remains hit-testable across pointer movement, while
+Escape dismisses a focus-triggered overlay without moving focus. Thirteen unit
+tests, one isolated real-browser Playwright regression, TypeScript, ESLint, and
+diff checks pass. No predecessor gate evidence transfers, and #1500 remains
+open until the successor merges and equivalence is reverified.
+PR #1488 (`5a5789e04b9e8bcb50ddd22fbc411fc7581a24d8`) repairs the calendar
+sidebar's deceptive enabled controls. Location, delete, copy, and close actions
+had no product-backed behavior and are removed; the remaining update check uses
+the existing signed-session calendar writeback-intent callback and stays
+disabled until source readiness. The interaction test now clicks the enabled
+action and proves callback dispatch. The same test rerenders a selected event
+with source writeback disabled and proves the callback cannot fire; two focused
+tests, TypeScript, ESLint, and diff checks pass. Hosted exact-head evidence
+remains required.
+Stacked accessibility child #1569
+(`b98abeef1259b6e23c82921a0dbe99a91ad29b06`) keeps sidebar ownership in
+#1488 and repairs the reusable writeback section. It now evaluates the selected
+source with the canonical writable-source predicate rather than treating every
+non-null stale selection as writable; a read-only stale selection cannot enable
+create, update, or provider execution and cannot display a false selected badge.
+The latest tip had removed native disabled/writeback behavior, deleted the
+validated tests, and rewritten parent-owned sidebar files; a non-force revert
+restores the complete child delta. Eighteen focused tests, TypeScript, ESLint,
+and diff checks pass. A warning-free desktop Chromium regression also proves
+all four read-only actions remain disabled, the reason is visible, no selected
+badge appears, no writeback request fires, and a screenshot is produced. The
+non-default-base head remains Draft until #1562 supplies required hosted
+validation and independent review evidence.
+PR #1559 (`4d6b697e97f7f0d98700292680970b41e7b12c48`) independently succeeds the
+confidence-boundary finding from conflicted #1436: it removes the frontend's
+unit-guessing discontinuity and follows the backend's documented 0--100
+percentage contract. The shared display boundary now rejects non-finite,
+non-integer, and out-of-range values instead of rounding malformed `0.856` to
+`1%`, `85.5` to `86%`, or `150` to a false `100%` claim. Its unit and
+EmailDetail fixtures, pilot and full-product smokes, and AGENTS.md recurrence
+rule share that unit; 28 focused tests, TypeScript, lint, and diff validation
+pass on the current head. Twenty-six hosted checks were regenerated, so
+predecessor GREEN does not transfer. Independent review and
+current-head hosted success are still required; this remains Draft.
+
+PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) remains predecessor provenance
+for the Today-dashboard recovery lane. Draft successor #1570
+(`a48e8ba85b6d3a4ceb78e110582b3d5bc76d0d7c`) now preserves independent reads,
+bounded abort and stale-generation rejection, and derives login recovery from
+all five source statuses. Calendar 401 and WebDAV 403 no longer offer a
+transport retry while core reads succeed; malformed successful payloads remain
+fail-closed instead of appearing as legitimate empty states. Thirty-eight
+related tests, TypeScript, ESLint, and diff checks pass. Fresh exact-head hosted
+Checks and independent review are pending, so neither protected succession nor
+closure of #1485 is proven.
+PR #1531 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) now honors an exact-head
+structured OpenCode approval when no CodeRabbit check exists even if a pending
+issue notice is present. On the current tree, 36 release/stacked-workflow
+contracts and the full shell gate harness pass with warnings as errors, and
+current-head unresolved threads are zero. The PR is Ready. The historical scheduler handles
+`33871200407`, `33871251541`, and `33872054770` belong to predecessor heads and
+are not reusable evidence. Canonical `.github` PR #1878 merged as
+`1b65dbc35e7183722ad77894e2d80b39993be90d`, removing the organization-wide
+queue sweep, and PR #1877 followed as
+`b5efbc2762e472e4a380b0503b1f050f76fbb008`, repairing the Strix admission and
+Noema cleanup contracts on protected `main`. The later central CodeQL, Strix,
+and coverage jobs were cancelled and cannot be rerun from this consumer
+repository because their reusable-workflow identifiers return 404. They remain
+failed evidence rather than source findings. Fresh exact-head review and Checks
+are still required; predecessor-head results remain non-transferable.
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
@@ -20,8 +981,8 @@ current merge state.
 `2026-08-25T15:39:22Z` found the active exact-head work relevant to this
 baseline: #1465 (`70596e26…`, tenant-archive import sanitization and duplicate
 identity rejection), #1466 (`a3e6762f…`, origin-integrity port validation),
-#1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
-#1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
+PR #1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
+PR #1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
 (`de6d7128…`, bounded 20–64 MiB deferred attachment parse-source admission),
 and #1455 (`d8757e65…`, attachment filename traversal hardening). The
 governance root #1443 now has exact head `62a0d645…` after child #1448 merged
@@ -42,6 +1003,29 @@ independent approval satisfy the protected ruleset; this follow-up does not
 reuse predecessor evidence or claim a merge. #1448 is historical after its
 normal merge; #1443's current head is `62a0d645…` and must be reviewed and
 checked again from that exact head.
+
+Draft PR #1541 (`2eaf6134434a2ad29ad8fe0365aa1b34b848dd5f`)
+separates attachment display sanitization from parser authority. MIME filename
+percent signs and character references remain literal identity, while path,
+markup, C0/C1, and bidirectional controls fail closed instead of manufacturing
+a trusted extension. Fifty-five filename/parser/EML tests and Ruff pass locally
+with warnings as errors. Prior OpenCode and Strix runs were externally
+cancelled; central exact-head review run `33940228096` is queued, and the stale
+metadata failure does not prove a source defect. Keep Draft until current-head
+review and required Checks complete.
+An exact two-tree comparison against `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
+still shows all four implementation, test, and doctoring files as a 344-line
+effective delta, so no protected successor has fully inherited this work.
+
+Draft PR #1570 (`a48e8ba85b6d3a4ceb78e110582b3d5bc76d0d7c`)
+keeps Today-dashboard source failures distinct from legitimate empty business
+data and gives the correct recovery action without hiding successful partial
+sources. The latest repair makes calendar and WebDAV authorization failures use
+the same login-recovery path as core data, while malformed successful payloads
+cannot masquerade as empty business data. Exact-head local evidence is 38
+related tests, TypeScript, ESLint, and diff checks; fresh hosted
+Checks, independent review, and predecessor-equivalence evidence remain
+required.
 
 **Live exact-head queue refresh (2026-08-25T17:51Z):** the following
 post-snapshot states supersede only the matching historical SHA references
@@ -147,12 +1131,21 @@ remains pending because it carries a UI overlay at this document path while
 PR #1429 owns the canonical commercial baseline; merge #1429 first, then
 reconcile #1436 against the canonical file before enabling auto-merge. These
 observations are exact-head evidence, not a release or hosted security claim.
-PR #1415 now has exact head `994c6d40bb8a5a1de82e2f137300ea620bcdf933`; the
-OIDC `kid` selection and strict administrator-role boundary passed 98 focused
-authentication tests. PR #1417 now has exact head
-`46f4b92a717361e3e4e42fcebc1d8c090a64c59b`; its PostgreSQL smoke seed now
-explicitly supplies `is_read` after a real existing-schema NOT NULL failure,
-and 180 focused tests pass. PR #1455 now has exact head
+PR #1415 now has exact head `f576eefce98bdc44dc03eed88510f60c3e6cccd9`;
+the OIDC `kid` selection and strict administrator-role boundary passed 98
+focused authentication tests. Its prior Noema failure was malformed model and
+repair JSON rather than an auth-test failure; Noema, Strix, and OpenCode have
+each been rerun once as attempt 2 on the same head and remain queued. PR #1417
+now has exact head
+`ad3ba4e44a015a9da9da221c841d1d9f345b0947` after a non-force merge of current
+`develop`; its PostgreSQL smoke seed explicitly supplies `is_read` after a real
+existing-schema NOT NULL failure. Current-head review also replaced the fixed window
+with an exact trailing-60-second count over existing scoped audit evidence,
+moved the limiter into its own READ COMMITTED transaction, and coalesced denial
+audits to one per scope/window. This prevents boundary double bursts, caller
+commit leakage, stale repeatable-read snapshots, and denial-storm write growth;
+86 limiter/email/parser tests pass with one PostgreSQL-only skip, and all five
+review threads are resolved. Fresh hosted Checks are queued. PR #1455 now has exact head
 `b2b4701366bc6bb2de1347b19eac9b4ed64cc614`; bounded filename decoding and
 Windows-separator traversal protection passed 130 focused parser/import tests.
 All three have recreated hosted Checks and remain normal protected-merge
@@ -311,6 +1304,43 @@ preserves `In-Reply-To` and `References`, scopes email/provider records by owner
 and organization, keeps opaque public identifiers separate from sequential
 surrogates, and applies deny-first RBAC/ABAC policies.
 
+Proposed PR #1534 (`bbcd3c5376102964d5e375821524a80b61b84599`)
+qualifies internal ABAC vocabulary while retaining the historical
+`action`/`conditions` wire aliases and read-only compatibility properties. All
+repository callers pass the evaluator policy positionally, 13 focused tests and
+Ruff pass, and both current review threads were verified as informational and
+resolved. Although `gh run view` cannot resolve the deleted workflow file, the
+raw Actions run, jobs, and logs remain available. They prove a single
+gateway-owned attempt served by
+`google/gemma-4-31b-it` ended after 310.3 seconds with an upstream HTTP 502 in
+`response_error`; this is provider failure rather than source evidence. The
+remaining metadata gate also records a cancelled Strix run. Contextual
+Orchestrator PR #1049 (`87612a68b3af1f305bb7b09bd0be860bad1b7fd6`)
+owns the missing `orchestrator/free` 502 failover: its focused tests and package
+quality checks pass, its review thread is resolved, and its current Noema,
+Strix, OpenCode, CodeQL, Semgrep, and security jobs remain queued. Naruon
+Noema run `33596312910` attempt 2 and bounded central review scheduler run
+`33942317426` now revalidate the unchanged #1534 head; both are queued and do
+not yet prove protected completion.
+Central `.github` PR #1888
+(`b61d8287a4a9aed3722868358b49116ada2999dc`) repairs a separate owner defect
+exposed by #1049: one-language CodeQL dispatches for the same repository and PR
+shared a concurrency group, so sibling Python, JavaScript/TypeScript, and
+Actions runs cancelled one another. The group now includes the already
+validated `required_language`; 25 focused contracts, Ruff, actionlint, and diff
+checks pass, and ADR 0025 records the live run evidence and rejected full-matrix
+alternative. It is non-force stacked on runner-image owner PR #1886 exact head
+`7bd5b02ddb84d7887c5d9984bd144302235cdfdf`; the parent lint finding is fixed,
+the combined 31-test suite passes, and the child retains a three-file effective
+delta. It remains Proposed pending both parent and child protected-main review
+and Checks.
+Naruon #1505 independently reproduced the same owner gap at exact head
+`3bf2f42ab8c854046f16b516073c13b13af77c6b`: Noema's sole gateway attempt
+served `deepseek-ai/deepseek-v4-flash-0731` and ended in HTTP 502 after 2,375.2
+seconds. The annotation contains no Naruon source finding. Central run
+`33936495146` now targets owner PR #1049 with merge and branch updates disabled;
+it is queued, not passing review or release evidence.
+
 ### 4.2 Source-of-truth and writeback sovereignty
 
 Protected `develop` already enforces important commercial boundaries:
@@ -396,7 +1426,7 @@ and defines the inventory that must be completed before GA.
 | #1418 | auditable URL/contact hygiene | deterministic tool/evidence lane; ensure contact redaction is not represented as complete anonymization |
 | #1317 | broad macOS/local-AI/runtime/governance integration | valuable evidence but unusually broad; must be decomposed or reconciled carefully because many active PRs overlap its surfaces |
 | #1392 | customer/operator README rewrite | directly addresses product-truth debt and has reported exact-head checks; still requires independent current-head approval |
-| #1300 | fail closed on unsafe global tool mutations | correct safety posture until durable tenant-scoped plugin/tool registry exists; links directly to #976 |
+| #1300 | fail closed on unsafe global tool mutations | exact head `e3485b4dfed763cdcd846c7894dc5c5f69e445e0` is non-force stacked on TestClient foundation #1565; five-file product delta and 86 warning-free focused contracts preserve the safety posture until durable tenant-scoped plugin/tool registry exists; links directly to #976 |
 | #1264 | EgressWeave integration | correctly dependency-blocked on an immutable released EgressWeave package and hash lock; mutable VCS dependency is forbidden |
 | #1390 / #1391 | 56- and 78-package dependency groups | excessive blast radius, including major runtime and OpenAI client changes; split by compatibility/authority and rehearse migrations before merge |
 | #1426 / #1414 | review-governance gate refresh | metadata-only governance repair; must not dismiss review, weaken rulesets, or turn stale aggregate state into false success |
@@ -406,14 +1436,17 @@ and defines the inventory that must be completed before GA.
 | #1347 | rate-limited review status governance | current head constrains repository API-scope identifiers and merges the protected base; local tests pass, while hosted Checks and independent review are still required |
 | #1433 | Message-ID whitespace hardening | source/security checks pass; the observed Strix failure is provider infrastructure (NVIDIA NIM 429 and direct OpenAI 404), so retry exact-head evidence without weakening the gate |
 | #1450 | stray scratch/debug cleanup | all source and security Checks passed; wait for the in-progress metadata gate and current-head independent review |
-| #1465 | scoped tenant archive import hardening | portability slice now rejects duplicate identities before writes and sanitizes archive-controlled display fields; retain the bounded slice-1 query cost and require current-head hosted evidence |
+| #1465 | scoped tenant archive import hardening | Draft head `e0b04d74…` non-force consumes Starlette TestClient prerequisite #1565 at `52dfc863…` and is retargeted to that owner branch; the effective archive delta remains nine files, rejects duplicate identities before writes, and sanitizes archive-controlled display fields; 76 archive/API/review/main/release/pin tests pass with warnings as errors, and an isolated `pgvector/pgvector:pg16` run passes the real export-delete-import-reimport PostgreSQL smoke with duplicate rows fully skipped; #1565 protected integration and fresh exact-head hosted evidence remain required |
 | #1466 | origin-integrity URL validation | current head rejects explicit zero/out-of-range ports; keep the signed-session and SSRF contract tied to exact-head regression evidence |
 | #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
-| #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; the observed Naruon Strix run failed at the provider boundary (NVIDIA NIM 429/OpenAI 404), not in this source change |
+| #1468 | PostgreSQL smoke fixture schema alignment | Draft head `53ce38ed6683d01a9d113069f5ac5a8f17e133a2` non-force consumes #1572 at `cd8ff413d4ed8a5f2855c47a21a31db5661cd487`, preserving its unique bootstrap assertion; exact sync, fresh/repeat migration 0020, and 131 strict PostgreSQL/search tests pass without skips. Owner performance acceptance, protected integration, and fresh exact-head hosted review/Checks remain required |
 | #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; the predecessor Strix provider failure is historical, while the current head requires fresh queued Checks and a qualifying independent approval |
 | #1448 | stacked governance regression coverage | merged normally into #1443's stack branch at `62a0d645…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures passed locally; merge-result hosted Checks remain queued and are post-merge canary evidence |
-| #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; current changelog states the supported 20–64 MiB range and the ADR-0006 contract remains required |
+| #1469 | deferred attachment parse-source admission and worker recovery | current `a312ea5e516fe1d696cfb35ffff7d3a731ad9cd2` preserves #1427 and the full `1b757d5` delta; exact migrated 305-test receipt and worker 258 statements/58 branches 100% are recorded above, including real-PDF retention, lease contention/cancellation, transaction recovery and HTTP 413 classification; ADR-0023 remains Proposed; required Checks/review, released provider pin, real 64 MiB recognition and representative capacity remain open |
+| #1427 | bounded PDF DOM upload | Draft head `cb08b1c3ea2aba8844fc29ef703c34368cc55e47` non-force consumes #1468 at `53ce38ed6683d01a9d113069f5ac5a8f17e133a2`, preserving PDF admission and deferred-worker contracts. Exact sync, fresh/repeat migration 0020, and 132 strict PostgreSQL/search tests pass without skips. Proposed ADR-0021 retains the former 0005 identity; the 64 MiB Naruon proposal is not actual NewsDOM release proof. Owner performance/release and fresh exact-head review/Checks remain required |
+| #1572 | complete-document search storage | Draft head `cd8ff413d4ed8a5f2855c47a21a31db5661cd487` on #1503 replaces four overflowing GiST indexes through forward migration 0020; four RED regressions become 131 passing strict migrated-PostgreSQL tests. The unchanged large archive case also passes in descendant #1497's 345-test integration. Exact ranking SQL is retained, but GIN does not accelerate distance-only ordering; measured p95, migration cost, and current-head protected gates remain open |
 | #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `aba77cf5…` preserves first-instance duplicate-ID selection, removes the dead `describeEdge` input, and deletes the tracked pre-refactor `NetworkGraph.tsx.out` copy; local 11-test, TypeScript, zero-warning ESLint, and diff checks passed, while hosted Checks and independent approval remain required |
+| #1477 | SearchLayout lookup optimization | a comment-triggered deletion rewrite was absorbed without force into current head `52c914c3…`; the effective delta remains the memoized result lookup plus its task record, and all 437 frontend tests, TypeScript, earlier ESLint, and diff checks pass; the historical Strix result was `STRIX_PROVIDER_UNAVAILABLE`, so only fresh exact-head hosted evidence can satisfy the gate |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
 | #1462 | utility tool trio (URL codec, hash generator) | bounded deterministic tooling consistent with #1418/#1361; must not be represented as AI judgment or topic evidence |
 | #1457–#1461 | refreshed dependency-group bumps | successor waves to the v0.2-flagged groups; the 64- and 86-package backend/CI bumps remain excessive blast radius and still require splitting and migration rehearsal |
@@ -460,7 +1493,7 @@ Point-in-time progress observed between the v0.2 snapshot (2026-08-21) and
 this v0.3 observation (2026-08-25). None of this is merge evidence; every
 claim requires a live exact-head re-fetch before any decision:
 
-- **Merge-gate progression:** #1337 completed its gate progression (CodeRabbit exact-head approval obtained, branch updated onto the base) and merged into protected `develop` at `2026-08-25T00:10:39Z`; #1438 obtained CodeRabbit exact-head approval and branch updates and remains open pending terminal required-check states.
+- **Merge-gate progression:** #1337 completed its gate progression (CodeRabbit exact-head approval obtained, branch updated onto the base) and merged into protected `develop` at `2026-08-25T00:10:39Z`; #1438 was non-force restacked on current `develop`, so its previous approval is stale and it remains open pending fresh exact-head review and terminal required-check states.
 - **Stale-snapshot repair:** #1241, #1368, #1412, and #1320 received systemic develop-baseline restores that preserved each PR's intended delta while removing predecessor-base drift from the diff surface.
 - **Thread remediation waves:** unresolved review threads progressed through repeated remediation cycles on #1264, #1332, #1347, #1349, #1361, #1380, #1339, #1376, #1412, #1452, #1454, #1449, #1457, #1436, and #1441.
 - **External blocker:** Naruon hosted Strix runs have observed NVIDIA NIM provider rate-limit failures (HTTP 429) since approximately 2026-08-24, emitting zero model-reported vulnerabilities before infrastructure failure. This is an observation of the affected hosted runs, not a change to the central GitHub Models default in `AGENTS.md`; per repository policy it is failed evidence, not clean-scan evidence, and Strix-dependent gates cannot pass until the provider path recovers.
@@ -569,10 +1602,10 @@ button, form, navigation, chart, or asynchronous data surface.
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
 | Binary object lifecycle | large/deferred document bytes cannot remain an inline database strategy | S3-compatible implementation is Draft | #1076, #1364 | upload/read/recognize/retain/delete/backfill/orphan round trip with real integration |
-| Disaster recovery | a release is not enterprise-ready without restore evidence | HA evaluation exists; production WAL/PITR policy remains incomplete | #1428 | WAL archive/PITR, failover fencing, backup and clean restore rehearsal |
-| Tenant export/reimport | customers need exit and migration without losing provenance | no single demonstrated full tenant round trip | #1428 | export → clean instance import preserving source, opaque IDs, history, evidence, policy |
+| Disaster recovery | a release is not enterprise-ready without restore evidence | Ready PR #1464 at `2ce32a89fbef0719f13cbab712aab5e843aa6432` adds WAL archive and same-volume retargeted PITR. The current repair force-recreates both restore containers before the existing applied/requested-target stamp comparison, removing stale Compose environment reuse. Bash, ShellCheck, Compose rendering, and diff checks pass; two review threads are resolved. An exact-commit archive run inside Colima completed both recovery targets: first-target marker inclusion/exclusion, post-promotion write, same-volume earlier retarget, exclusion of all later rows, and full stack/volume cleanup all passed | #1428, #1464 | terminal exact-head hosted checks and independent review, failover fencing, backup retention and scheduled clean-restore rehearsal |
+| Tenant export/reimport | customers need exit and migration without losing provenance | Draft #1497's bounded project-evidence slice passes 345 tests after actual fresh/repeat migration, including full-size cited content, retained identity rollback, and incompatible concurrent imports; full tenant/mailbox/binary/provider/audit portability and signed browser restore remain unverified | #1428, #1497 | export → clean instance import preserving source, opaque IDs, history, evidence, policy |
 | Retention/legal hold/disposition | deletion and evidence preservation conflict unless modeled | partial security/key/retention work exists across repository history | #1428, #1364 | purpose-scoped retention, legal hold, verified disposition, object/DB reconciliation |
-| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit, while unsupported binaries are not searchable | Naruon import transport and generic deferred parser admission are bounded at 64 MiB; the NewsDOM `/parse` provider contract remains 20 MiB, so PDF bytes from 20–64 MiB are admitted and retained fail-closed but are not sent to NewsDOM; unsupported types remain metadata-only | #1427, #1469, #1353, #1419, NewsDOM #682/#707 | one documented bounded admission contract, provider-side PDF limit alignment or an explicit large-PDF fallback, parser/status evidence, deferred recognition, and object-backed retention before increasing the bound again |
+| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit; one failed transaction also aborted subsequent files | Draft #1469 proposes 64 MiB retention and preserves real-PDF bytes/identity after size rejection and rollback; the separate 20 MiB guard rejects before network. This is source/local-test evidence, not a released 64 MiB capability; unsupported formats remain metadata-only | #1427, #1469, #1353, #1419; NewsDOM #665; Proposed ADR-0021/0023 | protect and release the canonical provider contract, pin it, verify real 64 MiB recognition and signed upload/retry, measure concurrent capacity and p95, and complete object-backed lifecycle before increasing the bound again |
 
 ### P0 — Evidence-based AI and document intelligence
 
@@ -580,14 +1613,16 @@ button, form, navigation, chart, or asynchronous data surface.
 |---|---|---|---|---|
 | Canonical evidence identity | OCR/media/attachment/model slices can disagree about the same source | source segments and several deterministic admission slices exist | #1350, #1353, #1397, #1419 | one source identity/provenance chain across email, thread, document, attachment, media, model result |
 | Judgment explanation | model output without evidence/calibration is not defensible | grounded extractor seam exists; wider evidence pipeline incomplete | #1350 | evidence IDs, claim support, abstention, correction, verifier result, prompt/model/version receipt |
+| Confidence unit integrity | adjacent values can appear as 100% and 2% when a client guesses whether a score is a ratio or percentage | backend extraction contract is 0--100; protected frontend still guesses the unit at runtime | #1436, #1559 | one explicit unit at the API boundary, current-head UI tests for low/high values, independent review, and protected merge evidence |
 | Provider-neutral route | raw provider coupling spreads credentials and failure behavior | contextual-orchestrator boundary exists; EgressWeave integration is blocked on release | #1262, #1264 | released hash-locked adapter, route/fallback evidence, no raw secret in products |
+| Noema workspace-agent boundary | buyers cannot rely on an assistant that bypasses governed routing or imports unreleased owner code | Noema protected `main` owns governed GitHub capability and delegates model routing; no released shared runtime is proven | #1384, #1486, #1527, Noema #536, Contextual Orchestrator #1004, ADR-0006 | tenant/workspace-authorized released orchestrator contract, distinct-candidate structured-output recovery, no direct-provider fallback, fail closed when the released `contextual-orchestrator` contract is unavailable, Naruon-owned domain tools, immutable owner release, and consumer conformance tests |
 | Scientific claim discipline | keyword labels can be mistaken for topic/event measurement | architecture explicitly says no live STM | TEPP dependency path | accepted immutable TEPP artifact/API or explicit feature absence; no lexical-as-STM claim |
 
 ### P1 — Typed context and scheduling differentiation
 
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
-| Responsive shell hydration and unavailable state | a buyer can see a polished navigation shell but no actionable content when a data request is unavailable, and hydration drift can produce inconsistent controls | local fixed-origin capture showed tablet/mobile loading feedback, desktop blank content without the backend, and a development-server caret-style hydration mismatch; this is not a hosted release result | follow-up required; keep separate from #1470's bounded lookup optimization | deterministic server/client markup, explicit desktop unavailable/error state, backend-backed responsive Playwright evidence, and no hydration warnings |
+| Responsive shell hydration and unavailable state | a buyer can see a polished navigation shell but no actionable content when a data request is unavailable, and hydration drift can produce inconsistent controls | Draft PR #1570 at `a48e8ba85b6d3a4ceb78e110582b3d5bc76d0d7c` stops converting mail, pending-reply, task, calendar-source, and project-folder failures into false zero states; all five sources settle independently, every authorization failure routes to login recovery instead of generic retry, and malformed successful payloads fail closed. Thirty-eight related tests, TypeScript, ESLint, and diff checks pass. This is local Proposed evidence, not a hosted or deployed result | #1485, #1570; keep predecessor open until full-delta succession is independently proven | current-head hosted checks and review, deterministic server/client markup, backend-backed desktop/mobile Playwright screenshots for loading/partial-error/auth/retry-success, and no hydration warnings |
 | Stacked PR current-head review dispatch | a dependent PR can show only metadata while the central OpenCode/required checks are still being materialized on a non-default base branch | #1448 exact head `068aefdf…` received a targeted scheduler/ OpenCode dispatch and then merged normally; its merge-result checks on `62a0d645…` remain queued | #1443, #1448, ContextualWisdomLab/.github scheduler | every supported stack base receives a bounded exact-head OpenCode/Noema/required-check run, with queued/provider states observable and no false merge readiness |
 | Typed Person/Event/Commitment graph | generic string graph cannot safely drive high-stakes action | planning spec marks types as new/planned | #977, #978, #1000 | normalized temporal/multi-membership identities, evidence/confidence/correction on every inferred edge |
 | Status-weighted scheduling | calendar CRUD does not prevent harmful double booking | CalDAV source/writeback/retry foundation exists | #978, #988, #989, #990, #1416 | confirmed/tentative/desired + organizer/attendee + recurrence/free-busy/resource end-to-end |
@@ -757,7 +1792,7 @@ review approval, hidden manual database edits, or an unreleased sibling branch.
 
 Existing linked implementation and blocker issues remain authoritative for their
 bounded scopes, including #1022, #1076, #1229, #1262, #1324, #1350, #1371, and
-#1379.
+PR #1379.
 
 ---
 
@@ -775,6 +1810,9 @@ metadata relationships and receipts; a provider upload or local path alone is
 not an eviction or lineage claim.
 
 ### APA 7th references
+
+Anomaly. (2026). *Providers: Custom provider*. OpenCode.
+https://opencode.ai/docs/providers
 
 Crispin, M. (2003). *Internet Message Access Protocol—Version 4rev1* (RFC
 3501). RFC Editor. https://doi.org/10.17487/RFC3501
@@ -813,6 +1851,9 @@ version 1.2*. https://slsa.dev/spec/v1.2/
 
 OpenTelemetry Authors. (2026). *OpenTelemetry specification, version 1.60.0*.
 https://opentelemetry.io/docs/specs/otel/
+
+WHATWG. (2026). *Fetch standard: HTTP-redirect fetch*.
+https://fetch.spec.whatwg.org/#http-redirect-fetch
 
 Elkady, H. (2026). *Anti-Slop UI: A Deterministic State-Machine Architecture
 for Eliminating Design Hallucinations in LLM-Generated Interfaces*. Local Over.
@@ -890,38 +1931,38 @@ branch. These values are therefore not one shared base declaration.
 | 1452 | 🎨 Palette: 비활성화 버튼 접근성(Tooltip) 개선 추가 | ad32c8d35c11a76f52e189d7a5e83fb74fb603df | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1451 | feat: 텍스트 유틸리티 도구 추가 및 테스트 보완 | a2a20e3eb14bb65fab8ee2f2f9199dd76dd71bce | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1450 | chore: remove stray scratch/debug files committed to develop | 7d1f57a83a34312bea265ae3095bc67ff4e0493e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1449 | 🎨 Palette: 데이터 저장소 버튼 액션 로딩 UX 및 접근성 개선 | 90248b26fff37f395c6918525c4eef041d683e09 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1449 | 🎨 Palette: 데이터 저장소 버튼 액션 로딩 UX 및 접근성 개선 | 63318d97c9feddba57fa962182ad3ca79da5a9da | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | frontend/a11y | — | repaired-root | latest comment-triggered acknowledgement is tree-identical and was fast-forwarded; 443 frontend tests, TypeScript, and diff checks pass; await exact-head review/Checks, then protected-merge |
 | 1448 | test(governance): exercise multiline CodeRabbit pending notice | 874c098548e6794217393e0338074ba2f292d080 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1443 | fix: ignore CodeRabbit approval pending notices | 41e48413cffefa8a5393d6af1d5ad16be3c5de7c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1441 | 🎨 Palette: [UX 개선] 메일 상세 고밀도 컴포넌트 추가 | ce6ff8f26e4cfdc76be7d667c7b159c57f8e0ac5 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1439 | ⚡ Bolt: 프론트엔드 O(N) Array.find() 룩업을 O(1) Map 룩업으로 성능 개선 | 68106d13175d7ff67978de66e31d385237ca53b1 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1438 | fix(governance): supersede stale review decisions safely | 5cc9ca3348575931b5d2ec35d1277436d1eece63 | develop@e5e99b4e3bb081b92c602358878856536030e2ca | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1438 | fix(governance): supersede stale review decisions safely | 899493fae44a50648faa0ecaa6e7095b94037833 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | security/governance | — | repaired-root | non-force restack preserves the six-file governance delta; shell contract and diff checks pass; await fresh exact-head review/Checks, then protected-merge |
 | 1436 | feat(frontend): add Storybook UI inventory | becc4e9e56bb30e511e812e8c66b19d094b28de0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1434 | fix: accept DiskSage cloud-readiness schema 7 | 85e3eb43f9a7c3e87848df1307549d4efd3d29de | develop@e5e99b4e3bb081b92c602358878856536030e2ca | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1433 | fix(security): reject ambiguous Message-ID whitespace | 0d71272d6ec5420afefa98cd5ae57b91efc31007 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1433 | fix(security): reject ambiguous Message-ID whitespace | 9c89a35e37f46a977d879dbec94fb3673870c0ce | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | security/governance | — | normal-or-stacked-root | non-force restacked; 136 passed, 1 skipped plus Ruff/diff checks; fresh exact-head checks/review pending |
 | 1432 | fix(compose): harden optional pg-llm-batch database | e3dbed9a0d4e08348f94d26de09a2fabbdcfa96b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1431 | test(core): cover operator env path resolution | e058f8c6e50256194d19be617f8df54f60bd1c27 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1430 | 🎨 Palette: 키보드 내비게이션을 위한 focus-visible 스타일 추가 | 49fc3eabd8e94a95dee2af3c1254c4d46a294399 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1429 | docs: establish Naruon product completion gap baseline | 5a72475506e8ec76692abfa233f3205c645568eb | develop@e5e99b4e3bb081b92c602358878856536030e2ca | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1427 | fix(data): align PDF DOM upload budget with sidecar | 29be15e4ec5e29dc1f62ac636928c9307a6f520f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1427 | fix(data): align PDF DOM upload budget with sidecar | ecf023ce3ad4efd804dd373834883a1e9632c391 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | yes | ingest/storage | newsdom-api#682 | owner-first/draft | pinned NewsDOM SHA still enforces 20 MiB; ADR lowered to Proposed/BLOCKED-UPSTREAM; 42 passed, 2 skipped plus Ruff/diff checks; merge owner release, then exact-pin and revalidate |
 | 1426 | fix(governance): wait on stale aggregate review state | 5cc148e1f2f84d1afcd2d3cf3dabaade616c01d0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1424 | ⚡ Bolt: [성능 개선] 네트워크 그래프에서 O(N) 노드 라벨 조회를 O(1) Map 조회로 대체 | 32c7edc11fd6faf8ae6918dae8b00de7c5c0b773 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1421 | 🎨 [UX] 설정 화면 장식용 아이콘에 aria-hidden 추가 | 719c1b347aae52e77ae7e40b0eb60769fd7178cb | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1420 | feat: URL 코덱 및 엄격한 JSON 포매터 추가 | bf7b741ea0b73a146ce9bcd323ca621c1562cb4e | develop@dd8d15191338b841f9e6f3a06507c6a5643b95d0 | yes | other | — | experimental/draft | validate parent and promote only after scope proof |
 | 1419 | feat(attachments): index common image metadata | a0f5e03107e6ec3e85eea029bb11c8c8e784b907 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1418 | feat(tools): add auditable URL and contact hygiene | 19adb3e74c66837c5fb2d0a11a7ac030bbbfe3c4 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1417 | fix(email): enforce shared send throttling | 69fb72d30c71ab7a9c2c6e09413292a05278148d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1416 | fix(calendar): allow provider-backed create writeback | d8b3df7d19def826a5b92abbcaec043377ceb3a4 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1417 | fix(email): enforce shared send throttling | 5a22a26ea370c15f8255f1e13c387a92bdcab68a | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | yes | mail/calendar | — | normal-or-stacked-root | reduced to five-file rolling-window slice; removed unused bucket schema and unrelated ancestry; 85 passed, 2 skipped plus Ruff/diff checks and real PostgreSQL advisory-lock smoke; exact-head checks/review pending |
+| 1416 | fix(calendar): allow provider-backed create writeback | e4bf31e5725841e72946661ed11f11244c715787 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | mail/calendar | — | normal-or-stacked-root | non-force restacked; create executes without If-Match while update still requires ETag/If-Match; 49 passed, 1 skipped plus Ruff/diff checks; fresh exact-head checks/review pending |
 | 1415 | fix(auth): select OIDC signing key by kid | e0a1f166221790e7ba4f0df37b328ac3cb896092 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1414 | fix(governance): refresh gate after OpenCode review | df1642c473011e935ab7501f4012fb58b8d06e21 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1414 | fix(governance): refresh gate after OpenCode review | 8fa5cf95c93b152450311a23e172cdbe13b68a94 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | security/governance | local gate PASS; 36 governance tests passed; actionlint clean; hosted checks queued | normal-or-stacked-root | await exact-head checks and current-head review, then protected-merge |
 | 1412 | ⚡ Bolt: [성능 개선] tools 배열 탐색을 Map 기반 O(1)로 변경 | b5032d7fb428189da86c10221d58d093d3abcc6e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1411 | 🎨 Palette: 검색어 지우기 ARIA 라벨 통일 | 6369e91f2f10ed9b6b436a41a08d89b7aedf9008 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1411 | 🎨 Palette: 검색어 지우기 ARIA 라벨 통일 | 9b52c7dac0d594210d28e1b7d732e454dbb68d9e | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | frontend/a11y | — | repaired-root | non-force restack preserves the eight-file localized clear-button label delta; 437 frontend tests, TypeScript, ESLint, and diff checks pass; await fresh exact-head review/Checks, then protected-merge |
 | 1410 | 🎨 [OIDC 로그인/로그아웃 버튼 로딩 상태 및 접근성 개선] | fac7a5377bd7c5bc7bde89a6f0f05b3fd2c47632 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1408 | fix(a11y): expose keyboard focus on AI Hub tabs | cda57c26e75788eaa350d0faeb898349818da074 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1407 | feat(mail): fail-closed Inkspan edit handoff for recognized HWPX | 22e4909dd13623190f61eae47baf74d70fa2b83a | cursor/mail-hwpx-attachment-preview-7b5e@b83a0da03b46a447f9710b5f91d245f5b1783dfa | yes | ingest/storage | cursor/mail-hwpx-attachment-preview-7b5e | experimental/draft | validate parent and promote only after scope proof |
-| 1406 | feat(mail): open recognized HWPX text from email attachments | b83a0da03b46a447f9710b5f91d245f5b1783dfa | cursor/hwpx-recognized-text-preview-b246@f21811379c1cc2435eadb41bb2746b4887947d53 | yes | ingest/storage | cursor/hwpx-recognized-text-preview-b246 | experimental/draft | validate parent and promote only after scope proof |
-| 1404 | feat(data): show recognized HWPX paragraph text in attachment preview | f21811379c1cc2435eadb41bb2746b4887947d53 | feat/hwpx-section-text-recognition@0fcf4d85dd70d4f2ee9dd0296fc454f764ae5326 | yes | security/governance | feat/hwpx-section-text-recognition | experimental/draft | validate parent and promote only after scope proof |
-| 1403 | fix(oidc): fail closed on malformed token-endpoint escapes | 7a0b0e443ae31a941c5a2139a2093b1af876458c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1407 | feat(mail): fail-closed Inkspan edit handoff for recognized HWPX | 730ac3798d7dac8990db1b4daf15f3ab0b3dd2d5 | cursor/mail-hwpx-attachment-preview-7b5e@1ff9fc7a1d590652aa5308262518b8b60e0cebd1 | no | ingest/storage | cursor/mail-hwpx-attachment-preview-7b5e | repaired-stack | 16-file handoff delta inherits the source-backed mail preview and TestClient foundation; 18 backend tests pass with one environment skip, 453 frontend tests, TypeScript, ESLint, Ruff, and diff checks pass; await fresh exact-head review/Checks |
+| 1406 | feat(mail): open recognized HWPX text from email attachments | 1ff9fc7a1d590652aa5308262518b8b60e0cebd1 | cursor/hwpx-recognized-text-preview-b246@1a1e4b3d622ab96a0866b6380d309708b30c1c51 | no | ingest/storage | cursor/hwpx-recognized-text-preview-b246 | repaired-stack | 11-file mail-preview delta inherits the source-backed preview and TestClient foundation; 14 backend tests pass with two environment skips, 448 frontend tests, TypeScript, ESLint, Ruff, and diff checks pass; await fresh exact-head review/Checks |
+| 1404 | feat(data): show recognized HWPX paragraph text in attachment preview | 1a1e4b3d622ab96a0866b6380d309708b30c1c51 | feat/hwpx-section-text-recognition@1c3943a9e11b6dd1d5a202765cfa52fa1e4f4ea7 | no | security/governance | feat/hwpx-section-text-recognition | repaired-stack | 13-file preview delta inherits the canonical TestClient dependency; 84 backend tests pass with one environment skip, 442 frontend tests, TypeScript, ESLint, Ruff, and diff checks pass; await fresh exact-head review/Checks |
+| 1403 | fix(oidc): fail closed on malformed token-endpoint escapes | 9cc3272fe8f3d97d20ace9ac72e8774a1dd9ffd0 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | security/governance | — | normal-or-stacked-root | stale-base reversals removed; 13 focused tests, TypeScript and ESLint pass; await fresh exact-head checks/review |
 | 1402 | feat(email-writing): add independent criterion Judge | 3d6b3341c5dd15512d5d60cd5f8d95a1bbc6d846 | feat/llm-email-writing-candidate-task6@fa844bd035ab1f188a28c58e0ed2dc45fa31d0f3 | yes | mail/calendar | feat/llm-email-writing-candidate-task6 | experimental/draft | validate parent and promote only after scope proof |
 | 1401 | ⚡ Bolt: ProjectsLayout 인라인 배열 맵핑 렌더링 최적화 | 1221fc848a086db721ef1dde0a26eb6af77fe035 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1400 | feat(email): Slice 3 buyer-visible withheld-media next actions | db7ca961de800a514cf9bee34d324f1c5cf233bb | cursor/email-media-quarantine-persist-0ad6@ff1dc18cd9de5e06649ac516b163af2db4bbde83 | yes | ingest/storage | cursor/email-media-quarantine-persist-0ad6 | experimental/draft | validate parent and promote only after scope proof |
@@ -934,9 +1975,9 @@ branch. These values are therefore not one shared base declaration.
 | 1380 | fix(dav): land capability honesty with tomllib CI import | 658f69accc627b99e379835593c2b9e49b514d00 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1376 | fix(email): expose header-derived media pixel dimensions | aae34d0a9e7d607070bc98e7b0d03e17f607dd6c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1375 | feat(email-writing): parse contextual review candidates | fa844bd035ab1f188a28c58e0ed2dc45fa31d0f3 | feat/llm-email-writing-orchestrator-task5@9cd9b953a2dd236aebe1fcdc25e59ba3e9388505 | yes | security/governance | feat/llm-email-writing-orchestrator-task5 | experimental/draft | validate parent and promote only after scope proof |
-| 1373 | feat(hwpx): recognize ordered section text with provenance | 32099709bafcee19fb32c385bbe89e0df15fe102 | feat/hwp-hwpx-attachment-recognition@70683266b93233dae62faec6cbd4df118be41383 | yes | ingest/storage | feat/hwp-hwpx-attachment-recognition | experimental/draft | validate parent and promote only after scope proof |
-| 1370 | feat(supply-chain): verify locked hashes against PyPI releases | 1a6ac604e159d98631b3996eb3f74d036e4a760b | feat/dependency-lock-provenance-receipt@f6eeb69f561e94cd50ae38fb1f43faa6cd2c52d7 | no | security/governance | feat/dependency-lock-provenance-receipt | stacked-child | re-fetch exact review/check state, then fix or protected-merge |
-| 1369 | feat(supply-chain): attest Python lock provenance before install | f6eeb69f561e94cd50ae38fb1f43faa6cd2c52d7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1373 | feat(hwpx): recognize ordered section text with provenance | 1c3943a9e11b6dd1d5a202765cfa52fa1e4f4ea7 | feat/hwp-hwpx-attachment-recognition@3ab3f6e48bc30c22376a366a763fd20d84cd65ba | no | ingest/storage | feat/hwp-hwpx-attachment-recognition | repaired-stack | parent-relative integration keeps strict OPF spine order, HWP conversion pending, HWPX-specific outcomes, provenance, and the canonical TestClient dependency; 107 related tests plus focused 37-test dependency rerun, Ruff, and diff checks pass; await fresh exact-head review/Checks |
+| 1370 | feat(supply-chain): verify locked hashes against PyPI releases | a1f89ebbf82acc83089c821f67c81258665c3e9b | feat/dependency-lock-provenance-receipt@f6eeb69f561e94cd50ae38fb1f43faa6cd2c52d7 | no | security/governance | feat/dependency-lock-provenance-receipt | stacked-child-merged-into-parent | merge commit cd7241798e347ee4b14a2b9812dd69eb719a1b58 is an ancestor of #1369 current head; verify through parent landing |
+| 1369 | feat(supply-chain): attest Python lock provenance before install | 40a2845fcf2799c873a94c9a9320cbc4e38e8c14 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | yes | security/governance | — | combined-owner-root | non-force restacked; 51 tests, Ruff, actionlint, diff check, and both five-lock live receipts pass with zero violations; exact-head Checks/review queued |
 | 1368 | ⚡ Bolt: [성능 개선] EmailDetail 개별 메시지 컴포넌트 메모이제이션 | 5c2f048c0e9fc97545e1d6f09d1379b3ae8f8b68 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1366 | fix(threading): honor RFC 5256 References ancestry | be0237714e373052b57d73e1168087da3adfda34 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1365 | fix(containers): publish explicit split runtime targets | 43666bed6214ce724d4dc50810d9f65f3d77d3f3 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
@@ -944,14 +1985,14 @@ branch. These values are therefore not one shared base declaration.
 | 1363 | fix(governance): audit orphaned Actions workflow identities | 48593a1cab22cca86e2dbfb7e6d5cb89cf298f3c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1361 | feat(tools): add bounded content checksum generator | 5859a8f3f5e9dddf20a43313b53d7aa6453f8cd7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1356 | feat(email-writing): add hardened contextual-orchestrator boundary | 9cd9b953a2dd236aebe1fcdc25e59ba3e9388505 | feat/llm-email-writing-context-task4@4570747ccebd57ccaab30ffc68239f0c9d2f1ca0 | yes | mail/calendar | feat/llm-email-writing-context-task4 | experimental/draft | validate parent and promote only after scope proof |
-| 1355 | fix(email): preserve deterministic descending thread order | fddc883ca2911c138bd9fcc3a9bd8257e1036124 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1355 | fix(email): preserve deterministic descending thread order | 4b508b843d0d7efa02e71b4d2f069ffa8d556877 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | mail/calendar | — | normal-or-stacked-root | current protected base merged normally; 38 reply-order/tracking/SLA tests and Ruff pass; await fresh exact-head Checks and independent review |
 | 1354 | feat(ui): add Storybook design-token contract | 84edbbf152d257cd05777bf0b007fcfec2ac1d18 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1353 | feat(attachments): recognize HWP and HWPX parser boundaries | dd501dae0fc03d813f4a65aa21318cc89d1a193c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1353 | feat(attachments): recognize HWP and HWPX parser boundaries | 3ab3f6e48bc30c22376a366a763fd20d84cd65ba | codex/starlette-testclient-dependency@52dfc863d1a5d6e4e80b6366f719dd09f2aa6172 | no | ingest/storage | codex/starlette-testclient-dependency | repaired-stack | non-force restack preserves HWP/HWPX bounds, filename traversal defense, the 64 MiB import contract, and canonical `httpx2`; 64 parser/dependency tests, Ruff, and diff checks pass; await parent merge and fresh exact-head review/Checks |
 | 1352 | fix(a11y): expose async button busy states | 8b7731da7063c39651aa9e3debfaa2052c476c35 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1349 | docs(product): define evidence-based workspace task contract | 559d091a9a75d8e79ab9608c04931c5a1e82e173 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1347 | fix(governance): reject rate-limited review status as semantic evidence | cd973fc364efb8d150786f4c2bceec54187eb806 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1345 | fix(dav): reject ambiguous nested authorization encodings | 07954b2e4d402fa2fd1e9775c52ec6b9483de52d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1339 | fix(host-policy): normalize dotted bracketed IPv6 safely | 44b65cac131ab5c4be25cfdebc026c4a1cf3bc35 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1345 | fix(dav): reject ambiguous nested authorization encodings | 8146c56587acea5c4aa859ba9366eef0f39540d7 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | security/governance | 82 focused tests + Ruff pass; information-only threads resolved; prior Strix provider failure is not clean evidence | normal-or-stacked-root | await fresh exact-head Checks and review, then protected-merge |
+| 1339 | fix(host-policy): normalize dotted bracketed IPv6 safely | 7fbfbc81e8fd09e1ab54c85318b54b7e71e35e5e | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | security/governance | — | normal-or-stacked-root | non-force restacked; fixed `::ffff:7f00` mapped-loopback misclassification; 58 related tests plus TypeScript/ESLint/diff checks pass; fresh exact-head checks/review pending |
 | 1333 | feat: persist DiskSage file lineage ontology | 017cdef392385571acfc5abc177882724d6026b9 | develop@e5e99b4e3bb081b92c602358878856536030e2ca | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1332 | feat(email): surface calendar writeback If-Match conflicts | d53598dc7e45b470907fd97dffb9d64e954f2731 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1329 | feat(email-writing): build authorized thread context | 4570747ccebd57ccaab30ffc68239f0c9d2f1ca0 | feat/llm-email-writing-review-evidence-task3@51fb5e8543247b1e5c790f3fdf98424c8fbed669 | yes | security/governance | feat/llm-email-writing-review-evidence-task3 | experimental/draft | validate parent and promote only after scope proof |
@@ -961,9 +2002,9 @@ branch. These values are therefore not one shared base declaration.
 | 1321 | fix(auth): require issued-at in Keyverse OIDC sessions | d06eff3875543b1afa28570f9269571a63a81983 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1320 | fix(calendar): expose proposal context to screen readers | 1a9afa0cf845a49db4c2eb2372f9f36eaf4c8c4e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1317 | feat: harden live macOS runtime and governance | 25d80197ee0eb8cb2aafc7d205ac7b98ccccba0c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1302 | fix(tools): remove canned source-derived tools | 2ee0c65097c78a99849fc749a3a848440c50271c | fix/remove-unsafe-phishing-detector@646a2401de35529425163fdefa7ad5e6355c349f | yes | other | fix/remove-unsafe-phishing-detector | experimental/draft | validate parent and promote only after scope proof |
-| 1301 | fix(tools): remove unsafe phishing detector | 646a2401de35529425163fdefa7ad5e6355c349f | fix/fail-closed-tool-mutations@67dbfddb01bacb604a0533ce486a550115ff0d64 | yes | other | fix/fail-closed-tool-mutations | experimental/draft | validate parent and promote only after scope proof |
-| 1300 | fix(tools): fail closed on unsafe global tool mutations | 7ea4bad69cf36acb9c8fbca48d32333907cce55f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1302 | fix(tools): remove canned source-derived tools | a39ba78d05d71f4d45bd7fe029b59f686e8cc2e3 | fix/remove-unsafe-phishing-detector@050ee1588090952c2c9058c4cb596851ee35cad7 | yes | other | fix/remove-unsafe-phishing-detector | validated stack | preserve four-file delta; await #1565 -> #1300 -> #1301 protected merge before fresh review |
+| 1301 | fix(tools): remove unsafe phishing detector | 050ee1588090952c2c9058c4cb596851ee35cad7 | fix/fail-closed-tool-mutations@e3485b4dfed763cdcd846c7894dc5c5f69e445e0 | yes | other | fix/fail-closed-tool-mutations | validated stack | preserve four-file delta; await #1565 and #1300 protected merge before fresh review |
+| 1300 | fix(tools): fail closed on unsafe global tool mutations | e3485b4dfed763cdcd846c7894dc5c5f69e445e0 | codex/starlette-testclient-dependency@52dfc863d1a5d6e4e80b6366f719dd09f2aa6172 | no | other | codex/starlette-testclient-dependency | validated stack | await fresh exact-head checks/review, then protected-merge after #1565 |
 | 1288 | test(email): consolidate thread identity and folder visibility coverage | b7db9a316162a70bf8e594faf4f2e73766d9dc6c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1287 | 🧪 테스트: runtime_secrets.py의 build_encryption_keyring 누락된 테스트 추가 | 4de4f5d5850baf1abc05203f204c489650ba9624 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1284 | test(pdf): cover pending document decode success | 68da2a53084751361f6332ca4f3fe82c34443964 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
@@ -971,12 +2012,12 @@ branch. These values are therefore not one shared base declaration.
 | 1279 | test(tools): consolidate webhook validation and execution coverage | c6a50e97b7742a7172d80de01159516796d4d1a0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1277 | test(core): cover connector scope statement | aa04c9392c86c29fd39cae80149fbbd02681cff8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1267 | perf(mail): memoize email list element mapping | 8fccadb727ac54a81422642022ccc2b31723bab9 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1264 | integration: route LLM egress through EgressWeave | 5a46a85f75dfae94dd8c1f8df0b88150b40ab3c8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1264 | integration: route LLM egress through EgressWeave | 124ea7bc7fa4632786f6a22c26196653b04d8c7f | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | llm/orchestration | docstring prefix regression repaired; 4 focused tests pass and review thread resolved | normal-or-stacked-root | await fresh exact-head checks and review, then protected-merge |
 | 1257 | chore(deps): update connector websockets to 17.0.1 | 4613ff5a1a85e4882af1a3a4abd0e56b3b574187 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1245 | fix(email-detail): make responsive evidence actions functional | 796b34c5a1322f09c6f00b8cf24591ae04b89b6b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | yes | frontend/a11y | — | experimental/draft | validate parent and promote only after scope proof |
 | 1244 | chore(deps): update hash-locked aiohttp to 3.14.3 | c1d4c7fd2b98e464d3ff7e92f26d92a6c0f1e6e8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1241 | fix(a11y): show keyboard focus on OIDC actions | fb7e63dee1d72365db595edb1bc49e097202e707 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | d7ae4768b7c30be7bac19fb9425d40a66e8fda05 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | aba2a03f3ca87914fcf1ca1c751b173097852bca | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | yes | security/governance | 61 focused tests + Ruff pass; exact-head approval; unique delta excludes #1345 owner scope | normal-or-stacked-root | after #1345 protected merge, non-force restack and revalidate before Ready |
 | 1195 | feat(email): deterministic dedupe provenance — gate strong fingerprints on genuine Date (naruon#1086) | c7aedc6a6a09bc91156e9c62e44f18cf8b4d3846 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 
 The inventory is intentionally identity-first:
