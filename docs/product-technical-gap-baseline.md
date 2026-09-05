@@ -161,12 +161,14 @@ the current head has an independent approval. Keep it Draft until #1345 reaches
 protected `develop`, then non-force restack, rerun both prerequisite and unique
 contracts, and collect fresh exact-head Checks before Ready promotion.
 
-**Semantic configuration naming refresh (2026-09-04T17:49Z):** Runtime-config
+**Semantic configuration naming refresh (2026-09-04T17:49Z):** Ready runtime-config
 PR #1521 (`cd8bc8b6425ca61e6aedbf24b5413a050dc4bd19`) preserves the published
 `version` and `features` wire keys while translating them to qualified internal
 product fields. Its remaining RED evidence is an old cancelled Strix lane and
-the resulting metadata/Noema gate response, not a demonstrated source defect;
-central exact-head revalidation is queued as `.github` run `33902484641`.
+the resulting metadata/Noema gate response, not a demonstrated source defect.
+Its old central run `33902484641` was cancelled before the queue-sweep repair;
+replacement run `33934902852` is queued on protected `.github@b5efbc2` with all
+write modes disabled.
 Ready agent-registry PR #1537
 (`8bb4648a34e29c41e10581f14e21f95bfc7123e1`) similarly keeps legacy generic
 JSON keys only in its anti-corruption loader and publishes semantic fields to
@@ -174,8 +176,8 @@ application callers. Its 41 focused registry/governance tests pass with
 warnings as errors, Ruff and diff checks pass. Its prior central revalidation
 run `33902596826` was cancelled on the unrepaired queue-sweep head; replacement
 run `33934850629` is queued on protected `.github@b5efbc2` with merge,
-auto-merge, and branch updates disabled. PR #1521 remains Draft; cancelled
-predecessor checks and local tests do not transfer as merge evidence.
+auto-merge, and branch updates disabled. Cancelled predecessor checks and local
+tests do not transfer as merge evidence for either Ready head.
 
 **Customer documentation refresh (2026-09-04T16:20Z):** Naruon PR #1519
 (`53e32fa82ad1234d5427d67ab1a6c06d237d82fc`) is the current customer-facing
