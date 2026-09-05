@@ -173,6 +173,13 @@ before caching and uses the existing fail-closed fallback. Thirteen frontend and
 21 hosted jobs are queued for the exact head. The aggregate changes-requested
 state predates this head and is not completion evidence; keep the PR Draft until
 current-head review and required Checks pass.
+Connector schema PR #1520
+(`e2043884a34fd08a5c2cc17726a6a615fa29d647`) confines legacy `capabilities`
+and `status` names to JSON aliases while using semantic owned fields internally.
+Both wire and owned names validate independently, conflicting duplicate inputs
+fail closed, and default serialization preserves the legacy keys. Two focused
+tests, Ruff, and diff validation pass; central exact-head review run
+`33940315065` is queued after predecessor review lanes were cancelled.
 Tasks bounded-context PR #1515
 (`8a532ef30b295f59daa890ca82aa3eeaf4e5077e`) preserves established HTTP aliases
 while exposing ticket-task semantic names internally. A fresh CodeGraph audit
