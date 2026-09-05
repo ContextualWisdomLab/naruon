@@ -2,6 +2,7 @@ import React from 'react';
 import { toSafeReactText } from '@/lib/safe-text';
 import type { RepositoryAssetPreview } from './types';
 import {
+  getInkspanEditHandoffUnavailableReason,
   getRepositoryAssetPreviewCopy,
   isRecognizedRepositoryAssetPreview,
 } from './utils';
@@ -9,6 +10,7 @@ import {
 type RepositoryAssetPreviewPanelProps = {
   currentDetailText: string;
   preview: RepositoryAssetPreview | null;
+  fileName?: string;
   onRefreshPreview?: () => void;
 };
 
@@ -16,6 +18,7 @@ type RepositoryAssetPreviewPanelProps = {
 export function RepositoryAssetPreviewPanel({
   currentDetailText,
   preview,
+  fileName,
   onRefreshPreview,
 }: RepositoryAssetPreviewPanelProps) {
   const copy = preview
@@ -25,6 +28,14 @@ export function RepositoryAssetPreviewPanel({
         status_label: '미리보기 확인',
       };
   const recognized = isRecognizedRepositoryAssetPreview(preview);
+  const editHandoff = preview?.edit_handoff ?? null;
+  const showInkspanHandoff = Boolean(
+    editHandoff
+    && isRecognizedRepositoryAssetPreview(preview)
+    && preview.parser_family === 'hwpx'
+    && editHandoff.parser_family === 'hwpx',
+  );
+  const handoffFileName = toSafeReactText(fileName || '선택한 파일');
 
   return (
     <section aria-label="선택한 자산 본문 미리보기" className="mt-5 border-t border-border pt-4">
@@ -45,6 +56,27 @@ export function RepositoryAssetPreviewPanel({
           {copy.next_action_label}
         </p>
       )}
+      {showInkspanHandoff && editHandoff ? (
+        <div className="mt-4 space-y-2">
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            aria-label={`${handoffFileName} Inkspan에서 편집`}
+            aria-describedby="inkspan-edit-handoff-status"
+            className="rounded-xl border border-border bg-muted px-3 py-2 text-sm font-semibold text-muted-foreground"
+          >
+            Inkspan에서 편집
+          </button>
+          <p
+            id="inkspan-edit-handoff-status"
+            role="status"
+            className="text-sm font-semibold text-muted-foreground"
+          >
+            {getInkspanEditHandoffUnavailableReason(editHandoff.error_code)}
+          </p>
+        </div>
+      ) : null}
       {preview?.preview_state === 'pending' ? (
         <button
           type="button"

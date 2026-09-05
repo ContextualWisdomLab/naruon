@@ -406,6 +406,16 @@ def test_preview_route_returns_recognized_hwpx_for_scoped_attachment() -> None:
     assert data["error_code"] is None
     assert data["next_action"] == NEXT_ACTION_READ_RECOGNIZED_TEXT
     assert data["provider_write_executed"] is False
+    handoff = data["edit_handoff"]
+    assert handoff["source_asset_key"] == asset_key
+    assert handoff["handoff_state"] == "unavailable"
+    assert handoff["mutation_allowed"] is False
+    assert handoff["converts_source_to_plain_text"] is False
+    assert handoff["overwrites_original"] is False
+    assert handoff["provider_write_executed"] is False
+    assert handoff["editable_document_payload"] is None
+    assert handoff["next_action"] == "keep_reading_recognized_text"
+    assert handoff["error_code"] == "inkspan_hangul_capability_unavailable"
 
 
 def test_preview_route_loads_only_the_matched_attachment_payload() -> None:

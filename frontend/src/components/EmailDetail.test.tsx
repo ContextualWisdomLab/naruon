@@ -1314,6 +1314,20 @@ describe("EmailDetail", () => {
           next_action: "read_recognized_text",
           error_code: null,
           provider_write_executed: false,
+          edit_handoff: {
+            source_asset_key: "asset_mail_hwpx_recognized",
+            source_asset_type: "email_attachment",
+            parser_family: "hwpx",
+            handoff_state: "unavailable",
+            editor_capability_name: "inkspan_hangul_document_engine",
+            mutation_allowed: false,
+            converts_source_to_plain_text: false,
+            overwrites_original: false,
+            provider_write_executed: false,
+            next_action: "keep_reading_recognized_text",
+            error_code: "inkspan_hangul_capability_unavailable",
+            editable_document_payload: null,
+          },
         }));
       }
       throw new Error(`Unexpected fetch: ${url}`);
@@ -1342,6 +1356,10 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("Quarterly decision record");
     expect(container.textContent).toContain("Approve the next action.");
     expect(container.textContent).toContain("인식된 본문");
+    expect(container.textContent).toContain("Inkspan에서 편집");
+    expect(container.textContent).toContain(
+      "설치된 Inkspan에 HWPX 편집 기능이 없습니다. 인식된 본문을 계속 읽거나 다른 파일을 선택하세요.",
+    );
     expect(container.textContent).not.toContain("본문이 없습니다");
     expect(container.textContent).not.toContain("asset_mail_hwpx_recognized");
   });

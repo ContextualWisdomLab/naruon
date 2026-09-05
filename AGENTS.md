@@ -339,6 +339,14 @@ in this repo.
   responses must sanitize stored subject/body/snippet/address display fields
   before returning them. Preserve message/thread identifiers separately from
   UI-safe subject/body, address, and attachment display text.
+- Recognized HWPX mail/Data preview may expose a read-only Inkspan edit
+  handoff, but it must fail closed when a released/installed Hangul document
+  engine is absent. Do not hand recognized paragraph text to Markdown/HTML
+  Inkspan as an editable document, do not overwrite the original attachment,
+  do not invent a write API, and do not vendor unreleased inkspan Draft #320
+  HangulDocumentEngine code. Preserve the exact opaque `asset_key` and the
+  already authorized workspace scope; tell the buyer to keep reading the
+  recognized text or choose another file.
 - Email file import must keep frontend file pickers, `/api/emails/import-files`,
   and `services.email_import_service` in the same source-backed contract:
   supported uploads are `.eml`, `.zip`, and `.mbox`; imported email and
