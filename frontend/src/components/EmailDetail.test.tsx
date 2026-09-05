@@ -1278,6 +1278,74 @@ describe("EmailDetail", () => {
     )).toBe(true);
   });
 
+  it("lets a buyer open recognized HWPX paragraph text from a mail attachment", async () => {
+    const email = {
+      id: 44,
+      message_id: "<mail-hwpx@example.com>",
+      thread_id: null,
+      sender: "partner@example.com",
+      recipients: "user@example.com",
+      subject: "HWPX from inbox",
+      date: "2026-08-17T09:00:00Z",
+      body: "Please read the attached decision record.",
+      attachments: [
+        {
+          asset_key: "asset_mail_hwpx_recognized",
+          file_name: "decision.hwpx",
+          parser_family: "hwpx",
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/44")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "첨부 결정문을 확인해야 합니다.", action_items: [] }));
+      }
+      if (url.endsWith("/api/data/repository-assets/asset_mail_hwpx_recognized/preview")) {
+        return Promise.resolve(jsonResponse({
+          asset_key: "asset_mail_hwpx_recognized",
+          asset_type: "email_attachment",
+          preview_state: "recognized",
+          parser_family: "hwpx",
+          paragraph_texts: ["Quarterly decision record", "Approve the next action."],
+          preview_text: "Quarterly decision record\n\nApprove the next action.",
+          next_action: "read_recognized_text",
+          error_code: null,
+          provider_write_executed: false,
+        }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={44} />);
+    });
+    await flushAsyncWork();
+
+    const openButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("decision.hwpx"),
+    );
+    expect(openButton).not.toBeUndefined();
+
+    await act(async () => {
+      openButton?.click();
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("Quarterly decision record");
+    expect(container.textContent).toContain("Approve the next action.");
+    expect(container.textContent).toContain("인식된 본문");
+    expect(container.textContent).not.toContain("본문이 없습니다");
+    expect(container.textContent).not.toContain("asset_mail_hwpx_recognized");
+  });
+
   it("handles send message failure", async () => {
     const email: TestEmail = {
       id: 22,
