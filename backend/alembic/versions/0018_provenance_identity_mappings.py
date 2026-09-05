@@ -52,11 +52,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if not sa.inspect(op.get_bind()).has_table(_MAPPING_TABLE):
-        return
-    op.drop_index(
-        "ix_provenance_identity_target_scope",
-        table_name=_MAPPING_TABLE,
-        if_exists=True,
-    )
-    op.drop_table(_MAPPING_TABLE)
+    """Preserve imported identity mappings when application code is rolled back."""
+    # The table may predate this revision via 0001's live metadata bootstrap.
+    # Its portable identity history is not rebuildable from remapped records.
+    # Destructive retirement requires a separate, explicitly governed operation.
+    return None

@@ -29,6 +29,7 @@ from db.models import (
     Email,
     ProjectFolder,
     WebdavAccount,
+    Workspace,
 )
 from db.session import get_db
 from main import app
@@ -61,6 +62,7 @@ class MockAsyncSession:
     def __init__(self, results):
         self.results = results
         self.documents: list[Document] = []
+        self.workspaces: list[Workspace] = []
         self.queries = []
         self.execute_calls = 0
 
@@ -68,6 +70,31 @@ class MockAsyncSession:
         self.queries.append(query)
         rendered_query = str(query)
         rendered_query_lower = rendered_query.lower()
+        if "insert into workspace_entities" in rendered_query_lower:
+            compiled = query.compile()
+            params = compiled.params
+            workspace_id = next(
+                value
+                for key, value in params.items()
+                if key.startswith("workspace_id")
+            )
+            workspace = next(
+                (
+                    workspace
+                    for workspace in self.workspaces
+                    if workspace.workspace_id == workspace_id
+                ),
+                None,
+            )
+            if workspace is None:
+                workspace = Workspace(
+                    workspace_id=workspace_id,
+                    workspace_name=workspace_id,
+                    created_at=_now(),
+                )
+                self.workspaces.append(workspace)
+                return MockResult(workspace)
+            return MockResult(None)
         if (
             "webdav_accounts.source_uid" in rendered_query_lower
             and "webdav_accounts.account_id" not in rendered_query_lower
@@ -84,6 +111,26 @@ class MockAsyncSession:
                     for account in result
                 ]
             )
+        if "from workspace_entities" in rendered_query_lower:
+            compiled = query.compile()
+            params = compiled.params
+            workspace_id = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("workspace_id")
+                ),
+                None,
+            )
+            workspace = next(
+                (
+                    workspace
+                    for workspace in self.workspaces
+                    if workspace.workspace_id == workspace_id
+                ),
+                None,
+            )
+            return MockResult(workspace)
         if "from workspace_documents" in rendered_query_lower:
             compiled = query.compile()
             params = compiled.params
@@ -103,11 +150,25 @@ class MockAsyncSession:
                 ),
                 None,
             )
+            organization_id = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("organization_id")
+                ),
+                None,
+            )
             rows = [
                 document
                 for document in self.documents
                 if (document_id is None or document.document_id == document_id)
                 and (workspace_id is None or document.workspace_id == workspace_id)
+                and (
+                    organization_id is None
+                    # Older fixtures predate Document.organization_id; keep
+                    # them usable while enforcing any explicit organization.
+                    or document.organization_id in (None, organization_id)
+                )
             ]
             if "order by" in rendered_query_lower:
                 return MockResult(rows)
@@ -123,8 +184,15 @@ class MockAsyncSession:
             if not obj.created_at:
                 obj.created_at = _now()
             self.documents.append(obj)
+        elif isinstance(obj, Workspace):
+            if not obj.created_at:
+                obj.created_at = _now()
+            self.workspaces.append(obj)
 
     async def commit(self):
+        pass
+
+    async def flush(self):
         pass
 
     async def refresh(self, obj):
@@ -2895,6 +2963,7 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
             Document(
                 document_id="doc_owned",
                 workspace_id="workspace-org-acme",
+                organization_id="org-acme",
                 document_name="<b>roadmap.md</b>",
                 document_type="text/markdown",
                 document_content="# Roadmap",
@@ -2907,6 +2976,16 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
                 document_name="rival.md",
                 document_type="text/markdown",
                 document_content="rival",
+                document_status="uploaded",
+                created_at=_now(),
+            ),
+            Document(
+                document_id="doc_other_org",
+                workspace_id="workspace-org-acme",
+                organization_id="org-rival",
+                document_name="other-org.md",
+                document_type="text/markdown",
+                document_content="other organization",
                 document_status="uploaded",
                 created_at=_now(),
             ),
@@ -2955,6 +3034,7 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
         }
     ]
     assert "doc_rival" not in response.text
+    assert "doc_other_org" not in response.text
 
 
 def test_data_document_upload_creates_workspace_scoped_document(mock_db):
@@ -3012,7 +3092,17 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
         document_status="uploaded",
         created_at=_now(),
     )
-    mock_db.documents.extend([document, rival_document])
+    other_organization_document = Document(
+        document_id="doc_other_org",
+        workspace_id="workspace-org-acme",
+        organization_id="org-rival",
+        document_name="other-org.md",
+        document_type="text/markdown",
+        document_content="other organization",
+        document_status="uploaded",
+        created_at=_now(),
+    )
+    mock_db.documents.extend([document, rival_document, other_organization_document])
     token = _signed_session_token(_valid_session_payload())
     client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
     try:
@@ -3024,6 +3114,9 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
             "/api/data/documents/doc_owned/hwp-conversion-intent"
         )
         rival_response = client.post("/api/data/documents/doc_rival/reparse")
+        other_organization_response = client.post(
+            "/api/data/documents/doc_other_org/reparse"
+        )
     finally:
         client.close()
         _restore_overrides(previous_secret, original_overrides)
@@ -3049,6 +3142,8 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
 
     assert rival_response.status_code == 404
     assert "doc_rival" not in rival_response.text
+    assert other_organization_response.status_code == 404
+    assert "doc_other_org" not in other_organization_response.text
 
 
 def test_data_document_webdav_materialization_executes_source_backed_write(

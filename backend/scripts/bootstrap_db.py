@@ -1,20 +1,12 @@
 import asyncio
 import os
-from collections.abc import Sequence
-
-from sqlalchemy import Executable, inspect, text
+from sqlalchemy import Executable, Index, MetaData, Table, inspect, text
 from sqlalchemy.engine import Connection
 
 from db.models import Base
 from db.session import engine
 
 INVALID_EMAIL_BACKFILL_OWNER_IDS = {None, "", "default"}
-LEGACY_EMAILS_INDEX = text(
-    "CREATE INDEX IF NOT EXISTS ix_emails_owner_date "
-    "ON emails (user_id, organization_id, date)"
-)
-
-
 def _static_bootstrap_sql(statement: str) -> Executable:
     # ponytail: repo-authored static bootstrap SQL only; bind params before runtime input.
     return text(statement)
@@ -97,7 +89,8 @@ def _get_add_columns_statements() -> list[Executable]:
             "ADD COLUMN IF NOT EXISTS organization_id varchar"
         ),
         _static_bootstrap_sql(
-            "ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS workspace_id varchar"
+            "ALTER TABLE prompt_templates "
+            "ADD COLUMN IF NOT EXISTS workspace_id varchar"
         ),
     ]
 
@@ -189,7 +182,6 @@ def _get_create_indexes_statements() -> list[Executable]:
             "CREATE INDEX IF NOT EXISTS ix_email_records_owner_date "
             "ON email_records (user_id, organization_id, date)"
         ),
-        LEGACY_EMAILS_INDEX,
         text(
             "CREATE INDEX IF NOT EXISTS ix_sender_relationships_owner_source "
             "ON sender_relationships "
@@ -527,15 +519,17 @@ def schema_backfill_sql() -> list[Executable]:
     return statements
 
 
-def execute_schema_backfill(
-    conn: Connection, statements: Sequence[Executable] | None = None
-) -> None:
-    statements = schema_backfill_sql() if statements is None else statements
-    legacy_emails_exists = inspect(conn).has_table("emails")
-    for statement in statements:
-        if statement is LEGACY_EMAILS_INDEX and not legacy_emails_exists:
-            continue
+def execute_schema_backfill(conn: Connection) -> None:
+    for statement in schema_backfill_sql():
         conn.execute(statement)
+    if inspect(conn).has_table("emails"):
+        emails = Table("emails", MetaData(), autoload_with=conn)
+        Index(
+            "ix_emails_owner_date",
+            emails.c.user_id,
+            emails.c.organization_id,
+            emails.c.date,
+        ).create(conn, checkfirst=True)
 
 
 async def bootstrap_db() -> None:

@@ -1686,7 +1686,12 @@ async def test_import_rejects_invalid_source_user_uid_before_transaction(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_concurrent_identical_same_database_imports_are_idempotent():
+@pytest.mark.parametrize(
+    "incompatible", [False, True], ids=["identical", "incompatible"]
+)
+async def test_concurrent_same_database_imports_preserve_winner(
+    monkeypatch, incompatible
+):
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
     await _require_direct_postgres(engine)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -1705,19 +1710,126 @@ async def test_concurrent_identical_same_database_imports_are_idempotent():
         async with session_factory() as session:
             archive = await export_tenant_provenance(session, source_scope)
 
-        async def run_import():
-            async with session_factory() as session:
-                return await import_tenant_provenance(session, target_scope, archive)
+        records = parse_provenance_archive(archive)
+        second_records = copy.deepcopy(records)
+        if incompatible:
+            second_records["project_objects"][0]["title"] = "Conflicting requirement"
+        archives = (archive, build_provenance_archive(second_records))
+        overlap = asyncio.Barrier(2)
 
-        first, second = await asyncio.gather(run_import(), run_import())
-        created_totals = sorted(
-            (sum(first.created.values()), sum(second.created.values()))
+        async def run_import(target_archive):
+            async with session_factory() as session:
+                execute = session.execute
+                first_statement = True
+
+                async def overlapping_execute(*args, **kwargs):
+                    nonlocal first_statement
+                    if first_statement:
+                        first_statement = False
+                        # Both transactions must be live before either takes import locks.
+                        await execute(select(1))
+                        await asyncio.wait_for(overlap.wait(), timeout=10)
+                    return await execute(*args, **kwargs)
+
+                monkeypatch.setattr(session, "execute", overlapping_execute)
+                return await import_tenant_provenance(
+                    session, target_scope, target_archive
+                )
+
+        outcomes = await asyncio.wait_for(
+            asyncio.gather(
+                *(run_import(target_archive) for target_archive in archives),
+                return_exceptions=True,
+            ),
+            timeout=30,
         )
-        assert created_totals == [0, 7]
-        assert sorted((sum(first.skipped.values()), sum(second.skipped.values()))) == [
-            2,
-            9,
+        receipts = [result for result in outcomes if isinstance(result, ImportReceipt)]
+        if incompatible:
+            # Regression: a conflicting retry overwrites the winner or leaks partial rows.
+            assert len(receipts) == 1
+            assert (
+                sum(isinstance(result, ProvenanceArchiveError) for result in outcomes)
+                == 1
+            )
+            assert sum(receipts[0].created.values()) == 7
+            assert sum(receipts[0].skipped.values()) == 2
+        else:
+            assert len(receipts) == 2
+            first, second = receipts
+            created_totals = sorted(
+                (sum(first.created.values()), sum(second.created.values()))
+            )
+            assert created_totals == [0, 7]
+            assert sorted(
+                (sum(first.skipped.values()), sum(second.skipped.values()))
+            ) == [
+                2,
+                9,
+            ]
+        winner_records = parse_provenance_archive(
+            archives[
+                outcomes.index(next(r for r in receipts if sum(r.created.values())))
+            ]
+        )
+        graph_collections = [
+            ("content_nodes", ContentNodeRecord, "content_node_uid"),
+            ("content_segments", ContentSegmentRecord, "content_segment_uid"),
+            ("structural_edges", KnowledgeGraphEdgeRecord, "edge_uid"),
+            ("project_objects", ProjectGraphObjectRecord, "object_uid"),
+            ("project_edges", ProjectGraphEdgeRecord, "edge_uid"),
+            ("corrections", ProjectGraphCorrectionRecord, "correction_uid"),
         ]
+        async with session_factory() as session:
+            target_records = parse_provenance_archive(
+                await export_tenant_provenance(session, target_scope)
+            )
+            for collection in (
+                "emails",
+                "attachments",
+                *(c for c, _, _ in graph_collections),
+            ):
+                assert target_records[collection] == winner_records[collection]
+            email = (
+                await session.scalars(
+                    select(Email).where(Email.user_id == source_scope.user_id)
+                )
+            ).one()
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(Attachment)
+                    .where(Attachment.email_id == email.id)
+                )
+                == 2
+            )  # The source also retains its excluded binary attachment.
+            for collection, model, _ in graph_collections:
+                scope_filter = (
+                    model.email_id == email.id
+                    if collection
+                    in ("content_nodes", "content_segments", "structural_edges")
+                    else model.workspace_id.in_(
+                        [source_scope.workspace_id, target_scope.workspace_id]
+                    )
+                )
+                assert await session.scalar(
+                    select(func.count()).select_from(model).where(scope_filter)
+                ) == 2 * len(records[collection])
+            mappings = list(
+                (
+                    await session.scalars(
+                        select(ProvenanceIdentityMapping).where(
+                            ProvenanceIdentityMapping.target_workspace_id
+                            == target_scope.workspace_id
+                        )
+                    )
+                ).all()
+            )
+            assert len(mappings) == 7
+            assert {(row.entity_kind, row.portable_uid) for row in mappings} == {
+                (collection, record[uid_key])
+                for collection, _, uid_key in graph_collections
+                for record in winner_records[collection]
+            }
     finally:
         async with session_factory.begin() as session:
             email = await session.scalar(

@@ -6,11 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from core.config import settings
 from db.models import Base
-from scripts.bootstrap_db import (
-    LEGACY_EMAILS_INDEX,
-    execute_schema_backfill,
-    schema_backfill_sql,
-)
+from scripts.bootstrap_db import execute_schema_backfill, schema_backfill_sql
 from db.models import (
     AgentRunRecord,
     CalendarWritebackSource,
@@ -119,10 +115,10 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         and "user_id, organization_id, date" in statement
         for statement in statements
     )
-    assert sum(
+    assert not any(
         "on emails (user_id, organization_id, date)" in statement
         for statement in statements
-    ) == 1
+    )
     assert any(
         "drop index if exists ix_email_records_message_id" in statement
         for statement in statements
@@ -765,6 +761,8 @@ async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
         pytest.skip("PostgreSQL smoke path unavailable")
     try:
         async with conn.begin():
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.run_sync(Base.metadata.create_all)
             await conn.execute(
                 text(
                     "CREATE TEMP TABLE emails ("
@@ -772,7 +770,8 @@ async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
                     ") ON COMMIT DROP"
                 )
             )
-            await conn.run_sync(execute_schema_backfill, [LEGACY_EMAILS_INDEX])
+            await conn.run_sync(execute_schema_backfill)
+            await conn.run_sync(execute_schema_backfill)
             result = await conn.execute(
                 text(
                     "SELECT indexname FROM pg_indexes "
