@@ -15,17 +15,23 @@ REPLY_SLA_SOURCE_TYPE = "reply_sla"
 
 
 class ReplySlaTaskConflict(Exception):
+    """Report a concurrent source-task conflict that cannot be reconciled."""
+
     pass
 
 
 @dataclass(frozen=True)
 class ReplySlaEscalatedTask:
+    """Pair a persisted task with its original external email reference."""
+
     task: TicketTask
     source_email_id: str | None
 
 
 @dataclass(frozen=True)
 class ReplySlaEscalationResult:
+    """Summarize evaluated mail and created or updated follow-up tasks."""
+
     evaluated: int
     created: int
     overdue_hours: int
@@ -33,6 +39,7 @@ class ReplySlaEscalationResult:
 
 
 def canonical_reply_sla_thread_key(email: Email) -> str:
+    """Prefer the normalized thread reference, then the message reference."""
     return (
         normalize_message_id(email.thread_id)
         or normalize_message_id(email.message_id)
@@ -41,6 +48,7 @@ def canonical_reply_sla_thread_key(email: Email) -> str:
 
 
 def _safe_email_subject(subject: str | None) -> str:
+    """Keep a bounded plain-text title without active email markup."""
     trimmed = (subject or "제목 없음").replace("\x00", " ").strip()
     if not trimmed or contains_html_markup(trimmed):
         return "제목 정리 필요"
@@ -48,10 +56,12 @@ def _safe_email_subject(subject: str | None) -> str:
 
 
 def _reply_sla_task_title(email: Email) -> str:
+    """Build the existing follow-up label from a sanitized mail subject."""
     return f"미답변 팔로업: {_safe_email_subject(email.subject)}"
 
 
 def _email_date_utc(email: Email) -> datetime.datetime:
+    """Interpret legacy naive timestamps as UTC for deadline comparisons."""
     message_date = email.date
     if message_date.tzinfo is None:
         return message_date.replace(tzinfo=datetime.timezone.utc)
@@ -61,6 +71,7 @@ def _email_date_utc(email: Email) -> datetime.datetime:
 async def _fetch_existing_tasks_by_email(
     db: AsyncSession, user_id: str, organization_id: str | None, email_ids: list[int]
 ) -> dict[int, TicketTask]:
+    """Select the most recently updated owner-scoped task per source email."""
     result = await db.execute(
         select(TicketTask)
         .where(
@@ -81,6 +92,7 @@ async def _fetch_existing_tasks_by_email(
 def _update_task_for_escalation(
     task: TicketTask, email: Email, now: datetime.datetime
 ) -> None:
+    """Escalate pending work without reopening a completed task."""
     if task.status != "done":
         task.title = _reply_sla_task_title(email)
         task.status = "blocked"
@@ -92,6 +104,7 @@ def _update_task_for_escalation(
 def _create_task_for_escalation(
     user_id: str, organization_id: str | None, email: Email
 ) -> TicketTask:
+    """Create a source-linked urgent task using the established identity contract."""
     return TicketTask(
         user_id=user_id,
         organization_id=organization_id,
@@ -111,6 +124,7 @@ async def _refresh_escalated_tasks(
     email_ids: list[int],
     escalated_tasks: list[tuple[TicketTask, str | None]],
 ) -> None:
+    """Replace task references with persisted owner-scoped rows when present."""
     refreshed_tasks_by_email = await _fetch_existing_tasks_by_email(
         db, user_id, organization_id, email_ids
     )
@@ -127,6 +141,7 @@ async def _process_bulk_escalation(
     overdue_replies: list[Email],
     now: datetime.datetime,
 ) -> tuple[int, list[tuple[TicketTask, str | None]]]:
+    """Create or update overdue follow-ups in the ordinary single commit path."""
     email_ids = [email.id for email in overdue_replies]
     existing_tasks_by_email = await _fetch_existing_tasks_by_email(
         db, user_id, organization_id, email_ids
@@ -166,6 +181,7 @@ async def _process_fallback_escalation(
     overdue_replies: list[Email],
     now: datetime.datetime,
 ) -> tuple[int, list[tuple[TicketTask, str | None]]]:
+    """Reconcile competing inserts with batched then individual savepoints."""
     email_ids = [email.id for email in overdue_replies]
     existing_tasks_by_email = await _fetch_existing_tasks_by_email(
         db, user_id, organization_id, email_ids
@@ -210,8 +226,6 @@ async def _process_fallback_escalation(
                     # We know this one conflicted.
                     conflicted_email_ids.append(email.id)
                     fallback_entries[index] = (email, None)
-                    if hasattr(db, "expunge"):
-                        db.expunge(task)
                 else:
                     remaining_tasks.append((index, email, task))
 
@@ -235,8 +249,6 @@ async def _process_fallback_escalation(
                         except IntegrityError:
                             conflicted_email_ids.append(email.id)
                             task_or_none = None
-                            if hasattr(db, "expunge"):
-                                db.expunge(task)
                         fallback_entries[index] = (email, task_or_none)
 
     if conflicted_email_ids:
@@ -276,12 +288,18 @@ async def create_reply_sla_escalation_tasks(
     *,
     user_id: str,
     organization_id: str | None,
+    workspace_id: str,
     overdue_hours: int,
     limit: int,
     tenant_config: TenantConfig | None = None,
 ) -> ReplySlaEscalationResult:
+    """Persist bounded follow-ups selected by authoritative scoped reply tracking."""
     pending_replies = await check_missing_replies(
-        db, user_id, organization_id, tenant_config=tenant_config
+        db,
+        user_id,
+        organization_id,
+        workspace_id,
+        tenant_config=tenant_config,
     )
     now = datetime.datetime.now(datetime.timezone.utc)
     overdue_cutoff = now - datetime.timedelta(hours=overdue_hours)
@@ -308,6 +326,9 @@ async def create_reply_sla_escalation_tasks(
         )
     except IntegrityError:
         await db.rollback()
+        # Rollback expires loaded mail even when expire_on_commit is disabled.
+        for email in overdue_replies:
+            await db.refresh(email)
         created_count, escalated_tasks = await _process_fallback_escalation(
             db, user_id, organization_id, overdue_replies, now
         )

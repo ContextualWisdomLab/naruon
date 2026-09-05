@@ -154,6 +154,7 @@ async def create_reply_sla_escalations(
             db,
             user_id=auth_context.user_id,
             organization_id=auth_context.organization_id,
+            workspace_id=auth_context.workspace_id,
             overdue_hours=request.overdue_hours,
             limit=request.limit,
         )
@@ -163,7 +164,7 @@ async def create_reply_sla_escalations(
             detail={
                 "error_code": "reply_sla_task_conflict",
                 "message": "Overdue reply follow-up task conflict",
-            }
+            },
         ) from None
     return _reply_sla_response(escalation_result)
 
@@ -177,6 +178,7 @@ def _build_task_query(auth_context: AuthContext):
                 TicketTask.related_email_id == Email.id,
                 Email.user_id == auth_context.user_id,
                 Email.organization_id == auth_context.organization_id,
+                Email.workspace_id == auth_context.workspace_id,
             ),
         )
         .where(
@@ -184,6 +186,7 @@ def _build_task_query(auth_context: AuthContext):
             TicketTask.organization_id == auth_context.organization_id,
         )
     )
+
 
 @router.get("", response_model=list[TicketTaskResponse])
 async def list_ticket_tasks(
@@ -248,6 +251,7 @@ async def _fetch_source_email(
             Email.message_id == request.source_email_id,
             Email.user_id == auth_context.user_id,
             Email.organization_id == auth_context.organization_id,
+            Email.workspace_id == auth_context.workspace_id,
         )
     )
     email = email_result.scalar_one_or_none()
