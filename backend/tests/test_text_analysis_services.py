@@ -38,7 +38,7 @@ def test_text_structure_statistics_are_descriptive_not_readability_scores() -> N
     result = measure_text_structure("One short sentence. Two words!")
 
     assert result.character_count == 30
-    assert result.non_whitespace_character_count == 25
+    assert result.non_whitespace_character_count == 26
     assert result.whitespace_token_count == 5
     assert result.sentence_boundary_count == 2
     assert result.segmentation_contract == "whitespace-and-terminal-punctuation-v1"
