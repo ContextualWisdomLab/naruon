@@ -1041,15 +1041,18 @@ Strix, OpenCode, CodeQL, Semgrep, and security jobs remain queued. Naruon
 Noema run `33596312910` attempt 2 and bounded central review scheduler run
 `33942317426` now revalidate the unchanged #1534 head; both are queued and do
 not yet prove protected completion.
-Central `.github` Draft PR #1888
-(`21c3e1b18a8f82416de44bd7bc47a3bd93864282`) repairs a separate owner defect
+Central `.github` PR #1888
+(`b61d8287a4a9aed3722868358b49116ada2999dc`) repairs a separate owner defect
 exposed by #1049: one-language CodeQL dispatches for the same repository and PR
 shared a concurrency group, so sibling Python, JavaScript/TypeScript, and
 Actions runs cancelled one another. The group now includes the already
 validated `required_language`; 25 focused contracts, Ruff, actionlint, and diff
 checks pass, and ADR 0025 records the live run evidence and rejected full-matrix
-alternative. It remains Proposed pending central protected-main review and
-Checks.
+alternative. It is non-force stacked on runner-image owner PR #1886 exact head
+`7bd5b02ddb84d7887c5d9984bd144302235cdfdf`; the parent lint finding is fixed,
+the combined 31-test suite passes, and the child retains a three-file effective
+delta. It remains Proposed pending both parent and child protected-main review
+and Checks.
 Naruon #1505 independently reproduced the same owner gap at exact head
 `3bf2f42ab8c854046f16b516073c13b13af77c6b`: Noema's sole gateway attempt
 served `deepseek-ai/deepseek-v4-flash-0731` and ended in HTTP 502 after 2,375.2
