@@ -55,6 +55,20 @@ def test_agent_guidance_names_canonical_llm_owner_and_fail_closed_boundary() -> 
     assert "fails closed" in normalized_architecture
 
 
+def test_agent_guidance_preserves_product_contract_recurrence_rules() -> None:
+    """Canonical guidance must retain product contracts repaired in owner lanes."""
+    agents = _read("AGENTS.md")
+    normalized_agents = " ".join(agents.lower().split())
+
+    assert "/api/llm/summarize" in agents
+    assert "integer percentage in `0..100`" in normalized_agents
+    assert "must not infer the unit from the numeric value" in normalized_agents
+    assert "dynamic `/api/tools` `post`/`patch`/`delete`" in normalized_agents
+    assert "built-in immutability" in normalized_agents
+    assert "real provider/adapter execution target" in normalized_agents
+    assert "mock or placeholder handler must never report successful work" in normalized_agents
+
+
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     """Repository OpenCode model work must use only the canonical logical pool."""
     raw_config = _read("opencode.jsonc")
