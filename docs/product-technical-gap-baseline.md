@@ -129,7 +129,7 @@ complete. No gate evidence transfers between the owner, upgrade, and consumer
 heads.
 
 **Frontend dependency security refresh (2026-09-05T00:40Z):** Dependabot alert
-#91 identifies GHSA-5p4m-2wfm-xmqj in transitive `js-yaml@4.3.0`. Draft PR
+#91 identifies GHSA-5p4m-2wfm-xmqj in transitive `js-yaml@4.3.0`. Ready PR
 #1571 (`23cb8e0eda1e0a29dbb39e1ca98c32a5313d2a0e`) uses the existing pnpm-native
 workspace override to require patched 4.3.1 and regenerates only the workspace
 policy and lockfile. Frozen installation, ESLint, TypeScript, exact lock
