@@ -338,7 +338,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
   const calendarSourceError = isDashboardDataUnavailable(dataStatus.calendarSources);
   const projectFolderLoading = dataStatus.projectFolders === 'loading';
   const projectFolderError = isDashboardDataUnavailable(dataStatus.projectFolders);
-  const dashboardAuthenticationRequired = [dataStatus.emails, dataStatus.pendingReplies, dataStatus.tasks].includes('auth');
+  const dashboardAuthenticationRequired = Object.values(dataStatus).includes('auth');
   const dashboardDataError = Object.values(dataStatus).some(isDashboardDataUnavailable);
   const dashboardStats = useMemo(() => ([
     { title: '받은 메일', value: emailUnavailable ? '오류' : emailLoading ? '-' : emails.length.toString(), diff: emailUnavailable ? '확인 필요' : unreadCount > 0 ? `+${unreadCount}` : '-', diffText: '안 읽음', icon: Inbox, color: emailUnavailable ? 'text-red-500' : 'text-primary' },

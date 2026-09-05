@@ -118,6 +118,39 @@ describe("WorkspaceHome dashboard successor contracts", () => {
     expect(container?.querySelector('[role="alert"] button')).toBeNull();
   });
 
+  it.each([
+    ["/api/calendar/writeback-sources", 401],
+    ["/api/webdav/folders", 403],
+  ])("routes %s status %i to login recovery", async (failingPath, status) => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(failingPath)) return Promise.resolve({ ok: false, status });
+      const support = supportResponse(url);
+      if (support) return support;
+      if (url.endsWith("/api/emails")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) return Promise.resolve({ ok: true, json: async () => [] });
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    await renderDashboard();
+    await waitForCondition(() => container?.textContent?.includes("로그인이 필요합니다.") ?? false);
+
+    expect(container?.querySelector('a[href="/settings"]')?.textContent).toContain("로그인 설정 열기");
+    expect(container?.querySelector('[role="alert"]')?.textContent).not.toContain("다시 시도");
+    expect(container?.querySelector('[role="alert"] button')).toBeNull();
+  });
+
   it("fails closed when a successful mail response omits the emails array", async () => {
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
       matches: false,
