@@ -619,9 +619,14 @@ externally cancelled without a source failure and have been rerun once as
 attempt 2; they remain queued. Independent approval is still required, so this
 remains a Draft candidate rather than protected-branch evidence.
 
-PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) now distinguishes 401/403
-login recovery from transport retry and bounds its three core dashboard reads
-with one native abort signal; 17 focused tests, TypeScript, and lint pass.
+PR #1485 (`796083106d46cff494836004937bb767fbb9672e`) remains predecessor provenance
+for the Today-dashboard recovery lane. Ready successor #1570
+(`1c08090c7b6e563a984b318edb7e89588b90e392`) now preserves independent reads,
+bounded abort and stale-generation rejection, and derives login recovery from
+all five source statuses. Calendar 401 and WebDAV 403 no longer offer a
+transport retry while core reads succeed; 17 focused tests, TypeScript, ESLint,
+and diff checks pass. Fresh exact-head hosted Checks and independent review are
+pending, so neither protected succession nor closure of #1485 is proven.
 PR #1531 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) now honors an exact-head
 structured OpenCode approval when no CodeRabbit check exists even if a pending
 issue notice is present; the full shell gate harness and ShellCheck pass, and
@@ -685,12 +690,14 @@ An exact two-tree comparison against `develop@042b0c70531b229af3acbd0421a2f23098
 still shows all four implementation, test, and doctoring files as a 344-line
 effective delta, so no protected successor has fully inherited this work.
 
-Draft PR #1570 (`32a1e0b2df499b80ca5852f6b1fd348fa4eb933e`)
+Ready PR #1570 (`1c08090c7b6e563a984b318edb7e89588b90e392`)
 keeps Today-dashboard source failures distinct from legitimate empty business
-data and gives the user a real retry action without hiding successful partial
-sources. Exact-head local evidence is 10 focused component tests, TypeScript,
-ESLint, and three signed-session Playwright recovery paths across desktop,
-tablet, and mobile. Fresh hosted Checks and independent review remain required.
+data and gives the correct recovery action without hiding successful partial
+sources. The latest repair makes calendar and WebDAV authorization failures use
+the same login-recovery path as core data. Exact-head local evidence is 17
+focused component tests, TypeScript, ESLint, and diff checks; fresh hosted
+Checks, independent review, and predecessor-equivalence evidence remain
+required.
 
 **Live exact-head queue refresh (2026-08-25T17:51Z):** the following
 post-snapshot states supersede only the matching historical SHA references
@@ -1264,7 +1271,7 @@ button, form, navigation, chart, or asynchronous data surface.
 
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
-| Responsive shell hydration and unavailable state | a buyer can see a polished navigation shell but no actionable content when a data request is unavailable, and hydration drift can produce inconsistent controls | Draft PR #1570 at `be7b6d4e28d677bf1a96a0a5d7cd7698132eb5b6` stops converting mail, pending-reply, task, calendar-source, and project-folder failures into false zero states; all five sources have independent status, so one source failure preserves every successful sibling result and exposes the shared retry. It also rejects stale generations and mounts only the active viewport dashboard. The full frontend suite passes with 51 files and 439 tests, plus TypeScript and zero-warning focused ESLint. This is local Proposed evidence, not a hosted or deployed result | #1570; keep separate from #1470's bounded lookup optimization | current-head hosted checks, deterministic server/client markup, backend-backed desktop/mobile Playwright screenshots for loading/partial-error/retry-success, and no hydration warnings |
+| Responsive shell hydration and unavailable state | a buyer can see a polished navigation shell but no actionable content when a data request is unavailable, and hydration drift can produce inconsistent controls | Ready PR #1570 at `1c08090c7b6e563a984b318edb7e89588b90e392` stops converting mail, pending-reply, task, calendar-source, and project-folder failures into false zero states; all five sources settle independently and every authorization failure routes to login recovery instead of generic retry. Seventeen focused tests, TypeScript, ESLint, and diff checks pass. This is local Proposed evidence, not a hosted or deployed result | #1485, #1570; keep predecessor open until full-delta succession is independently proven | current-head hosted checks and review, deterministic server/client markup, backend-backed desktop/mobile Playwright screenshots for loading/partial-error/auth/retry-success, and no hydration warnings |
 | Stacked PR current-head review dispatch | a dependent PR can show only metadata while the central OpenCode/required checks are still being materialized on a non-default base branch | #1448 exact head `068aefdf…` received a targeted scheduler/ OpenCode dispatch and then merged normally; its merge-result checks on `62a0d645…` remain queued | #1443, #1448, ContextualWisdomLab/.github scheduler | every supported stack base receives a bounded exact-head OpenCode/Noema/required-check run, with queued/provider states observable and no false merge readiness |
 | Typed Person/Event/Commitment graph | generic string graph cannot safely drive high-stakes action | planning spec marks types as new/planned | #977, #978, #1000 | normalized temporal/multi-membership identities, evidence/confidence/correction on every inferred edge |
 | Status-weighted scheduling | calendar CRUD does not prevent harmful double booking | CalDAV source/writeback/retry foundation exists | #978, #988, #989, #990, #1416 | confirmed/tentative/desired + organizer/attendee + recurrence/free-busy/resource end-to-end |
