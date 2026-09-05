@@ -285,13 +285,16 @@ and trailing quotation or bracket punctuation. After a non-force parent merge,
 the current stack passes 117
 combined tests, Ruff, and diff checks. No predecessor gate evidence transfers
 after these base/head changes. Draft PR #1482
-(`fa202dcb665789ee5c955646a511d9678d29aab2`) is restacked last on #1555,
+(`cb6b718e5c019b3d1313a178c1e5f8656122e786`) is restacked last on exact #1555
+head `1b37eeb7558733f1312df65f45166510218246df`,
 reuses the canonical email and phone matchers, and adds bounded Unicode-email,
 French-phone, and separator-optional Korean resident-registration masking. Its
 catalog claim excludes complete de-identification, and NIST SP 800-188 grounds
-that boundary. The effective child delta is three files; the combined tool and
-privacy contract suite passes 87 tests with warnings as errors, plus Ruff and
-diff checks. PR #1502
+that boundary. A concurrent acknowledgement ancestry was absorbed without a
+force-push while preserving the validated tree. The effective child delta is
+three files with 163 additions and no deletion; the combined tool and privacy
+contract suite passes 120 tests with warnings as errors, plus Ruff and diff
+checks. PR #1502
 (`0b9e324a91fd2148b2b2759cca875ac7d50c86a0`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
 Its previous frontend failure occurred before tests because Corepack resolved
