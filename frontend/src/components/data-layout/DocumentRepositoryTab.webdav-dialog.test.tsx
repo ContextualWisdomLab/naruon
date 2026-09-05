@@ -19,21 +19,23 @@ import { DocumentRepositoryTab } from './DocumentRepositoryTab';
 
 const webdavAccount = {
   source_id: 'webdav-customer',
-  source_name: 'Customer WebDAV',
-  account_label: 'Customer WebDAV',
+  display_label: 'Customer WebDAV',
   writeback_enabled: true,
-  status_code: 'ready',
+  etag: 'etag-1',
 };
 
 const repositoryAsset = {
   asset_key: 'asset-roadmap',
+  asset_type: 'workspace_document' as const,
   display_name: 'roadmap.md',
   source_label: 'customer-webdav',
-  state_code: 'ready',
+  state_code: 'ready' as const,
+  detail_text: 'Signed workspace document evidence',
   content_chars: 128,
   captured_at: '2026-09-06T00:00:00Z',
+  evidence_source: 'signed-workspace',
+  thread_key: 'thread-roadmap',
   provider_write_executed: false,
-  detail_text: 'Signed workspace document evidence',
 };
 
 function buildProps(requestDocumentAction = vi.fn()) {
@@ -70,7 +72,7 @@ function buildProps(requestDocumentAction = vi.fn()) {
     documentActionResult: null,
     webdavAccountStatus: 'ready' as const,
     webdavAccounts: [webdavAccount],
-    webdavAccountMap: { [webdavAccount.source_id]: webdavAccount },
+    webdavAccountMap: new Map([[webdavAccount.source_id, { account: webdavAccount, index: 0 }]]),
     projectFolders: [],
     selectedRepositoryAssetKey: repositoryAsset.asset_key,
     setSelectedRepositoryAssetKey: vi.fn(),
