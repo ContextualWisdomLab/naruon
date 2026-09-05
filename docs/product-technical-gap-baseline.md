@@ -124,7 +124,7 @@ digest match the lock; the Starlette release history, exact provenance, rollback
 and APA 7th references are recorded in
 `docs/doctoring/starlette-httpx2-testclient-dependency.md`. This
 was found while validating utility consumer PR
-#1538 (`6dd0344cef29de760ba56ef2568e888b1963dfc8`): its source tests could not
+#1538 (`9ae498ec9f866d0cbd44691ca2a247091eae35ff`): its source tests could not
 collect under Python 3.14 with warnings as
 errors because protected `develop` omitted the direct test dependency. Frozen
 sync and the predecessor's 65 focused tests passed without the warning; the
@@ -137,7 +137,7 @@ prerequisite is protected-merged and its own unchanged-head review and Checks
 complete. Its release note now names only the two effective tools and does not
 claim the removed URL extractor. It distinguishes MD5/SHA-1 compatibility
 fingerprints from the SHA-256 security hash and retains `usedforsecurity=False`
-at that boundary. Seventy-one focused tests, Ruff, and diff checks pass, while
+at that boundary. Seventy-three focused tests, Ruff, and diff checks pass, while
 current-head hosted checks are queued. A fresh frozen-sync run also passes the
 pin contract and a real FastAPI `TestClient` API path (`7 passed`) with warnings
 as errors. With no unresolved thread, source failure, or merge conflict, PR
@@ -251,15 +251,16 @@ remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 which carries its complete valid delta plus the newer exact-head repair rules.
 #1558 remains open until #1564 reaches protected merge or an independent
 equivalence check confirms succession; no count-only closure is authorized. #1538
-(`6dd0344cef29de760ba56ef2568e888b1963dfc8`)
+(`9ae498ec9f866d0cbd44691ca2a247091eae35ff`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
 boundary, bounded malformed-input regression, and North American cases. Its
 hash-generator contract labels MD5 and SHA-1 as compatibility fingerprints,
 keeps `usedforsecurity=False`, and identifies SHA-256 as the security-capable
-output. Seventy-one focused tool/API/privacy tests, Ruff, and diff checks pass,
-and the review thread is resolved. Draft PR #1496
+output. The release note now names only the two implemented tools rather than
+the removed URL extractor. Seventy-three focused tool/API/privacy/dependency
+tests, Ruff, and diff checks pass, and the review thread is resolved. Draft PR #1496
 (`260db8f3d328e52ce340de33a60af13c0e3edfc4`) was non-force restacked on
 that current owner head after GitHub reported a dirty stack. The merge preserves
 the URL-extractor delta and the parent's complete masking/security contract;
