@@ -273,10 +273,6 @@ if [ "$MERGE_STATE" = "UNKNOWN" ]; then
   add_waiting "Merge state is still UNKNOWN after 4 attempts on ${HEAD_REF_OID}; waiting for GitHub to refresh mergeability."
 fi
 
-if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then
-  add_blocker 'Review decision is CHANGES_REQUESTED; address requested changes before merge.'
-fi
-
 # shellcheck disable=SC2016  # GraphQL variables must remain literal.
 THREADS_JSON="$(gh api graphql \
   -F owner="$OWNER" \
@@ -343,6 +339,7 @@ CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failu
 CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 COMMIT_STATUS_JSON='{"statuses":[]}'
+CURRENT_ROBOT_REVIEW_READY=false
 if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
   printf 'commit status lookup failed:\n'
   printf '%s\n' "$(<"$COMMIT_STATUS_ERROR_FILE")" | sed 's/^/    /'
@@ -386,6 +383,7 @@ if [ "$CODERABBIT_COUNT" = "0" ]; then
     if [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
       add_waiting "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval on ${HEAD_REF_OID}."
     else
+      CURRENT_ROBOT_REVIEW_READY=true
       printf 'CodeRabbit check is absent; accepted current-head OpenCode App adversarial approval on %s.\n' "$HEAD_REF_OID"
     fi
   fi
@@ -423,6 +421,8 @@ else
     :
   elif [ "$CODERABBIT_PENDING" != "0" ] || [ "$CODERABBIT_STATUS_PENDING" != "0" ]; then
     add_waiting "Waiting for current-head CodeRabbit evidence on ${HEAD_REF_OID}."
+  else
+    CURRENT_ROBOT_REVIEW_READY=true
   fi
 fi
 
@@ -473,6 +473,41 @@ else
   )"
   if [ "$CODERABBIT_REVIEW_BLOCKERS" != "0" ]; then
     add_blocker "Current-head CodeRabbit review comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
+  fi
+fi
+
+# GitHub's aggregate reviewDecision remains CHANGES_REQUESTED after the
+# requested review's commit becomes stale. Treat that aggregate as blocking
+# only when a current-head request still exists, review metadata is unavailable,
+# or no current-head robot evidence supersedes the stale decision. This keeps
+# the gate aligned with its exact-head evidence contract without dismissing any
+# review object or bypassing a current request.
+if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then
+  if ! REVIEW_METADATA_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" 2>"$OPENCODE_REVIEWS_ERROR_FILE")"; then
+    printf 'Review metadata lookup failed:\n'
+    printf '%s\n' "$(<"$OPENCODE_REVIEWS_ERROR_FILE")" | sed 's/^/    /'
+    add_blocker 'Review decision metadata could not be read; see the workflow run log.'
+  else
+    CURRENT_CHANGES_REQUESTED_COUNT="$(printf '%s' "$REVIEW_METADATA_JSON" | jq -s --arg head_sha "$HEAD_SHA" '
+      [ .[]
+        | ..
+        | objects
+        | select(has("state") and has("commit_id"))
+      ]
+      | sort_by([(.submitted_at // .created_at // ""), (.id // 0)])
+      | group_by(.user.login // .user.id // "")
+      | map(last)
+      | map(select((.state // "" | ascii_upcase) == "CHANGES_REQUESTED"))
+      | map(select((.commit_id // "") == $head_sha))
+      | length
+    ')"
+    if [ "$CURRENT_CHANGES_REQUESTED_COUNT" != "0" ]; then
+      add_blocker 'Review decision is CHANGES_REQUESTED; address current-head requested changes before merge.'
+    elif [ "$CURRENT_ROBOT_REVIEW_READY" != true ]; then
+      add_blocker 'Review decision remains CHANGES_REQUESTED; await current-head robot review evidence before merge.'
+    else
+      printf 'Stale CHANGES_REQUESTED review decision is superseded by current-head robot evidence on %s.\n' "$HEAD_REF_OID"
+    fi
   fi
 fi
 
