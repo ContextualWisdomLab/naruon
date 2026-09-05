@@ -997,6 +997,12 @@ quality checks pass, its review thread is resolved, and its current Noema,
 Strix, OpenCode, CodeQL, Semgrep, and security jobs remain queued. The earlier
 central replacement run id recorded for #1534 now returns 404, so neither that
 stale handle nor the owner PR's pending checks prove protected completion.
+Naruon #1505 independently reproduced the same owner gap at exact head
+`3bf2f42ab8c854046f16b516073c13b13af77c6b`: Noema's sole gateway attempt
+served `deepseek-ai/deepseek-v4-flash-0731` and ended in HTTP 502 after 2,375.2
+seconds. The annotation contains no Naruon source finding. Central run
+`33936495146` now targets owner PR #1049 with merge and branch updates disabled;
+it is queued, not passing review or release evidence.
 
 ### 4.2 Source-of-truth and writeback sovereignty
 
