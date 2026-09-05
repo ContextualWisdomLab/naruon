@@ -161,14 +161,15 @@ the current head has an independent approval. Keep it Draft until #1345 reaches
 protected `develop`, then non-force restack, rerun both prerequisite and unique
 contracts, and collect fresh exact-head Checks before Ready promotion.
 
-**Semantic configuration naming refresh (2026-09-04T17:49Z):** Ready runtime-config
-PR #1521 (`cd8bc8b6425ca61e6aedbf24b5413a050dc4bd19`) preserves the published
+**Semantic configuration naming refresh (2026-09-05T02:34Z):** Draft runtime-config
+PR #1521 (`1269f6d8f09d54b24795ad32dc2fc05ec220491d`) preserves the published
 `version` and `features` wire keys while translating them to qualified internal
-product fields. Its remaining RED evidence is an old cancelled Strix lane and
-the resulting metadata/Noema gate response, not a demonstrated source defect.
-Its old central run `33902484641` was cancelled before the queue-sweep repair;
-replacement run `33934902852` is queued on protected `.github@b5efbc2` with all
-write modes disabled.
+product fields. The frontend now rejects malformed successful wire payloads
+before caching and uses the existing fail-closed fallback. Thirteen frontend and
+39 backend focused tests plus ESLint, TypeScript, Ruff, and diff validation pass;
+21 hosted jobs are queued for the exact head. The aggregate changes-requested
+state predates this head and is not completion evidence; keep the PR Draft until
+current-head review and required Checks pass.
 Tasks bounded-context PR #1515
 (`8a532ef30b295f59daa890ca82aa3eeaf4e5077e`) preserves established HTTP aliases
 while exposing ticket-task semantic names internally. A fresh CodeGraph audit
