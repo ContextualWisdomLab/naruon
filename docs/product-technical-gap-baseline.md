@@ -79,16 +79,17 @@ dispatch is run `33898524781`, currently queued. Hosted exact-head checks and
 current-head independent review remain pending; this is not protected-branch or
 release evidence.
 
-**Structured-output confidence refresh (2026-09-04T17:12Z):** Naruon Draft
-PR #1553 exact head `b4242580e93ada697b405f8c48eb822daadd6de9`
+**Structured-output confidence refresh (2026-09-05T02:43Z):** Naruon Draft
+PR #1553 exact head `4643e3404e01a3c860cdbddb225000493357bb07`
 repairs the product-owned project-graph response schema. The predecessor accepted
 negative, greater-than-one, `NaN`, and infinite confidence and heuristically
 clamped finite outliers downstream, allowing a provider value such as `7.5` to
 become maximum confidence. Object and relation payloads now reject every
 non-finite or out-of-range value at the provider boundary and projection uses
-only the validated 0.0–1.0 value. Eight new cases were RED before the fix; 71
-focused structured-output, project-graph, and LLM tests pass with warnings as
-errors, plus Ruff and diff checks. Fresh hosted checks and current-head
+only the validated 0.0–1.0 value. Seventy-seven focused structured-output,
+project-graph, LLM, and grounded-answer tests pass with warnings as errors, plus
+Ruff and diff checks. The superseded hosted runs were cancelled; central review
+run `33939894339` is queued for this exact head. Current-head hosted Checks and
 independent review remain pending, so the inference-confidence Gap is not yet
 closed on protected `develop`.
 
