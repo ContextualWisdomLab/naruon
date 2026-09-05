@@ -16,10 +16,47 @@ establish that prerequisite: the actual fresh installation failed first.
 | #1503 before integration | `9c1851336fa04bcdc77c1c6e531afdb882583af1` | 73 tests passed with a retained, undeclared httpx2 package. Exact synchronization removed it; strict Data API collection then failed, exit 4. |
 | #1565 dependency owner | `52dfc863d1a5d6e4e80b6366f719dd09f2aa6172` | Existing declared httpx2 dependency, lock, warning-suppression removal, and runtime regression delta; reused unchanged. |
 | #1503 integrated owner | `19d5860bc27e860acba940390f5792721cd99e5e` | Tree `793aadd78a7ad2d6033ca6e12a931dfa776b7374`: exact synchronization, fresh/repeat upgrade to `0019_email_read_state_repair`, 75 tests with `-W error`, Ruff and diff checks passed. |
+| #1468 propagated owner | `037b58adeda53e6c847f8949494b9b518a94dac9` | Normal merge of #1503, unique bootstrap assertion retained; exact sync, fresh/repeat 0019 and 75 strict PostgreSQL tests passed, zero skipped. |
+| #1427 propagated PDF lane | `02366791b2a449b8b23b527dcc550996361c0f96` | Normal merge of #1468; exact sync, fresh/repeat 0019 and 76 strict PostgreSQL tests passed, zero skipped. Naruon 64 MiB admission is not immutable NewsDOM release evidence. |
+| #1572 search-storage owner | `cd8ff413d4ed8a5f2855c47a21a31db5661cd487` | Tree `526b7c334a00020e5f3ac49d76d3fdd2b44a9665`, based on #1503: four GiST regression failures become 131 strict PostgreSQL passes after forward GIN revision 0020. Representative latency and migration-cost gates remain open. |
 
 The #1503 commit has the before-integration and #1565 heads as its two parents;
 neither history was rewritten. The verified pre-commit tree exactly matches
 the committed tree. Its direct PR base is #1565, not protected `develop`.
+The #1468 and #1427 rows are pushed source heads. The additional #1497
+integration below is uncommitted and must not be attributed to its remote head.
+
+## Subsequent migrated integration and search-storage finding
+
+The local #1497 merge of remote head
+`705d8ece2c97edc8575ea59766fd8f68bf4cdb82` with #1427
+`02366791b2a449b8b23b527dcc550996361c0f96` reconciles the bootstrap owner
+conflicts and adds an unpublished revision joining the two Alembic heads.
+Fresh and repeat migrations pass. A real rollback first exposed destruction
+of retained portable-identity mappings; the unmerged proposal now retains them,
+and historical/downgrade/re-upgrade cases pass. Two forced-overlap transaction
+tests cover identical and incompatible imports, including one rejected writer,
+intact winning content, and no losing rows or mappings for incompatible input.
+
+The broader actual-migration suite still reports **1 failed / 288 passed**.
+`test_export_counts_cited_segment_bytes_once` stores its unchanged 8 MiB-class
+high-entropy segment and fails with SQLSTATE `54000`: the whole-document GiST
+leaf exceeds PostgreSQL's index-row limit. Shrinking the value, omitting the
+index, or returning to ORM-only tables would conceal this separate defect.
+No #1497 merge commit or push has been made for that incomplete integration.
+
+Naruon owns those schema-bound search expressions. New Draft
+[#1572](https://github.com/ContextualWisdomLab/naruon/pull/1572) on #1503
+provides a forward full-content GIN storage candidate; RankWeave's fusion and
+normalization ownership is unchanged. GIN does not provide distance-only kNN
+acceleration, so this candidate is not accepted until representative query and
+migration costs are measured and any findings repaired. Its
+[Proposed ADR-0020](https://github.com/ContextualWisdomLab/naruon/blob/cd8ff413d4ed8a5f2855c47a21a31db5661cd487/docs/adr/0020-full-document-trigram-storage.md)
+and [131-test receipt](https://github.com/ContextualWisdomLab/naruon/blob/cd8ff413d4ed8a5f2855c47a21a31db5661cd487/docs/doctoring/search_trigram_storage.md)
+preserve the causal probe, alternatives, primary references, image digest,
+index-presence assertion, and rollback limitations. The unchanged #1497 large
+archive regression must run again after inheritance; the smaller diagnostic
+supplements it rather than replacing acceptance coverage.
 
 ## Root cause and rejected shortcuts
 
@@ -94,8 +131,9 @@ That run passed 224 tests in 12.53 seconds, zero skipped, with real database
 service tests. Its environment retained other packages outside the lock, so
 do not promote it to clean-lock proof. API success tests replace the service;
 they do not prove signed HTTP-to-database restore. Concurrent successful imports
-are covered, but forced overlap of incompatible imports still needs evidence
-of one rejected writer, intact winning content, and no losing rows or mappings.
+are covered at the remote head. Forced incompatible-overlap coverage has since
+passed in the uncommitted integration described above; it is not yet a pushed,
+hosted, or protected source receipt.
 
 ## Dependency decision and next actions
 
@@ -103,19 +141,25 @@ of one rejected writer, intact winning content, and no losing rows or mappings.
    independent review pass. This supersedes the historical
    [#1502-before-#1503 proposal](https://github.com/ContextualWisdomLab/naruon/pull/1503#issuecomment-5503791028);
    it does not create reciprocal prerequisites or close either PR.
-2. Non-force propagate #1503 through #1468, #1427, then #1497. Preserve #1468's
-   unique fixture/assertion delta. Reconcile the provenance lane's optional
-   bootstrap statements with the owner's structured conditional index creation;
-   do not replace whole files or discard tests to resolve overlap.
+2. #1503 is already propagated and pushed through #1468 and #1427 with their
+   unique deltas intact. Next propagate #1572 through the same owner stack.
+   Retain #1497's pending bootstrap reconciliation and all regression cases;
+   never discard tests or replace the canonical conditional index with an
+   unconditional legacy-table statement to resolve overlap.
 3. Integrating #1497 adds `0018_provenance_identity` alongside the owner's
-   `0019_email_read_state_repair`. Join those heads with a forward merge revision
-   and run the combined graph, fresh and historical paths, before claiming an
-   installable restore. Neither published revision ID should be rewritten.
+   `0019_email_read_state_repair`. The unpublished local merge revision currently
+   joins them; once #1572 is inherited, join provenance with the new
+   `0020_search_trigram_storage` head instead and rerun the complete graph and
+   original large archive test. Only the uncommitted local merge ID may be
+   renumbered; published revision identities remain intact.
 4. #1502 remains the CI-service lane on #1562, whose own parent is #1531.
    Integrate the existing #1503 forward repair by ancestry rather than copying
    `0019` to answer its [already-stamped database finding](https://github.com/ContextualWisdomLab/naruon/pull/1502#discussion_r3939592974).
 5. AGENTS.md recurrence rules are owned by #1566
-   (`5dade0a897c8f4ecd46a86e4f31ff61885e05a9b`), not repeated in product PRs.
+   (`16fd89f1ed991003b5668a66c882114707f469fc`), not repeated in product PRs.
+   Its migrated-schema, full-size-content, and retained-identity rollback rules
+   now cover these findings. Forty-three focused source/governance tests pass
+   in the existing environment, not a clean-lock or database acceptance run.
    Current queued checks are wait states; neither a local pass nor PR metadata
    promotes Proposed work to a released or protected contract.
 

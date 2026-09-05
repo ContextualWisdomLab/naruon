@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.24
+**Baseline version:** 1.25
 **Observed on:** 2026-09-05 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -29,7 +29,54 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Tenant provenance portability evidence (2026-09-05T06:57Z):** stacked
+**Search storage and owner propagation refresh (2026-09-05):** Naruon Draft
+[#1572](https://github.com/ContextualWisdomLab/naruon/pull/1572), exact head
+`cd8ff413d4ed8a5f2855c47a21a31db5661cd487`, is the bounded search-schema
+owner on #1503 `19d5860bc27e860acba940390f5792721cd99e5e`. Real migrated
+PostgreSQL exposed whole-document GiST leaf overflow on all four search
+surfaces. A forward GIN candidate preserves complete text and exact ranking
+SQL: four regression failures before repair become 131 passed, zero
+failed/skipped, after exact dependency synchronization and fresh/repeated
+migration. A catalog assertion prevents a false pass from removing all indexes.
+GIN does not accelerate the existing distance-only top-k query. Representative
+search p95, migration lock/build/storage costs, current-head required Checks,
+and qualifying independent review remain acceptance gates; this is not a
+released search-performance repair. Proposed ADR-0020 and the
+[exact-head doctoring receipt](https://github.com/ContextualWisdomLab/naruon/blob/cd8ff413d4ed8a5f2855c47a21a31db5661cd487/docs/doctoring/search_trigram_storage.md)
+record the alternatives, primary PostgreSQL evidence, and retained-data rollback.
+ADR-0008 was already present in #1418; all 160 then-open PR file lists were
+checked before selecting the unused local proposal number 0020.
+
+The original #1503 prerequisite is already non-force propagated and pushed:
+#1468 `037b58adeda53e6c847f8949494b9b518a94dac9` passes 75 strict PostgreSQL
+tests, and #1427 `02366791b2a449b8b23b527dcc550996361c0f96` passes 76;
+both fresh/repeated migrations reach `0019_email_read_state_repair` with no
+skips. #1468 retains its unique bootstrap assertion. #1427's 64 MiB PDF
+admission is a Naruon proposal, not proof of an immutable NewsDOM release.
+#1497's local integration of that #1427 head joins the two migration heads and
+preserves portable identities through rollback. Forced incompatible-import
+overlap verifies one rejected writer and no losing rows/mappings. The broader
+actual migrated run is still **288 passed / 1 failed**: the unchanged 8 MiB-class
+cited-segment case fails at the GiST index. These repairs remain uncommitted;
+remote #1497 stays at `705d8ece2c97edc8575ea59766fd8f68bf4cdb82`. Next,
+propagate #1572 through the existing stack, reconcile the unpublished local
+merge revision, and rerun that unchanged large-content case. No delta or PR
+has been discarded to make the queue smaller.
+
+**AGENTS operating knowledge refresh (2026-09-05):** Draft #1566 exact head
+`16fd89f1ed991003b5668a66c882114707f469fc` adds the recurrence rule to test
+application behavior on the actually migrated database, retaining indexes,
+constraints, full-size high-entropy content, and portable identities across
+rollback. Its 43 focused source/governance tests pass with `-W error` and
+`--noconftest` in the existing environment; this is not a clean-lock, database,
+or browser receipt. CodeRabbit and Devin status contexts are successful, but
+the aggregate changes-requested state has no verified current-head approval.
+The PR remains Draft on #1564; required hosted evidence is not inferred from
+those two contexts. Confidence-ledger (#1559) and fail-closed mutation (#1300)
+follow-ups recorded in its body are not claimed as landed AGENTS text.
+
+**Historical tenant provenance portability evidence (2026-09-05T06:57Z;
+current propagation and remaining failure are above):** stacked
 Naruon PR #1497 (`705d8ece2c97edc8575ea59766fd8f68bf4cdb82`)
 keeps export/import identity mappings scoped by target user, organization, and
 workspace, validates archive closure before mutation, and restores records in
@@ -47,11 +94,9 @@ The actual fresh Alembic path on this same head fails at
 the provenance migration. The repair owner is existing #1503, now non-force
 stacked on #1565 at `19d5860bc27e860acba940390f5792721cd99e5e`: exact-lock
 fresh/repeated migrations and 75 strict PostgreSQL/dependency tests pass.
-#1497 has not yet inherited that repair. It remains Draft/Proposed, with
-current-head checks queued and no protected completion claim. Propagate the
-owner through #1468 -> #1427 -> #1497, reconcile bootstrap conflicts, merge
-the two resulting Alembic heads without rewriting history, and verify fresh,
-historical, rollback, and conflicting-concurrent import paths. See the
+#1497's remote head has not yet inherited that repair. It remains Draft/Proposed;
+the local integration now exposes the separate search-storage prerequisite
+described above. See the
 [reproducible evidence and dependency decision](doctoring/provenance_migration_evidence.md).
 
 **Governed review evidence refresh (2026-09-05T06:08Z):** Naruon PR #1564
@@ -408,7 +453,8 @@ RO-Crate 1.3, and PROV metadata; OIDC-authoritative export/import; tenant and
 workspace closure; portable identity remapping; transactional conflict checks;
 and bounded archive parsing. CodeGraph review traced the shared service and API
 authority paths. The delta is non-force stacked after #1427 in the prerequisite
-chain #1565 -> #1468 -> #1427 -> #1497; its conflicting ADR number is repaired
+chain #1565 -> #1503 -> #1468 -> #1427 -> #1497, with new Draft #1572 to
+propagate after #1503; its conflicting ADR number is repaired
 as Proposed ADR-0007 rather than prematurely accepted ADR-0005. Earlier
 157-fast/117-database receipts are historical scope-specific runs, not evidence
 that the deployment migration chain succeeded. The current combined suite
@@ -539,8 +585,8 @@ only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
 discovery, capability routing, free-pool membership, and fallback remain with
 the canonical owner. Consumer adoption still requires an immutable protected
 owner release, and open PRs or unreleased branches remain Proposed evidence.
-Stacked PR #1566 (`104ecf39d6affae7716ca81b4d167bf09abafcb1`)
-is now non-force restacked directly on canonical AGENTS writer #1564 and
+Historical stacked PR #1566 (`104ecf39d6affae7716ca81b4d167bf09abafcb1`)
+was non-force restacked directly on canonical AGENTS writer #1564 and
 normally merges current LLM-owner foundation #1549
 (`f038377d7d95d445a0e9f3e37707278d792213a2`). Its operating delta adds
 `agents-md`, Context7, DeepWiki,
@@ -548,16 +594,17 @@ sequential-thinking, remote-MCP ZDR handling, Superpowers test-first debugging,
 the Ponytail minimal-solution ladder, truthful `Co-Authored-By` attribution,
 and current `contextual-orchestrator/orchestrator/free` wording to `AGENTS.md`,
 with two assertions in the existing lifecycle contract test.
-The latest repair restores #1549's deleted LLM-authority regression and missing
+That repair restores #1549's deleted LLM-authority regression and missing
 CLAUDE/architecture owner boundary while retaining #1564's loopback-only
 OpenCode endpoint and unset request timeout. Thirty-nine focused governance
-contracts, Ruff, and diff checks pass. Current-head hosted suites remain absent
+contracts, Ruff, and diff checks passed on that head. Hosted suites were absent
 because leaf branch filters do not attach them to this stacked base. #1566
 therefore has one bounded central exact-head scheduler dispatch, run
 `33941908363`, queued with review enabled and merge, auto-merge, and branch
 updates disabled; duplicate current-head dispatch was absent before enqueue.
 The dispatch is wait-state evidence, not an approval or hosted-check substitute.
-#1566 remains Draft until #1564 reaches protected merge; fresh exact-head hosted
+#1566 remains Draft; the newer exact head and 43-test source-only scope are
+recorded at the top of this baseline. #1564 protected merge, fresh exact-head hosted
 Checks and independent review remain required after restacking on `develop`.
 Former child #1567 was restacked to
 `4456fabe0d4906f29d07f2b54fbf374462108798`; its sole prior child test failed
@@ -1222,11 +1269,12 @@ and defines the inventory that must be completed before GA.
 | #1465 | scoped tenant archive import hardening | Draft head `e0b04d74…` non-force consumes Starlette TestClient prerequisite #1565 at `52dfc863…` and is retargeted to that owner branch; the effective archive delta remains nine files, rejects duplicate identities before writes, and sanitizes archive-controlled display fields; 76 archive/API/review/main/release/pin tests pass with warnings as errors, and an isolated `pgvector/pgvector:pg16` run passes the real export-delete-import-reimport PostgreSQL smoke with duplicate rows fully skipped; #1565 protected integration and fresh exact-head hosted evidence remain required |
 | #1466 | origin-integrity URL validation | current head rejects explicit zero/out-of-range ports; keep the signed-session and SSRF contract tied to exact-head regression evidence |
 | #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
-| #1468 | PostgreSQL smoke fixture schema alignment | Draft head `60391459…` non-force consumes TestClient prerequisite #1565 at `52dfc863…` and is retargeted to that parent; the effective four-file delta repairs the canonical `email_records.is_read` smoke contract, with 43 bootstrap/data/pin tests passing and two PostgreSQL-service tests explicitly skipped locally; #1565 protected integration, real PostgreSQL evidence, and fresh exact-head hosted review/Checks remain required |
+| #1468 | PostgreSQL smoke fixture schema alignment | Draft head `037b58adeda53e6c847f8949494b9b518a94dac9` non-force consumes #1503 at `19d5860bc27e860acba940390f5792721cd99e5e`, preserving its unique bootstrap assertion; exact sync, fresh/repeat migration 0019, and 75 strict PostgreSQL/dependency tests pass without skips. New #1572 search-storage prerequisite still needs propagation; protected integration and fresh exact-head hosted review/Checks remain required |
 | #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; the predecessor Strix provider failure is historical, while the current head requires fresh queued Checks and a qualifying independent approval |
 | #1448 | stacked governance regression coverage | merged normally into #1443's stack branch at `62a0d645…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures passed locally; merge-result hosted Checks remain queued and are post-merge canary evidence |
 | #1469 | deferred attachment parse-source admission | current head `ed4bebed…` non-force merges `develop@042b0c70…`, resolves the parser conflict by preserving both the authenticated 64 MiB import bound and bounded filename decoding, and keeps unsupported binaries metadata-only; 22 attachment-parser tests pass with warnings as errors, while fresh hosted Checks and current-head review remain required |
-| #1427 | bounded PDF DOM upload | Draft head `3a5f2b37…` non-force consumes #1468 at `60391459…`, completing the `#1565 → #1468 → #1427` prerequisite chain; the effective six-file delta keeps signed-session, PDF signature, bounded-read, deferred-worker, ADR, and doctoring contracts, with four focused PDF tests plus 28 parent bootstrap/pin tests passing and one service-dependent test skipped; canonical NewsDOM owner PR #665 was found closed without merge or successor evidence and reopened at exact head `14eb886a…`, with zero active unresolved threads and fresh hosted Checks queued, so consumer integration still waits for owner protected merge and immutable release |
+| #1427 | bounded PDF DOM upload | Draft head `02366791b2a449b8b23b527dcc550996361c0f96` non-force consumes #1468 at `037b58adeda53e6c847f8949494b9b518a94dac9`, preserving PDF admission and deferred-worker contracts. Exact sync, fresh/repeat migration 0019, and 76 strict PostgreSQL/dependency tests pass without skips. The 64 MiB Naruon proposal is not actual NewsDOM release proof; owner protected merge, immutable release, #1572 propagation, and fresh exact-head review/Checks remain required |
+| #1572 | complete-document search storage | Draft head `cd8ff413d4ed8a5f2855c47a21a31db5661cd487` on #1503 replaces four overflowing GiST indexes through forward migration 0020; four RED regressions become 131 passing strict migrated-PostgreSQL tests. Exact ranking SQL is retained, but GIN does not accelerate distance-only ordering; measured p95 and migration cost, the unchanged #1497 large archive case, and protected gates remain open |
 | #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `aba77cf5…` preserves first-instance duplicate-ID selection, removes the dead `describeEdge` input, and deletes the tracked pre-refactor `NetworkGraph.tsx.out` copy; local 11-test, TypeScript, zero-warning ESLint, and diff checks passed, while hosted Checks and independent approval remain required |
 | #1477 | SearchLayout lookup optimization | a comment-triggered deletion rewrite was absorbed without force into current head `52c914c3…`; the effective delta remains the memoized result lookup plus its task record, and all 437 frontend tests, TypeScript, earlier ESLint, and diff checks pass; the historical Strix result was `STRIX_PROVIDER_UNAVAILABLE`, so only fresh exact-head hosted evidence can satisfy the gate |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
