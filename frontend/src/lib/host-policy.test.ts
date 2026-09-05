@@ -58,6 +58,7 @@ describe("host-policy", () => {
       "::ffff:127.0.0.1",
       "::ffff:10.0.0.1",
       "::ffff:c0a8:0101",
+      "::ffff:7f00",
     ]) {
       expect(isPrivateOrLoopbackHostname(hostname), hostname).toBe(true);
     }
@@ -104,7 +105,6 @@ describe("host-policy", () => {
       "::ffff:8.8.8.8",
       "::ffff:0808:0808",
       "::ffff:zzzz:1",
-      "::ffff:7f00",
     ]) {
       expect(isPrivateOrLoopbackHostname(hostname), hostname).toBe(false);
     }

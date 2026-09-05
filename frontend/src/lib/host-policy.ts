@@ -174,7 +174,9 @@ function ipv4MappedHostToDotted(hostname: string): string | null {
   if (!hostname.startsWith("::ffff:")) return null;
   const suffix = hostname.slice("::ffff:".length);
   if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(suffix)) return suffix;
-  const [highHex, lowHex] = suffix.split(":");
+  const suffixHextets = suffix.split(":");
+  const [highHex, lowHex] =
+    suffixHextets.length === 1 ? ["0", suffixHextets[0]] : suffixHextets;
   if (
     !highHex ||
     !lowHex ||
