@@ -127,6 +127,47 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
+def test_startup_catalog_omits_unsupported_spam_phishing_detector():
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/tools",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        )
+
+    assert response.status_code == 200
+    assert "spam_phishing_detector" not in {
+        tool["code"] for tool in response.json()
+    }
+
+
+def test_removed_spam_phishing_detector_detail_returns_not_found():
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/tools/spam_phishing_detector",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Tool not found"}
+
+
+def test_removed_spam_phishing_detector_execute_returns_not_found():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/spam_phishing_detector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "Urgent: update your bank password now",
+                    "sender_domain": "secure-bank-login.ru",
+                }
+            },
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Tool not found"}
+
+
 @pytest.mark.parametrize(
     "tool_code", ["email_categorizer", "meeting_agenda_generator"]
 )
@@ -894,27 +935,6 @@ def test_execute_email_translator():
     assert data["result"]["source_language_detected"] == "en"
 
 
-def test_execute_spam_phishing_detector():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/spam_phishing_detector/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "email_content": "Urgent: update your bank password now",
-                    "sender_domain": "secure-bank-login.ru",
-                }
-            },
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["is_phishing"] is True
-    assert data["result"]["is_spam"] is True
-    assert data["result"]["risk_score"] >= 90
-    assert any("sender domain" in warning for warning in data["result"]["warnings"])
-
-
 def test_execute_reply_drafter():
     with TestClient(app) as client:
         response = client.post(
@@ -1012,7 +1032,6 @@ async def test_analysis_handlers_safe_and_fallthrough_paths():
         email_translator_handler,
         grammar_checker_handler,
         sentiment_analyzer_handler,
-        spam_phishing_detector_handler,
     )
 
     untranslated = await email_translator_handler(
@@ -1020,19 +1039,6 @@ async def test_analysis_handlers_safe_and_fallthrough_paths():
     )
     assert untranslated["translated_text"] == "Hello, thank you for the meeting."
     assert untranslated["source_language_detected"] == "en"
-
-    safe_email = await spam_phishing_detector_handler(
-        {
-            "email_content": "Here are the approved meeting notes.",
-            "sender_domain": "example.com",
-        }
-    )
-    assert safe_email == {
-        "is_spam": False,
-        "is_phishing": False,
-        "risk_score": 10,
-        "warnings": [],
-    }
 
     nonurgent_negative = await sentiment_analyzer_handler(
         {"text": "I am disappointed."}

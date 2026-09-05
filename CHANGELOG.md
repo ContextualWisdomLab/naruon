@@ -1,4 +1,13 @@
 ## [Unreleased]
+### 이메일 보안 판정 경계 (Email Security Verdict Boundary)
+
+- 고정 키워드와 발신자 도메인 suffix만으로 확정적 spam/phishing boolean과
+  risk score를 반환하던 `spam_phishing_detector`를 내장 도구 레지스트리에서
+  제거했습니다. 이를 대신하는 keyword·suffix fallback은 없으며, source-bound
+  evidence, provider verdict, provenance가 없는 경우에는 보안 판정을 생성하지 않고
+  fail closed/unknown으로 처리해야 합니다. 아래의 과거 기능 추가 기록은 당시 변경
+  이력으로 보존하며 현재 지원 계약을 뜻하지 않습니다.
+
 ### 도구 변경 경계 (Tool Mutation Boundary)
 
 - 프로세스 전역·비영속 레지스트리를 모든 인증 사용자가 변경할 수 있었던
