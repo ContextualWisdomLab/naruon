@@ -702,17 +702,19 @@ Checks and independent review are pending, so neither protected succession nor
 closure of #1485 is proven.
 PR #1531 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) now honors an exact-head
 structured OpenCode approval when no CodeRabbit check exists even if a pending
-issue notice is present; the full shell gate harness and ShellCheck pass, and
-current-head unresolved threads are zero. The historical scheduler handles
+issue notice is present. On the current tree, 36 release/stacked-workflow
+contracts and the full shell gate harness pass with warnings as errors, and
+current-head unresolved threads are zero. The PR is Ready. The historical scheduler handles
 `33871200407`, `33871251541`, and `33872054770` belong to predecessor heads and
 are not reusable evidence. Canonical `.github` PR #1878 merged as
 `1b65dbc35e7183722ad77894e2d80b39993be90d`, removing the organization-wide
 queue sweep, and PR #1877 followed as
 `b5efbc2762e472e4a380b0503b1f050f76fbb008`, repairing the Strix admission and
-Noema cleanup contracts on protected `main`. A bounded #1531 review dispatch
-with merge and branch updates disabled is now live as central run
-`33933575670`; it remains queued and therefore is neither review nor protected
-completion evidence. Predecessor-head Checks remain non-transferable.
+Noema cleanup contracts on protected `main`. The later central CodeQL, Strix,
+and coverage jobs were cancelled and cannot be rerun from this consumer
+repository because their reusable-workflow identifiers return 404. They remain
+failed evidence rather than source findings. Fresh exact-head review and Checks
+are still required; predecessor-head results remain non-transferable.
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
