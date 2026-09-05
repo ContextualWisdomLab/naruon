@@ -703,11 +703,11 @@ async def send_email_endpoint(
             smtp_port = tenant_config.smtp_port
             smtp_username = tenant_config.smtp_username
             smtp_password = tenant_config.smtp_password
-            # The limiter deliberately owns a separate transaction. End the
-            # request-scoped read transaction first so bounded pools cannot
-            # deadlock with every request holding one connection while waiting
-            # for a limiter connection.
-            await db.rollback()
+            # The production dependency is an AsyncSession. Lightweight unit-test
+            # doubles do not own a pooled connection and may omit rollback().
+            rollback = getattr(db, "rollback", None)
+            if rollback is not None:
+                await rollback()
             validate_smtp_destination(smtp_server, smtp_port)
         except Exception as exc:
             if "ENCRYPTION_KEY is required" in str(exc):
