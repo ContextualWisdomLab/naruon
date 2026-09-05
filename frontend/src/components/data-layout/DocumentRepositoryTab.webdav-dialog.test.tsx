@@ -90,12 +90,13 @@ describe('DocumentRepositoryTab WebDAV confirmation', () => {
     if (root) {
       await act(async () => root?.unmount());
     }
+    document.body.style.overflow = '';
     container?.remove();
     container = null;
     root = null;
   });
 
-  it('keeps focus inside the modal confirmation and restores the write trigger', async () => {
+  it('keeps focus and interaction inside the modal confirmation and restores the write trigger', async () => {
     const requestDocumentAction = vi.fn();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -119,6 +120,9 @@ describe('DocumentRepositoryTab WebDAV confirmation', () => {
     const cancelButton = findButton('취소');
     const confirmButton = findButton('WebDAV 쓰기 확인');
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
+    expect(dialog?.parentElement?.className).toContain('fixed inset-0');
+    expect(dialog?.previousElementSibling?.getAttribute('aria-hidden')).toBe('true');
+    expect(document.body.style.overflow).toBe('hidden');
     expect(document.activeElement).toBe(cancelButton);
 
     confirmButton?.focus();
@@ -137,6 +141,7 @@ describe('DocumentRepositoryTab WebDAV confirmation', () => {
       confirmButton?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
     expect(container?.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.body.style.overflow).toBe('');
     expect(document.activeElement).toBe(writeTrigger);
 
     await act(async () => {
