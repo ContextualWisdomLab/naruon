@@ -238,6 +238,11 @@ in this repo.
   the test or trusted workflow step. Use explicit test-only values and fresh
   random secrets; do not weaken production validation or depend on a developer
   shell's environment.
+- For warning-strict pytest evidence, use `python -m pytest -W error` and audit
+  ini filters, per-test marks, and warning-catching contexts. The environment
+  setting `PYTHONWARNINGS=error` alone does not override pytest ignore rules;
+  record intentional warning assertions separately and repair deprecated
+  dependencies in their existing prerequisite PR instead of hiding warnings.
 - Exact changed-line review evidence must be generated only from real
   current-head added or modified lines. Do not invent line 1 for deleted-only,
   binary, oversized, or otherwise ineligible files, and do not relax the
@@ -618,6 +623,14 @@ subject to U.S. copyright, while attribution remains required.
   fail closed on any remaining warning-class report log output.
 - DB-affecting API slices need both mocked fast tests and a real PostgreSQL
   bootstrap/smoke path before PR merge evidence is considered complete.
+- ORM `Base.metadata.create_all()` success is not migration evidence. On an
+  isolated empty PostgreSQL database, run `scripts/migrate_db.py` from `backend/`,
+  rerun it, and verify the recorded Alembic head. Also exercise upgrades from
+  supported historical revisions and data-preserving rollback where supported.
+  An already-stamped database needs a forward repair; editing an old revision
+  alone will not rerun it. Integrate the existing migration owner prerequisite,
+  rerun the combined revision graph, and never stamp past a failure or create a
+  fake legacy table to make the consumer pass.
 - When a backend container reports missing `DATABASE_URL` or
   `AUTH_SESSION_HMAC_SECRET`, verify the runtime path injects the operator env
   through `scripts/naruon_compose.sh`, Kubernetes secrets, or an explicit
@@ -789,6 +802,11 @@ subject to U.S. copyright, while attribution remains required.
   --locked`, and `uv run --project backend --frozen python -m pytest` with the
   relevant test paths. Keep `backend/uv.lock`; never install into a system
   Python runtime or treat a one-off `PYTHONPATH=.` workaround as a root fix.
+- Clean-lock evidence requires an exact `uv sync --locked` in a task-owned
+  project environment before testing. `uv run --frozen` alone can retain
+  extraneous packages and mask a missing dependency. Do not prune a shared
+  environment; use a dedicated worktree environment and keep supplemented-local
+  results separate from a clean-lock run.
 - Frontend: use Corepack and the `packageManager` pin in
   `frontend/package.json`, `corepack pnpm --dir frontend install
   --frozen-lockfile`, and its existing test/lint/build scripts. The test script
