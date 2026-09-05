@@ -5,6 +5,9 @@ import {
   WebdavAccountLookup,
   WebdavWritebackIntentResponse,
   DataQualitySurfaceResponse,
+  RepositoryAssetPreview,
+  RepositoryAssetPreviewNextAction,
+  RepositoryAssetPreviewState,
 } from './types';
 
 export function getApiErrorStatus(error: unknown) {
@@ -102,6 +105,64 @@ export function getWritebackTargetLabel(
     return '선택된 원본';
   }
   return label;
+}
+
+/** Return buyer-visible status and next-action copy for one preview state. */
+export function getRepositoryAssetPreviewCopy(
+  preview: Pick<RepositoryAssetPreview, 'preview_state' | 'next_action'>,
+) {
+  const nextAction = preview.next_action;
+  switch (preview.preview_state) {
+    case 'recognized':
+      return {
+        next_action_label: getRepositoryAssetPreviewNextActionLabel(nextAction),
+        status_label: '인식된 본문',
+      };
+    case 'pending':
+      return {
+        next_action_label: '인식이 끝날 때까지 기다리거나 다른 파일을 선택하세요.',
+        status_label: '인식 대기',
+      };
+    case 'failed':
+      return {
+        next_action_label: '이 파일의 본문을 읽을 수 없습니다. 다른 파일을 선택하세요.',
+        status_label: '인식 실패',
+      };
+    case 'unavailable':
+      return {
+        next_action_label: '미리보기를 열 수 없습니다. 다른 파일을 선택하세요.',
+        status_label: '미리보기 없음',
+      };
+    default: {
+      const exhaustive: never = preview.preview_state;
+      return exhaustive;
+    }
+  }
+}
+
+/** Return the exact next action a buyer should take for a preview result. */
+export function getRepositoryAssetPreviewNextActionLabel(
+  nextAction: RepositoryAssetPreviewNextAction,
+) {
+  switch (nextAction) {
+    case 'read_recognized_text':
+      return '인식된 본문을 읽으세요.';
+    case 'wait_for_recognition':
+      return '인식이 끝날 때까지 기다리거나 다른 파일을 선택하세요.';
+    case 'choose_another_file':
+      return '이 파일의 본문을 읽을 수 없습니다. 다른 파일을 선택하세요.';
+    default: {
+      const exhaustive: never = nextAction;
+      return exhaustive;
+    }
+  }
+}
+
+/** True only when preview contains recognized paragraph text, never empty content. */
+export function isRecognizedRepositoryAssetPreview(
+  preview: RepositoryAssetPreview | null | undefined,
+): preview is RepositoryAssetPreview & { preview_state: Extract<RepositoryAssetPreviewState, 'recognized'> } {
+  return preview?.preview_state === 'recognized' && preview.paragraph_texts.length > 0;
 }
 
 export function getSurfaceStatusClass(status: SurfaceStatusCode | QualityStatusCode) {

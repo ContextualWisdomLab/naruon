@@ -23,6 +23,7 @@ vi.mock("lucide-react", () => ({
   Loader2: () => <svg aria-hidden="true" />,
 }));
 
+import type { RepositoryAssetPreview } from "@/components/data-layout/types";
 import DataPage from "./page";
 
 const acquisitionRemediationActions = [
@@ -1590,9 +1591,66 @@ function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500) {
   };
 }
 
+const knownRepositoryAssetPreviews: Record<string, RepositoryAssetPreview> = {
+  doc_repository_ready: {
+    asset_key: "doc_repository_ready",
+    asset_type: "workspace_document",
+    preview_state: "recognized",
+    parser_family: null,
+    paragraph_texts: ["# Q2 roadmap", "Ship the buyer-visible Data room."],
+    preview_text: "# Q2 roadmap\n\nShip the buyer-visible Data room.",
+    next_action: "read_recognized_text",
+    error_code: null,
+    provider_write_executed: false,
+  },
+  asset_repository_ready: {
+    asset_key: "asset_repository_ready",
+    asset_type: "email_attachment",
+    preview_state: "recognized",
+    parser_family: "pdf",
+    paragraph_texts: ["Extracted roadmap PDF text"],
+    preview_text: "Extracted roadmap PDF text",
+    next_action: "read_recognized_text",
+    error_code: null,
+    provider_write_executed: false,
+  },
+  asset_repository_pending: {
+    asset_key: "asset_repository_pending",
+    asset_type: "email_attachment",
+    preview_state: "pending",
+    parser_family: null,
+    paragraph_texts: [],
+    preview_text: null,
+    next_action: "wait_for_recognition",
+    error_code: "recognition_pending",
+    provider_write_executed: false,
+  },
+};
+
+function knownRepositoryAssetPreviewResponse(path: string) {
+  const match = path.match(/^\/api\/data\/repository-assets\/([^/]+)\/preview$/);
+  if (!match) return null;
+  const preview = knownRepositoryAssetPreviews[match[1]];
+  if (!preview) {
+    return jsonResponse(
+      {
+        detail: {
+          error_code: "repository_asset_not_found",
+          message: "Repository asset was not found in the signed workspace scope.",
+        },
+      },
+      false,
+      404,
+    );
+  }
+  return jsonResponse(preview);
+}
+
 function mockWebdavFetch() {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    const previewResponse = knownRepositoryAssetPreviewResponse(path);
+    if (previewResponse) return previewResponse;
     if (path === "/api/data/quality-surface") {
       void init;
       return jsonResponse(dataQualitySurface);
@@ -1785,6 +1843,7 @@ describe("DataPage", () => {
     localStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("renders document repository ingestion embeddings quality and WebDAV writeback details", async () => {
@@ -1838,6 +1897,61 @@ describe("DataPage", () => {
     expect(updatedAssetDetail?.textContent).toContain("본문 추출 대기");
     expect(updatedAssetDetail?.textContent).toContain("content extraction pending, canonical thread pending");
     expect(updatedAssetDetail?.textContent).not.toContain("thread_missing");
+  });
+
+  it("refreshes a pending preview until recognized paragraph text is available", async () => {
+    const baseFetch = mockWebdavFetch();
+    let pendingPreviewCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/data/repository-assets/asset_repository_pending/preview") {
+        pendingPreviewCalls += 1;
+        if (pendingPreviewCalls === 1) {
+          return jsonResponse(knownRepositoryAssetPreviews.asset_repository_pending);
+        }
+        return jsonResponse({
+          ...knownRepositoryAssetPreviews.asset_repository_pending,
+          preview_state: "recognized",
+          paragraph_texts: ["Recognized notes paragraph"],
+          preview_text: "Recognized notes paragraph",
+          next_action: "read_recognized_text",
+          error_code: null,
+        } satisfies RepositoryAssetPreview);
+      }
+      return baseFetch(input, init);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const pendingAsset = Array.from(container.querySelectorAll('[role="button"][aria-pressed]')).find((candidate) =>
+      candidate.textContent?.includes("blank-notes.md"),
+    );
+    expect(pendingAsset).toBeDefined();
+
+    await act(async () => {
+      pendingAsset?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const pendingPanel = container.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
+    expect(pendingPanel?.textContent).toContain("인식이 끝날 때까지 기다리거나 다른 파일을 선택하세요");
+    expect(pendingPanel?.querySelector("[data-preview-paragraphs]")).toBeNull();
+    const refresh = pendingPanel?.querySelector('[aria-label="인식 결과 다시 확인"]');
+    expect(refresh).not.toBeNull();
+    expect(pendingPreviewCalls).toBe(1);
+
+    await act(async () => {
+      refresh?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const recognizedPanel = container.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
+    expect(recognizedPanel?.textContent).toContain("Recognized notes paragraph");
+    expect(recognizedPanel?.querySelector("[data-preview-paragraphs]")).not.toBeNull();
+    expect(pendingPreviewCalls).toBe(2);
   });
 
   it("uploads workspace documents and posts document action intents through signed APIs", async () => {
@@ -2431,6 +2545,8 @@ describe("DataPage", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/data/quality-surface") return jsonResponse(dataQualitySurface);
       if (path === "/api/data/quality-surface/evidence-snapshot") {
         return jsonResponse({ detail: "snapshot unavailable" }, false, 500);
@@ -2581,6 +2697,8 @@ describe("DataPage", () => {
   it("sanitizes WebDAV source labels that contain opaque source ids", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/data/quality-surface") return jsonResponse(dataQualitySurface);
       if (path === "/api/webdav/accounts") {
         void init;
@@ -2637,6 +2755,8 @@ describe("DataPage", () => {
   it("lets the user choose a specific WebDAV source and distinguishes If-Match conflicts", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/webdav/accounts") {
         return jsonResponse([
           {
@@ -2693,6 +2813,8 @@ describe("DataPage", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/webdav/accounts") {
         throw new Error("account source fetch failed");
       }
