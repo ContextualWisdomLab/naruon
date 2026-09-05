@@ -86,6 +86,7 @@ Outcome:
   the pre-target marker, excluded the post-target marker, and accepted new
   writes.
 - A second restore on the same `restore_data` volume against an earlier target
+  force-recreates the restore container so Compose applies the new target,
   re-materialized the data directory from the base backup and flipped marker
   inclusion (pre-marker row absent), proving the overlay is retarget-safe
   instead of silently serving a previously applied recovery target.

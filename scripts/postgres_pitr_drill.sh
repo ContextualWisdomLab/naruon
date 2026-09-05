@@ -144,7 +144,7 @@ echo "Stopping db-primary to simulate loss of the source primary."
 "${compose[@]}" stop db-primary
 
 echo "Restoring into a fresh instance targeting ${recovery_target_time} UTC."
-"${full_compose[@]}" up -d db-restore
+"${full_compose[@]}" up -d --force-recreate db-restore
 
 wait_for_sql_result "db-restore" \
   "SELECT CASE WHEN pg_is_in_recovery() THEN 0 ELSE 1 END" "1" \
@@ -168,7 +168,7 @@ echo "Stopping the first restored instance to re-target recovery."
 
 echo "Restoring again from the same volume targeting ${second_recovery_target_time} UTC."
 export RECOVERY_TARGET_TIME="${second_recovery_target_time}"
-"${full_compose[@]}" up -d db-restore
+"${full_compose[@]}" up -d --force-recreate db-restore
 
 wait_for_sql_result "db-restore" \
   "SELECT CASE WHEN pg_is_in_recovery() THEN 0 ELSE 1 END" "1" \
