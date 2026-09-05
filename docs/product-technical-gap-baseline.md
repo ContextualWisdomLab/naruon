@@ -49,8 +49,8 @@ retained with a focused governance regression test. The OpenCode gateway
 contract pins the token destination to the owner's documented loopback endpoint,
 removes the arbitrary base-URL environment input, and disables the supported
 client request timeout so long-running model work is not cut off at the default
-limit. Exact-head focused proof is `36 passed`; all thirteen current review
-threads are resolved, while fresh hosted checks remain queued.
+limit. Exact-head focused proof is `36 passed`; all 15 current review threads
+are resolved, while 21 fresh hosted checks remain queued.
 Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
@@ -473,9 +473,10 @@ and current `contextual-orchestrator/orchestrator/free` wording to `AGENTS.md`,
 with two assertions in the existing lifecycle contract test.
 The duplicate 140-line operating procedure and unrelated entry-point/test
 delta were removed instead of creating a parallel policy owner. Thirty-six
-focused governance contracts, Ruff, and diff checks pass. Central targeted
-review run `33938802963` is queued with merge and branch update disabled because
-leaf branch filters do not attach their suites to this stacked base. #1566
+focused governance contracts, Ruff, and diff checks pass. Central scheduler run
+`33938802963` and exact-head review run `33940123774` are queued with merge and
+branch update disabled because leaf branch filters do not attach their suites to
+this stacked base. #1566
 remains Draft until #1564 reaches protected merge; fresh exact-head hosted
 Checks and independent review remain required after restacking on `develop`.
 Former child #1567 was restacked to
