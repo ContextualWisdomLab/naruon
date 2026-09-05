@@ -148,6 +148,16 @@ unsupported direct-OpenAI request contract), not a completed vulnerability
 finding; fresh exact-head Checks and independent review remain required before
 protected merge.
 
+**CardDAV and identity successor boundary (2026-09-05T01:23Z):** Draft PR
+#1206 (`aba2a03f3ca87914fcf1ca1c751b173097852bca`) remains a separate successor
+for CardDAV TXT discovery single-decode semantics, opaque Prompt Catalog API
+identity, and OIDC-only administrator authority. Its unique delta does not copy
+#1345's DAV route, document-scope, or local-provider network changes. Sixty-one
+focused tests and Ruff pass on `develop@042b0c70531b229af3acbd0421a2f23098d848b3`;
+the current head has an independent approval. Keep it Draft until #1345 reaches
+protected `develop`, then non-force restack, rerun both prerequisite and unique
+contracts, and collect fresh exact-head Checks before Ready promotion.
+
 **Semantic configuration naming refresh (2026-09-04T17:49Z):** Runtime-config
 PR #1521 (`cd8bc8b6425ca61e6aedbf24b5413a050dc4bd19`) preserves the published
 `version` and `features` wire keys while translating them to qualified internal
@@ -1625,7 +1635,7 @@ branch. These values are therefore not one shared base declaration.
 | 1245 | fix(email-detail): make responsive evidence actions functional | 796b34c5a1322f09c6f00b8cf24591ae04b89b6b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | yes | frontend/a11y | — | experimental/draft | validate parent and promote only after scope proof |
 | 1244 | chore(deps): update hash-locked aiohttp to 3.14.3 | c1d4c7fd2b98e464d3ff7e92f26d92a6c0f1e6e8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1241 | fix(a11y): show keyboard focus on OIDC actions | fb7e63dee1d72365db595edb1bc49e097202e707 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | d7ae4768b7c30be7bac19fb9425d40a66e8fda05 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | aba2a03f3ca87914fcf1ca1c751b173097852bca | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | yes | security/governance | 61 focused tests + Ruff pass; exact-head approval; unique delta excludes #1345 owner scope | normal-or-stacked-root | after #1345 protected merge, non-force restack and revalidate before Ready |
 | 1195 | feat(email): deterministic dedupe provenance — gate strong fingerprints on genuine Date (naruon#1086) | c7aedc6a6a09bc91156e9c62e44f18cf8b4d3846 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 
 The inventory is intentionally identity-first:
