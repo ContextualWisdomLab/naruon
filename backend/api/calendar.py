@@ -272,6 +272,7 @@ def _calendar_runner_command(
         "account": target_source.source_id,
         "source_id": target_source.source_id,
         "target_path": _calendar_writeback_target_path(writeback_uid),
+        "requires_if_match": intent.requires_if_match,
         "if_match": intent.if_match,
         "content_type": "text/calendar; charset=utf-8",
         "content": content,
@@ -379,7 +380,7 @@ async def create_writeback_intent(
     )
     if not request.execute_provider:
         return intent
-    if intent.if_match is None:
+    if requires_if_match and intent.if_match is None:
         raise HTTPException(
             status_code=409,
             detail="If-Match is required before provider write execution",
