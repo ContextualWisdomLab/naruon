@@ -152,18 +152,35 @@ in this repo.
 
 ### Agent PR lifecycle playbook
 
-- When available, use `autoresearch` for an autonomous review-repair loop,
-  `babysit-pr` for protected-merge observation, and `git-commit-format` before
-  committing; use `agents-md` when changing this file. If one is unavailable,
-  perform the same steps directly: keep an
-  evidence log, poll current-head checks without treating pending work as a
-  failure, and use the repository's conventional commit history as the format
-  contract. Use CodeGraph before broad source searches when an index exists;
-  apply `humanize-korean` to Korean prose when that shared skill is available.
-  Prefer repository-local
-  `fix-development-mistakes`, `github-actions-privileged-pr-scan`, and
-  `github-robot-review-gate` skills for their matching repair, privileged
-  scanner, and review-gate work; read the selected `SKILL.md` completely.
+- Select skills by the current task, not by the size of the installed catalog.
+  Read each selected `SKILL.md` and its required references completely before
+  acting. Discover shared skills through the active tool catalog or
+  `~/.agents/skills/<skill>/SKILL.md`; do not commit machine-specific paths.
+  Missing tools require an explicit limitation and a safe fallback, never a
+  claim that the tool ran. Registration alone does not prove a working service.
+- Use these checked-in skills for their matching task:
+  [fix-development-mistakes](.agents/skills/fix-development-mistakes/SKILL.md)
+  for causal repair,
+  [github-actions-privileged-pr-scan](.agents/skills/github-actions-privileged-pr-scan/SKILL.md)
+  for privileged scanners, and
+  [github-robot-review-gate](.agents/skills/github-robot-review-gate/SKILL.md)
+  for gate diagnosis. None authorizes bypassing protection or widening scope.
+- Use `agents-md` for agent instructions, `git-commit-format` for commits, and
+  `verification-before-completion` before delivery claims. Use `babysit-pr`
+  when watching a protected PR. Follow repository commit conventions and use
+  truthful attribution, not another skill author's model identity or commands
+  copied from an unrelated repository.
+- Use `autoresearch` only for measurable optimization with a baseline, an exact
+  metric command, scope, constraints, and an experiment/result log. Do not add
+  an experiment scaffold to documentation-only work or ordinary review repair.
+  Shared-branch recovery must preserve other writers' changes; the skill's
+  destructive reset, amend, and generic timeout examples do not override this
+  repository's non-force and model-timeout rules.
+- Use `adr-author` for architecture decisions and `humanize-korean`/`im-not-ai`
+  for Korean prose, preserving meaning, facts, numbers, and proper names. For UI
+  changes, use Figma, Storybook, `ui-ux-pro-max`, and `anti-slop-ui` when
+  available; verify actual component states, accessibility, responsive layouts,
+  and affected locales rather than treating a design artifact as runtime proof.
 - After tracing the affected flow, apply Superpowers systematic debugging and
   test-first verification, then use the Ponytail ladder: reuse repository code,
   standard-library or platform behavior, and installed dependencies before
@@ -187,6 +204,14 @@ in this repo.
   with the local remote-tracking ref and start from the verified 40-character
   SHA. Never guess or manually extend abbreviated SHAs in commits, PR bodies,
   release evidence, or gap baselines.
+- Inspect `git config --get-all remote.origin.fetch`: a narrow refspec can make
+  `git fetch origin <branch>` update only `FETCH_HEAD`. Fetch the exact source
+  branch into its explicit `refs/remotes/origin/<branch>` destination, then
+  compare it with `git ls-remote` again. A successful fetch is not proof that
+  the remote-tracking ref used for the merge is current.
+
+#### Commit Attribution
+
 - Create a conventional commit with truthful agent attribution. Add a
   cryptographic signature or `Signed-off-by` footer when repository rules or
   contributor policy require it, and add a truthful `Co-Authored-By` footer for
@@ -202,9 +227,13 @@ in this repo.
   branch, preserve its complete delta, rerun focused checks, and retarget only
   when the resulting dependency order is verified.
 - Preserve unrelated dirty or untracked files. If a command changes the wrong
-  checkout, stop before editing or pushing, record the reflog evidence, restore
-  only the affected branch with a non-destructive detached-head and branch-ref
-  move, and verify the original checkout and untracked files afterward.
+  checkout, stop before editing or pushing. Record before/after SHAs and staged,
+  unstaged, and untracked state; preserve displaced commits under a recovery
+  ref. Restore only proven agent-owned changes with a ref update guarded by the
+  expected old SHA. Stop if ownership or concurrent movement is uncertain.
+
+#### Verification and protected landing
+
 - Tests invoked with `--noconftest` must bootstrap every required setting in
   the test or trusted workflow step. Use explicit test-only values and fresh
   random secrets; do not weaken production validation or depend on a developer
@@ -239,11 +268,12 @@ in this repo.
 - A queued workflow record is not proof of an occupied runner. Inspect jobs and
   preserve current-head release, deployment, image, migration, SBOM,
   provenance, and security evidence. Do not use administrative merge bypass.
-  The only permitted temporary required-context adjustment is the documented
-  stale-context procedure in `docs/development/merge-gate-policy.md`: capture
-  equivalent current-head evidence, make a reversible ruleset change, restore
-  the context after protected-branch repair, and rerun its evidence. It does not
-  authorize suppressing a product or security finding.
+  The stale-context procedure in `docs/development/merge-gate-policy.md`
+  requires explicit maintainer authorization for the exact ruleset change and
+  substitute evidence; a delivery request alone is not that authorization.
+  Restore the captured configuration on success, failure, cancellation, or
+  expiry, and block further landing until restoration is verified. It never
+  authorizes suppressing a product or security finding.
 - Model-backed OpenCode, Strix, and Noema workflows request only
   `contextual-orchestrator/orchestrator/free` with the gateway token.
   Provider discovery, capability routing, and fallback belong to the
@@ -269,6 +299,19 @@ in this repo.
 - Do not close a PR merely to reach zero open PRs. Close only with explicit user
   direction, no valid delta, a malicious change, or a verified successor that
   carries the predecessor's complete delta and records the lineage.
+- Keep the handoff in the existing PR and `docs/product-technical-gap-baseline.md`:
+  owner, worktree, full head/base SHAs, changed contract, reproduction command,
+  exit status, pass/fail/skip counts, evidence link, and next safe action. Record
+  skipped PostgreSQL or browser paths as unverified, even when the command exits
+  zero. Local tests, protected merge, published release, and live operation are
+  separate claims; source/config assertions do not prove network behavior.
+- When filtering reviews, bind the root `headRefOid` before iterating
+  `.reviews[]`; inside that iterator, `.` is the review, not the PR. A useful
+  read-only snapshot is `gh pr view <pr> --repo ContextualWisdomLab/naruon
+  --json headRefOid,reviews --jq '.headRefOid as $head | {head: $head,
+  reviews: [.reviews[] | select(.commit.oid == $head)]}'`. Empty output or
+  omitted/paginated evidence is not approval; verify checks, unresolved threads,
+  and live rules separately under the merge-gate policy.
 
 Evidence basis: Souppaya, M., Scarfone, K., & Dodson, D. (2022). *Secure
 Software Development Framework (SSDF) Version 1.1: Recommendations for
@@ -740,6 +783,26 @@ subject to U.S. copyright, while attribution remains required.
 
 ## Development environment and tooling defaults
 
+### Package Manager
+
+- Backend: use the project-local `backend/.venv`, `uv sync --project backend
+  --locked`, and `uv run --project backend --frozen python -m pytest` with the
+  relevant test paths. Keep `backend/uv.lock`; never install into a system
+  Python runtime or treat a one-off `PYTHONPATH=.` workaround as a root fix.
+- Frontend: use Corepack and the `packageManager` pin in
+  `frontend/package.json`, `corepack pnpm --dir frontend install
+  --frozen-lockfile`, and its existing test/lint/build scripts. The test script
+  uses Vitest; do not append Jest-only `--runInBand`.
+- For this playbook's source-only contracts, run from the repository root:
+  `uv run --project backend --frozen python -m pytest -q --noconftest
+  backend/tests/test_agent_llm_authority_docs.py
+  backend/tests/test_release_governance.py`. This bypass is limited to tests
+  that do not need application fixtures; API/DB validation must use conftest.
+- Keep `CLAUDE.md` as complementary guidance; do not replace an existing file
+  with a symlink or copy the whole playbook into it.
+
+### Local tooling and cleanup
+
 - If CodeGraph is not initialized for this repository, agents may run
   `codegraph init -i` autonomously without asking first; keep generated
   `.codegraph/` and `.cursor/rules/codegraph.mdc` artifacts local unless a
@@ -767,7 +830,7 @@ subject to U.S. copyright, while attribution remains required.
   the changed contract and include exact commands in the PR body. For release
   and Docker changes, at minimum verify `python -m pytest
   backend/tests/test_release_governance.py backend/tests/test_runtime_config_api.py
-  -q`, `corepack pnpm@11.5.3 --dir frontend test --runInBand` when frontend
+  -q`, `corepack pnpm --dir frontend test` when frontend
   behavior changes, and a Docker build of the affected image.
 - GHCR publishing evidence for the combined `naruon` image must include the
   exact image name, tag, local image ID, push result, and registry verification
@@ -784,13 +847,12 @@ subject to U.S. copyright, while attribution remains required.
   container scanner such as Trivy or Grype against the exact pushed image tag
   and treat high/critical actionable findings as blockers until fixed or
   documented with precise non-applicability evidence.
-- Docker Compose and Podman live-E2E work must clean up after itself. Stop
-  stale `naruon*` containers, remove unused volumes/layers with
-  `podman system prune --all --volumes --force` when safe, and verify
-  `podman ps` has no stale Naruon services. If Podman reports broken storage
-  metadata such as missing overlay layers or `readlink ... overlay: invalid
-  argument`, run `podman system check --repair --force` before relying on
-  `podman system df` or additional image scans.
+- Docker Compose and Podman live-E2E work must clean up only resources created
+  by that task, identified by exact IDs and project labels. Use an isolated test
+  project and free loopback ports; preserve pre-existing services and persistent
+  volumes. System-wide pruning or forced storage repair requires separate
+  authorization covering the identified affected resources. Verify cleanup of
+  the task-owned resources; do not infer ownership from a `naruon*` name match.
 - Keep contributor setup friction low: document any new required environment
   variables, model tags, package-manager version pins, or live-E2E ports in the
   same PR that introduces them, and avoid hidden local-only defaults that make
