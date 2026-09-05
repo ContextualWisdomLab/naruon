@@ -1,3 +1,5 @@
+"""Track sent email messages that still await an external reply."""
+
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -81,42 +83,60 @@ def thread_reply_candidate(
     thread_messages: list[Email],
     user_addresses: set[str],
     is_chronological: bool = False,
+    is_descending: bool = False,
 ) -> Email | None:
+    """Return the newest sent message without a later external reply.
+
+    ``is_chronological`` trusts ascending ``(date, id)`` input and scans it in
+    reverse. ``is_descending`` trusts an existing descending ``(date, id)``
+    database order and avoids another allocation and sort.
+    """
     if not user_addresses:
         return None
 
-    ordered_messages = (
-        reversed(thread_messages)
-        if is_chronological
-        else sorted(
+    if is_descending:
+        ordered_messages = thread_messages
+    elif is_chronological:
+        ordered_messages = reversed(thread_messages)
+    else:
+        ordered_messages = sorted(
             thread_messages, key=lambda item: (item.date, item.id or 0), reverse=True
         )
-    )
 
-    latest_external_date = None
+    latest_external_key: tuple[datetime.datetime, int] | None = None
     for message in ordered_messages:
+        message_key = (message.date, message.id or 0)
         is_from_user = message_is_from_user(message, user_addresses)
 
         if not is_from_user:
-            if latest_external_date is None or message.date > latest_external_date:
-                latest_external_date = message.date
+            if latest_external_key is None or message_key > latest_external_key:
+                latest_external_key = message_key
             continue
 
-        if is_from_user and not message_is_self_sent(message, user_addresses):
+        if not message_is_self_sent(message, user_addresses):
             has_later_external_reply = (
-                latest_external_date is not None and latest_external_date > message.date
+                latest_external_key is not None and latest_external_key > message_key
             )
-            if not has_later_external_reply:
-                if detect_reply_tracking(message.body):
-                    return message
+            if not has_later_external_reply and detect_reply_tracking(message.body):
+                return message
 
     return None
 
 
 def thread_requires_reply(
-    thread_messages: list[Email], user_addresses: set[str]
+    thread_messages: list[Email],
+    user_addresses: set[str],
+    is_descending: bool = False,
 ) -> bool:
-    return thread_reply_candidate(thread_messages, user_addresses) is not None
+    """Return whether a thread has a sent message awaiting a reply."""
+    return (
+        thread_reply_candidate(
+            thread_messages,
+            user_addresses,
+            is_descending=is_descending,
+        )
+        is not None
+    )
 
 
 async def check_missing_replies(
