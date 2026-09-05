@@ -462,13 +462,11 @@ export function SearchLayout() {
     return results;
   }, [activeFilter, results]);
 
-  // ⚡ Bolt: Wrap search results map in useMemo to prevent O(N) array traversals
-  // 🎯 Why: Using Array.prototype.find() and findIndex() inside render cycles blocks the main thread when searching large sets.
-  // 📊 Impact: Converts O(N) lookups to O(1), significantly reducing re-render latency for search results.
   const resultById = useMemo(() => {
     const map = new Map<number, { result: SearchResultItem; index: number }>();
     filteredResults.forEach((result, index) => {
-      map.set(result.id, { result, index });
+      // Preserve the first-match semantics of the previous find/findIndex path.
+      if (!map.has(result.id)) map.set(result.id, { result, index });
     });
     return map;
   }, [filteredResults]);
