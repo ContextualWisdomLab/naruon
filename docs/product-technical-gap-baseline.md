@@ -576,13 +576,14 @@ structured OpenCode approval when no CodeRabbit check exists even if a pending
 issue notice is present; the full shell gate harness and ShellCheck pass, and
 current-head unresolved threads are zero. The historical scheduler handles
 `33871200407`, `33871251541`, and `33872054770` belong to predecessor heads and
-are not reusable evidence. Current heads have fresh runner-required workflows
-queued. At the same observation time, runner-requiring
-work across central `.github` had remained queued since 11:56Z while
-metadata-only jobs completed. This is point-in-time organization queue
-evidence, not a source failure, a successful review, or permission to reuse
-predecessor-head Checks. Runner-policy details remain unverified because the
-current credential lacks organization Actions administration permission.
+are not reusable evidence. Canonical `.github` PR #1878 merged as
+`1b65dbc35e7183722ad77894e2d80b39993be90d`, removing the organization-wide
+queue sweep, and PR #1877 followed as
+`b5efbc2762e472e4a380b0503b1f050f76fbb008`, repairing the Strix admission and
+Noema cleanup contracts on protected `main`. A bounded #1531 review dispatch
+with merge and branch updates disabled is now live as central run
+`33933575670`; it remains queued and therefore is neither review nor protected
+completion evidence. Predecessor-head Checks remain non-transferable.
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
