@@ -116,7 +116,7 @@ warning suppression and promotes the already used optional-agent
 hash lock contracts. The current head also includes that pin in the shared
 SHA-256 digest-format assertion instead of checking only record presence. This
 was found while validating utility consumer PR
-#1538 (`1aa390de3d1eee0d83b2377a2b50751646c3a39b`): its source tests could not
+#1538 (`79e54b1b1298817fb86cae5b6eae9edc2a25675d`): its source tests could not
 collect under Python 3.14 with warnings as
 errors because protected `develop` omitted the direct test dependency. Frozen
 sync and the predecessor's 65 focused tests passed without the warning; the
@@ -126,7 +126,9 @@ as errors, Ruff, and diff checks. Broad dependency-upgrade PR #1494 exact head
 `httpx2==2.12.0` and its other package migrations; it also removes the
 suppression rather than reviving it. PR #1538 remains Draft until the minimal
 prerequisite is protected-merged and its own unchanged-head review and Checks
-complete. PR #1565 is now Ready; repo-local Application CI, Bandit, and Docker
+complete. Its release note now names only the two effective tools and does not
+claim the removed URL extractor; 71 focused tests and Ruff pass, while 22
+current-head hosted checks are queued. PR #1565 is now Ready; repo-local Application CI, Bandit, and Docker
 were rerun once on their existing exact-head handles, and central review
 dispatch `33934750107` is queued with merge, auto-merge, and branch updates
 disabled. No gate evidence transfers between the owner, upgrade, and consumer
@@ -239,7 +241,7 @@ remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 which carries its complete valid delta plus the newer exact-head repair rules.
 #1558 remains open until #1564 reaches protected merge or an independent
 equivalence check confirms succession; no count-only closure is authorized. #1538
-(`1aa390de3d1eee0d83b2377a2b50751646c3a39b`)
+(`79e54b1b1298817fb86cae5b6eae9edc2a25675d`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
