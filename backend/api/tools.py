@@ -168,45 +168,6 @@ registry = ToolRegistry()
 # Initialize default tools
 
 
-async def thread_summarizer_handler(params: Dict[str, Any]) -> Any:
-    thread_id = params.get("thread_id", "")
-    return {
-        "summary": f"이메일 스레드 {thread_id}에 대한 요약입니다. 여러 논의 사항이 정리되었습니다.",
-        "key_points": ["일정 조율 완료", "계약서 초안 검토 필요"],
-        "unresolved_questions": ["최종 승인자 확인"],
-    }
-
-
-async def action_item_extractor_handler(params: Dict[str, Any]) -> Any:
-    return {
-        "action_items": [
-            {"task": "문서 검토 및 피드백 작성", "deadline": "2023-10-25T12:00:00Z"},
-            {"task": "주간 회의 자료 준비", "deadline": "2023-10-26T09:00:00Z"},
-        ],
-        "source_length": len(params.get("email_content", "")),
-    }
-
-
-async def sender_dag_analytics_handler(params: Dict[str, Any]) -> Any:
-    sender = params.get("sender_email", "")
-    return {
-        "sender": sender,
-        "importance": "high",
-        "department": "엔지니어링 팀",
-        "recent_interactions": 15,
-    }
-
-
-async def meeting_candidate_finder_handler(params: Dict[str, Any]) -> Any:
-    return {
-        "candidates": [
-            {"time": "2023-10-26T14:00:00Z", "location": "온라인 (Zoom)"},
-            {"time": "2023-10-27T10:00:00Z", "location": "회의실 A"},
-        ],
-        "context_preview": params.get("email_content", "")[:30] + "...",
-    }
-
-
 async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     draft = params.get("draft_content", "")
     rel = params.get("recipient_relationship", "unknown")
@@ -414,50 +375,6 @@ def _parameter_matches_type(value: Any, expected_type: str) -> bool:
     }
     return validators.get(expected_type, validators["string"])(value)
 
-
-registry.register(
-    ToolInfo(
-        code="thread_summarizer",
-        name="이메일 맥락 요약 (Thread Summarizer)",
-        description="긴 이메일 스레드를 분석하여 핵심 맥락, 결정 사항, 미해결 질문을 추출합니다.",
-        category="이메일 분석",
-        parameters={"thread_id": "string"},
-    ),
-    thread_summarizer_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="action_item_extractor",
-        name="실행 항목 자동 추출 (Action Item Extractor)",
-        description="이메일 본문에서 사용자가 수행해야 할 작업(Task)과 마감일을 자동으로 식별합니다.",
-        category="작업 관리",
-        parameters={"email_content": "string"},
-    ),
-    action_item_extractor_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="sender_dag_analytics",
-        name="발신자 관계 분석 (Sender DAG Analytics)",
-        description="과거 이메일 기록을 바탕으로 발신자와의 관계(조직도 상 위치, 중요도 등)를 분석합니다.",
-        category="관계 인텔리전스",
-        parameters={"sender_email": "string"},
-    ),
-    sender_dag_analytics_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="meeting_candidate_finder",
-        name="일정 후보 추출 (Meeting Candidate Finder)",
-        description="이메일 텍스트에서 회의나 약속으로 예상되는 시간대와 장소를 추출하여 캘린더 등록 초안을 생성합니다.",
-        category="일정 관리",
-        parameters={"email_content": "string"},
-    ),
-    meeting_candidate_finder_handler,
-)
 
 registry.register(
     ToolInfo(

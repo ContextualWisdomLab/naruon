@@ -1,4 +1,15 @@
 ## [Unreleased]
+### Source-bound 요약·업무·관계·일정 경계
+
+- 입력과 무관한 고정 2023 fixture로 결정 사항과 미해결 질문, 업무와 마감일,
+  발신자 조직 관계와 중요도, 회의 시간·장소 후보를 성공 응답으로 반환하던
+  `thread_summarizer`, `action_item_extractor`, `sender_dag_analytics`,
+  `meeting_candidate_finder`를 내장 도구 레지스트리에서 제거했습니다. 이를
+  대신하는 고정값·템플릿 fallback은 없습니다. source-bound evidence와 선언된
+  provider가 없는 동안 catalog에 노출하지 않으며 상세 조회와 실행은 `404`로
+  fail closed 합니다. 아래의 과거 기능 추가 기록은 당시 변경 이력으로 보존하며
+  현재 지원 계약을 뜻하지 않습니다.
+
 ### 이메일 보안 판정 경계 (Email Security Verdict Boundary)
 
 - 고정 키워드와 발신자 도메인 suffix만으로 확정적 spam/phishing boolean과
