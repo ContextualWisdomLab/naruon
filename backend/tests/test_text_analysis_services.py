@@ -25,6 +25,19 @@ def test_contact_information_preserves_unicode_local_part_case() -> None:
     assert result.phone_numbers == ()
 
 
+def test_contact_information_does_not_casefold_distinct_unicode_domain_labels() -> None:
+    result = extract_contact_information(
+        "IDNA: Ada@faß.de, distinct Ada@fass.de, "
+        "ASCII-label case Ada@EXAMPLE.한국 / Ada@example.한국"
+    )
+
+    assert result.email_addresses == (
+        "Ada@faß.de",
+        "Ada@fass.de",
+        "Ada@EXAMPLE.한국",
+    )
+
+
 def test_contact_information_supports_unicode_email_without_normalizing_output() -> None:
     result = extract_contact_information("문의: 사용자@예시.한국")
 
