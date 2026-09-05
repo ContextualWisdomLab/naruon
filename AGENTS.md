@@ -462,6 +462,16 @@ subject to U.S. copyright, while attribution remains required.
   only to prevalidated global IP addresses while TLS/SNI still uses the
   allowlisted hostname; do not hand a freshly validated URL to a generic client
   that can resolve DNS again at connect time.
+- Dynamic tool registration (`POST /api/tools`), update (`PATCH
+  /api/tools/{code}`), and deletion (`DELETE /api/tools/{code}`) must fail closed
+  until durable signed-session tenant/workspace ownership, administrative
+  authorization, built-in immutability, and a real provider/adapter execution
+  target are implemented and verified. Do not substitute a process-global
+  registry or placeholder success. Preserve the built-in catalog and supported
+  `POST /api/tools/{code}/execute` path; the mutation restriction is not a ban on
+  all POST requests. Keep behavioral tests for rejected writes, unchanged
+  built-ins, signed-session scope, and actual execution results with the product
+  implementation; documentation alone does not establish runtime readiness.
 - OIDC issuer and JWKS URLs are outbound identity-provider fetch surfaces. They
   must use HTTPS, must not include userinfo or fragments, must reject localhost
   and non-global IP literals, and must be exact-host allowlisted by
@@ -585,6 +595,13 @@ subject to U.S. copyright, while attribution remains required.
   topic components, or label evidence by a bare document, model, topic, rank,
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
+- `/api/llm/summarize` confidence uses an integer percentage in `0..100`, not
+  a `0..1` ratio: `1` means `1%`. Reject fractional, non-finite, out-of-range,
+  and non-number values without rounding, coercion, or unit inference; absent
+  or invalid confidence must remain unavailable, not become `0%`. Frontend
+  unit/E2E fixtures and pilot/full-product smoke data must use the same backend
+  contract. Keep boundary and rendered-output tests with the product consumer;
+  a documentation update is not proof that the consumer fix has been released.
 - Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
   `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
   desynchronizes first-wins label maps from the selected node or edge when
