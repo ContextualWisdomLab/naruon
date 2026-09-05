@@ -638,6 +638,38 @@ registry.register(
 )
 
 
+async def email_address_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract valid ASCII email addresses in first-occurrence order."""
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+
+    unique_emails: list[str] = []
+    seen_addresses: set[str] = set()
+    for match in _EMAIL_PATTERN.finditer(text):
+        email_address = match.group(0)
+        normalized_address = email_address.casefold()
+        if normalized_address not in seen_addresses:
+            seen_addresses.add(normalized_address)
+            unique_emails.append(email_address)
+
+    return {"emails": unique_emails, "count": len(unique_emails)}
+
+
+registry.register(
+    ToolInfo(
+        code="email_address_extractor",
+        name="이메일 주소 추출기 (Email Address Extractor)",
+        description="텍스트 본문에서 유효한 ASCII 이메일 주소를 찾아 중복을 제거하여 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    email_address_extractor_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     """Generate one RFC 9562 UUID version 4 for the retained built-in utility."""
     return {"uuid": str(uuid.uuid4())}
