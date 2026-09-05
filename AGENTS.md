@@ -152,17 +152,46 @@ in this repo.
 
 ### Agent PR lifecycle playbook
 
-- When available, use `autoresearch` for an autonomous review-repair loop,
-  `babysit-pr` for protected-merge observation, and `git-commit-format` before
-  committing. If one is unavailable, perform the same steps directly: keep an
-  evidence log, poll current-head checks without treating pending work as a
-  failure, and use the repository's conventional commit history as the format
-  contract. Use CodeGraph before broad source searches when an index exists;
-  apply `humanize-korean` to Korean prose when that shared skill is available.
-  Prefer repository-local
-  `fix-development-mistakes`, `github-actions-privileged-pr-scan`, and
-  `github-robot-review-gate` skills for their matching repair, privileged
-  scanner, and review-gate work; read the selected `SKILL.md` completely.
+- Select skills by the current task, not by the size of the installed catalog.
+  Read each selected `SKILL.md` and its required references completely before
+  acting. Discover shared skills through the active tool catalog or
+  `~/.agents/skills/<skill>/SKILL.md`; do not commit machine-specific paths.
+  Missing tools require an explicit limitation and a safe fallback, never a
+  claim that the tool ran. Registration alone does not prove a working service.
+- Use these checked-in skills for their matching task:
+  [fix-development-mistakes](.agents/skills/fix-development-mistakes/SKILL.md)
+  for causal repair,
+  [github-actions-privileged-pr-scan](.agents/skills/github-actions-privileged-pr-scan/SKILL.md)
+  for privileged scanners, and
+  [github-robot-review-gate](.agents/skills/github-robot-review-gate/SKILL.md)
+  for gate diagnosis. None authorizes bypassing protection or widening scope.
+- Use `agents-md` for agent instructions, `git-commit-format` for commits, and
+  `verification-before-completion` before delivery claims. Use `babysit-pr`
+  when watching a protected PR. Follow repository commit conventions and use
+  truthful attribution, not another skill author's model identity or commands
+  copied from an unrelated repository.
+- Use `autoresearch` only for measurable optimization with a baseline, an exact
+  metric command, scope, constraints, and an experiment/result log. Do not add
+  an experiment scaffold to documentation-only work or ordinary review repair.
+  Shared-branch recovery must preserve other writers' changes; the skill's
+  destructive reset, amend, and generic timeout examples do not override this
+  repository's non-force and model-timeout rules.
+- Use `adr-author` for architecture decisions and `humanize-korean`/`im-not-ai`
+  for Korean prose, preserving meaning, facts, numbers, and proper names. For UI
+  changes, use Figma, Storybook, `ui-ux-pro-max`, and `anti-slop-ui` when
+  available; verify actual component states, accessibility, responsive layouts,
+  and affected locales rather than treating a design artifact as runtime proof.
+- After tracing the affected flow, apply Superpowers systematic debugging and
+  test-first verification, then use the Ponytail ladder: reuse repository code,
+  standard-library or platform behavior, and installed dependencies before
+  adding the smallest complete implementation. This ordering never removes
+  trust-boundary validation, data-loss protection, accessibility, or the check
+  that reproduces a non-trivial fix.
+- Use Context7 for current third-party API contracts, DeepWiki for public
+  external-repository architecture, and sequential thinking for multi-step
+  design or debugging. Send only public metadata to remote MCP services;
+  private source and customer data require an organization-approved ZDR
+  endpoint.
 - Apply the mutation loop only to implementation, remediation, and landing
   tasks. Review-only agents stop after publishing evidence-backed findings and
   must not edit, execute project code, push, approve, or merge.
@@ -175,10 +204,19 @@ in this repo.
   with the local remote-tracking ref and start from the verified 40-character
   SHA. Never guess or manually extend abbreviated SHAs in commits, PR bodies,
   release evidence, or gap baselines.
+- Inspect `git config --get-all remote.origin.fetch`: a narrow refspec can make
+  `git fetch origin <branch>` update only `FETCH_HEAD`. Fetch the exact source
+  branch into its explicit `refs/remotes/origin/<branch>` destination, then
+  compare it with `git ls-remote` again. A successful fetch is not proof that
+  the remote-tracking ref used for the merge is current.
+
+#### Commit Attribution
+
 - Create a conventional commit with truthful agent attribution. Add a
   cryptographic signature or `Signed-off-by` footer when repository rules or
-  contributor policy require it; verify that evidence before claiming the
-  commit satisfies that policy. Immediately before updating an existing remote
+  contributor policy require it, and add a truthful `Co-Authored-By` footer for
+  the acting agent; verify that evidence before claiming the commit satisfies
+  that policy. Immediately before updating an existing remote
   branch without force, fetch it and require its head to equal the reviewed
   parent. For an initial push, first verify that the exact remote ref is absent,
   then create it with a normal non-force push. Generated GitHub merge refs are
@@ -189,13 +227,22 @@ in this repo.
   branch, preserve its complete delta, rerun focused checks, and retarget only
   when the resulting dependency order is verified.
 - Preserve unrelated dirty or untracked files. If a command changes the wrong
-  checkout, stop before editing or pushing, record the reflog evidence, restore
-  only the affected branch with a non-destructive detached-head and branch-ref
-  move, and verify the original checkout and untracked files afterward.
+  checkout, stop before editing or pushing. Record before/after SHAs and staged,
+  unstaged, and untracked state; preserve displaced commits under a recovery
+  ref. Restore only proven agent-owned changes with a ref update guarded by the
+  expected old SHA. Stop if ownership or concurrent movement is uncertain.
+
+#### Verification and protected landing
+
 - Tests invoked with `--noconftest` must bootstrap every required setting in
   the test or trusted workflow step. Use explicit test-only values and fresh
   random secrets; do not weaken production validation or depend on a developer
   shell's environment.
+- For warning-strict pytest evidence, use `python -m pytest -W error` and audit
+  ini filters, per-test marks, and warning-catching contexts. The environment
+  setting `PYTHONWARNINGS=error` alone does not override pytest ignore rules;
+  record intentional warning assertions separately and repair deprecated
+  dependencies in their existing prerequisite PR instead of hiding warnings.
 - Exact changed-line review evidence must be generated only from real
   current-head added or modified lines. Do not invent line 1 for deleted-only,
   binary, oversized, or otherwise ineligible files, and do not relax the
@@ -226,22 +273,26 @@ in this repo.
 - A queued workflow record is not proof of an occupied runner. Inspect jobs and
   preserve current-head release, deployment, image, migration, SBOM,
   provenance, and security evidence. Do not use administrative merge bypass.
-  The only permitted temporary required-context adjustment is the documented
-  stale-context procedure in `docs/development/merge-gate-policy.md`: capture
-  equivalent current-head evidence, make a reversible ruleset change, restore
-  the context after protected-branch repair, and rerun its evidence. It does not
-  authorize suppressing a product or security finding.
+  The stale-context procedure in `docs/development/merge-gate-policy.md`
+  requires explicit maintainer authorization for the exact ruleset change and
+  substitute evidence; a delivery request alone is not that authorization.
+  Restore the captured configuration on success, failure, cancellation, or
+  expiry, and block further landing until restoration is verified. It never
+  authorizes suppressing a product or security finding.
 - Model-backed OpenCode, Strix, and Noema workflows request only
-  `contextual-orchestrator/orchestrator/free` with the gateway credential.
+  `contextual-orchestrator/orchestrator/free` with the gateway token.
   Provider discovery, capability routing, and fallback belong to the
-  orchestrator; consumer workflows do not carry provider names, direct-provider
-  credentials, or paid fallbacks. Verify the requested logical model, endpoint,
-  served-model metadata, and terminal response in the same run.
+  orchestrator; consumer workflows do not carry provider names, model names,
+  direct-provider credentials, or paid fallbacks. Production consumption
+  requires an immutable released owner API/client/schema; an open PR or
+  unreleased branch is proposed evidence, not a consumable contract. Verify the
+  requested logical model, endpoint, served-model metadata, and terminal
+  response in the same run.
 - Keep private-source review fail closed and ZDR-only. Never log or copy bearer
   tokens, provider credentials, request payloads, or secret-derived values.
   Repair shared sidecar startup, credential bootstrap, timeout handling, and
   response normalization where all review paths converge.
-- Do not impose a shared application, agent, or gateway wall-clock timeout on
+- Do not impose a shared application/agent/gateway wall-clock timeout on
   model work. The default is unset; only explicit user cancellation, a provider
   terminal result, or a configured administrator limit ends it. OpenCode,
   Strix, and Noema jobs must permit at least two hours, but that job budget is
@@ -253,6 +304,19 @@ in this repo.
 - Do not close a PR merely to reach zero open PRs. Close only with explicit user
   direction, no valid delta, a malicious change, or a verified successor that
   carries the predecessor's complete delta and records the lineage.
+- Keep the handoff in the existing PR and `docs/product-technical-gap-baseline.md`:
+  owner, worktree, full head/base SHAs, changed contract, reproduction command,
+  exit status, pass/fail/skip counts, evidence link, and next safe action. Record
+  skipped PostgreSQL or browser paths as unverified, even when the command exits
+  zero. Local tests, protected merge, published release, and live operation are
+  separate claims; source/config assertions do not prove network behavior.
+- When filtering reviews, bind the root `headRefOid` before iterating
+  `.reviews[]`; inside that iterator, `.` is the review, not the PR. A useful
+  read-only snapshot is `gh pr view <pr> --repo ContextualWisdomLab/naruon
+  --json headRefOid,reviews --jq '.headRefOid as $head | {head: $head,
+  reviews: [.reviews[] | select(.commit.oid == $head)]}'`. Empty output or
+  omitted/paginated evidence is not approval; verify checks, unresolved threads,
+  and live rules separately under the merge-gate policy.
 
 Evidence basis: Souppaya, M., Scarfone, K., & Dodson, D. (2022). *Secure
 Software Development Framework (SSDF) Version 1.1: Recommendations for
@@ -299,7 +363,7 @@ subject to U.S. copyright, while attribution remains required.
 - Strix logs may print the report's `Model ...` line after the title, endpoint,
   and Code Locations block. Failed-check evidence parsers and OpenCode review
   validators must attribute each vulnerability to that in-report model line, not
-  to a previous retry attempt such as a failed primary `openai/gpt-5` run.
+  to a previous failed routing attempt.
 - OpenCode Agent PR reviews must be general-purpose and meticulous rather than
   narrowly scenario-specific. Configure the review prompt to use all relevant
   MCP sources: CodeGraph for structural source evidence, DeepWiki for repo docs,
@@ -398,6 +462,17 @@ subject to U.S. copyright, while attribution remains required.
   only to prevalidated global IP addresses while TLS/SNI still uses the
   allowlisted hostname; do not hand a freshly validated URL to a generic client
   that can resolve DNS again at connect time.
+- Dynamic tool registration (`POST /api/tools`), update (`PATCH
+  /api/tools/{code}`), and deletion (`DELETE /api/tools/{code}`) must fail closed
+  until durable signed-session tenant/workspace ownership, administrative
+  authorization, built-in immutability, and a real provider/adapter execution
+  target are implemented and verified. Do not substitute a process-global
+  registry or placeholder success. A mock or placeholder handler must never
+  report successful work. Preserve the built-in catalog and supported
+  `POST /api/tools/{code}/execute` path; the mutation restriction is not a ban on
+  all POST requests. Keep behavioral tests for rejected writes, unchanged
+  built-ins, signed-session scope, and actual execution results with the product
+  implementation; documentation alone does not establish runtime readiness.
 - OIDC issuer and JWKS URLs are outbound identity-provider fetch surfaces. They
   must use HTTPS, must not include userinfo or fragments, must reject localhost
   and non-global IP literals, and must be exact-host allowlisted by
@@ -521,6 +596,13 @@ subject to U.S. copyright, while attribution remains required.
   topic components, or label evidence by a bare document, model, topic, rank,
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
+- `/api/llm/summarize` confidence uses an integer percentage in `0..100`, not
+  a `0..1` ratio: `1` means `1%`. Frontend consumers must reject fractional,
+  non-finite, out-of-range, and non-number values without rounding, coercion,
+  or unit inference; absent or invalid confidence stays unavailable, not `0%`.
+  Unit/E2E fixtures and pilot/full-product smoke data must use this contract.
+  Keep boundary and rendered-output tests with the product consumer; guidance
+  does not prove that the consumer fix has been released.
 - Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
   `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
   desynchronizes first-wins label maps from the selected node or edge when
@@ -533,9 +615,9 @@ subject to U.S. copyright, while attribution remains required.
   responses must include `Referrer-Policy`, and `target="_blank"` links must
   use explicit `rel="noopener noreferrer"`.
 - When robot review cites an obsolete Strix provider policy, update the docs and
-  tests to the current GitHub Models default contract before accepting a
-  rollback suggestion; do not reintroduce generic `LLM_API_KEY` or
-  cross-provider credential forwarding while trying to satisfy old comments.
+  tests to the current `contextual-orchestrator/orchestrator/free` contract
+  before accepting a rollback suggestion; do not reintroduce generic
+  `LLM_API_KEY` or direct-provider credential forwarding to satisfy old comments.
 - When reviews find inert navigation/dead-space controls, either wire them to an
   implemented workspace route/API or remove the control; do not leave
   high-traffic drawer/sidebar entries as permanent `준비 중` copy.
@@ -559,6 +641,50 @@ subject to U.S. copyright, while attribution remains required.
   fail closed on any remaining warning-class report log output.
 - DB-affecting API slices need both mocked fast tests and a real PostgreSQL
   bootstrap/smoke path before PR merge evidence is considered complete.
+- ORM `Base.metadata.create_all()` success is not migration evidence. On an
+  isolated empty PostgreSQL database, run `scripts/migrate_db.py` from `backend/`,
+  rerun it, and verify the recorded Alembic head. Also exercise upgrades from
+  supported historical revisions and data-preserving rollback where supported.
+  An already-stamped database needs a forward repair; editing an old revision
+  alone will not rerun it. Integrate the existing migration owner prerequisite,
+  rerun the combined revision graph, and never stamp past a failure or create a
+  fake legacy table to make the consumer pass.
+- After migration succeeds, run the affected application tests against that
+  migrated database, not a replacement ORM-only schema. Migration-created
+  indexes and constraints must remain active for supported size limits and
+  high-entropy content cases; do not shrink inputs, drop indexes, or omit failing
+  cases to manufacture passing evidence. Record migration and application-test
+  results separately and repair the shared schema owner when they disagree.
+- A rollback check must persist representative records before downgrade and
+  compare their values and portable identities after downgrade and re-upgrade.
+  A successful command or an empty schema proves no data preservation. Retain
+  non-rebuildable identity/provenance history; destructive retirement requires
+  a separately authorized migration with recovery evidence.
+- A session-level advisory lock that spans item commits or rollbacks needs a
+  held physical connection; keeping the ORM session object does not preserve
+  backend ownership. Budget any separate lease connection explicitly and test
+  a supported one-slot pool. Do not replace the lock with a transaction-level
+  lock that ends coordination at the first item commit.
+- On uncertain acquisition, work cancellation, or unconfirmed unlock,
+  invalidate before session-close rollback can wait on a broken connection.
+  Abort a disconnected cycle instead of reconnecting without a lease. Advance
+  recovery cursors only through the last completed item or healthy item
+  rollback, so unattempted prefetched rows are not skipped after interruption.
+- Test lease lifetime on real PostgreSQL across commit and rollback with a
+  same-pool reader and an independent replica. Cover actual task cancellation,
+  cleanup ordering, connection loss, strict unlock confirmation, and resumption
+  of unattempted work while retaining representative source bytes. Source-only
+  checks do not prove these runtime outcomes or exactly-once provider execution.
+- A conflict rollback expires loaded ORM records even when commit expiration is
+  disabled. Await refresh/reload before fallback reads; savepoint rollback already
+  removes failed new inserts, so do not expunge them again. A cached `get()` is
+  not a fresh authority check: revalidate configuration in the database before
+  processing another workspace when deletion must revoke further work.
+- Reproduce competing manual writes and configuration deletion with a second
+  real database session. Assert lease exclusion during work and availability
+  after cleanup; keep assertions outside handlers that intentionally catch
+  per-item errors. A test named "between workspaces" must finish the first
+  workspace before injecting its failure, not only execute a matching branch.
 - When a backend container reports missing `DATABASE_URL` or
   `AUTH_SESSION_HMAC_SECRET`, verify the runtime path injects the operator env
   through `scripts/naruon_compose.sh`, Kubernetes secrets, or an explicit
@@ -724,6 +850,31 @@ subject to U.S. copyright, while attribution remains required.
 
 ## Development environment and tooling defaults
 
+### Package Manager
+
+- Backend: use the project-local `backend/.venv`, `uv sync --project backend
+  --locked`, and `uv run --project backend --frozen python -m pytest` with the
+  relevant test paths. Keep `backend/uv.lock`; never install into a system
+  Python runtime or treat a one-off `PYTHONPATH=.` workaround as a root fix.
+- Clean-lock evidence requires an exact `uv sync --locked` in a task-owned
+  project environment before testing. `uv run --frozen` alone can retain
+  extraneous packages and mask a missing dependency. Do not prune a shared
+  environment; use a dedicated worktree environment and keep supplemented-local
+  results separate from a clean-lock run.
+- Frontend: use Corepack and the `packageManager` pin in
+  `frontend/package.json`, `corepack pnpm --dir frontend install
+  --frozen-lockfile`, and its existing test/lint/build scripts. The test script
+  uses Vitest; do not append Jest-only `--runInBand`.
+- For this playbook's source-only contracts, run from the repository root:
+  `uv run --project backend --frozen python -m pytest -q --noconftest
+  backend/tests/test_agent_llm_authority_docs.py
+  backend/tests/test_release_governance.py`. This bypass is limited to tests
+  that do not need application fixtures; API/DB validation must use conftest.
+- Keep `CLAUDE.md` as complementary guidance; do not replace an existing file
+  with a symlink or copy the whole playbook into it.
+
+### Local tooling and cleanup
+
 - If CodeGraph is not initialized for this repository, agents may run
   `codegraph init -i` autonomously without asking first; keep generated
   `.codegraph/` and `.cursor/rules/codegraph.mdc` artifacts local unless a
@@ -751,7 +902,7 @@ subject to U.S. copyright, while attribution remains required.
   the changed contract and include exact commands in the PR body. For release
   and Docker changes, at minimum verify `python -m pytest
   backend/tests/test_release_governance.py backend/tests/test_runtime_config_api.py
-  -q`, `corepack pnpm@11.5.3 --dir frontend test --runInBand` when frontend
+  -q`, `corepack pnpm --dir frontend test` when frontend
   behavior changes, and a Docker build of the affected image.
 - GHCR publishing evidence for the combined `naruon` image must include the
   exact image name, tag, local image ID, push result, and registry verification
@@ -768,13 +919,12 @@ subject to U.S. copyright, while attribution remains required.
   container scanner such as Trivy or Grype against the exact pushed image tag
   and treat high/critical actionable findings as blockers until fixed or
   documented with precise non-applicability evidence.
-- Docker Compose and Podman live-E2E work must clean up after itself. Stop
-  stale `naruon*` containers, remove unused volumes/layers with
-  `podman system prune --all --volumes --force` when safe, and verify
-  `podman ps` has no stale Naruon services. If Podman reports broken storage
-  metadata such as missing overlay layers or `readlink ... overlay: invalid
-  argument`, run `podman system check --repair --force` before relying on
-  `podman system df` or additional image scans.
+- Docker Compose and Podman live-E2E work must clean up only resources created
+  by that task, identified by exact IDs and project labels. Use an isolated test
+  project and free loopback ports; preserve pre-existing services and persistent
+  volumes. System-wide pruning or forced storage repair requires separate
+  authorization covering the identified affected resources. Verify cleanup of
+  the task-owned resources; do not infer ownership from a `naruon*` name match.
 - Keep contributor setup friction low: document any new required environment
   variables, model tags, package-manager version pins, or live-E2E ports in the
   same PR that introduces them, and avoid hidden local-only defaults that make
@@ -794,7 +944,7 @@ subject to U.S. copyright, while attribution remains required.
 - **UI/Browser Testing**: Use a real browser for testing (do not rely on assumptions).
 - **Strict Errors**: Treat `Timeout`, `Fatal`, `Warn`, and `Denied` outputs as hard failures.
 - **Goal**: Converge open PRs through protected merges or verified full-delta
-  succession, never by count-only closure.
+  succession, never through count-only closure.
 
 - When the gate exhausts fallbacks after the primary model produces a finding at or above threshold and then fails with a retryable error (like `NOT_FOUND`), ensure the final output explicitly reports `Strix quick scan failed with a non-recoverable error.` to prevent downgrading the finding to pass or misleadingly reporting an unavailability error.
 
