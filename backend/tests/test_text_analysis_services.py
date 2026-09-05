@@ -4,14 +4,25 @@ from services.contact_information_extractor import extract_contact_information
 from services.text_structure_statistics import measure_text_structure
 
 
-def test_contact_information_preserves_first_occurrence_and_deduplicates() -> None:
+def test_contact_information_preserves_mailbox_identity_and_source_order() -> None:
     result = extract_contact_information(
-        "Primary: Ada.Example@example.com, backup ada.example@EXAMPLE.com, "
-        "mobile +82 10-1234-5678, desk (415) 555-0123."
+        "Primary: Ada.Example@example.com, same Ada.Example@EXAMPLE.com, "
+        "distinct ada.example@example.com, mobile +82 10-1234-5678, "
+        "desk (415) 555-0123."
     )
 
-    assert result.email_addresses == ("Ada.Example@example.com",)
+    assert result.email_addresses == (
+        "Ada.Example@example.com",
+        "ada.example@example.com",
+    )
     assert result.phone_numbers == ("+82 10-1234-5678", "(415) 555-0123")
+
+
+def test_contact_information_preserves_unicode_local_part_case() -> None:
+    result = extract_contact_information("문의: Üser@예시.한국 / üser@예시.한국")
+
+    assert result.email_addresses == ("Üser@예시.한국", "üser@예시.한국")
+    assert result.phone_numbers == ()
 
 
 def test_contact_information_supports_unicode_email_without_normalizing_output() -> None:
