@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from sqlalchemy import bindparam, func, select
+from sqlalchemy import bindparam, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import SecurityAuditEvent
@@ -94,8 +94,10 @@ async def enforce_send_email_rate_limit(
     A limiter-owned transaction prevents committing unrelated request work.
     PostgreSQL advisory locking serializes the count-and-record decision across
     workers. Production timestamps come from PostgreSQL after the scope lock so
-    worker clock skew and lock wait do not weaken the real-time quota. ``now``
-    remains an explicit deterministic test seam.
+    worker clock skew and lock wait do not weaken the real-time quota. Expired
+    allowed rows are transient reservation state and are pruned under that same
+    lock; durable quota-denial audit evidence is retained. ``now`` remains an
+    explicit deterministic test seam.
     """
     observed_at = now
     scope_hash = rate_limit_scope_hash(
@@ -103,6 +105,7 @@ async def enforce_send_email_rate_limit(
         auth_context.organization_id,
         auth_context.workspace_id,
     )
+    scope_uid = f"email_send_scope:{scope_hash}"
     async with AsyncSessionLocal() as session:
         if not _session_uses_postgresql(session):
             raise EmailSendRateLimitUnavailable
@@ -120,12 +123,19 @@ async def enforce_send_email_rate_limit(
             window_started_at = observed_at - datetime.timedelta(
                 seconds=SEND_RATE_LIMIT_WINDOW_SECONDS
             )
+            await session.execute(
+                delete(SecurityAuditEvent).where(
+                    SecurityAuditEvent.resource_uid == scope_uid,
+                    SecurityAuditEvent.event_action
+                    == "email_send_rate_limit.allowed",
+                    SecurityAuditEvent.observed_at <= window_started_at,
+                )
+            )
             result = await session.execute(
                 select(func.count())
                 .select_from(SecurityAuditEvent)
                 .where(
-                    SecurityAuditEvent.resource_uid
-                    == f"email_send_scope:{scope_hash}",
+                    SecurityAuditEvent.resource_uid == scope_uid,
                     SecurityAuditEvent.event_action
                     == "email_send_rate_limit.allowed",
                     SecurityAuditEvent.observed_at > window_started_at,
@@ -142,8 +152,7 @@ async def enforce_send_email_rate_limit(
                     select(func.count())
                     .select_from(SecurityAuditEvent)
                     .where(
-                        SecurityAuditEvent.resource_uid
-                        == f"email_send_scope:{scope_hash}",
+                        SecurityAuditEvent.resource_uid == scope_uid,
                         SecurityAuditEvent.event_action
                         == "email_send_rate_limit.quota_exhausted",
                         SecurityAuditEvent.observed_at > window_started_at,
