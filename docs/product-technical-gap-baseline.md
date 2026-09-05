@@ -128,6 +128,14 @@ prerequisite is protected-merged and its own unchanged-head review and Checks
 complete. No gate evidence transfers between the owner, upgrade, and consumer
 heads.
 
+**Frontend dependency security refresh (2026-09-05T00:40Z):** Dependabot alert
+#91 identifies GHSA-5p4m-2wfm-xmqj in transitive `js-yaml@4.3.0`. Draft PR
+#1571 (`23cb8e0eda1e0a29dbb39e1ca98c32a5313d2a0e`) uses the existing pnpm-native
+workspace override to require patched 4.3.1 and regenerates only the workspace
+policy and lockfile. Frozen installation, ESLint, TypeScript, exact lock
+identity, `pnpm audit --audit-level high`, and diff checks pass without warning;
+fresh exact-head hosted checks are queued, so protected completion is pending.
+
 **Semantic configuration naming refresh (2026-09-04T17:49Z):** Runtime-config
 PR #1521 (`cd8bc8b6425ca61e6aedbf24b5413a050dc4bd19`) preserves the published
 `version` and `features` wire keys while translating them to qualified internal
