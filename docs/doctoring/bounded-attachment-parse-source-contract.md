@@ -275,6 +275,17 @@ copy or overwrite those owners. Their actual contention and cancellation paths
 still need independent RED/GREEN evidence; this worker result does not prove
 either sibling fixed. No exactly-once provider-call or throughput claim follows.
 
+The complete 17-file suite on checkpoint
+`47b2347dd5285081d24b13b38c6b85190dd0aa36` passed **303 tests, zero
+failures/errors/skips, in 303.72 s**, after fresh and repeated migrations. Its
+worker coverage was 256/258 statements and 56/58 branches, with zero exclusions;
+22/22 function/class definitions had docstrings. The two uncovered paths were
+pending-record reloads that return no row after rollback. Follow-up unit cases
+cover both source kinds, skip that missing or no-longer-pending record, and
+continue with the next cached identity. The final changed-head suite must rerun;
+the 303-pass result is not automatically transferred to it. Checkpoint JUnit
+SHA-256: `b7bb102a7fcd1ea1da0099ad348964e1d96fed0c122e71d762d01cc7e4694e7f`.
+
 ### Earlier combined local execution receipt
 
 On 2026-09-05 the merged working tree passed **276 tests, 0 failures, 0 errors,

@@ -107,6 +107,10 @@ class _RowsResult:
     def all(self):
         return self._rows
 
+    def scalar_one_or_none(self):
+        """Return the optional row from a controlled pending-record reload."""
+        return self._rows[0] if self._rows else None
+
 
 class _SequenceSession:
     def __init__(self, row_batches):
@@ -753,6 +757,31 @@ async def test_disconnect_cursor_retries_unattempted_rows_before_newer_work(
         assert completed_identity in resumed_query.params.values()
     else:
         assert " > " not in str(resumed_query)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+async def test_rollback_reload_skips_missing_or_no_longer_pending_source(source_kind):
+    """Do not process a vanished pending row; continue with the next valid cached identity."""
+    worker = NewsdomRecognitionWorker(
+        config_resolver=AsyncMock(side_effect=[RuntimeError("controlled item failure"), None]),
+    )
+    if source_kind == "attachment":
+        pending_rows = [_pending_attachment(attachment_id=index) for index in (1, 2, 3)]
+        cursor_name, final_identity = "_attachment_cursor", 3
+        sweep = worker._sweep_attachments
+    else:
+        pending_rows = [_pending_document(f"doc-{index}") for index in (1, 2, 3)]
+        cursor_name, final_identity = "_document_cursor", "doc-3"
+        sweep = worker._sweep_documents
+    session = _SequenceSession([pending_rows, [], [pending_rows[2]]])
+
+    await sweep(session)
+
+    assert worker._config_resolver.await_count == 2
+    assert session.commit_count == session.rollback_count == 1
+    assert getattr(worker, cursor_name) == final_identity
+    assert final_identity in session.statements[2].compile().params.values()
 
 
 @pytest.mark.asyncio
