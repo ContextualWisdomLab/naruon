@@ -48,7 +48,7 @@ class NewsdomRequestError(RuntimeError):
 
 
 class NewsdomPayloadTooLargeError(NewsdomRequestError):
-    """Raised before network I/O when a PDF exceeds the sidecar contract."""
+    """Raised when the payload exceeds the local or provider-side contract."""
 
 
 class NewsdomEmptyRecognitionError(NewsdomRequestError):
@@ -434,6 +434,8 @@ async def request_pdf_dom(
         except httpx.HTTPError as exc:
             raise NewsdomRequestError(f"NewsDOM request failed: {exc}") from exc
 
+    if response.status_code == 413:
+        raise NewsdomPayloadTooLargeError("NewsDOM returned HTTP 413 for /parse")
     if response.status_code >= 400:
         raise NewsdomRequestError(
             f"NewsDOM returned HTTP {response.status_code} for /parse"
