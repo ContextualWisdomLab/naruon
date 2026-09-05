@@ -34,11 +34,11 @@ in this repo.
 
 ### Code exploration
 
-- This repo has no `.codegraph/` index, so use normal search (grep/find/ripgrep).
-  If a `.codegraph/` index is later added at the repo root, prefer CodeGraph
-  (`codegraph explore "<query>"`, or the code-review-graph MCP tools) before
-  grep/find when understanding or locating code — it surfaces callers, callees,
-  and impact that text search misses.
+- When CodeGraph is available, check `codegraph status` before architecture or
+  symbol exploration. Initialize a missing index with `codegraph init`, repair a
+  stale or unhealthy index with `codegraph sync`, and use `codegraph explore`
+  before broad searches. Otherwise use focused `rg` and file reads. Keep graph
+  artifacts local unless repository policy requires them.
 
 ### Config & secrets (KV, not env)
 
@@ -136,51 +136,12 @@ in this repo.
   `.github/workflows/opencode-review.yml`, `.github/workflows/strix.yml`,
   `.github/workflows/strix-selftest.yml`, or
   `.github/workflows/pr-review-merge-scheduler.yml`.
-- The central Strix Security Scan uses GitHub Models by default through
-  `STRIX_GITHUB_MODELS_TOKEN`, `STRIX_LLM=openai/gpt-5`, and
-  `LLM_API_BASE_FILE` pointing at a trusted file containing
-  `https://models.github.ai/inference`; GitHub Models scans must try the
-  configured GPT-5-or-newer model first and may fall back to the explicit
-  workflow fallback list, currently
-  `github_models/deepseek/deepseek-r1-0528` and
-  `github_models/deepseek/deepseek-v3-0324`, when GitHub Models provider
-  capacity or model availability blocks the primary run. The Strix gate must
-  route these fallback names through the GitHub Models endpoint with
-  OpenAI-compatible child model names such as
-  `openai/deepseek/deepseek-r1-0528`, not the public DeepSeek API. Do not use
-  GPT-4.1 or weaker GitHub Models fallbacks for Strix or OpenCode PR review
-  evidence. Keep the GitHub Models endpoint in a trusted input file and pass
-  the token only through
-  the provider-scoped Strix child-process key path. Legacy `STRIX_LLM` secrets
-  must not override PR, push, or scheduled Strix defaults. Vertex remains
-  available only for manual
-  `workflow_dispatch` evidence when the `strix_llm` input
-  explicitly selects `vertex_ai/gemini-3.1-pro-preview-customtools` or
-  `vertex_ai/gemini-2.5-flash` with `GCP_SA_KEY`; expose Google/Vertex
-  credentials only for Vertex provider mode. Direct OpenAI GPT-5.4-or-newer
-  scans remain supported only for manual `strix_llm` selections with
-  `STRIX_OPENAI_API_KEY`. Do not silently fall back between providers, and
-  do not treat timeout-class provider infrastructure failures as clean PR
-  evidence even when Strix printed zero vulnerabilities before failing. Disable
-  silent Vertex fallback models in the workflow unless a future PR proves a new
-  exact fallback contract with no Timeout/Fatal/Warn/Denied output. Record
-  provider evidence in the PR. Known third-party Strix/Pydantic
-  serializer warnings must be filtered narrowly inside the Strix gate child
-  process, not as a visible workflow env entry, so Warn-class logs are not
-  accepted as clean evidence and warning-filter variable names do not pollute
-  GitHub logs. Strix workflow runtime budget keys should be exported inside the
-  execution shell, not listed as visible step `env:` timeout names, so clean runs
-  do not carry stale timeout-signal strings. Keep PR-scope process budgets large
-  enough for Strix to finalize reports after the scanner emits completion
-  events; a wrapper timeout after `vulnerability_count: 0` is still failed
-  evidence, not a pass. PR evidence must present the full scannable changed-file
-  set from the PR head, plus allowlisted trusted context files, to Strix in one
-  scanner invocation; do not split changed files into separate scanner runs or
-  copy the entire PR-head repository tree by default because either breaks
-  Strix's required whole-context and bounded-input contract. Keep architecture
-  docs and reusable Strix gate tests aligned with this rule so stale
-  Vertex-default, OpenAI-only, unavailable-model, blanket-warning, or generic-key
-  examples cannot re-enter copied workflow guidance.
+- Central LLM review workflows use
+  `contextual-orchestrator/orchestrator/free`; do not restore direct GitHub
+  Models, Vertex, OpenAI, OpenRouter, or provider-specific fallback credentials.
+  Preserve whole-context Strix input, bounded job runtime, ZDR-only
+  private-source routing, and fail-closed `Timeout`/`Fatal`/`Warn`/`Denied`
+  artifact checks.
 - HMAC fallback sessions are local/control-plane compatibility credentials, not
   authoritative workspace-membership evidence. Sensitive tenant security posture
   surfaces must require OIDC/JWKS-backed membership or an explicit dependency
@@ -188,6 +149,120 @@ in this repo.
   cross-workspace security data.
 
 ## PR automation and review defaults
+
+### Agent PR lifecycle playbook
+
+- When available, use `autoresearch` for an autonomous review-repair loop,
+  `babysit-pr` for protected-merge observation, and `git-commit-format` before
+  committing. If one is unavailable, perform the same steps directly: keep an
+  evidence log, poll current-head checks without treating pending work as a
+  failure, and use the repository's conventional commit history as the format
+  contract. Use CodeGraph before broad source searches when an index exists;
+  apply `humanize-korean` to Korean prose when that shared skill is available.
+  Prefer repository-local
+  `fix-development-mistakes`, `github-actions-privileged-pr-scan`, and
+  `github-robot-review-gate` skills for their matching repair, privileged
+  scanner, and review-gate work; read the selected `SKILL.md` completely.
+- Apply the mutation loop only to implementation, remediation, and landing
+  tasks. Review-only agents stop after publishing evidence-backed findings and
+  must not edit, execute project code, push, approve, or merge.
+- For every open PR, repeat: fetch the exact remote base and head, inspect
+  current-head reviews and unresolved threads, reproduce failed checks from
+  their logs, repair the canonical owner, run focused tests plus the applicable
+  contract/security suite, push without force, and re-fetch evidence. A new
+  head invalidates earlier reviews and checks.
+- Before creating a worktree or restacking a branch, compare `git ls-remote`
+  with the local remote-tracking ref and start from the verified 40-character
+  SHA. Never guess or manually extend abbreviated SHAs in commits, PR bodies,
+  release evidence, or gap baselines.
+- Create a conventional commit with truthful agent attribution. Add a
+  cryptographic signature or `Signed-off-by` footer when repository rules or
+  contributor policy require it; verify that evidence before claiming the
+  commit satisfies that policy. Immediately before updating an existing remote
+  branch without force, fetch it and require its head to equal the reviewed
+  parent. For an initial push, first verify that the exact remote ref is absent,
+  then create it with a normal non-force push. Generated GitHub merge refs are
+  transport evidence, not authored commits; verify their parent and tree SHAs
+  rather than rewriting them.
+- Treat concurrent commits and pushes as lineage to reconcile, not as grounds
+  for force-pushing. Merge the updated prerequisite into the same stacked
+  branch, preserve its complete delta, rerun focused checks, and retarget only
+  when the resulting dependency order is verified.
+- Preserve unrelated dirty or untracked files. If a command changes the wrong
+  checkout, stop before editing or pushing, record the reflog evidence, restore
+  only the affected branch with a non-destructive detached-head and branch-ref
+  move, and verify the original checkout and untracked files afterward.
+- Tests invoked with `--noconftest` must bootstrap every required setting in
+  the test or trusted workflow step. Use explicit test-only values and fresh
+  random secrets; do not weaken production validation or depend on a developer
+  shell's environment.
+- Exact changed-line review evidence must be generated only from real
+  current-head added or modified lines. Do not invent line 1 for deleted-only,
+  binary, oversized, or otherwise ineligible files, and do not relax the
+  validator to accept a fabricated receipt; fail closed or repair the canonical
+  receipt producer.
+- Do not present a heuristic as a security, AI-quality, or completion
+  guarantee. State its evidence boundary and replace it at the canonical owner
+  when the workflow requires an enforceable contract.
+- Pending or queued reviews and checks are wait states. Continue safe work on
+  another gap. Before calling a PR merge-ready, freshly verify the exact head
+  and base, live rulesets, required checks, unresolved threads, and applicable
+  current-head CodeRabbit or structured OpenCode fallback evidence. After the
+  merge, verify the merge commit and protected target branch.
+- Audit workflow triggers and concurrency as parsed YAML behavior, not by text
+  search. PR review and repair groups use
+  `<workflow>-<repository>-<PR number>` with `cancel-in-progress: true`, so a
+  new head cancels only the older run for the same workflow, repository, and
+  PR. Metadata-only PR Governance is the deliberate exception: it serializes
+  the same PR's state publication with `cancel-in-progress: false`. Release,
+  deployment, migration, and provenance jobs also remain serialized and are not
+  canceled by review concurrency.
+- Prefer central required or reusable workflows over repository-local copies.
+  Remove duplicate scanners, arbitrary sleeps, runner-held polling, and
+  per-PR organization queue sweeps once a current-head dispatcher or central
+  control-plane workflow owns that job. On `converted_to_draft`, `closed`, or
+  an obsolete head, revalidate the live PR state before canceling queued or
+  running review work; `ready_for_review` must start fresh current-head work.
+- A queued workflow record is not proof of an occupied runner. Inspect jobs and
+  preserve current-head release, deployment, image, migration, SBOM,
+  provenance, and security evidence. Do not use administrative merge bypass.
+  The only permitted temporary required-context adjustment is the documented
+  stale-context procedure in `docs/development/merge-gate-policy.md`: capture
+  equivalent current-head evidence, make a reversible ruleset change, restore
+  the context after protected-branch repair, and rerun its evidence. It does not
+  authorize suppressing a product or security finding.
+- Model-backed OpenCode, Strix, and Noema workflows request only
+  `contextual-orchestrator/orchestrator/free` with the gateway credential.
+  Provider discovery, capability routing, and fallback belong to the
+  orchestrator; consumer workflows do not carry provider names, direct-provider
+  credentials, or paid fallbacks. Verify the requested logical model, endpoint,
+  served-model metadata, and terminal response in the same run.
+- Keep private-source review fail closed and ZDR-only. Never log or copy bearer
+  tokens, provider credentials, request payloads, or secret-derived values.
+  Repair shared sidecar startup, credential bootstrap, timeout handling, and
+  response normalization where all review paths converge.
+- Do not impose a shared application, agent, or gateway wall-clock timeout on
+  model work. The default is unset; only explicit user cancellation, a provider
+  terminal result, or a configured administrator limit ends it. OpenCode,
+  Strix, and Noema jobs must permit at least two hours, but that job budget is
+  not a model timeout and does not create a three-hour maximum.
+- On GitHub 401, 403, rate limit, or repeatedly truncated responses, fail closed
+  instead of inferring current state. Use bounded retry and archive validation,
+  then continue only work grounded in already fetched exact SHAs until access is
+  restored.
+- Do not close a PR merely to reach zero open PRs. Close only with explicit user
+  direction, no valid delta, a malicious change, or a verified successor that
+  carries the predecessor's complete delta and records the lineage.
+
+Evidence basis: Souppaya, M., Scarfone, K., & Dodson, D. (2022). *Secure
+Software Development Framework (SSDF) Version 1.1: Recommendations for
+Mitigating the Risk of Software Vulnerabilities* (NIST SP 800-218). National
+Institute of Standards and Technology. https://doi.org/10.6028/NIST.SP.800-218.
+SSDF PS.1 and PS.3 ground accountable protected changes and retained integrity
+and provenance evidence without prescribing repository-specific tooling. The
+redistributable NIST publication is retained at
+`docs/papers/nist-sp-800-218.pdf`; NIST states that SP 800 publications are not
+subject to U.S. copyright, while attribution remains required.
 
 - Follow `docs/development/merge-gate-policy.md` for PR gate interpretation.
 - PR Governance must stay metadata-only: no PR-head checkout, no admin merge, no
@@ -707,14 +782,19 @@ in this repo.
 
 ## Phase 10 development rules
 
-- **Stepwise execution**: Each phase requires an atomic PR, GitHub PR Tracking, Push, and Robot Review. A phase only ends when merged. Do not proceed without merge.
+- **Stepwise execution**: Each phase requires an atomic PR, GitHub PR Tracking,
+  Push, and Robot Review. A phase ends only when its PR is protected-merged or a
+  successor's exact tree, effective diff, tests, and lineage record independently
+  prove complete-delta succession. While it waits, continue independent work
+  that does not consume or contradict the pending delta.
 - **TDD + DDD**: Practice TDD, micro TDD, nano TDD, Domain Driven Development, and Context Driven Development.
 - **API Wiring**: Always work with API wiring completed.
 - **Collaboration**: Respect other agents' concurrent work; do not overwrite or dismiss unfamiliar changes.
 - **Subagent Delegation**: Actively delegate tasks to Subagents.
 - **UI/Browser Testing**: Use a real browser for testing (do not rely on assumptions).
 - **Strict Errors**: Treat `Timeout`, `Fatal`, `Warn`, and `Denied` outputs as hard failures.
-- **Goal**: Actively manage tasks to ensure open PR counts converge to 0.
+- **Goal**: Converge open PRs through protected merges or verified full-delta
+  succession, never by count-only closure.
 
 - When the gate exhausts fallbacks after the primary model produces a finding at or above threshold and then fails with a retryable error (like `NOT_FOUND`), ensure the final output explicitly reports `Strix quick scan failed with a non-recoverable error.` to prevent downgrading the finding to pass or misleadingly reporting an unavailability error.
 

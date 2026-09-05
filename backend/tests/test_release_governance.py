@@ -44,6 +44,40 @@ def read_repo_text(relative_path: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def test_agent_lifecycle_governance_artifacts_stay_aligned() -> None:
+    """Keep lifecycle policy, model routing, and research evidence consistent."""
+    guidance = read_repo_text("AGENTS.md")
+    opencode_config = read_repo_text("opencode.jsonc")
+    environment_example = read_repo_text(".env.example")
+    readme = read_repo_text("README.md")
+    research_artifact = REPO_ROOT / "docs/papers/nist-sp-800-218.pdf"
+
+    assert '"model": "contextual-orchestrator/orchestrator/free"' in opencode_config
+    assert '"enabled_providers": ["contextual-orchestrator"]' in opencode_config
+    assert '"baseURL": "http://127.0.0.1:8100/v1"' in opencode_config
+    assert (
+        '"Authorization": "Bearer {env:CONTEXTUAL_ORCHESTRATOR_TOKEN}"'
+        in opencode_config
+    )
+    assert '"apiKey"' not in opencode_config
+    assert "CONTEXTUAL_ORCHESTRATOR_BASE_URL" not in opencode_config
+    assert opencode_config.count('"timeout": false') == 1
+    assert "STRIX_GITHUB_MODELS_TOKEN" not in opencode_config
+    assert "CONTEXTUAL_ORCHESTRATOR_BASE_URL" not in environment_example
+    assert "CONTEXTUAL_ORCHESTRATOR_BASE_URL" not in readme
+    assert "CONTEXTUAL_ORCHESTRATOR_TOKEN=" in environment_example
+    assert "CONTEXTUAL_ORCHESTRATOR_TOKEN" in readme
+    assert "http://127.0.0.1:8100/v1" in readme
+    assert "short-lived" in readme
+    assert "owner-issued" in readme
+    assert "docs/development/merge-gate-policy.md" in guidance
+    assert "prove complete-delta succession" in guidance
+    assert "Do not use administrative merge bypass" in guidance
+    assert "stale-context procedure" in guidance
+    assert "successor's exact tree, effective diff, tests, and lineage record" in guidance
+    assert research_artifact.read_bytes().startswith(b"%PDF-")
+
+
 def assert_dockerfile_stage_from(dockerfile: str, image: str, stage_alias: str) -> None:
     pattern = (
         rf"^FROM {re.escape(image)}@sha256:[0-9a-f]{{64}} AS {re.escape(stage_alias)}$"
