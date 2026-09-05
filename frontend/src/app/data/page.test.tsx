@@ -1929,9 +1929,31 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("운영 문서 원본에 현재 문서를 기록합니다");
 
     const cancelWriteButton = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent === "취소");
+    const initialConfirmWriteButton = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent === "WebDAV 쓰기 확인");
+    expect(document.activeElement).toBe(cancelWriteButton);
+    initialConfirmWriteButton?.focus();
     await act(async () => {
-      cancelWriteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      initialConfirmWriteButton?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     });
+    expect(document.activeElement).toBe(cancelWriteButton);
+    await act(async () => {
+      cancelWriteButton?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    });
+    expect(document.activeElement).toBe(initialConfirmWriteButton);
+    await act(async () => {
+      initialConfirmWriteButton?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(document.activeElement).toBe(materializeButton);
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+
+    await act(async () => {
+      materializeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const reopenedCancelWriteButton = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent === "취소");
+    await act(async () => {
+      reopenedCancelWriteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(document.activeElement).toBe(materializeButton);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("webdav-materialization-intent"))).toBe(false);
 
     await act(async () => {
@@ -1979,6 +2001,7 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("etag-webdav-primary");
     expect(container.textContent).not.toContain("/Naruon/Data/roadmap.md-opaque.md");
     expect(container.textContent).not.toContain("runner_req_data_doc_1");
+    expect(document.activeElement).toBe(materializeButton);
   });
 
   it("shows loading feedback only on the document action that is pending", async () => {
