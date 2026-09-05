@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -7,11 +8,6 @@ import pytest
 from api.auth import AuthContext
 from db.models import SecurityAuditEvent
 import services.email_send_rate_limiter as limiter_module
-from services.email_send_rate_limiter import (
-    EmailSendRateLimitUnavailable,
-    enforce_send_email_rate_limit,
-    rate_limit_scope_hash,
-)
 
 
 class _Result:
@@ -29,13 +25,16 @@ class _SharedAttemptStore:
 
 
 class _PostgresSession:
-    def __init__(self, store):
+    def __init__(self, store, *, database_now: datetime.datetime | None = None):
         self.store = store
         self.added = []
         self.queries = []
         self.lock_held = False
         self.pending = []
         self.isolation_level = None
+        self.database_now = database_now or datetime.datetime(
+            2026, 8, 19, tzinfo=datetime.timezone.utc
+        )
 
     async def __aenter__(self):
         return self
@@ -59,15 +58,23 @@ class _PostgresSession:
             await self.store.lock.acquire()
             self.lock_held = True
             return _Result()
+        if "clock_timestamp" in query_text:
+            return _Result(self.database_now)
         if "security_audit_events" in query_text:
             values = tuple(query.compile().params.values())
-            resource_uid = next(value for value in values if str(value).startswith("email_send_scope:"))
+            resource_uid = next(
+                value
+                for value in values
+                if str(value).startswith("email_send_scope:")
+            )
             event_action = next(
                 value
                 for value in values
                 if str(value).startswith("email_send_rate_limit.")
             )
-            window_started_at = next(value for value in values if isinstance(value, datetime.datetime))
+            window_started_at = next(
+                value for value in values if isinstance(value, datetime.datetime)
+            )
             return _Result(
                 sum(
                     event.resource_uid == resource_uid
@@ -110,13 +117,17 @@ def _context(
 
 
 @pytest.mark.asyncio
-async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leakage(monkeypatch):
+async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leakage(
+    monkeypatch,
+):
     store = _SharedAttemptStore()
-    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: _PostgresSession(store))
+    monkeypatch.setattr(
+        limiter_module, "AsyncSessionLocal", lambda: _PostgresSession(store)
+    )
     observed_at = datetime.datetime(2026, 8, 19, tzinfo=datetime.timezone.utc)
 
     async def attempt(user_id):
-        return await enforce_send_email_rate_limit(
+        return await limiter_module.enforce_send_email_rate_limit(
             _context(user_id), now=observed_at
         )
 
@@ -124,7 +135,7 @@ async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leak
     other_scope = await asyncio.gather(*(attempt("user-2") for _ in range(10)))
     other_workspace = await asyncio.gather(
         *(
-            enforce_send_email_rate_limit(
+            limiter_module.enforce_send_email_rate_limit(
                 _context("user-1", workspace_id="workspace-2"), now=observed_at
             )
             for _ in range(10)
@@ -136,14 +147,14 @@ async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leak
     assert all(decision.allowed for decision in other_scope)
     assert all(decision.allowed for decision in other_workspace)
 
-    rollover = await enforce_send_email_rate_limit(
+    rollover = await limiter_module.enforce_send_email_rate_limit(
         _context("user-1"),
         now=observed_at + datetime.timedelta(seconds=61),
     )
     assert rollover.allowed is True
     scope_uid = (
         "email_send_scope:"
-        f'{rate_limit_scope_hash("user-1", "org-1", "workspace-org-1")}'
+        f'{limiter_module.rate_limit_scope_hash("user-1", "org-1", "workspace-org-1")}'
     )
     assert sum(event.resource_uid == scope_uid for event in store.events) == 12
 
@@ -151,24 +162,26 @@ async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leak
 @pytest.mark.asyncio
 async def test_sliding_window_blocks_boundary_burst(monkeypatch):
     store = _SharedAttemptStore()
-    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: _PostgresSession(store))
+    monkeypatch.setattr(
+        limiter_module, "AsyncSessionLocal", lambda: _PostgresSession(store)
+    )
     started_at = datetime.datetime(2026, 8, 19, tzinfo=datetime.timezone.utc)
 
     for offset_seconds in range(50, 60):
-        decision = await enforce_send_email_rate_limit(
+        decision = await limiter_module.enforce_send_email_rate_limit(
             _context(),
             now=started_at + datetime.timedelta(seconds=offset_seconds),
         )
         assert decision.allowed is True
 
-    blocked = await enforce_send_email_rate_limit(
+    blocked = await limiter_module.enforce_send_email_rate_limit(
         _context(),
         now=started_at + datetime.timedelta(seconds=61),
     )
     assert blocked.allowed is False
     for offset_seconds in range(62, 72):
         assert not (
-            await enforce_send_email_rate_limit(
+            await limiter_module.enforce_send_email_rate_limit(
                 _context(),
                 now=started_at + datetime.timedelta(seconds=offset_seconds),
             )
@@ -184,7 +197,7 @@ async def test_limiter_uses_owned_transaction_and_non_sensitive_audit_state(monk
     store = _SharedAttemptStore()
     session = _PostgresSession(store)
     monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: session)
-    decision = await enforce_send_email_rate_limit(
+    decision = await limiter_module.enforce_send_email_rate_limit(
         _context(),
         now=datetime.datetime(2026, 8, 19, tzinfo=datetime.timezone.utc),
     )
@@ -196,6 +209,31 @@ async def test_limiter_uses_owned_transaction_and_non_sensitive_audit_state(monk
     assert "user-1" not in repr(audit)
     assert "org-1" not in repr(audit)
     assert audit.event_action == "email_send_rate_limit.allowed"
+
+
+@pytest.mark.asyncio
+async def test_limiter_uses_database_clock_after_scope_lock(monkeypatch):
+    store = _SharedAttemptStore()
+    database_now = datetime.datetime(
+        2026, 8, 19, 12, 34, 56, tzinfo=datetime.timezone.utc
+    )
+    session = _PostgresSession(store, database_now=database_now)
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: session)
+
+    decision = await limiter_module.enforce_send_email_rate_limit(_context())
+
+    assert decision.allowed is True
+    lock_query_index = next(
+        index
+        for index, query in enumerate(session.queries)
+        if "pg_advisory_xact_lock" in query
+    )
+    clock_query_index = next(
+        index for index, query in enumerate(session.queries) if "clock_timestamp" in query
+    )
+    assert lock_query_index < clock_query_index
+    audit = next(item for item in session.added if isinstance(item, SecurityAuditEvent))
+    assert audit.observed_at == database_now
 
 
 @pytest.mark.asyncio
@@ -213,8 +251,8 @@ async def test_rate_limiter_fails_closed_when_shared_state_is_unavailable():
     original_factory = limiter_module.AsyncSessionLocal
     limiter_module.AsyncSessionLocal = lambda: _UnavailableSession()
     try:
-        with pytest.raises(EmailSendRateLimitUnavailable):
-            await enforce_send_email_rate_limit(_context())
+        with pytest.raises(limiter_module.EmailSendRateLimitUnavailable):
+            await limiter_module.enforce_send_email_rate_limit(_context())
     finally:
         limiter_module.AsyncSessionLocal = original_factory
 
@@ -247,10 +285,14 @@ async def test_rate_limiter_real_postgres_reserves_and_denies(monkeypatch):
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(limiter_module, "AsyncSessionLocal", session_factory)
     monkeypatch.setattr(limiter_module, "SEND_RATE_LIMIT_MAX_ATTEMPTS", 1)
-    context = _context("rate-limit-smoke-user", "rate-limit-smoke-org")
+    scope_suffix = uuid.uuid4().hex
+    context = _context(
+        f"rate-limit-smoke-user-{scope_suffix}",
+        f"rate-limit-smoke-org-{scope_suffix}",
+    )
     scope_uid = (
         "email_send_scope:"
-        f"{rate_limit_scope_hash(context.user_id, context.organization_id, context.workspace_id)}"
+        f"{limiter_module.rate_limit_scope_hash(context.user_id, context.organization_id, context.workspace_id)}"
     )
     observed_at = datetime.datetime.now(datetime.timezone.utc)
 
@@ -263,20 +305,26 @@ async def test_rate_limiter_real_postgres_reserves_and_denies(monkeypatch):
             )
             await session.commit()
 
-    await cleanup()
     try:
-        first = await enforce_send_email_rate_limit(context, now=observed_at)
-        second = await enforce_send_email_rate_limit(context, now=observed_at)
-        async with session_factory() as session:
-            actions = (
-                await session.execute(
-                    select(SecurityAuditEvent.event_action)
-                    .where(SecurityAuditEvent.resource_uid == scope_uid)
-                    .order_by(SecurityAuditEvent.event_action)
-                )
-            ).scalars().all()
-    finally:
         await cleanup()
+        try:
+            first = await limiter_module.enforce_send_email_rate_limit(
+                context, now=observed_at
+            )
+            second = await limiter_module.enforce_send_email_rate_limit(
+                context, now=observed_at
+            )
+            async with session_factory() as session:
+                actions = (
+                    await session.execute(
+                        select(SecurityAuditEvent.event_action)
+                        .where(SecurityAuditEvent.resource_uid == scope_uid)
+                        .order_by(SecurityAuditEvent.event_action)
+                    )
+                ).scalars().all()
+        finally:
+            await cleanup()
+    finally:
         await engine.dispose()
 
     assert first.allowed is True
