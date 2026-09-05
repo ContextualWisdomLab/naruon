@@ -1,10 +1,52 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.27
+**Baseline version:** 1.28
 **Observed on:** 2026-09-05 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Bounded source retention and worker recovery refresh (2026-09-05):** Draft
+[#1469](https://github.com/ContextualWisdomLab/naruon/pull/1469), exact head
+`db083c9b30dc0156a46baa2cc0ffc3aec5444ab7`, tree
+`db7f17d290de99234acbb5c906599b69b60cad74`, normally inherits #1427
+`cb08b1c3ea2aba8844fc29ef703c34368cc55e47` and concurrent remote
+`facadfb1ce535c5d124e2a463a844942a7704ba5`. Neither history nor the
+prerequisite CHANGELOG was discarded. The former attachment ADR-0006 remains
+Proposed as ADR-0023; the complete old ADR-0005 body is preserved as a historical
+snapshot alongside canonical ADR-0021. All 161 open PRs were inventoried; a
+10:07:23 UTC recheck found the other 160 head/base pairs unchanged and no
+unrelated ADR-0023 collision.
+
+Actual PostgreSQL fault injection exposed a separate worker defect after the
+size-boundary fix: rollback expired every prefetched row, and the error logger
+and next item attempted implicit I/O. Two real-PDF cases failed with
+`MissingGreenlet`. Cached primitive IDs plus explicit recovery-only reloads
+produce 29 focused passes; the exact pushed commit passes **276 tests, zero
+failures/errors/skips, in 67.05 s**, after clean-lock synchronization and fresh
+and repeated migrations to `0020_search_trigram_storage`. The unmodified,
+hash-verified NASA PDF is 40,758,835 bytes. Fresh sessions compare complete
+bytes and identities through pending, actual size rejection, transaction
+rollback, and processing the next item. Full-size synthetic boundaries remain
+unit-only. JUnit SHA-256 is
+`47d54551661795ea10fde3f9f88c38545a2dbe7daf25ed0376dea93231ebee1b`;
+task-owned PostgreSQL and network cleanup completed. The
+[exact-head doctoring](https://github.com/ContextualWisdomLab/naruon/blob/db083c9b30dc0156a46baa2cc0ffc3aec5444ab7/docs/doctoring/bounded-attachment-parse-source-contract.md)
+records the primary SQLAlchemy/NASA evidence, RED/GREEN distinction, full test
+command, retained proposal history, and concurrent-delta reconciliation.
+
+| Requirement and owner | Current evidence | Remaining acceptance action |
+| --- | --- | --- |
+| PRD: preserve an admitted original and continue unrelated files after one failure; Naruon ingestion | Real-PDF persistence and two-item rollback regression; no source truncation or identity replacement | Signed upload/browser recovery and actionable document failure/retry states |
+| TRD: bounded admission, per-item transaction recovery, and separate provider transport; Naruon worker / NewsDOM provider | Proposed 64 MiB retention; existing 20 MiB client guard rejects before network; successful batches have no added query | Protected owner integration, immutable bounded NewsDOM release, exact consumer pin, actual 64 MiB recognition |
+| Operability: retain full-size indexes and measure realistic capacity; Naruon storage/runtime | Migrated indexes stay enabled; complete bytes survive writes and rollback | Concurrent heap/storage/index/lock costs, tenant quotas, representative p95 ≤ 20 ms; no performance claim from test duration |
+
+Fresh post-push required check-run enumeration returned zero checks and no
+current-head approval. Keep Draft; earlier checks do not transfer. The push
+also reported six default-branch dependency advisories (four high, two
+moderate), which require independent owner diagnosis and are not negated by
+this local suite. PR count, provider release, security readiness, and protected
+merge are not claimed complete.
 
 **Noema owner-boundary refresh (2026-09-04):** Noema protected
 `main@e1ac9d50f6c646f04be8c137c8acdc7200182fcd` defines Noema as the
@@ -1287,7 +1329,7 @@ and defines the inventory that must be completed before GA.
 | #1468 | PostgreSQL smoke fixture schema alignment | Draft head `53ce38ed6683d01a9d113069f5ac5a8f17e133a2` non-force consumes #1572 at `cd8ff413d4ed8a5f2855c47a21a31db5661cd487`, preserving its unique bootstrap assertion; exact sync, fresh/repeat migration 0020, and 131 strict PostgreSQL/search tests pass without skips. Owner performance acceptance, protected integration, and fresh exact-head hosted review/Checks remain required |
 | #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; the predecessor Strix provider failure is historical, while the current head requires fresh queued Checks and a qualifying independent approval |
 | #1448 | stacked governance regression coverage | merged normally into #1443's stack branch at `62a0d645…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures passed locally; merge-result hosted Checks remain queued and are post-merge canary evidence |
-| #1469 | deferred attachment parse-source admission | current head `ed4bebed…` non-force merges `develop@042b0c70…`, resolves the parser conflict by preserving both the authenticated 64 MiB import bound and bounded filename decoding, and keeps unsupported binaries metadata-only; 22 attachment-parser tests pass with warnings as errors, while fresh hosted Checks and current-head review remain required |
+| #1469 | deferred attachment parse-source admission and worker recovery | current `db083c9b30dc0156a46baa2cc0ffc3aec5444ab7` normally integrates #1427 and concurrent `facadfb1`; full migrated 276-test suite passes without skips, including unchanged real-PDF retention and a two-item transaction-failure regression; ADR-0023 remains Proposed, full old proposal and parent CHANGELOG survive; required Checks/review, released provider pin, real 64 MiB recognition and representative capacity remain open |
 | #1427 | bounded PDF DOM upload | Draft head `cb08b1c3ea2aba8844fc29ef703c34368cc55e47` non-force consumes #1468 at `53ce38ed6683d01a9d113069f5ac5a8f17e133a2`, preserving PDF admission and deferred-worker contracts. Exact sync, fresh/repeat migration 0020, and 132 strict PostgreSQL/search tests pass without skips. Proposed ADR-0021 retains the former 0005 identity; the 64 MiB Naruon proposal is not actual NewsDOM release proof. Owner performance/release and fresh exact-head review/Checks remain required |
 | #1572 | complete-document search storage | Draft head `cd8ff413d4ed8a5f2855c47a21a31db5661cd487` on #1503 replaces four overflowing GiST indexes through forward migration 0020; four RED regressions become 131 passing strict migrated-PostgreSQL tests. The unchanged large archive case also passes in descendant #1497's 345-test integration. Exact ranking SQL is retained, but GIN does not accelerate distance-only ordering; measured p95, migration cost, and current-head protected gates remain open |
 | #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `aba77cf5…` preserves first-instance duplicate-ID selection, removes the dead `describeEdge` input, and deletes the tracked pre-refactor `NetworkGraph.tsx.out` copy; local 11-test, TypeScript, zero-warning ESLint, and diff checks passed, while hosted Checks and independent approval remain required |
@@ -1450,7 +1492,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Disaster recovery | a release is not enterprise-ready without restore evidence | Ready PR #1464 at `2ce32a89fbef0719f13cbab712aab5e843aa6432` adds WAL archive and same-volume retargeted PITR. The current repair force-recreates both restore containers before the existing applied/requested-target stamp comparison, removing stale Compose environment reuse. Bash, ShellCheck, Compose rendering, and diff checks pass; two review threads are resolved. An exact-commit archive run inside Colima completed both recovery targets: first-target marker inclusion/exclusion, post-promotion write, same-volume earlier retarget, exclusion of all later rows, and full stack/volume cleanup all passed | #1428, #1464 | terminal exact-head hosted checks and independent review, failover fencing, backup retention and scheduled clean-restore rehearsal |
 | Tenant export/reimport | customers need exit and migration without losing provenance | Draft #1497's bounded project-evidence slice passes 345 tests after actual fresh/repeat migration, including full-size cited content, retained identity rollback, and incompatible concurrent imports; full tenant/mailbox/binary/provider/audit portability and signed browser restore remain unverified | #1428, #1497 | export → clean instance import preserving source, opaque IDs, history, evidence, policy |
 | Retention/legal hold/disposition | deletion and evidence preservation conflict unless modeled | partial security/key/retention work exists across repository history | #1428, #1364 | purpose-scoped retention, legal hold, verified disposition, object/DB reconciliation |
-| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit, while unsupported binaries are not searchable | Naruon import transport and generic deferred parser admission are bounded at 64 MiB; the NewsDOM `/parse` provider contract remains 20 MiB, so PDF bytes from 20–64 MiB are admitted and retained fail-closed but are not sent to NewsDOM; unsupported types remain metadata-only | #1427, #1469, #1353, #1419, NewsDOM #682/#707 | one documented bounded admission contract, provider-side PDF limit alignment or an explicit large-PDF fallback, parser/status evidence, deferred recognition, and object-backed retention before increasing the bound again |
+| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit; one failed transaction also aborted subsequent files | Draft #1469 proposes 64 MiB retention and preserves real-PDF bytes/identity after size rejection and rollback; the separate 20 MiB guard rejects before network. This is source/local-test evidence, not a released 64 MiB capability; unsupported formats remain metadata-only | #1427, #1469, #1353, #1419; NewsDOM #665; Proposed ADR-0021/0023 | protect and release the canonical provider contract, pin it, verify real 64 MiB recognition and signed upload/retry, measure concurrent capacity and p95, and complete object-backed lifecycle before increasing the bound again |
 
 ### P0 — Evidence-based AI and document intelligence
 

@@ -22,12 +22,26 @@ establish that prerequisite: the actual fresh installation failed first.
 | #1468 current propagated owner | `53ce38ed6683d01a9d113069f5ac5a8f17e133a2` | Tree `723d9f4b4d503cf19b67d473a8d5398b7b0dd114`: normal merge of #1572, fresh/repeat 0020 and 131 strict PostgreSQL/search tests passed, zero skipped. |
 | #1427 current PDF lane | `cb08b1c3ea2aba8844fc29ef703c34368cc55e47` | Tree `526ba4181a710f96f61a1347720d606bdf92aa0f`: normal merge of #1468, fresh/repeat 0020 and 132 strict tests passed, zero skipped. ADR-0021 retains the colliding 0005 proposal. |
 | #1497 current combined restore | `69f50ae684f50c501ff2f49be2969f1d211d7f3c` | Tree `839d62316b5ff5f1e84e346e48982f0d4494c8c7`: normal merge of #1427; fresh/repeat 0021 and 345 strict tests passed, zero skipped, including unchanged large content, rollback identity, and incompatible writers. ADR-0022 retains the colliding 0007 proposal. |
+| #1469 current source-retention integration | `db083c9b30dc0156a46baa2cc0ffc3aec5444ab7` | Tree `db7f17d290de99234acbb5c906599b69b60cad74`: normal integration of #1427 and concurrent `facadfb1`; clean-lock fresh/repeat 0020 and 276 strict tests passed, zero failures/errors/skips. Real 40,758,835-byte PDF sources survive pending, size rejection, rollback and next-item continuation. No recognition/capacity/release claim. |
 
 The #1503 commit has the before-integration and #1565 heads as its two parents;
 neither history was rewritten. The verified pre-commit tree exactly matches
 the committed tree. Its direct PR base is #1565, not protected `develop`.
 All current lane rows are pushed source heads. Earlier intermediate results
 below are retained as causal history and do not override the current receipt.
+
+The #1469 [exact-head source-retention receipt](https://github.com/ContextualWisdomLab/naruon/blob/db083c9b30dc0156a46baa2cc0ffc3aec5444ab7/docs/doctoring/bounded-attachment-parse-source-contract.md)
+adds an actual worker exception-path check to manual transaction rollback.
+Two persisted records expose SQLAlchemy expiration after the first transaction
+is deliberately aborted: both attachment and document variants first fail with
+`MissingGreenlet`. Cache primitive IDs before processing and explicitly reload
+remaining pending records after rollback; no new query runs on the normal path.
+The focused 29-test receipt and exact-head combined 276-test receipt are
+separate. Complete retained bytes and stable identities are checked in fresh
+sessions with migration-created indexes enabled. The intentional fault log is
+asserted, not suppressed or misrepresented as successful provider execution.
+ADR-0023 remains Proposed; owner releases, realistic capacity, signed HTTP and
+browser paths, current-head Checks and independent approval remain open.
 
 ## Subsequent migrated integration and search-storage finding
 
