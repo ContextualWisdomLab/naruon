@@ -462,10 +462,12 @@ export function SearchLayout() {
     return results;
   }, [activeFilter, results]);
 
-  const activeResult =
+  // ⚡ Bolt: Memoize activeResult to prevent O(N) re-renders
+  const activeResult = useMemo(() => (
     filteredResults.find((result) => result.id === activeResultId) ??
     filteredResults[0] ??
-    null;
+    null
+  ), [filteredResults, activeResultId]);
   const activeOntologySourceKey = ontologySourceKey(activeResult);
   const activeOntologyUrl = activeResult
     ? buildOntologyUrl(activeResult)
