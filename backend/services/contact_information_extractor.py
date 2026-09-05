@@ -1,8 +1,8 @@
 """Pure, bounded contact-information extraction for explicitly supplied text."""
 
-from dataclasses import dataclass
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 MAX_CONTACT_INPUT_CHARS = 100_000
 _EMAIL_ATOM = r"A-Za-z0-9!#$%&'*+/=?^_`{|}~"
