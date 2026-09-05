@@ -1,4 +1,14 @@
-# ADR-0005: Bounded PDF DOM upload contract
+# Historical ADR-0005 proposal from the attachment branch
+
+This is the complete historical proposal from #1469 at
+`ed4bebeddf05ce1da0c76aca77448deef6254fbb`, not current implementation guidance.
+The same proposal's canonical identity is now
+[ADR-0021](../adr/0021-bounded-pdf-dom-upload-contract.md), inherited from #1427.
+Moving this snapshot out of the numbered ADR directory removes the duplicate
+identity without discarding its deferral rationale or claiming acceptance.
+The original content follows unchanged.
+
+## ADR-0005: Bounded PDF DOM upload contract
 
 **Status:** Proposed
 **Date:** 2026-08-20

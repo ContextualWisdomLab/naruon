@@ -328,6 +328,14 @@ async def process_pending_document(
             exc,
         )
         return RESULT_PENDING
+    except NewsdomPayloadTooLargeError as exc:
+        document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
+        logger.info(
+            "NewsDOM document %s exceeds the provider payload contract: %s",
+            getattr(document, "document_id", "?"),
+            exc,
+        )
+        return RESULT_FAILED
     except (NewsdomRequestError, ValueError) as exc:
         document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         logger.warning(

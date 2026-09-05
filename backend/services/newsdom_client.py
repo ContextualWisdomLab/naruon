@@ -34,8 +34,8 @@ _DNS_RESOLUTION_TIMEOUT_SECONDS = 5.0
 _LOCAL_DEV_HOSTNAMES = {"localhost", "localhost.localdomain"}
 _LOCAL_DEV_IP_LITERALS = {"127.0.0.1", "::1"}
 _DEFAULT_PARSE_TIMEOUT_SECONDS = 300.0
-# The deployed NewsDOM ``/parse`` contract accepts at most 20 MiB. Keep this
-# boundary explicit so deferred 64 MiB retention cannot remain pending forever.
+# NewsDOM's verified protected-source ``/parse`` guard is 20 MiB; this does not
+# prove a deployed version. Raise only after an immutable owner release is pinned.
 NEWSDOM_MAX_PARSE_UPLOAD_BYTES = 20 * 1024 * 1024
 
 

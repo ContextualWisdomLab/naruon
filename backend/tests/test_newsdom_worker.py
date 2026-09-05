@@ -1,7 +1,7 @@
 """Unit tests for the NewsDOM recognition worker's per-item processing.
 
-Fully mocked: in-memory models, an injected async config resolver, and a canned
-sidecar ``request_fn`` — no database, no network. Covers the fail-closed
+In-memory models, an injected async config resolver, and canned sidecar
+responses or the real pre-network size guard — no database, no network. Covers the fail-closed
 outcomes (unconfigured -> pending, bad payload -> failed, empty response ->
 failed) that keep a pending PDF from ever masquerading as parsed.
 """
@@ -9,13 +9,15 @@ failed) that keep a pending PDF from ever masquerading as parsed.
 import asyncio
 import base64
 import logging
+from random import Random
 from types import SimpleNamespace
 
 import pytest
 
 from db.models import Attachment, Document, Email
 from services.content_graph import ContentSegment, ParseResult
-from services.newsdom_client import NewsdomConfigurationError, NewsdomPayloadTooLargeError
+from services.newsdom_client import NewsdomConfigurationError
+import services.newsdom_client as newsdom_client_module
 from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_FAILED_STATUS,
     PDF_DOM_RECOGNITION_PENDING_STATUS,
@@ -78,14 +80,17 @@ def _pending_attachment(
     return attachment
 
 
-def _pending_document(document_id: str, *, organization_id: str = "org-1") -> Document:
+def _pending_document(
+    document_id: str, *, organization_id: str = "org-1", payload: bytes = b"%PDF-1.7 fake"
+) -> Document:
+    """Create an in-memory pending document with the supplied unit-test bytes."""
     return Document(
         document_id=document_id,
         workspace_id="ws-1",
         organization_id=organization_id,
         document_name="news.pdf",
         document_type="pdf",
-        document_content=base64.b64encode(b"%PDF-1.7 fake").decode("ascii"),
+        document_content=base64.b64encode(payload).decode("ascii"),
         document_status=PDF_DOM_RECOGNITION_PENDING_STATUS,
     )
 
@@ -222,25 +227,82 @@ async def test_attachment_failed_on_empty_sidecar_response():
 
 
 @pytest.mark.asyncio
-async def test_attachment_above_provider_limit_fails_instead_of_remaining_pending(caplog):
-    attachment = _pending_attachment()
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+async def test_large_source_is_retained_when_real_provider_guard_rejects(
+    source_kind, caplog, monkeypatch
+):
+    """Both worker paths retain actual over-limit bytes after bounded rejection."""
+    payload = b"%PDF-" + Random(1469).randbytes(20 * 1024 * 1024 - 4)
+    source_record = (
+        _pending_attachment(payload)
+        if source_kind == "attachment"
+        else _pending_document("doc-size-boundary", payload=payload)
+    )
+    process_source = (
+        process_pending_attachment if source_kind == "attachment" else process_pending_document
+    )
 
-    async def oversized_request(**_kwargs):
-        raise NewsdomPayloadTooLargeError("provider limit")
+    async def reject_validation(_base_url):
+        """Fail if an oversized retained source reaches DNS validation."""
+        pytest.fail("oversized retained source reached address validation")
+
+    monkeypatch.setattr(
+        newsdom_client_module, "validate_newsdom_base_url_details_async", reject_validation
+    )
 
     with caplog.at_level(logging.INFO, logger="services.newsdom_worker"):
-        result = await process_pending_attachment(
+        result = await process_source(
             session=object(),
-            attachment=attachment,
+            **{source_kind: source_record},
             config_resolver=await _resolver_with(_config()),
-            request_fn=oversized_request,
+            request_fn=newsdom_client_module.request_pdf_dom,
         )
 
     assert result == RESULT_FAILED
-    assert attachment.parse_status == PDF_DOM_RECOGNITION_FAILED_STATUS
-    assert attachment.parse_error_code == "provider_payload_size_exceeded"
-    records = [record for record in caplog.records if "exceeds the provider payload contract" in record.message]
+    if source_kind == "attachment":
+        assert source_record.parse_status == PDF_DOM_RECOGNITION_FAILED_STATUS
+        assert source_record.parse_error_code == "provider_payload_size_exceeded"
+        retained_content = source_record.content
+    else:
+        assert source_record.document_status == PDF_DOM_RECOGNITION_FAILED_STATUS
+        retained_content = source_record.document_content
+    assert base64.b64decode(retained_content, validate=True) == payload
+    records = [record for record in caplog.records if record.name == "services.newsdom_worker"]
     assert records and all(record.levelno == logging.INFO for record in records)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["attachment", "document"])
+async def test_full_size_source_stays_pending_and_intact_without_provider(source_kind):
+    """Absence of a provider must not destroy or process a retained 64 MiB source."""
+    payload = b"%PDF-" + Random(1469).randbytes(64 * 1024 * 1024 - 5)
+    source_record = (
+        _pending_attachment(payload)
+        if source_kind == "attachment"
+        else _pending_document("doc-unconfigured-boundary", payload=payload)
+    )
+    process_source = (
+        process_pending_attachment if source_kind == "attachment" else process_pending_document
+    )
+
+    async def reject_request(**_kwargs):
+        """Fail if an unconfigured record reaches recognition."""
+        pytest.fail("unconfigured source reached recognition")
+
+    result = await process_source(
+        session=object(),
+        **{source_kind: source_record},
+        config_resolver=await _resolver_with(None),
+        request_fn=reject_request,
+    )
+    assert result == RESULT_PENDING
+    if source_kind == "attachment":
+        assert source_record.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+        retained_content = source_record.content
+    else:
+        assert source_record.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+        retained_content = source_record.document_content
+    assert base64.b64decode(retained_content, validate=True) == payload
 
 
 @pytest.mark.asyncio

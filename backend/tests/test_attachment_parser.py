@@ -1,10 +1,10 @@
 import base64
+from random import Random
 
 import pytest
 
 from services.attachment_parser import (
     _safe_filename,
-    MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
     MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
     decode_deferred_attachment_payload,
     get_attachment_parser_manifest,
@@ -161,9 +161,18 @@ def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
     assert result.parse_error_code == "unsupported_content_type"
 
 
-def test_attachment_source_budget_accepts_payloads_above_twenty_mib():
-    assert MAX_ATTACHMENT_PARSE_SOURCE_BYTES == 64 * 1024 * 1024
-    assert MAX_ATTACHMENT_PARSE_SOURCE_BYTES > 20 * 1024 * 1024
+@pytest.mark.parametrize("payload_size", [20 * 1024 * 1024 + 1, 64 * 1024 * 1024])
+def test_large_pdf_source_round_trips_at_real_admission_boundaries(payload_size):
+    """Retain every byte above the former limit and at the actual ceiling."""
+    payload = b"%PDF-" + Random(1469).randbytes(payload_size - 5)
+    result = parse_email_attachment(
+        filename="boundary.pdf", content_type="application/pdf", raw_content=payload
+    )
+
+    assert result.parse_status == "pdf_dom_recognition_pending"
+    assert result.parse_error_code is None
+    assert result.parse_content == ""
+    assert decode_deferred_attachment_payload(result.content) == payload
 
 
 def test_pdf_attachment_is_deferred_pending_newsdom_recognition():
@@ -212,10 +221,11 @@ def test_invalid_pdf_payload_is_rejected_before_deferred_recognition():
 
 
 def test_oversized_pdf_payload_is_not_retained():
+    """Reject one byte above 64 MiB without persisting the rejected source."""
     result = parse_email_attachment(
         filename="huge.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-" + b"A" * MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
+        raw_content=b"%PDF-" + Random(1469).randbytes(64 * 1024 * 1024 - 4),
     )
 
     assert result.content == ""
