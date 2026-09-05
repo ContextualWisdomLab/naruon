@@ -54,6 +54,10 @@ enterprise document text searchable without model dependence.
   type from `decode_deferred_attachment_payload()` still get PDF validation.
 - Invalid HWPX/HWP/PDF payloads fail closed and are not retained as deferred
   parser inputs.
+- The recognition worker reads only canonical `Contents/sectionN.xml` members,
+  bounds each section and the aggregate XML bytes, rejects entity declarations,
+  and lands paragraph text with stable content-graph provenance. The worker
+  never executes package content or follows external resources.
 
 ## Active HWPX semantic-recognition boundary — PR #1373
 
@@ -110,7 +114,7 @@ primary technical documentation.
 
 | Boundary | Current bound | Applied at | Purpose |
 | --- | ---: | --- | --- |
-| Complete deferred source | 20 MiB | import + deferred decode | Prevent oversized payload retention. |
+| Complete deferred source | 64 MiB | import + deferred decode | Align deferred retention with the email import transport while bounding memory and database payload growth. |
 | ZIP entry count | 4,096 | import + worker | Bound member-object and traversal work. |
 | Central-directory bytes | 4 MiB | import | Bound metadata parsing before member materialization. |
 | Aggregate decoded member-name bytes | 1 MiB | import + worker | Prevent path/name metadata amplification. |
@@ -263,3 +267,9 @@ https://tech.hancom.com/python-hwpx-parsing-2/
 
 PKWARE, Inc. (2024). *APPNOTE.TXT: .ZIP file format specification*.
 https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+
+Fielding, R., Nottingham, M., & Reschke, J. (Eds.). (2022). *HTTP semantics*
+(RFC 9110). RFC Editor. https://doi.org/10.17487/RFC9110
+
+World Wide Web Consortium. (2008, November 26). *Extensible Markup Language
+(XML) 1.0 (Fifth Edition)*. https://www.w3.org/TR/xml/

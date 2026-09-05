@@ -1,4 +1,8 @@
 ## [Unreleased]
+- HWPX `Contents/sectionN.xml`을 bounded worker에서 안전하게 읽어 문단·content graph로 저장합니다. 기존 64MiB 원본·ZIP 경계를 유지하고 XML entity 선언, 암호화/미지원 압축, section별·전체 XML 확장을 fail-closed 합니다. HWP 바이너리는 별도 sandbox converter가 생길 때까지 `hwp_conversion_pending`으로 보류합니다. `backend/tests/test_hwpx_recognition.py`와 worker 회귀 테스트가 실제 ZIP/XML 문서 경로와 오류 경계를 검증합니다.
+- HWP/HWPX 첨부파일을 명시적인 지연 인식 경계로 분류하고, HWP OLE+FileHeader 및 HWPX ZIP/mimetype 서명을 bounded preflight 합니다. 유효한 원본은 64MiB까지 base64 deferred payload로 보존하고, 손상·위조·과대 입력은 안정적인 rejection status로 fail-closed 합니다. ADR-0006과 APA 7th 근거를 함께 기록했으며 HWP binary 변환·OCR·LLM 해석은 아직 제공하지 않습니다.
+- Starlette `TestClient`의 기존 `httpx2==2.5.0` pin을 core 개발·테스트 의존성으로 승격하고, deprecated `httpx` fallback 경고 억제를 제거했습니다.
+- 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
