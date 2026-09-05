@@ -33,12 +33,22 @@ class ContactInformationMatches:
     phone_numbers: tuple[str, ...]
 
 
-def _mailbox_identity(value: str) -> tuple[str, str]:
-    """Return exact local-part plus case-insensitive domain identity for one mailbox."""
+def _domain_identity(domain_part: str) -> tuple[tuple[str, str], ...]:
+    """Compare ASCII DNS labels case-insensitively and Unicode U-labels exactly."""
+    return tuple(
+        ("ascii", label.casefold()) if label.isascii() else ("unicode", label)
+        for label in domain_part.split(".")
+    )
+
+
+def _mailbox_identity(
+    value: str,
+) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """Return exact local-part plus loss-avoiding domain identity for one mailbox."""
     local_part, separator, domain_part = value.rpartition("@")
     if not separator:
-        return value, ""
-    return local_part, domain_part.casefold()
+        return value, ()
+    return local_part, _domain_identity(domain_part)
 
 
 def _deduplicate_matches(
@@ -65,13 +75,15 @@ def _deduplicate_matches(
 def extract_contact_information(text: str) -> ContactInformationMatches:
     """Extract bounded email/phone patterns from caller-supplied text with no side effects.
 
-    Mailbox local-parts are preserved and compared exactly while domains are compared
-    case-insensitively. This avoids collapsing distinct SMTP mailboxes solely because
-    their local-parts differ by case. The function does not log, persist, index, or
-    transmit the input or extracted PII. Callers remain responsible for authorization,
-    purpose limitation, retention, and any downstream disclosure. Pattern matching is
-    intentionally bounded and is not a claim that every international email address or
-    telephone numbering plan is recognized.
+    Mailbox local-parts are preserved and compared exactly. ASCII DNS/A-label domain
+    labels are compared case-insensitively, while non-ASCII IDNA U-labels are compared
+    exactly so irreversible Unicode case folding cannot collapse distinct domain names.
+    The function does not perform IDNA A-label/U-label conversion, normalization, or
+    deliverability validation. It does not log, persist, index, or transmit the input or
+    extracted PII. Callers remain responsible for authorization, purpose limitation,
+    retention, and downstream disclosure. Pattern matching is intentionally bounded and
+    is not a claim that every international email address or telephone numbering plan is
+    recognized.
     """
     if len(text) > MAX_CONTACT_INPUT_CHARS:
         raise ValueError(
