@@ -251,6 +251,16 @@ in this repo.
 - Do not present a heuristic as a security, AI-quality, or completion
   guarantee. State its evidence boundary and replace it at the canonical owner
   when the workflow requires an enforceable contract.
+- `/api/llm/summarize` confidence is a backend integer percentage in `0..100`.
+  Frontend unit, E2E, pilot, and full-product fixtures must preserve that unit
+  exactly; malformed non-integers and out-of-range values fail closed. They must
+  not reintroduce `0..1` ratios, silently round values, or infer units from
+  magnitude. They must not infer the unit from the numeric value.
+- Dynamic `/api/tools` `POST`/`PATCH`/`DELETE` stays unavailable until durable
+  signed-session tenant/workspace ownership, administrative authorization,
+  built-in immutability, and a real provider/adapter execution target exist.
+  A mock or placeholder handler must never report successful work; missing
+  mutation authority or execution capability fails closed.
 - Pending or queued reviews and checks are wait states. Continue safe work on
   another gap. Before calling a PR merge-ready, freshly verify the exact head
   and base, live rulesets, required checks, unresolved threads, and applicable
