@@ -112,18 +112,23 @@ no buyer-visible latency claim or protected-branch completion is recorded.
 
 **Backend test-runtime dependency refresh (2026-09-04T17:35Z):** Minimal
 protected-base prerequisite PR #1565 exact head
-`3a4ec5833db649994dc0042653d1d29f71010cfd` removes the Starlette `TestClient`
+`52dfc863d1a5d6e4e80b6366f719dd09f2aa6172` removes the Starlette `TestClient`
 warning suppression and promotes the already used optional-agent
 `httpx2==2.5.0` pin into the core development, direct test, project lock, and
 hash lock contracts. The current head also includes that pin in the shared
-SHA-256 digest-format assertion instead of checking only record presence. This
+SHA-256 digest-format assertion instead of checking only record presence, and
+a runtime test proves Starlette selects the `httpx2` module rather than its
+deprecated fallback. PyPI's 2.5.0 trusted-publishing attestation and wheel
+digest match the lock; the Starlette release history, exact provenance, rollback,
+and APA 7th references are recorded in
+`docs/doctoring/starlette-httpx2-testclient-dependency.md`. This
 was found while validating utility consumer PR
 #1538 (`6dd0344cef29de760ba56ef2568e888b1963dfc8`): its source tests could not
 collect under Python 3.14 with warnings as
 errors because protected `develop` omitted the direct test dependency. Frozen
 sync and the predecessor's 65 focused tests passed without the warning; the
-current head independently passes 36 pin/release-governance tests with warnings
-as errors, Ruff, and diff checks. Broad dependency-upgrade PR #1494 exact head
+current head independently passes the two focused manifest/runtime tests with
+warnings as errors, Ruff, and diff checks. Broad dependency-upgrade PR #1494 exact head
 `8ac9cfbe882bddfb85c44e84aca5c8ee841a3453` remains the successor owner for
 `httpx2==2.12.0` and its other package migrations; it also removes the
 suppression rather than reviving it. PR #1538 remains Draft until the minimal
@@ -132,10 +137,9 @@ complete. Its release note now names only the two effective tools and does not
 claim the removed URL extractor. It distinguishes MD5/SHA-1 compatibility
 fingerprints from the SHA-256 security hash and retains `usedforsecurity=False`
 at that boundary. Seventy-one focused tests, Ruff, and diff checks pass, while
-current-head hosted checks are queued. PR #1565 is now Ready; repo-local Application CI, Bandit, and Docker
-were rerun once on their existing exact-head handles, and central review
-dispatch `33934750107` is queued with merge, auto-merge, and branch updates
-disabled. No gate evidence transfers between the owner, upgrade, and consumer
+current-head hosted checks are queued. PR #1565 remains Draft; 21 exact-head
+checks are queued and five are skipped, with no completed failure at the latest
+read. No gate evidence transfers between the owner, upgrade, and consumer
 heads.
 
 **Frontend dependency security refresh (2026-09-05T02:38Z):** Dependabot alert
