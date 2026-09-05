@@ -29,8 +29,8 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
-**Governed review evidence refresh (2026-09-05T04:31Z):** Naruon PR #1564
-(`24a2a46eaa3bca6c67b604f1c2cc224a495950f7`) records the reusable exact-head,
+**Governed review evidence refresh (2026-09-05T06:08Z):** Naruon PR #1564
+(`615be4514add6a21eef743f591a65a5f8fef4dee`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
 procedure in `AGENTS.md`. Its current revision separates pre-merge readiness
 evidence from post-merge commit verification and names the applicable
@@ -49,9 +49,12 @@ retained with a focused governance regression test. The OpenCode gateway
 contract pins the token destination to the owner's documented loopback endpoint,
 removes the arbitrary base-URL environment input, and disables the supported
 client request timeout so long-running model work is not cut off at the default
-limit. Exact-head focused proof is `36 passed`; all 15 current review threads
-are resolved. With no source failure or merge conflict, the PR is Ready for
-independent review while nine hosted checks remain queued.
+limit. The current repair also replaces the provider's implicit API-key option
+with an explicit standard `Authorization` header. The fixed loopback origin and
+Fetch credential stripping on cross-origin redirects keep the short-lived owner
+token from following a redirect to another origin. Exact-head focused proof is
+`36 passed`; CodeRabbit and hosted checks are pending on the repaired head. With
+no source failure or merge conflict, the PR remains Ready for independent review.
 Canonical workflow
 owner PR ContextualWisdomLab/.github #1850
 (`8eccc85378a842986e767e056960d8f544803c1d`) repairs two evidence losses. It
@@ -1559,6 +1562,9 @@ not an eviction or lineage claim.
 
 ### APA 7th references
 
+Anomaly. (2026). *Providers: Custom provider*. OpenCode.
+https://opencode.ai/docs/providers
+
 Crispin, M. (2003). *Internet Message Access Protocol—Version 4rev1* (RFC
 3501). RFC Editor. https://doi.org/10.17487/RFC3501
 
@@ -1596,6 +1602,9 @@ version 1.2*. https://slsa.dev/spec/v1.2/
 
 OpenTelemetry Authors. (2026). *OpenTelemetry specification, version 1.60.0*.
 https://opentelemetry.io/docs/specs/otel/
+
+WHATWG. (2026). *Fetch standard: HTTP-redirect fetch*.
+https://fetch.spec.whatwg.org/#http-redirect-fetch
 
 Elkady, H. (2026). *Anti-Slop UI: A Deterministic State-Machine Architecture
 for Eliminating Design Hallucinations in LLM-Generated Interfaces*. Local Over.
