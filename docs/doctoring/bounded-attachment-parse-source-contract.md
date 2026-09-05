@@ -12,26 +12,46 @@ content.
 
 ## Contract
 
-`MAX_ATTACHMENT_PARSE_SOURCE_BYTES` is 64 MiB, matching the authenticated email
-import budget. The parser is fail-closed:
+`MAX_ATTACHMENT_PARSE_SOURCE_BYTES` is a proposed 64 MiB Naruon retention
+budget, matching the authenticated email-import ceiling. The parser is
+fail-closed:
 
 - supported text formats are parsed inline within the existing character bound;
-- PDF bytes are retained only for bounded deferred NewsDOM recognition;
+- validated PDF bytes may be retained only for bounded deferred NewsDOM recognition;
 - unsupported binary formats return `unsupported_content_type`,
   `unsupported_binary`, and empty content;
-- oversized source bytes return `parse_size_limit_exceeded` and empty content.
+- oversized Naruon source bytes return `parse_size_limit_exceeded` and empty content;
+- the NewsDOM client independently enforces the verified protected-source
+  20 MiB guard, and the attachment worker persists
+  `provider_payload_size_exceeded` when that boundary rejects a retained PDF.
+  This source guard is not evidence of a released or deployed capacity.
 
-This preserves provenance without claiming that an unsupported file was parsed.
-The quality surface exposes the parser key and status, not raw attachment bytes,
+This separation preserves provenance without claiming that a source retained by
+Naruon was accepted by an external provider. An open owner PR is evidence of a
+candidate contract only; provider-size parity becomes consumable only after an
+immutable NewsDOM release is verified and pinned. ADR-0021 owns the separate
+direct PDF-DOM upload proposal and the same immutable-release prerequisite.
+
+The quality surface exposes parser key and status, not raw attachment bytes,
 message IDs, attachment IDs, credentials, or customer payloads.
 
 ## Evidence and next action
 
-The parser boundary is tested in
-`backend/tests/test_attachment_parser.py`. The import transport is tested in
-`backend/tests/test_email_import_service.py`. If a customer needs a currently
-unsupported format, add a dedicated parser proposal with sandbox, dependency,
-provenance, and exact-head regression evidence before changing the registry.
+- `backend/tests/test_attachment_parser.py` covers the Naruon 64 MiB retention
+  boundary and metadata-only unsupported binaries.
+- `backend/tests/test_newsdom_client.py` covers provider-size preflight before
+  network I/O.
+- `backend/tests/test_newsdom_worker.py` covers persistent provider-size failure
+  evidence instead of silent pending state.
+- `backend/tests/test_email_import_service.py` retains import-transport coverage.
+- [ADR-0021](../adr/0021-bounded-pdf-dom-upload-contract.md) remains Proposed and
+  blocked on the immutable owner release/pin; this document does not upgrade it.
+
+If a customer needs a currently unsupported format, add a dedicated parser
+proposal with sandbox, dependency, provenance, and exact-head regression
+evidence before changing the registry. If provider transport is raised, verify
+the immutable owner release first, then bump the Naruon released-contract
+boundary and rerun exact-head integration evidence.
 
 ## 2026-09-05 owner-stack repair
 
