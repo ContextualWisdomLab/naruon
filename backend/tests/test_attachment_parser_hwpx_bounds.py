@@ -87,9 +87,7 @@ def test_hwpx_recognition_bounds_aggregate_member_name_bytes(
     """Reject metadata expansion through many or very long member names."""
     monkeypatch.setattr(parser, "MAX_HWPX_ZIP_NAME_BYTES", 32)
 
-    result = _parse_hwpx(
-        _hwpx_bytes(extra_entries=(f"Contents/{'x' * 64}.xml",))
-    )
+    result = _parse_hwpx(_hwpx_bytes(extra_entries=(f"Contents/{'x' * 64}.xml",)))
 
     assert result.parse_status == "invalid_hwpx_payload"
 

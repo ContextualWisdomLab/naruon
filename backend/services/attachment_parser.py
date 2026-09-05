@@ -8,6 +8,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from .text_safety import strip_html_markup
 
@@ -35,11 +36,15 @@ _ZIP_END_RECORD_SIZE = 22
 _ZIP_MAX_COMMENT_BYTES = 65_535
 _ZIP_END_RECORD = struct.Struct("<4s4H2LH")
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
-MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
+# Keep deferred attachment retention aligned with the email import transport.
+MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 64 * 1024 * 1024
 MAX_HWPX_ZIP_ENTRIES = 4_096
 MAX_HWPX_CENTRAL_DIRECTORY_BYTES = 4 * 1024 * 1024
 MAX_HWPX_ZIP_NAME_BYTES = 1 * 1024 * 1024
 MAX_HWPX_MIMETYPE_BYTES = 128
+HWPX_XML_PACKAGE_PENDING_STATUS = "hwpx_xml_package_pending"
+HWP_CONVERSION_PENDING_STATUS = "hwp_conversion_pending"
+MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS = 3
 
 
 @dataclass(frozen=True)
@@ -115,14 +120,14 @@ _PARSER_MANIFEST = (
         display_name="HWPX documents (OWPML XML package recognition)",
         content_types=_HWPX_CONTENT_TYPES,
         extensions=(".hwpx", ".owpml"),
-        parse_status="hwpx_xml_package_pending",
+        parse_status=HWPX_XML_PACKAGE_PENDING_STATUS,
     ),
     AttachmentParserDescriptor(
         parser_key="hwp",
         display_name="HWP binary documents (sandboxed conversion)",
         content_types=_HWP_CONTENT_TYPES,
         extensions=(".hwp",),
-        parse_status="hwp_conversion_pending",
+        parse_status=HWP_CONVERSION_PENDING_STATUS,
     ),
     AttachmentParserDescriptor(
         parser_key="unsupported_binary",
@@ -138,8 +143,8 @@ _PARSER_MANIFEST = (
 _DEFERRED_PARSE_STATUSES = frozenset(
     {
         "pdf_dom_recognition_pending",
-        "hwpx_xml_package_pending",
-        "hwp_conversion_pending",
+        HWPX_XML_PACKAGE_PENDING_STATUS,
+        HWP_CONVERSION_PENDING_STATUS,
     }
 )
 _SUPPORTED_CONTENT_TYPES = {
@@ -317,8 +322,19 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 def _safe_filename(filename: str | None) -> str:
     """Return a basename-only attachment display filename."""
-    display_filename = strip_html_markup(_sanitize_nul(filename or "attachment"))
-    display_filename = Path(display_filename).name.strip()
+    display_filename = filename or "attachment"
+    for _ in range(MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS):
+        decoded_filename = unquote(display_filename)
+        if decoded_filename == display_filename:
+            break
+        display_filename = decoded_filename
+    # Entity-encoded percent escapes (for example ``&#37;2e``) only become
+    # literal ``%`` sequences during markup decoding, so the residual-encoding
+    # guard must run after ``strip_html_markup`` to stay fail-closed.
+    display_filename = strip_html_markup(_sanitize_nul(display_filename))
+    if unquote(display_filename) != display_filename:
+        return "attachment"
+    display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
     return display_filename
@@ -351,6 +367,10 @@ def decode_deferred_attachment_payload(
     worker can record an error status instead of crashing.
     """
     parse_content_type = _normalize_content_type(expected_content_type)
+    if parse_content_type not in _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE:
+        raise ValueError(
+            "Pending attachment content type is not a deferred parser type"
+        )
     try:
         payload = base64.b64decode((content or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
@@ -460,8 +480,7 @@ def _is_hwpx_payload(payload: bytes) -> bool:
 
     has_manifest = "Contents/content.hpf" in names or "META-INF/manifest.xml" in names
     has_section = any(
-        name.startswith("Contents/section") and name.endswith(".xml")
-        for name in names
+        name.startswith("Contents/section") and name.endswith(".xml") for name in names
     )
     return (
         mimetype == _HWPX_MIMETYPE

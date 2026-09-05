@@ -5,12 +5,14 @@ import zipfile
 import pytest
 
 from services.attachment_parser import (
+    _safe_filename,
     MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
     MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
     decode_deferred_attachment_payload,
     get_attachment_parser_manifest,
     parse_email_attachment,
 )
+from services import attachment_parser as parser
 
 
 def _minimal_hwpx_bytes() -> bytes:
@@ -241,16 +243,23 @@ def test_invalid_pdf_payload_is_rejected_before_deferred_recognition():
     assert result.parse_error_code == "invalid_pdf_payload"
 
 
-def test_oversized_pdf_payload_is_not_retained():
+def test_oversized_pdf_payload_is_not_retained(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 8
+    )
     result = parse_email_attachment(
         filename="huge.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-" + b"A" * MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
+        raw_content=b"%PDF-" + b"A" * 8,
     )
 
     assert result.content == ""
     assert result.parse_status == "parse_size_limit_exceeded"
     assert result.parse_error_code == "parse_size_limit_exceeded"
+
+
+def test_deferred_attachment_source_limit_exceeds_twenty_megabytes():
+    assert MAX_ATTACHMENT_PARSE_SOURCE_BYTES > 20 * 1024 * 1024
 
 
 @pytest.mark.parametrize(
@@ -308,16 +317,20 @@ def test_hwpx_attachment_is_deferred_for_structured_xml_package():
     assert result.parser_key == "hwpx"
     assert result.parse_status == "hwpx_xml_package_pending"
     assert result.parse_error_code is None
-    assert decode_deferred_attachment_payload(
-        result.content,
-        "application/hwp+zip",
-    ) == raw
+    assert (
+        decode_deferred_attachment_payload(
+            result.content,
+            "application/hwp+zip",
+        )
+        == raw
+    )
 
 
-def test_hwpx_extension_with_generic_content_type_is_deferred_pending():
+@pytest.mark.parametrize("filename", ["proposal.hwpx", "proposal.owpml"])
+def test_hwpx_extension_with_generic_content_type_is_deferred_pending(filename):
     raw = _minimal_hwpx_bytes()
     result = parse_email_attachment(
-        filename="proposal.hwpx",
+        filename=filename,
         content_type="application/octet-stream",
         raw_content=raw,
     )
@@ -326,6 +339,11 @@ def test_hwpx_extension_with_generic_content_type_is_deferred_pending():
     assert result.parse_content_type == "application/hwp+zip"
     assert result.parser_key == "hwpx"
     assert result.parse_status == "hwpx_xml_package_pending"
+
+
+def test_deferred_decoder_rejects_unsupported_content_type_before_decoding():
+    with pytest.raises(ValueError, match="not a deferred parser type"):
+        decode_deferred_attachment_payload("not base64!", "application/octet-stream")
 
 
 def test_invalid_hwpx_payload_is_rejected_before_xml_package_recognition():
@@ -363,10 +381,13 @@ def test_hwp_attachment_is_deferred_for_sandboxed_conversion():
     assert result.parser_key == "hwp"
     assert result.parse_status == "hwp_conversion_pending"
     assert result.parse_error_code is None
-    assert decode_deferred_attachment_payload(
-        result.content,
-        "application/x-hwp",
-    ) == raw
+    assert (
+        decode_deferred_attachment_payload(
+            result.content,
+            "application/x-hwp",
+        )
+        == raw
+    )
 
 
 def test_hwp_extension_with_generic_content_type_is_deferred_pending():
@@ -400,3 +421,84 @@ def test_deferred_hwp_decoder_rejects_non_hwp_payload():
     not_hwp = base64.b64encode(b"plain bytes").decode("ascii")
     with pytest.raises(ValueError, match="not a HWP binary"):
         decode_deferred_attachment_payload(not_hwp, "application/x-hwp")
+
+
+def test_parser_handles_unknown_parser_key_and_invalid_display_filename():
+    assert parser._parser_key_for("application/x-unknown", "parsed") == (
+        "unsupported_binary"
+    )
+
+    result = parse_email_attachment(
+        filename="\x00",
+        content_type="application/zip",
+        raw_content=b"opaque",
+    )
+
+    assert result.filename == "attachment"
+
+
+def test_deferred_decoder_rejects_invalid_base64():
+    with pytest.raises(ValueError, match="not valid base64"):
+        decode_deferred_attachment_payload("not base64!")
+
+
+@pytest.mark.parametrize("raw_content", [None, b"binary text", 12345])
+def test_text_parser_coerces_empty_bytes_and_other_values(raw_content):
+    result = parse_email_attachment(
+        filename="notes.txt",
+        content_type="text/plain",
+        raw_content=raw_content,
+    )
+
+    assert result.parse_status == "parsed"
+    expected_content = (
+        ""
+        if raw_content is None
+        else raw_content.decode("utf-8")
+        if isinstance(raw_content, bytes)
+        else str(raw_content)
+    )
+    assert result.parse_content == expected_content
+
+
+def test_hwpx_recognition_fails_closed_when_zip_reader_errors(monkeypatch):
+    payload = _minimal_hwpx_bytes()
+
+    def raise_os_error(*args, **kwargs):
+        raise OSError("zip reader unavailable")
+
+    monkeypatch.setattr(parser.zipfile, "ZipFile", raise_os_error)
+
+    result = parse_email_attachment(
+        filename="broken.hwpx",
+        content_type="application/hwp+zip",
+        raw_content=payload,
+    )
+
+    assert result.parse_status == "invalid_hwpx_payload"
+    assert result.parse_error_code == "invalid_hwpx_payload"
+
+
+def test_safe_filename_handles_windows_path_traversal():
+    assert _safe_filename("..\\..\\upload.txt") == "upload.txt"
+    assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"
+    assert _safe_filename("%5c%2e%2e%5csecret.txt") == "secret.txt"
+    assert _safe_filename("%252e%252e%252fsecret.txt") == "secret.txt"
+    assert _safe_filename("%252525252e%252525252e%252525252fsecret.txt") == "attachment"
+
+
+def test_safe_filename_fails_closed_after_entity_decoding():
+    """Entity-encoded percent escapes must trip the residual guard post-decode."""
+    assert _safe_filename("&#37;2e&#37;2e&#37;2fsecret.txt") == "attachment"
+
+
+def test_safe_filename_plain_percent_encoded_traversal_still_decodes_to_basename():
+    """Single percent-encoded traversal still decodes in-round to its basename."""
+    assert _safe_filename("%2e%2e%2fsecret.txt") == "secret.txt"
+
+
+def test_safe_filename_benign_name_survives_unchanged():
+    assert _safe_filename("annual-report-2026.pdf") == "annual-report-2026.pdf"
+    assert _safe_filename("quarterly report & notes.pdf") == (
+        "quarterly report & notes.pdf"
+    )
