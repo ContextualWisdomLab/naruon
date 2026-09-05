@@ -245,16 +245,19 @@ in this repo.
   the context after protected-branch repair, and rerun its evidence. It does not
   authorize suppressing a product or security finding.
 - Model-backed OpenCode, Strix, and Noema workflows request only
-  `contextual-orchestrator/orchestrator/free` with the gateway credential.
+  `contextual-orchestrator/orchestrator/free` with the gateway token.
   Provider discovery, capability routing, and fallback belong to the
-  orchestrator; consumer workflows do not carry provider names, direct-provider
-  credentials, or paid fallbacks. Verify the requested logical model, endpoint,
-  served-model metadata, and terminal response in the same run.
+  orchestrator; consumer workflows do not carry provider names, model names,
+  direct-provider credentials, or paid fallbacks. Production consumption
+  requires an immutable released owner API/client/schema; an open PR or
+  unreleased branch is proposed evidence, not a consumable contract. Verify the
+  requested logical model, endpoint, served-model metadata, and terminal
+  response in the same run.
 - Keep private-source review fail closed and ZDR-only. Never log or copy bearer
   tokens, provider credentials, request payloads, or secret-derived values.
   Repair shared sidecar startup, credential bootstrap, timeout handling, and
   response normalization where all review paths converge.
-- Do not impose a shared application, agent, or gateway wall-clock timeout on
+- Do not impose a shared application/agent/gateway wall-clock timeout on
   model work. The default is unset; only explicit user cancellation, a provider
   terminal result, or a configured administrator limit ends it. OpenCode,
   Strix, and Noema jobs must permit at least two hours, but that job budget is
