@@ -125,7 +125,10 @@ as errors, Ruff, and diff checks. Broad dependency-upgrade PR #1494 exact head
 `httpx2==2.12.0` and its other package migrations; it also removes the
 suppression rather than reviving it. PR #1538 remains Draft until the minimal
 prerequisite is protected-merged and its own unchanged-head review and Checks
-complete. No gate evidence transfers between the owner, upgrade, and consumer
+complete. PR #1565 is now Ready; repo-local Application CI, Bandit, and Docker
+were rerun once on their existing exact-head handles, and central review
+dispatch `33934750107` is queued with merge, auto-merge, and branch updates
+disabled. No gate evidence transfers between the owner, upgrade, and consumer
 heads.
 
 **Frontend dependency security refresh (2026-09-05T00:40Z):** Dependabot alert
