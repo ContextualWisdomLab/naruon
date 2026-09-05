@@ -926,12 +926,13 @@ resolved. The deleted-workflow `noema-review` run body returns 404, but retained
 check-run annotations prove a single gateway-owned attempt served by
 `google/gemma-4-31b-it` ended after 310.3 seconds with an upstream HTTP 502 in
 `response_error`; this is provider failure rather than source evidence. The
-remaining metadata gate also records a cancelled Strix run. Central
-merge-scheduler run `33896429098` was dispatched for this exact head with
-branch updates and merge disabled but later completed as cancelled. One bounded
-replacement dispatch, run `33917903607`, is queued with the same no-merge and
-no-update boundary, so no protected completion claim transfers from the local
-evidence.
+remaining metadata gate also records a cancelled Strix run. Contextual
+Orchestrator PR #1049 (`87612a68b3af1f305bb7b09bd0be860bad1b7fd6`)
+owns the missing `orchestrator/free` 502 failover: its focused tests and package
+quality checks pass, its review thread is resolved, and its current Noema,
+Strix, OpenCode, CodeQL, Semgrep, and security jobs remain queued. The earlier
+central replacement run id recorded for #1534 now returns 404, so neither that
+stale handle nor the owner PR's pending checks prove protected completion.
 
 ### 4.2 Source-of-truth and writeback sovereignty
 
