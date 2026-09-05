@@ -33,14 +33,28 @@ class ContactInformationMatches:
     phone_numbers: tuple[str, ...]
 
 
-def _deduplicate_matches(matches: Iterable[re.Match[str]]) -> tuple[str, ...]:
-    """Return case-insensitive unique match values in source-position order."""
+def _mailbox_identity(value: str) -> tuple[str, str]:
+    """Return exact local-part plus case-insensitive domain identity for one mailbox."""
+    local_part, separator, domain_part = value.rpartition("@")
+    if not separator:
+        return value, ""
+    return local_part, domain_part.casefold()
+
+
+def _deduplicate_matches(
+    matches: Iterable[re.Match[str]], *, preserve_mailbox_local_part: bool = False
+) -> tuple[str, ...]:
+    """Return unique match values in source order under the requested identity rule."""
     ordered_matches = sorted(matches, key=lambda match: (match.start(), match.end()))
     values: list[str] = []
-    seen: set[str] = set()
+    seen: set[object] = set()
     for match in ordered_matches:
         value = match.group(0)
-        identity = value.casefold()
+        identity: object
+        if preserve_mailbox_local_part:
+            identity = _mailbox_identity(value)
+        else:
+            identity = value.casefold()
         if identity in seen:
             continue
         seen.add(identity)
@@ -51,10 +65,13 @@ def _deduplicate_matches(matches: Iterable[re.Match[str]]) -> tuple[str, ...]:
 def extract_contact_information(text: str) -> ContactInformationMatches:
     """Extract bounded email/phone patterns from caller-supplied text with no side effects.
 
-    This function does not log, persist, index, or transmit the input or extracted PII.
-    Callers remain responsible for authorization, purpose limitation, retention, and any
-    downstream disclosure. Pattern matching is intentionally bounded and is not a claim
-    that every international email address or telephone numbering plan is recognized.
+    Mailbox local-parts are preserved and compared exactly while domains are compared
+    case-insensitively. This avoids collapsing distinct SMTP mailboxes solely because
+    their local-parts differ by case. The function does not log, persist, index, or
+    transmit the input or extracted PII. Callers remain responsible for authorization,
+    purpose limitation, retention, and any downstream disclosure. Pattern matching is
+    intentionally bounded and is not a claim that every international email address or
+    telephone numbering plan is recognized.
     """
     if len(text) > MAX_CONTACT_INPUT_CHARS:
         raise ValueError(
@@ -65,6 +82,8 @@ def extract_contact_information(text: str) -> ContactInformationMatches:
     email_matches.extend(_UNICODE_EMAIL_PATTERN.finditer(text))
     phone_matches = _PHONE_PATTERN.finditer(text)
     return ContactInformationMatches(
-        email_addresses=_deduplicate_matches(email_matches),
+        email_addresses=_deduplicate_matches(
+            email_matches, preserve_mailbox_local_part=True
+        ),
         phone_numbers=_deduplicate_matches(phone_matches),
     )
