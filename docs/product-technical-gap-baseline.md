@@ -131,13 +131,15 @@ dispatch `33934750107` is queued with merge, auto-merge, and branch updates
 disabled. No gate evidence transfers between the owner, upgrade, and consumer
 heads.
 
-**Frontend dependency security refresh (2026-09-05T00:40Z):** Dependabot alert
-#91 identifies GHSA-5p4m-2wfm-xmqj in transitive `js-yaml@4.3.0`. Ready PR
-#1571 (`23cb8e0eda1e0a29dbb39e1ca98c32a5313d2a0e`) uses the existing pnpm-native
-workspace override to require patched 4.3.1 and regenerates only the workspace
-policy and lockfile. Frozen installation, ESLint, TypeScript, exact lock
-identity, `pnpm audit --audit-level high`, and diff checks pass without warning;
-fresh exact-head hosted checks are queued, so protected completion is pending.
+**Frontend dependency security refresh (2026-09-05T02:38Z):** Dependabot alert
+#91 identifies GHSA-5p4m-2wfm-xmqj in transitive `js-yaml@4.3.0`. Draft PR
+#1571 (`c3cf4efc478a264a0a010df82d1ea90b48776610`) uses the existing pnpm-native
+workspace override to require patched 4.3.1 and carries an executable lock
+contract. Pinned pnpm 11.5.3 reproduced lock hash
+`018f0382c815ea7a35899e64ddb6c3645399fcb6` byte-for-byte; a narrower update
+command was rejected because it changed unrelated Vite and WASM closure entries.
+Both focused tests and diff validation pass. Hosted Checks remain queued, so
+protected completion and independent current-head review are pending.
 
 **DAV authorization boundary refresh (2026-09-05T01:08Z):** Ready PR #1345
 (`8146c56587acea5c4aa859ba9366eef0f39540d7`) is now non-force merged with
