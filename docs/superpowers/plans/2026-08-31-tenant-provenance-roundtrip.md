@@ -75,7 +75,7 @@ PostgreSQL/pgvector, pytest.
 
 **Files:** Modify ADR index, product baseline, platform plan, and CHANGELOG.
 
-- [ ] Index ADR-0007, correct the stale test-only graph claim, and retain the full
+- [ ] Index ADR-0022 (formerly ADR-0007), correct the stale test-only graph claim, and retain the full
   portability gap after recording this bounded implemented slice.
 - [ ] Run Ruff, focused suites, the full backend suite, and `git diff --check`.
 - [ ] Confirm `git ls-files tests/real_datasets` is empty and inspect the complete

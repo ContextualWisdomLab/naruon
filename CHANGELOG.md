@@ -1,15 +1,21 @@
 ## [Unreleased]
-- 테넌트 portability의 첫 범위로, authoritative OIDC/server session이 현재 workspace의 프로젝트 근거 closure를 결정론적 BagIt 1.0/RO-Crate 1.3 ZIP으로 내보내고 다시 가져오는 `GET /api/data/provenance-bundle` 및 `POST /api/data/provenance-bundle/import`를 추가했습니다. 인용된 이메일, parser가 textual로 확인한 첨부, content/KG, project object/edge, correction만 stable UID로 보존하고 새 DB key로 한 transaction에서 복원합니다. 64 MiB archive/총 비압축 크기, 64 entries, entry당 32 MiB, 100:1 압축비를 검증하며 path/manifest/reference/중복/범위 오류는 mutation 전에 fail closed 합니다. HMAC fallback workspace claim은 거부하고 bundle scope가 target session authority를 덮어쓸 수 없습니다. 전체 tenant/mailbox, binary object, credential, provider/connector state, embedding, audit-history portability는 계속 미완료입니다(ADR-0007).
-- 검증: 관련 Ruff, warnings-as-errors 결합 suite `151 passed`, fresh-schema 및 legacy-table PostgreSQL bootstrap 경로 `2 passed`, 전체 backend suite `1972 passed, 3 skipped`. Bootstrap 실행기는 legacy `emails` 테이블이 실제로 존재할 때만 그 전용 인덱스를 만들며, fresh schema에서는 해당 문장만 건너뜁니다.
-- 수동 PDF DOM 인식 업로드도 이메일 첨부 및 NewsDOM sidecar와 같은 64MiB
-  bounded transport 계약을 사용합니다. 한도를 넘으면 PDF를 저장하거나
-  sidecar에 전달하지 않고 `413`을 반환하므로 고객은 파일을 분할해
-  다시 업로드할 수 있습니다. 이 변경은 NewsDOM의 64MiB immutable release를
-  Naruon이 exact pin한 뒤에만 병합합니다.
-- PostgreSQL bootstrap now creates the owner/date index only on the canonical
-  `email_records` table after email-model reconciliation, and real smoke seeds
-  provide the required `is_read` state. Fresh-schema bootstrap and data-quality
-  smoke checks no longer fail on the removed legacy `emails` table.
+- Proposed: export and restore the project evidence cited in one verified
+  workspace, preserving source links and stable identities. This first slice
+  excludes full mailbox, binary documents, credentials, provider and connector
+  state, embeddings, and audit history. Archives remain bounded to 64 MiB
+  compressed and total uncompressed content, 64 entries, 32 MiB per entry, and
+  a 100:1 compression ratio; invalid archives are rejected before changes.
+  Full customer-exit portability and deployment verification remain open.
+- Proposed: accept manual PDF uploads up to 64MiB after the required processing
+  service release is verified and pinned. Larger files are rejected before
+  storage or processing with HTTP 413; split the file and upload it again.
+  This limit is not yet a released capability.
+- Proposed: repair fresh-install and upgrade failures while retaining existing
+  mail and its read state. Real database smoke tests preserve the complete
+  historical upgrade path and verify the repaired installation.
+- Proposed: repair storage failures for long email and document content while
+  retaining complete text and search scores. Search latency and deployment
+  validation remain required before this change is released.
 - Starlette `TestClient`의 기존 `httpx2==2.5.0` pin을 core 개발·테스트 의존성으로 승격하고, deprecated `httpx` fallback 경고 억제를 제거했습니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.

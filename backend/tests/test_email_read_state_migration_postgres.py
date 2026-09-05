@@ -1,4 +1,4 @@
-"""PostgreSQL regression coverage for 0011_email_read_state.
+"""PostgreSQL regression coverage for read-state and search-storage repairs.
 
 String-matching the revision file's source (test_alembic_migrations.py)
 cannot detect a destructive downgrade or prove the upgrade is actually
@@ -6,21 +6,30 @@ idempotent -- both require running the real migration against a real
 database in each of the shapes it must handle.
 """
 
-import subprocess
+import hashlib
 import secrets
+import subprocess
 import sys
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import asyncpg
 import pytest
 from asyncpg.exceptions import InvalidAuthorizationSpecificationError, InvalidPasswordError
-from sqlalchemy import inspect, select, text
+from sqlalchemy import func, inspect, select, text, update
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
-from db.models import ProvenanceIdentityMapping
+from db.models import (
+    Attachment,
+    ContentNodeRecord,
+    ContentSegmentRecord,
+    Email,
+    ProjectGraphObjectRecord,
+    ProvenanceIdentityMapping,
+)
 
 pytestmark = pytest.mark.postgres
 
@@ -187,7 +196,7 @@ async def test_provenance_upgrade_and_rollback_preserve_portable_identity(
         async with engine.begin() as connection:
             assert list(
                 await connection.scalars(text("SELECT version_num FROM alembic_version"))
-            ) == ["0020_merge_provenance_workspace"]
+            ) == ["0021_merge_provenance_workspace"]
             await connection.execute(
                 mapping_table.insert().values(
                     target_user_id="restore_target_user",
@@ -295,3 +304,206 @@ async def test_upgrade_head_repairs_a_database_already_stamped_past_0011(
     _run_migrations(fresh_database_url)
 
     assert await _column_exists(fresh_database_url, "email_records", "is_read") is True
+
+
+def _search_storage_rows(record_suffix: str):
+    """Build related historical records using the production mapper dependencies."""
+    message_id = f"<search-storage-{record_suffix}@example.com>"
+    content_hash = hashlib.sha256(b"historical quartz").hexdigest()
+    email = Email(
+        user_id="search-storage-user",
+        organization_id="search-storage-org",
+        message_id=message_id,
+        sender="sender@example.com",
+        subject="historical",
+        body="quartz",
+        date=datetime(2026, 9, 5, tzinfo=timezone.utc),
+    )
+    attachment = Attachment(
+        email=email,
+        filename=f"search-storage-{record_suffix}.txt",
+        content="historical quartz",
+    )
+    node = ContentNodeRecord(
+        email=email,
+        content_node_uid=f"search-node-{record_suffix}",
+        source_kind="email_body",
+        source_record_uid=message_id,
+        node_kind="document",
+        node_path="/document[1]",
+        ordinal_index=0,
+        safe_text_content="historical quartz",
+        content_hash=content_hash,
+    )
+    segment = ContentSegmentRecord(
+        email=email,
+        content_node=node,
+        content_segment_uid=f"search-segment-{record_suffix}",
+        source_kind="email_body",
+        source_record_uid=message_id,
+        segment_kind="paragraph",
+        segment_path="/document[1]/paragraph[1]",
+        ordinal_index=0,
+        safe_text_content="historical quartz",
+        content_hash=content_hash,
+        word_count=2,
+    )
+    project_object = ProjectGraphObjectRecord(
+        email=email,
+        primary_content_segment=segment,
+        object_uid=f"search-project-{record_suffix}",
+        user_id=email.user_id,
+        organization_id=email.organization_id,
+        workspace_id="workspace-search-storage-org",
+        object_type="requirement",
+        title="historical",
+        summary="quartz",
+        confidence=0.9,
+        source_segment_uids=[segment.content_segment_uid],
+        extractor_name="deterministic_reference",
+        extractor_version="test",
+    )
+    return {
+        "email_records": email,
+        "email_attachments": attachment,
+        "content_segments": segment,
+        "project_graph_objects": project_object,
+    }
+
+
+def _search_document_values(column_names, document: str):
+    """Split a complete test document across a surface's real storage columns."""
+    # The first SHA-256 word fits the project's 240-character title limit.
+    parts = document.split(" ", 1) if len(column_names) == 2 else [document]
+    values = dict(zip(column_names, parts, strict=True))
+    if "safe_text_content" in values:
+        values["content_hash"] = hashlib.sha256(document.encode()).hexdigest()
+        values["word_count"] = len(document.split())
+    return values
+
+
+@pytest.mark.parametrize(
+    ("surface", "column_names"),
+    [
+        ("email_records", ("subject", "body")),
+        ("email_attachments", ("content",)),
+        ("content_segments", ("safe_text_content",)),
+        ("project_graph_objects", ("title", "summary")),
+    ],
+    ids=["email", "attachment", "segment", "project"],
+)
+@pytest.mark.asyncio
+async def test_search_trigram_storage_forward_repair_preserves_large_documents(
+    fresh_database_url,
+    surface,
+    column_names,
+):
+    """Catch whole-document index overflow and destructive index rollback."""
+    _run_migrations(fresh_database_url, revision="0019_email_read_state_repair")
+    engine = create_async_engine(fresh_database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    historical_rows = _search_storage_rows("historical")
+    model = type(historical_rows[surface])
+    primary_key = inspect(model).primary_key[0]
+    columns = [getattr(model, name) for name in column_names]
+    search_document = columns[0]
+    if len(columns) == 2:
+        search_document = columns[0] + " " + columns[1]
+
+    async def assert_document(row_id, expected: str, tail_query: str):
+        """Verify complete stored bytes and the literal perfect tail-word score."""
+        async with engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    select(
+                        *columns,
+                        func.word_similarity(
+                            func.search_normalized_text(tail_query),
+                            func.search_normalized_text(search_document),
+                        ),
+                    ).where(primary_key == row_id)
+                )
+            ).one()
+        assert " ".join(row[:-1]) == expected
+        # A complete final word has exactly the query's trigrams, so score = 1.
+        assert row[-1] == 1.0
+
+    try:
+        async with session_factory.begin() as session:
+            session.add_all(historical_rows.values())
+            await session.flush()
+            historical_id = inspect(historical_rows[surface]).identity[0]
+
+        _run_migrations(fresh_database_url)
+        await assert_document(historical_id, "historical quartz", "quartz")
+        async with engine.connect() as connection:
+            index_methods = list(
+                await connection.scalars(
+                    text(
+                        "SELECT access_method.amname FROM pg_index AS index_entry "
+                        "JOIN pg_class AS index_object ON index_object.oid = index_entry.indexrelid "
+                        "JOIN pg_class AS table_object ON table_object.oid = index_entry.indrelid "
+                        "JOIN pg_namespace AS table_schema ON table_schema.oid = table_object.relnamespace "
+                        "JOIN pg_am AS access_method ON access_method.oid = index_object.relam "
+                        "WHERE table_schema.nspname = 'public' AND table_object.relname = :table_name "
+                        "AND index_object.relname LIKE '%_trgm' AND index_entry.indisvalid"
+                    ),
+                    {"table_name": surface},
+                )
+            )
+        assert index_methods == ["gin"], "storage repair must retain a valid trigram index"
+
+        documents = {}
+        for tail_query in ("quartz", "zircon", "topaz"):
+            # Distinct digests exercise diverse trigram keys, not repeated text;
+            # the non-hex tail word occurs only beyond the 32 KiB boundary.
+            prefix = " ".join(
+                hashlib.sha256(f"{surface}:{tail_query}:{index}".encode()).hexdigest()
+                for index in range(1024)
+            )
+            assert len(prefix.encode()) > 32 * 1024
+            documents[tail_query] = f"{prefix} {tail_query}"
+
+        inserted_rows = _search_storage_rows("inserted")
+        for name, value in _search_document_values(
+            column_names, documents["quartz"]
+        ).items():
+            setattr(inserted_rows[surface], name, value)
+        async with session_factory.begin() as session:
+            session.add_all(inserted_rows.values())
+            await session.flush()
+            inserted_id = inspect(inserted_rows[surface]).identity[0]
+        await assert_document(inserted_id, documents["quartz"], "quartz")
+
+        async with engine.begin() as connection:
+            await connection.execute(
+                update(model)
+                .where(primary_key.in_([historical_id, inserted_id]))
+                .values(_search_document_values(column_names, documents["zircon"]))
+            )
+        for row_id in (historical_id, inserted_id):
+            await assert_document(row_id, documents["zircon"], "zircon")
+
+        _run_migrations(fresh_database_url)
+        for row_id in (historical_id, inserted_id):
+            await assert_document(row_id, documents["zircon"], "zircon")
+
+        _run_downgrade(fresh_database_url, "0019_email_read_state_repair")
+        for row_id in (historical_id, inserted_id):
+            await assert_document(row_id, documents["zircon"], "zircon")
+        # Downgrade must retain the corrected indexes and their ability to accept
+        # new large values, not reinstall the known failing GiST representation.
+        async with engine.begin() as connection:
+            await connection.execute(
+                update(model)
+                .where(primary_key.in_([historical_id, inserted_id]))
+                .values(_search_document_values(column_names, documents["topaz"]))
+            )
+        for row_id in (historical_id, inserted_id):
+            await assert_document(row_id, documents["topaz"], "topaz")
+
+        _run_migrations(fresh_database_url)
+        for row_id in (historical_id, inserted_id):
+            await assert_document(row_id, documents["topaz"], "topaz")
+    finally:
+        await engine.dispose()

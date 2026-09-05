@@ -1,4 +1,4 @@
-# ADR-0007: Package tenant provenance as a deterministic integrity envelope
+# ADR-0022: Package tenant provenance as a deterministic integrity envelope
 
 **Status:** Proposed for the workspace project-evidence closure
 **Date:** 2026-08-31
@@ -6,6 +6,9 @@
 **Scope:** Export and reimport of the email-derived provenance records cited by
 one signed-session workspace. This decision does not claim full mailbox,
 credential, connector, binary-object, or arbitrary multi-workspace portability.
+**Former proposal ID:** ADR-0007 in #1497. The 2026-09-05 open-PR inventory
+found unrelated ADR-0007 in #1361. The proposal is renumbered, not discarded
+or accepted; its historical discussion and evidence remain attached to #1497.
 
 ## Context
 
@@ -54,9 +57,14 @@ to the exact workspace and includes only their cited source records.
    identity table; export reverses the mapping to the stable portable UIDs. The
    archive identifies the source user with a validated lowercase SHA-256 digest.
    Known typed UID keys nested in graph metadata are translated recursively,
-   while arbitrary string values remain unchanged. PostgreSQL serializes only
-   identical source-to-target import scopes with a transaction advisory lock so
-   concurrent retries remain idempotent. A target containing native records or
+   while arbitrary string values remain unchanged. PostgreSQL first takes a
+   transaction advisory lock keyed by the complete sorted portable-identity
+   sets, then locks each email UID in sorted order under the target user and
+   organization. The first lock is shared by equal identity sets even across
+   target scopes; it does not serialize every arbitrary partial overlap. The
+   email locks and existing conflict/uniqueness checks remain distinct guards.
+   Forced identical and incompatible imports verify retries and preservation of
+   the winning records without losing-writer rows or mappings. A target containing native records or
    multiple imported origins exports one target-scoped archive with its current
    database UIDs; a single fully mapped origin still restores its portable UIDs.
 
@@ -77,6 +85,15 @@ to the exact workspace and includes only their cited source records.
   signing is a later profile revision.
 - The product baseline keeps full tenant/mailbox, binary-object, credential,
   provider/connector-state, and audit-history export/reimport open.
+- Application rollback retains portable-identity mappings. They cannot be
+  reconstructed from remapped database records, and deleting them would change
+  the identity of later exports. Destructive retirement needs its own governed
+  operation rather than a downgrade side effect.
+- Fresh and historical installs must traverse the actual combined Alembic
+  graph before application tests run. ORM-created tables omit migration-owned
+  indexes and cannot alone prove installable restore. The unchanged large cited
+  segment case exposed the search-storage prerequisite in #1572; its Proposed
+  ADR-0020 separately gates representative search and migration costs.
 
 ## References (APA 7th)
 

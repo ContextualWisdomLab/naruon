@@ -1,10 +1,14 @@
-# ADR-0005: Bounded PDF DOM upload contract
+# ADR-0021: Bounded PDF DOM upload contract
 
 **Status:** Proposed
 **Date:** 2026-08-20
 **Decision owner:** Naruon maintainers
 **Scope:** Signed `POST /api/data/documents/pdf-dom-recognition` uploads
 **Figma File ID:** N/A — backend upload contract; no visual surface.
+**Former proposal ID:** ADR-0005 in #1427. Renumbered after the 2026-09-05
+open-PR inventory found unrelated 0005 proposals; the decision content and
+immutable-release prerequisite are retained. Existing #1469 inherits this
+proposal and must take the rename by ancestry, not publish a second decision.
 
 ## Context
 
