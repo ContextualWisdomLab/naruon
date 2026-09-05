@@ -467,7 +467,8 @@ subject to U.S. copyright, while attribution remains required.
   until durable signed-session tenant/workspace ownership, administrative
   authorization, built-in immutability, and a real provider/adapter execution
   target are implemented and verified. Do not substitute a process-global
-  registry or placeholder success. Preserve the built-in catalog and supported
+  registry or placeholder success. A mock or placeholder handler must never
+  report successful work. Preserve the built-in catalog and supported
   `POST /api/tools/{code}/execute` path; the mutation restriction is not a ban on
   all POST requests. Keep behavioral tests for rejected writes, unchanged
   built-ins, signed-session scope, and actual execution results with the product
