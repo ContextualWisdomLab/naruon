@@ -194,7 +194,14 @@ pass. The PR is Ready with 21 fresh hosted jobs queued; the prior 41-test result
 and earlier requested review do not transfer to this head.
 
 **Authentication owner prerequisite refresh (2026-09-04T16:27Z):** Naruon
-Draft PR #1532 remains a consumer lane and must not restore ROPC. Keyverse Draft
+Draft PR #1532 (`d93aabcc134ae461cf7f42d6cf26c6ca29deb9f5`)
+remains a consumer lane and must not restore ROPC. Its login and signup routes
+fail closed before parsing credentials, while Authorization Code with PKCE uses
+a nonce-bound same-origin popup completion channel. Thirty focused frontend
+authentication tests, TypeScript, and ESLint pass with the repository-pinned
+pnpm 11.5.3. The previous seven review findings targeted predecessor code;
+current-head source preserves their security outcomes without implementing an
+unreleased password/session contract. Keyverse Draft
 PR #128 (`e1cf0807d6b15e8d8300eb252533aa05b20b93c9`) disables that path while a
 standards-compliant headless session contract is unfinished. Its merge-ref
 account-unification failure was traced to a retired repo-local hourly PR steward
