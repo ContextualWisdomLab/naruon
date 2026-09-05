@@ -631,6 +631,17 @@ subject to U.S. copyright, while attribution remains required.
   alone will not rerun it. Integrate the existing migration owner prerequisite,
   rerun the combined revision graph, and never stamp past a failure or create a
   fake legacy table to make the consumer pass.
+- After migration succeeds, run the affected application tests against that
+  migrated database, not a replacement ORM-only schema. Migration-created
+  indexes and constraints must remain active for supported size limits and
+  high-entropy content cases; do not shrink inputs, drop indexes, or omit failing
+  cases to manufacture passing evidence. Record migration and application-test
+  results separately and repair the shared schema owner when they disagree.
+- A rollback check must persist representative records before downgrade and
+  compare their values and portable identities after downgrade and re-upgrade.
+  A successful command or an empty schema proves no data preservation. Retain
+  non-rebuildable identity/provenance history; destructive retirement requires
+  a separately authorized migration with recovery evidence.
 - When a backend container reports missing `DATABASE_URL` or
   `AUTH_SESSION_HMAC_SECRET`, verify the runtime path injects the operator env
   through `scripts/naruon_compose.sh`, Kubernetes secrets, or an explicit
