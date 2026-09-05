@@ -118,7 +118,7 @@ warning suppression and promotes the already used optional-agent
 hash lock contracts. The current head also includes that pin in the shared
 SHA-256 digest-format assertion instead of checking only record presence. This
 was found while validating utility consumer PR
-#1538 (`79e54b1b1298817fb86cae5b6eae9edc2a25675d`): its source tests could not
+#1538 (`6dd0344cef29de760ba56ef2568e888b1963dfc8`): its source tests could not
 collect under Python 3.14 with warnings as
 errors because protected `develop` omitted the direct test dependency. Frozen
 sync and the predecessor's 65 focused tests passed without the warning; the
@@ -129,7 +129,9 @@ as errors, Ruff, and diff checks. Broad dependency-upgrade PR #1494 exact head
 suppression rather than reviving it. PR #1538 remains Draft until the minimal
 prerequisite is protected-merged and its own unchanged-head review and Checks
 complete. Its release note now names only the two effective tools and does not
-claim the removed URL extractor; 71 focused tests and Ruff pass, while 22
+claim the removed URL extractor. It distinguishes MD5/SHA-1 compatibility
+fingerprints from the SHA-256 security hash and retains `usedforsecurity=False`
+at that boundary. Seventy-one focused tests, Ruff, and diff checks pass, while
 current-head hosted checks are queued. PR #1565 is now Ready; repo-local Application CI, Bandit, and Docker
 were rerun once on their existing exact-head handles, and central review
 dispatch `33934750107` is queued with merge, auto-merge, and branch updates
@@ -243,15 +245,15 @@ remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 which carries its complete valid delta plus the newer exact-head repair rules.
 #1558 remains open until #1564 reaches protected merge or an independent
 equivalence check confirms succession; no count-only closure is authorized. #1538
-(`79e54b1b1298817fb86cae5b6eae9edc2a25675d`)
+(`6dd0344cef29de760ba56ef2568e888b1963dfc8`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
-boundary, bounded malformed-input regression, and North American cases. Ruff
-and 78 focused tests pass. Its hash-generator contract now returns SHA-256 only;
-the unused MD5 and SHA-1 compatibility outputs and scanner suppressions were
-removed at their source. All 68 tool API tests, Ruff, and diff checks pass, and
-the Semgrep review thread is resolved. Draft PR #1496
+boundary, bounded malformed-input regression, and North American cases. Its
+hash-generator contract labels MD5 and SHA-1 as compatibility fingerprints,
+keeps `usedforsecurity=False`, and identifies SHA-256 as the security-capable
+output. Seventy-one focused tool/API/privacy tests, Ruff, and diff checks pass,
+and the review thread is resolved. Draft PR #1496
 (`260db8f3d328e52ce340de33a60af13c0e3edfc4`) was non-force restacked on
 that current owner head after GitHub reported a dirty stack. The merge preserves
 the URL-extractor delta and the parent's complete masking/security contract;
