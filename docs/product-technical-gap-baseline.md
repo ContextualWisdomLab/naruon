@@ -291,7 +291,7 @@ PostgreSQL 16 + pgvector instance with warnings as errors. Binary payloads,
 credentials, provider state, embeddings, and audit-history portability remain
 explicit non-goals. The head stays Draft until fresh central review controls and
 protected checks replace historical malformed/absent reviewer evidence.
-Draft PR #1493 (`997e18cf51ed7e8265a111c7637274a1f097db08`)
+Ready PR #1493 (`997e18cf51ed7e8265a111c7637274a1f097db08`)
 updates the self-hosted connector to websockets 17.1 and repairs the missing
 runtime release boundary discovered during review. The existing image workflow
 validated only backend, combined, and frontend images, so the connector change
@@ -305,8 +305,11 @@ shared backend lock, copies that owner runtime, and verifies seeded adapter
 imports at build time without embedding a credential-shaped test value; both
 backend and connector locks resolve websockets 17.1.
 Seventy-five focused tests, Ruff, actionlint, and warning-free adapter import
-smoke pass for both platforms. Fresh hosted
-`validate connector image` and protected review evidence remain required.
+smoke pass for both platforms. After the central queue-owner repair, Application
+CI, Bandit, and Docker attempt 2 plus bounded central review run `33934191278`
+were requested on the unchanged head and remain queued. Deleted or dynamic
+workflows that GitHub refuses to rerun remain non-passing; fresh hosted
+`validate connector image` and protected review evidence are still required.
 Canonical workflow-owner PR `ContextualWisdomLab/.github#1871`
 (`25083c8b006db8ec8234aa02661d0c23a05c44df`) repairs stale schedule and
 inactive-review test oracles against current protected main, closes Python 3.14
