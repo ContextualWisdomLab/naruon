@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import os
 from pathlib import Path
 import re
 import secrets
@@ -89,10 +90,15 @@ def _write_private(path: Path, text: str) -> None:
     """Restrict ``path`` before any generated secret material is written."""
 
     private_mode = stat.S_IRUSR | stat.S_IWUSR
-    if not path.exists():
-        path.touch(mode=private_mode, exist_ok=False)
-    path.chmod(private_mode)
-    path.write_text(text, encoding="utf-8")
+    file_descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW,
+        private_mode,
+    )
+    with os.fdopen(file_descriptor, "w", encoding="utf-8") as dotenv_file:
+        os.fchmod(dotenv_file.fileno(), private_mode)
+        os.ftruncate(dotenv_file.fileno(), 0)
+        dotenv_file.write(text)
 
 
 def prepare_local_env(path: Path, example_path: Path) -> None:

@@ -5,6 +5,8 @@ import stat
 import subprocess
 import sys
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "prepare_local_env.py"
@@ -217,3 +219,17 @@ def test_prepare_local_env_replaces_only_effective_empty_duplicate(tmp_path: Pat
     assert password_lines[1] != "POSTGRES_PASSWORD= # effective empty assignment"
     assert password_lines[1].split("=", 1)[1]
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_prepare_local_env_rejects_existing_symbolic_link(tmp_path: Path) -> None:
+    example = tmp_path / ".env.example"
+    target = tmp_path / "operator.env"
+    path = tmp_path / ".env"
+    example.write_text("TEMPLATE_ONLY=value\n", encoding="utf-8")
+    target.write_text("OPERATOR_VALUE=preserve\n", encoding="utf-8")
+    path.symlink_to(target)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        _run(path, example)
+
+    assert target.read_text(encoding="utf-8") == "OPERATOR_VALUE=preserve\n"
