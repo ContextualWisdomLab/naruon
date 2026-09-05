@@ -136,6 +136,18 @@ policy and lockfile. Frozen installation, ESLint, TypeScript, exact lock
 identity, `pnpm audit --audit-level high`, and diff checks pass without warning;
 fresh exact-head hosted checks are queued, so protected completion is pending.
 
+**DAV authorization boundary refresh (2026-09-05T01:08Z):** Ready PR #1345
+(`8146c56587acea5c4aa859ba9366eef0f39540d7`) is now non-force merged with
+`develop@042b0c70531b229af3acbd0421a2f23098d848b3`. It preserves the framework's
+single decode, rejects nested encodings that would expose traversal dots,
+separators, backslashes, or control octets, and keeps owner and organization
+scope on DAV and document reads. The 82 focused authorization/network tests and
+Ruff pass. Both information-only review threads are resolved. The previous
+Strix failure was fail-closed provider evidence (NVIDIA rate limiting and an
+unsupported direct-OpenAI request contract), not a completed vulnerability
+finding; fresh exact-head Checks and independent review remain required before
+protected merge.
+
 **Semantic configuration naming refresh (2026-09-04T17:49Z):** Runtime-config
 PR #1521 (`cd8bc8b6425ca61e6aedbf24b5413a050dc4bd19`) preserves the published
 `version` and `features` wire keys while translating them to qualified internal
@@ -1587,7 +1599,7 @@ branch. These values are therefore not one shared base declaration.
 | 1352 | fix(a11y): expose async button busy states | 8b7731da7063c39651aa9e3debfaa2052c476c35 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1349 | docs(product): define evidence-based workspace task contract | 559d091a9a75d8e79ab9608c04931c5a1e82e173 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1347 | fix(governance): reject rate-limited review status as semantic evidence | cd973fc364efb8d150786f4c2bceec54187eb806 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1345 | fix(dav): reject ambiguous nested authorization encodings | 07954b2e4d402fa2fd1e9775c52ec6b9483de52d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1345 | fix(dav): reject ambiguous nested authorization encodings | 8146c56587acea5c4aa859ba9366eef0f39540d7 | develop@042b0c70531b229af3acbd0421a2f23098d848b3 | no | security/governance | 82 focused tests + Ruff pass; information-only threads resolved; prior Strix provider failure is not clean evidence | normal-or-stacked-root | await fresh exact-head Checks and review, then protected-merge |
 | 1339 | fix(host-policy): normalize dotted bracketed IPv6 safely | 44b65cac131ab5c4be25cfdebc026c4a1cf3bc35 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1333 | feat: persist DiskSage file lineage ontology | 017cdef392385571acfc5abc177882724d6026b9 | develop@e5e99b4e3bb081b92c602358878856536030e2ca | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1332 | feat(email): surface calendar writeback If-Match conflicts | d53598dc7e45b470907fd97dffb9d64e954f2731 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
