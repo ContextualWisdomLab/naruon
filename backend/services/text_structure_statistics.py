@@ -1,7 +1,7 @@
 """Transparent text-structure counts without an inferred readability scale."""
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 MAX_TEXT_STRUCTURE_INPUT_CHARS = 100_000
 _SENTENCE_TERMINATOR_PATTERN = re.compile(r"[.!?。！？．]+")
@@ -29,7 +29,8 @@ def measure_text_structure(text: str) -> TextStructureStatistics:
     """
     if len(text) > MAX_TEXT_STRUCTURE_INPUT_CHARS:
         raise ValueError(
-            f"Text structure input must not exceed {MAX_TEXT_STRUCTURE_INPUT_CHARS} characters"
+            "Text structure input must not exceed "
+            f"{MAX_TEXT_STRUCTURE_INPUT_CHARS} characters"
         )
 
     return TextStructureStatistics(
