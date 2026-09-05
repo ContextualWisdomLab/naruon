@@ -164,6 +164,12 @@ in this repo.
   `fix-development-mistakes`, `github-actions-privileged-pr-scan`, and
   `github-robot-review-gate` skills for their matching repair, privileged
   scanner, and review-gate work; read the selected `SKILL.md` completely.
+- After tracing the affected flow, apply Superpowers systematic debugging and
+  test-first verification, then use the Ponytail ladder: reuse repository code,
+  standard-library or platform behavior, and installed dependencies before
+  adding the smallest complete implementation. This ordering never removes
+  trust-boundary validation, data-loss protection, accessibility, or the check
+  that reproduces a non-trivial fix.
 - Use Context7 for current third-party API contracts, DeepWiki for public
   external-repository architecture, and sequential thinking for multi-step
   design or debugging. Send only public metadata to remote MCP services;

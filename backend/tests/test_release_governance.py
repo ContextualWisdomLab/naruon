@@ -68,6 +68,8 @@ def test_agent_lifecycle_governance_artifacts_stay_aligned() -> None:
     assert "owner-issued" in readme
     assert "docs/development/merge-gate-policy.md" in guidance
     assert "prove complete-delta succession" in guidance
+    assert "Superpowers systematic debugging" in guidance
+    assert "Ponytail ladder" in guidance
     assert "Do not use administrative merge bypass" in guidance
     assert "stale-context procedure" in guidance
     assert "successor's exact tree, effective diff, tests, and lineage record" in guidance
