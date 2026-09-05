@@ -18,10 +18,10 @@ describe('toConfidencePercent', () => {
     expect(toConfidencePercent(100)).toBe(100);
   });
 
-  it('clamps values to the 0-100 range', () => {
-    expect(toConfidencePercent(-10)).toBe(0);
-    expect(toConfidencePercent(150)).toBe(100);
-    expect(toConfidencePercent(-0.1)).toBe(0);
+  it('rejects values outside the backend 0-100 contract', () => {
+    expect(toConfidencePercent(-10)).toBeUndefined();
+    expect(toConfidencePercent(150)).toBeUndefined();
+    expect(toConfidencePercent(-0.1)).toBeUndefined();
   });
 
   it('treats every finite input as the backend percentage contract', () => {

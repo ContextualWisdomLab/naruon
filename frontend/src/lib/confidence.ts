@@ -1,7 +1,12 @@
 export function toConfidencePercent(confidence: number | undefined): number | undefined {
-  if (typeof confidence !== "number" || !Number.isFinite(confidence)) {
+  if (
+    typeof confidence !== "number" ||
+    !Number.isFinite(confidence) ||
+    confidence < 0 ||
+    confidence > 100
+  ) {
     return undefined;
   }
 
-  return Math.round(Math.min(100, Math.max(0, confidence)));
+  return confidence === 0 ? 0 : Math.round(confidence);
 }
