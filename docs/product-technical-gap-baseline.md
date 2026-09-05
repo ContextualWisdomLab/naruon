@@ -111,7 +111,7 @@ hosted runs remain cancelled. The PR stays Draft pending current-head hosted
 checks and independent review;
 no buyer-visible latency claim or protected-branch completion is recorded.
 
-**Backend test-runtime dependency refresh (2026-09-04T17:35Z):** Minimal
+**Backend test-runtime dependency refresh (2026-09-05T04:42Z):** Minimal
 protected-base prerequisite PR #1565 exact head
 `52dfc863d1a5d6e4e80b6366f719dd09f2aa6172` removes the Starlette `TestClient`
 warning suppression and promotes the already used optional-agent
@@ -138,10 +138,11 @@ complete. Its release note now names only the two effective tools and does not
 claim the removed URL extractor. It distinguishes MD5/SHA-1 compatibility
 fingerprints from the SHA-256 security hash and retains `usedforsecurity=False`
 at that boundary. Seventy-one focused tests, Ruff, and diff checks pass, while
-current-head hosted checks are queued. PR #1565 remains Draft; 21 exact-head
-checks are queued and five are skipped, with no completed failure at the latest
-read. No gate evidence transfers between the owner, upgrade, and consumer
-heads.
+current-head hosted checks are queued. A fresh frozen-sync run also passes the
+pin contract and a real FastAPI `TestClient` API path (`7 passed`) with warnings
+as errors. With no unresolved thread, source failure, or merge conflict, PR
+#1565 is Ready; 21 exact-head checks are queued and five are skipped. No gate
+evidence transfers between the owner, upgrade, and consumer heads.
 
 **Frontend dependency security refresh (2026-09-05T02:38Z):** Dependabot alert
 #91 identifies GHSA-5p4m-2wfm-xmqj in transitive `js-yaml@4.3.0`. Draft PR
