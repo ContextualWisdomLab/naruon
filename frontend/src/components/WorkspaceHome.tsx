@@ -856,7 +856,7 @@ export function WorkspaceHome({
   }, [startupView]);
 
   useEffect(() => {
-    const clearStartupOverride = () => setStartupOverride(null);
+    const clearStartupOverride = () => setStartupViewOverride(null);
     window.addEventListener('naruon:startup-view-change', clearStartupOverride);
     return () => window.removeEventListener('naruon:startup-view-change', clearStartupOverride);
   }, []);
