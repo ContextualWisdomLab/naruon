@@ -60,6 +60,33 @@ class _PostgresSession:
             return _Result()
         if "clock_timestamp" in query_text:
             return _Result(self.database_now)
+        if query_text.startswith("delete from security_audit_events"):
+            values = tuple(query.compile().params.values())
+            resource_uid = next(
+                value
+                for value in values
+                if str(value).startswith("email_send_scope:")
+            )
+            event_action = next(
+                value
+                for value in values
+                if str(value).startswith("email_send_rate_limit.")
+            )
+            cutoff = next(
+                value for value in values if isinstance(value, datetime.datetime)
+            )
+            retained_events = [
+                event
+                for event in self.store.events
+                if not (
+                    event.resource_uid == resource_uid
+                    and event.event_action == event_action
+                    and event.observed_at <= cutoff
+                )
+            ]
+            deleted_count = len(self.store.events) - len(retained_events)
+            self.store.events = retained_events
+            return _Result(deleted_count)
         if "security_audit_events" in query_text:
             values = tuple(query.compile().params.values())
             resource_uid = next(
@@ -156,7 +183,7 @@ async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leak
         "email_send_scope:"
         f'{limiter_module.rate_limit_scope_hash("user-1", "org-1", "workspace-org-1")}'
     )
-    assert sum(event.resource_uid == scope_uid for event in store.events) == 12
+    assert sum(event.resource_uid == scope_uid for event in store.events) == 2
 
 
 @pytest.mark.asyncio
@@ -190,6 +217,66 @@ async def test_sliding_window_blocks_boundary_burst(monkeypatch):
         event.event_action == "email_send_rate_limit.quota_exhausted"
         for event in store.events
     ) == 1
+
+
+@pytest.mark.asyncio
+async def test_limiter_prunes_expired_allowed_state_but_keeps_denial_evidence(monkeypatch):
+    store = _SharedAttemptStore()
+    observed_at = datetime.datetime(2026, 8, 19, 12, 0, tzinfo=datetime.timezone.utc)
+    scope_hash = limiter_module.rate_limit_scope_hash(
+        "user-1", "org-1", "workspace-org-1"
+    )
+    scope_uid = f"email_send_scope:{scope_hash}"
+    expired_at = observed_at - datetime.timedelta(seconds=61)
+    expired_allowed = SecurityAuditEvent(
+        actor_user_id="user-1",
+        actor_role="member",
+        organization_id="org-1",
+        workspace_id="workspace-org-1",
+        event_action="email_send_rate_limit.allowed",
+        resource_type="email_send_rate_limit",
+        resource_uid=scope_uid,
+        evidence_source="services.email_send_rate_limiter",
+        observed_at=expired_at,
+    )
+    durable_denial = SecurityAuditEvent(
+        actor_user_id="user-1",
+        actor_role="member",
+        organization_id="org-1",
+        workspace_id="workspace-org-1",
+        event_action="email_send_rate_limit.quota_exhausted",
+        resource_type="email_send_rate_limit",
+        resource_uid=scope_uid,
+        evidence_source="services.email_send_rate_limiter",
+        observed_at=expired_at,
+    )
+    store.events.extend([expired_allowed, durable_denial])
+    session = _PostgresSession(store)
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: session)
+
+    decision = await limiter_module.enforce_send_email_rate_limit(
+        _context(), now=observed_at
+    )
+
+    assert decision.allowed is True
+    assert expired_allowed not in store.events
+    assert durable_denial in store.events
+    assert sum(
+        event.event_action == "email_send_rate_limit.allowed"
+        and event.resource_uid == scope_uid
+        for event in store.events
+    ) == 1
+    delete_query_index = next(
+        index
+        for index, query in enumerate(session.queries)
+        if query.startswith("delete from security_audit_events")
+    )
+    count_query_index = next(
+        index
+        for index, query in enumerate(session.queries)
+        if "count(" in query and "security_audit_events" in query
+    )
+    assert delete_query_index < count_query_index
 
 
 @pytest.mark.asyncio
