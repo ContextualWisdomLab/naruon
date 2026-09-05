@@ -18,7 +18,6 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
-    text,
 )
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -804,12 +803,7 @@ class Email(Base):
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
     body: Mapped[str] = mapped_column(Text)
     # IMAP \Seen read state; defaults read so historical/file imports don't nag.
-    # A DB-level server_default keeps create_all/bootstrap_db consistent with the
-    # 0011_email_read_state migration intent so raw inserts that omit is_read
-    # (e.g. postgres smoke seeds) don't hit a NOT NULL violation.
-    is_read: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
-    )
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
     attachments: Mapped[list["Attachment"]] = relationship(
@@ -826,33 +820,6 @@ class Email(Base):
     )
     ticket_tasks: Mapped[list["TicketTask"]] = relationship(
         back_populates="related_email", cascade="all, delete-orphan"
-    )
-
-
-class EmailSendRateBucket(Base):
-    __tablename__ = "email_send_rate_buckets"
-
-    bucket_scope_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    window_started_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    expires_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        Index("ix_email_send_rate_buckets_expires_at", "expires_at"),
     )
 
 

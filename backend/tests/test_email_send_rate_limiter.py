@@ -203,3 +203,71 @@ async def test_rate_limiter_fails_closed_when_shared_state_is_unavailable():
             await enforce_send_email_rate_limit(_context())
     finally:
         limiter_module.AsyncSessionLocal = original_factory
+
+
+@pytest.mark.postgres
+@pytest.mark.asyncio
+async def test_rate_limiter_real_postgres_reserves_and_denies(monkeypatch):
+    from core.config import settings
+    from asyncpg.exceptions import InvalidAuthorizationSpecificationError
+    from asyncpg.exceptions import InvalidPasswordError
+    from db.models import Base
+    from sqlalchemy import delete, select
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
+            await connection.run_sync(Base.metadata.create_all)
+    except (
+        InvalidAuthorizationSpecificationError,
+        InvalidPasswordError,
+        OperationalError,
+        OSError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke database unavailable")
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(limiter_module, "SEND_RATE_LIMIT_MAX_ATTEMPTS", 1)
+    context = _context("rate-limit-smoke-user", "rate-limit-smoke-org")
+    scope_uid = (
+        "email_send_scope:"
+        f"{rate_limit_scope_hash(context.user_id, context.organization_id)}"
+    )
+    observed_at = datetime.datetime.now(datetime.timezone.utc)
+
+    async def cleanup() -> None:
+        async with session_factory() as session:
+            await session.execute(
+                delete(SecurityAuditEvent).where(
+                    SecurityAuditEvent.resource_uid == scope_uid
+                )
+            )
+            await session.commit()
+
+    await cleanup()
+    try:
+        first = await enforce_send_email_rate_limit(context, now=observed_at)
+        second = await enforce_send_email_rate_limit(context, now=observed_at)
+        async with session_factory() as session:
+            actions = (
+                await session.execute(
+                    select(SecurityAuditEvent.event_action)
+                    .where(SecurityAuditEvent.resource_uid == scope_uid)
+                    .order_by(SecurityAuditEvent.event_action)
+                )
+            ).scalars().all()
+    finally:
+        await cleanup()
+        await engine.dispose()
+
+    assert first.allowed is True
+    assert second.allowed is False
+    assert actions == [
+        "email_send_rate_limit.allowed",
+        "email_send_rate_limit.quota_exhausted",
+    ]

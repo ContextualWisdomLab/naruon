@@ -145,12 +145,6 @@ remains a local/dev compatibility path that creates the `vector` extension,
 metadata-defined tables for fresh local databases, and idempotent backfills for
 existing local databases.
 
-Cloud Agent VMs use the same managed migration path through
-`.cursor/start.sh` → `scripts/migrate_db.py`. Local role-secret alignment is
-stdin dollar-quoted SQL (`scripts/reconcile_local_postgres_role.py`); do not
-interpolate `DATABASE_URL` secrets into `psql -c`. See
-[`docs/development/cloud-agent-environment.md`](docs/development/cloud-agent-environment.md).
-
 ## Send boundary
 
 Outbound replies preserve `In-Reply-To` and `References` headers in the built

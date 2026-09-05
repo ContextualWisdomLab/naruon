@@ -348,12 +348,6 @@ in this repo.
   embedding generation is unavailable. Tests must cover the local
   `embeddinggemma` path so Data workspace imports do not silently bypass the
   selected embedding model.
-- PostgreSQL `text` / `hashtext()` cannot encode a NUL (`0x00`) octet. Do not
-  pass a raw `user_id\\x00organization_id` (or any other NUL-separated payload)
-  as a `pg_advisory_lock` bind value. Derive a NUL-free digest such as
-  SHA-256 hex and keep mocked/SQLite tests from asserting the raw NUL form —
-  those dialects skip the lock and hide `CharacterNotInRepertoireError` until
-  a real Postgres import.
 - Home/Today dashboard reply-wait surfaces must read signed
   `/api/emails/pending-replies` data instead of inferring pending replies from
   generic inbox fixtures or static copy. Tests and E2E mocks must verify the
