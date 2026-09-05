@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import inspect
-import json
 import logging
 import re
 import unicodedata
@@ -9,7 +8,7 @@ import urllib.parse
 import uuid
 from collections import Counter
 from collections.abc import Callable
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NoReturn, Optional
 
 import httpx
 from core.url_validation import (
@@ -26,6 +25,13 @@ router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
+TOOL_MUTATION_NOT_SUPPORTED_DETAIL = {
+    "error_code": "tool_mutation_not_supported",
+    "message": (
+        "Dynamic tool mutations are disabled until tenant-scoped persistent "
+        "storage and administrative authorization are implemented."
+    ),
+}
 
 
 def _tool_code_fingerprint(code: str) -> str:
@@ -84,35 +90,6 @@ class ToolInfo(BaseModel):
         default=None, description="도구 실행에 필요한 파라미터 스키마"
     )
     is_active: bool = Field(default=True, description="도구의 활성화 여부")
-    webhook_url: Optional[str] = Field(
-        default=None, description="도구 실행을 위한 외부 웹훅 URL"
-    )
-
-
-class ToolCreate(BaseModel):
-    code: str = Field(..., description="도구의 고유 식별 코드")
-    name: str = Field(..., description="도구의 이름")
-    description: str = Field(..., description="도구에 대한 상세 설명")
-    category: str = Field(..., description="도구의 분류 (예: 이메일, 일정, 분석 등)")
-    parameters: Optional[Dict[str, Any]] = Field(
-        default=None, description="도구 실행에 필요한 파라미터 스키마"
-    )
-    is_active: bool = Field(default=True, description="도구의 활성화 여부")
-    webhook_url: Optional[str] = Field(
-        default=None, description="도구 실행을 위한 외부 웹훅 URL"
-    )
-
-
-class ToolUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, description="도구의 이름")
-    description: Optional[str] = Field(
-        default=None, description="도구에 대한 상세 설명"
-    )
-    category: Optional[str] = Field(default=None, description="도구의 분류")
-    parameters: Optional[Dict[str, Any]] = Field(
-        default=None, description="도구 실행에 필요한 파라미터 스키마"
-    )
-    is_active: Optional[bool] = Field(default=None, description="도구의 활성화 여부")
     webhook_url: Optional[str] = Field(
         default=None, description="도구 실행을 위한 외부 웹훅 URL"
     )
@@ -191,50 +168,6 @@ registry = ToolRegistry()
 # Initialize default tools
 
 
-async def mock_handler(params: Dict[str, Any]) -> str:
-    encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
-    return f"Mock execution successful with params: {encoded}"
-
-
-async def thread_summarizer_handler(params: Dict[str, Any]) -> Any:
-    thread_id = params.get("thread_id", "")
-    return {
-        "summary": f"이메일 스레드 {thread_id}에 대한 요약입니다. 여러 논의 사항이 정리되었습니다.",
-        "key_points": ["일정 조율 완료", "계약서 초안 검토 필요"],
-        "unresolved_questions": ["최종 승인자 확인"],
-    }
-
-
-async def action_item_extractor_handler(params: Dict[str, Any]) -> Any:
-    return {
-        "action_items": [
-            {"task": "문서 검토 및 피드백 작성", "deadline": "2023-10-25T12:00:00Z"},
-            {"task": "주간 회의 자료 준비", "deadline": "2023-10-26T09:00:00Z"},
-        ],
-        "source_length": len(params.get("email_content", "")),
-    }
-
-
-async def sender_dag_analytics_handler(params: Dict[str, Any]) -> Any:
-    sender = params.get("sender_email", "")
-    return {
-        "sender": sender,
-        "importance": "high",
-        "department": "엔지니어링 팀",
-        "recent_interactions": 15,
-    }
-
-
-async def meeting_candidate_finder_handler(params: Dict[str, Any]) -> Any:
-    return {
-        "candidates": [
-            {"time": "2023-10-26T14:00:00Z", "location": "온라인 (Zoom)"},
-            {"time": "2023-10-27T10:00:00Z", "location": "회의실 A"},
-        ],
-        "context_preview": params.get("email_content", "")[:30] + "...",
-    }
-
-
 async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     draft = params.get("draft_content", "")
     rel = params.get("recipient_relationship", "unknown")
@@ -246,7 +179,6 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
         ],
         "tone_score": 85,
     }
-
 
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
@@ -275,10 +207,7 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if (
-                source_phrase in lowered_text
-                and translated_phrase not in translated_terms
-            ):
+            if source_phrase in lowered_text and translated_phrase not in translated_terms:
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -286,47 +215,6 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         "translated_text": translated_text,
         "source_language_detected": source_language,
         "confidence": confidence,
-    }
-
-
-async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
-    """Score an email body for simple spam and phishing risk indicators."""
-    email_content = params.get("email_content", "")
-    sender_domain = params.get("sender_domain", "")
-    normalized_content = email_content.lower()
-    normalized_domain = sender_domain.lower()
-    phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
-    spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(
-        term for term in phishing_terms if term in normalized_content
-    )
-    spam_hits = sorted(term for term in spam_terms if term in normalized_content)
-    suspicious_domain = (
-        normalized_domain.endswith((".ru", ".zip", ".tk"))
-        or "login" in normalized_domain
-        or "secure-" in normalized_domain
-    )
-    risk_score = min(
-        100,
-        10
-        + (20 * len(phishing_hits))
-        + (15 * len(spam_hits))
-        + (35 if suspicious_domain else 0),
-    )
-    warnings: list[str] = []
-    if phishing_hits:
-        warnings.append(f"phishing keywords detected: {', '.join(phishing_hits)}")
-    if spam_hits:
-        warnings.append(f"spam urgency keywords detected: {', '.join(spam_hits)}")
-    if suspicious_domain:
-        warnings.append(f"sender domain looks suspicious: {sender_domain}")
-    return {
-        "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(
-            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
-        ),
-        "risk_score": risk_score,
-        "warnings": warnings,
     }
 
 
@@ -349,15 +237,7 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {
-        "disappointed",
-        "urgent",
-        "issue",
-        "problem",
-        "bad",
-        "불만",
-        "문제",
-    }
+    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -498,50 +378,6 @@ def _parameter_matches_type(value: Any, expected_type: str) -> bool:
 
 registry.register(
     ToolInfo(
-        code="thread_summarizer",
-        name="이메일 맥락 요약 (Thread Summarizer)",
-        description="긴 이메일 스레드를 분석하여 핵심 맥락, 결정 사항, 미해결 질문을 추출합니다.",
-        category="이메일 분석",
-        parameters={"thread_id": "string"},
-    ),
-    thread_summarizer_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="action_item_extractor",
-        name="실행 항목 자동 추출 (Action Item Extractor)",
-        description="이메일 본문에서 사용자가 수행해야 할 작업(Task)과 마감일을 자동으로 식별합니다.",
-        category="작업 관리",
-        parameters={"email_content": "string"},
-    ),
-    action_item_extractor_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="sender_dag_analytics",
-        name="발신자 관계 분석 (Sender DAG Analytics)",
-        description="과거 이메일 기록을 바탕으로 발신자와의 관계(조직도 상 위치, 중요도 등)를 분석합니다.",
-        category="관계 인텔리전스",
-        parameters={"sender_email": "string"},
-    ),
-    sender_dag_analytics_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="meeting_candidate_finder",
-        name="일정 후보 추출 (Meeting Candidate Finder)",
-        description="이메일 텍스트에서 회의나 약속으로 예상되는 시간대와 장소를 추출하여 캘린더 등록 초안을 생성합니다.",
-        category="일정 관리",
-        parameters={"email_content": "string"},
-    ),
-    meeting_candidate_finder_handler,
-)
-
-registry.register(
-    ToolInfo(
         code="tone_analyzer",
         name="답장 어조 분석 및 교정 (Tone Analyzer & Editor)",
         description="작성 중인 답장의 어조를 분석하고, 수신자의 관계에 맞게 정중함이나 명확성을 교정해줍니다.",
@@ -550,7 +386,6 @@ registry.register(
     ),
     tone_analyzer_handler,
 )
-
 
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
@@ -563,7 +398,6 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
-
 
 registry.register(
     ToolInfo(
@@ -627,17 +461,6 @@ registry.register(
         parameters={"text": "string", "target_language": "string"},
     ),
     email_translator_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="spam_phishing_detector",
-        name="스팸 및 피싱 탐지기 (Spam & Phishing Detector)",
-        description="이메일 본문과 발신자 도메인을 분석하여 스팸 및 피싱 위험도를 평가합니다.",
-        category="보안",
-        parameters={"email_content": "string", "sender_domain": "string"},
-    ),
-    spam_phishing_detector_handler,
 )
 
 registry.register(
@@ -770,7 +593,7 @@ registry.register(
     ToolInfo(
         code="hash_generator",
         name="지문/해시 생성기 (Fingerprint/Hash Generator)",
-        description="텍스트의 호환성 지문(MD5) 및 보안 해시(SHA-256) 값을 생성합니다.",
+        description="텍스트의 호환성 지문(MD5, SHA-1) 및 보안 해시(SHA-256) 값을 생성합니다.",
         category="유틸리티",
         parameters={"text": "string"},
     ),
@@ -778,22 +601,14 @@ registry.register(
 )
 
 
-_EMAIL_ATOM = r"A-Za-z0-9!#$%&'*+/=?^_`{|}~"
-_EMAIL_PATTERN = re.compile(
-    rf"(?<![{_EMAIL_ATOM}.-])"
-    rf"[{_EMAIL_ATOM}-]+(?:\.[{_EMAIL_ATOM}-]+)*@"
-    rf"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+"
-    r"[A-Za-z]{2,63}(?![A-Za-z0-9-])"
-)
+_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _PHONE_PATTERN = re.compile(
-    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
-    r"|\d{2,3}-\d{3,4}-\d{4}"
-    r"|(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4})(?!\d)"
+    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}|\d{2,3}-\d{3,4}-\d{4})(?!\d)"
 )
 
 
 async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Mask ASCII email and selected Korean or North American phone formats."""
+    """Mask ASCII email and selected domestic or +82 Korean phone formats."""
     text = params["text"]
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
@@ -807,7 +622,7 @@ registry.register(
     ToolInfo(
         code="email_phone_masker",
         name="이메일/전화번호 마스킹 (Email/Phone Masker)",
-        description="텍스트에서 ASCII 이메일 주소와 일부 한국·북미 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
+        description="텍스트에서 ASCII 이메일 주소와 일부 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
         category="유틸리티",
         parameters={"text": "string"},
     ),
@@ -848,6 +663,7 @@ registry.register(
 
 
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Generate one RFC 9562 UUID version 4 for the retained built-in utility."""
     return {"uuid": str(uuid.uuid4())}
 
 
@@ -934,30 +750,17 @@ def get_tools() -> list[ToolInfo]:
     return registry.get_all()
 
 
-@router.post("/tools", response_model=ToolInfo, status_code=201)
-def create_tool(tool_data: ToolCreate) -> ToolInfo:
-    """
-    새로운 도구를 등록합니다.
-    """
-    if registry.get(tool_data.code):
-        raise HTTPException(
-            status_code=400, detail="Tool with this code already exists"
-        )
+def _reject_tool_mutation() -> NoReturn:
+    raise HTTPException(
+        status_code=501,
+        detail=TOOL_MUTATION_NOT_SUPPORTED_DETAIL,
+    )
 
-    tool_info = ToolInfo(**tool_data.model_dump())
 
-    if tool_info.webhook_url:
-        try:
-            handler = make_webhook_handler(tool_info.webhook_url)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid or unsafe webhook URL: {e}"
-            )
-    else:
-        handler = mock_handler
-
-    registry.register(tool_info, handler)
-    return tool_info
+@router.post("/tools", include_in_schema=False, response_model=None)
+def create_tool() -> NoReturn:
+    """Fail closed until custom tools have durable tenant-scoped ownership."""
+    _reject_tool_mutation()
 
 
 @router.get("/tools/{code}", response_model=ToolInfo)
@@ -971,49 +774,16 @@ def get_tool(code: str) -> ToolInfo:
     return tool
 
 
-@router.patch("/tools/{code}", response_model=ToolInfo)
-def update_tool(code: str, tool_data: ToolUpdate) -> ToolInfo:
-    """
-    특정 도구의 정보를 업데이트합니다.
-    """
-    tool = registry.get(code)
-    if not tool:
-        raise HTTPException(status_code=404, detail="Tool not found")
-
-    update_data = tool_data.model_dump(exclude_unset=True)
-
-    # Validate webhook URL first to avoid state inconsistency
-    handler = None
-    if "webhook_url" in update_data:
-        if update_data["webhook_url"]:
-            try:
-                handler = make_webhook_handler(update_data["webhook_url"])
-            except ValueError as e:
-                raise HTTPException(
-                    status_code=400, detail=f"Invalid or unsafe webhook URL: {e}"
-                )
-        else:
-            handler = mock_handler
-
-    # Apply updates safely
-    for key, value in update_data.items():
-        setattr(tool, key, value)
-
-    if handler:
-        registry.register(tool, handler)
-
-    return tool
+@router.patch("/tools/{code}", include_in_schema=False, response_model=None)
+def update_tool(code: str) -> NoReturn:
+    """Fail closed without mutating a process-global tool."""
+    _reject_tool_mutation()
 
 
-@router.delete("/tools/{code}", status_code=204)
-def delete_tool(code: str) -> None:
-    """
-    특정 도구를 삭제(등록 해제)합니다.
-    """
-    tool = registry.get(code)
-    if not tool:
-        raise HTTPException(status_code=404, detail="Tool not found")
-    registry.unregister(code)
+@router.delete("/tools/{code}", include_in_schema=False, response_model=None)
+def delete_tool(code: str) -> NoReturn:
+    """Fail closed without unregistering a process-global tool."""
+    _reject_tool_mutation()
 
 
 @router.post("/tools/{code}/execute", response_model=ExecuteResponse)
