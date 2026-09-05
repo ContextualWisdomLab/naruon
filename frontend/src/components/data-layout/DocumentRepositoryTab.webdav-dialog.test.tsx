@@ -153,4 +153,39 @@ describe('DocumentRepositoryTab WebDAV confirmation', () => {
     expect(requestDocumentAction).toHaveBeenCalledWith('webdav-materialization-intent');
     expect(document.activeElement).toBe(writeTrigger);
   });
+
+  it('locks WebDAV account and repository-asset selection while a document action is pending', async () => {
+    const setSelectedWebdavSourceId = vi.fn();
+    const setSelectedRepositoryAssetKey = vi.fn();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <DocumentRepositoryTab
+          {...buildProps()}
+          documentActionPendingAction="reparse"
+          setSelectedWebdavSourceId={setSelectedWebdavSourceId}
+          setSelectedRepositoryAssetKey={setSelectedRepositoryAssetKey}
+        />,
+      );
+    });
+
+    const webdavAccountButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Customer WebDAV'));
+    expect(webdavAccountButton).toBeDefined();
+    expect(webdavAccountButton?.disabled).toBe(true);
+
+    const assetCard = container.querySelector('article[role="button"]');
+    expect(assetCard?.getAttribute('aria-disabled')).toBe('true');
+    await act(async () => {
+      assetCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      assetCard?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      assetCard?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    });
+
+    expect(setSelectedWebdavSourceId).not.toHaveBeenCalled();
+    expect(setSelectedRepositoryAssetKey).not.toHaveBeenCalled();
+  });
 });
