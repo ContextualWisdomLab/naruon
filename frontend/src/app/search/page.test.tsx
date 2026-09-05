@@ -443,19 +443,19 @@ describe("SearchPage", () => {
     expect(input?.getAttribute("inputmode")).toBe("search");
     expect(input?.getAttribute("role")).toBe("searchbox");
     expect(
-      container.querySelector('button[aria-label="맥락 검색어 지우기"]'),
+      container.querySelector('button[aria-label="검색어 지우기"]'),
     ).not.toBeNull();
 
     await act(async () => {
       container!
-        .querySelector('button[aria-label="맥락 검색어 지우기"]')
+        .querySelector('button[aria-label="검색어 지우기"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(input?.value).toBe("");
     expect(document.activeElement).toBe(input);
     expect(
-      container.querySelector('button[aria-label="맥락 검색어 지우기"]'),
+      container.querySelector('button[aria-label="검색어 지우기"]'),
     ).toBeNull();
 
     await act(async () => {
@@ -472,7 +472,7 @@ describe("SearchPage", () => {
 
     expect(input?.value).toBe("새 맥락 검색어");
     expect(
-      container.querySelector('button[aria-label="맥락 검색어 지우기"]'),
+      container.querySelector('button[aria-label="검색어 지우기"]'),
     ).not.toBeNull();
   });
 

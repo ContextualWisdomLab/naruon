@@ -153,7 +153,7 @@ describe("EmailList", () => {
     await act(async () => {
       setInputValue(input as HTMLInputElement, "계약");
     });
-    const clearButton = container.querySelector<HTMLButtonElement>('button[aria-label="맥락 검색어 지우기"]');
+    const clearButton = container.querySelector<HTMLButtonElement>('button[aria-label="검색어 지우기"]');
     expect(clearButton).not.toBeNull();
 
     await act(async () => {

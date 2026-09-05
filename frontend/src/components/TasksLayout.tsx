@@ -446,7 +446,7 @@ export function TasksLayout() {
             {taskSearch.length > 0 && (
               <button
                 type="button"
-                aria-label="맥락 검색어 지우기"
+                aria-label="검색어 지우기"
                 onClick={() => {
                   setTaskSearch("");
                   taskSearchInputRef.current?.focus();
