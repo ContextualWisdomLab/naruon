@@ -271,11 +271,14 @@ URL extractor plus the parent's complete masking/security contract; 100 combined
 tool/privacy/dependency tests pass without warnings. GitHub now reports the
 four-file stack clean, while protected parent integration and fresh exact-head
 review/Checks remain required. Draft PR #1512
-(`6a66a9b0d1fa106c19c0fbf51031aaba41ba6415`) follows #1496, removes its
-permissive duplicate email regex, consumes the canonical matcher, rejects empty
-domain labels and trailing ellipses, and records its RFC 5322 ASCII subset. Its
-latest review acknowledgement removes inherited duplicate code and tests
-without deleting the effective email-extractor delta. Draft PR #1555
+(`d77a2567ecba8e63d3c70c8caf147cc37f0382de`) follows current #1496 head
+`2e25b1649c5ac46d238e540d411555b00851d0db`, consumes the canonical matcher,
+rejects empty domain labels and trailing ellipses, and records its RFC 5322
+ASCII subset. A review acknowledgement had deleted the parent URL implementation
+and regressions, causing a reproduced 404; the repaired head restores the exact
+parent files and leaves a four-file, 131-addition email-extractor delta with no
+deletion. The combined 103 tests pass with warnings as errors, alongside Ruff
+and diff checks. Draft PR #1555
 (`24cdd5900ecf2919b8887efedc1effcdd409c4a9`) follows #1512 and carries
 only the first/last-sentence extractor. It consumes both parent matchers and
 preserves U+FF0E, decimal/title periods, URL/email periods, repeated terminators,
