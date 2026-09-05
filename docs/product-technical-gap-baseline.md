@@ -702,14 +702,15 @@ reuse predecessor evidence or claim a merge. #1448 is historical after its
 normal merge; #1443's current head is `62a0d645…` and must be reviewed and
 checked again from that exact head.
 
-Ready PR #1541 (`2eaf6134434a2ad29ad8fe0365aa1b34b848dd5f`)
+Draft PR #1541 (`2eaf6134434a2ad29ad8fe0365aa1b34b848dd5f`)
 separates attachment display sanitization from parser authority. MIME filename
 percent signs and character references remain literal identity, while path,
 markup, C0/C1, and bidirectional controls fail closed instead of manufacturing
-a trusted extension. Thirty-one filename/parser tests and Ruff pass locally
-with warnings as errors. Exact-head OpenCode and Strix runs were externally
-cancelled at attempt 1 and have each been rerun once; they are queued, and the
-metadata gate correctly remains failed until those checks and review complete.
+a trusted extension. Fifty-five filename/parser/EML tests and Ruff pass locally
+with warnings as errors. Prior OpenCode and Strix runs were externally
+cancelled; central exact-head review run `33940228096` is queued, and the stale
+metadata failure does not prove a source defect. Keep Draft until current-head
+review and required Checks complete.
 An exact two-tree comparison against `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 still shows all four implementation, test, and doctoring files as a 344-line
 effective delta, so no protected successor has fully inherited this work.
