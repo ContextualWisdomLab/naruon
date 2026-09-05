@@ -4,9 +4,11 @@
 20MiB even though the aligned email-import and NewsDOM transport contracts
 accept up to 64MiB.
 
-**Correction:** The upload endpoint and pending-payload decoder now share a
-64MiB bound. Signature validation, signed-session authorization, base64 storage,
-worker deferral, and `413` rejection remain fail-closed.
+**Proposed correction:** After NewsDOM publishes an immutable 64MiB release and
+Naruon pins it exactly, the upload endpoint and pending-payload decoder will
+share a 64MiB bound. Signature validation, signed-session authorization, base64
+storage, worker deferral, and `413` rejection remain fail-closed. The Naruon PR
+stays Draft until that owner evidence exists.
 
 **Evidence:** `backend/tests/test_data_api.py` asserts the 64MiB contract and
 keeps the over-limit test monkeypatched to a small fixture. The NewsDOM sidecar

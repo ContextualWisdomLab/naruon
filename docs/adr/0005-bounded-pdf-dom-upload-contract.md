@@ -1,6 +1,6 @@
 # ADR-0005: Bounded PDF DOM upload contract
 
-**Status:** Accepted
+**Status:** Proposed
 **Date:** 2026-08-20
 **Decision owner:** Naruon maintainers
 **Scope:** Signed `POST /api/data/documents/pdf-dom-recognition` uploads
@@ -15,16 +15,16 @@ but receive an avoidable `413` when using the equivalent manual workflow.
 
 ## Decision
 
-Set the direct PDF DOM upload and its pending-payload decoder to 64MiB. Keep the
-signed-session boundary, PDF signature validation, one-byte-over-limit read,
-base64 persistence contract, and `413` response unchanged. This ADR records
-Naruon's consumer-side contract; the NewsDOM sidecar has its own ADR and must
-pass its own checks before deployment.
+After NewsDOM publishes an immutable 64MiB transport release and Naruon pins
+that exact release, set the direct PDF DOM upload and its pending-payload
+decoder to 64MiB. Keep the signed-session boundary, PDF signature validation,
+one-byte-over-limit read, base64 persistence contract, and `413` response
+unchanged. Until then this consumer change remains Draft and must not be merged.
 
 ## Consequences
 
-- Email and manual PDF ingestion present the same bounded size expectation to
-  customers.
+- After the owner release is pinned, email and manual PDF ingestion present the
+  same bounded size expectation to customers.
 - The endpoint can persist more temporary database content, so existing
   workspace quotas, background worker limits, and database capacity monitoring
   remain required.

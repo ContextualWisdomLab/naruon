@@ -2,7 +2,8 @@
 - 수동 PDF DOM 인식 업로드도 이메일 첨부 및 NewsDOM sidecar와 같은 64MiB
   bounded transport 계약을 사용합니다. 한도를 넘으면 PDF를 저장하거나
   sidecar에 전달하지 않고 `413`을 반환하므로 고객은 파일을 분할해
-  다시 업로드할 수 있습니다.
+  다시 업로드할 수 있습니다. 이 변경은 NewsDOM의 64MiB immutable release를
+  Naruon이 exact pin한 뒤에만 병합합니다.
 - PostgreSQL bootstrap now creates the owner/date index only on the canonical
   `email_records` table after email-model reconciliation, and real smoke seeds
   provide the required `is_read` state. Fresh-schema bootstrap and data-quality
