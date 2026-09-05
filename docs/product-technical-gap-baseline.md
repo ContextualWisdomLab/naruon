@@ -452,16 +452,20 @@ only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
 discovery, capability routing, free-pool membership, and fallback remain with
 the canonical owner. Consumer adoption still requires an immutable protected
 owner release, and open PRs or unreleased branches remain Proposed evidence.
-Stacked PR #1566 (`93e99fa3bac6671e58d099f74a23cc5c300a8863`)
+Stacked PR #1566 (`d665f923d431ac11b8928b35ffc2c7869a670401`)
 is now non-force restacked directly on canonical AGENTS writer #1564. Its
-verified child-only delta is one file: it adds `agents-md`, Context7, DeepWiki,
-sequential-thinking, remote-MCP ZDR handling, truthful `Co-Authored-By`
-attribution, and current `contextual-orchestrator/orchestrator/free` wording.
+verified child-only delta adds `agents-md`, Context7, DeepWiki,
+sequential-thinking, remote-MCP ZDR handling, Superpowers test-first debugging,
+the Ponytail minimal-solution ladder, truthful `Co-Authored-By` attribution,
+and current `contextual-orchestrator/orchestrator/free` wording to `AGENTS.md`,
+with two assertions in the existing lifecycle contract test.
 The duplicate 140-line operating procedure and unrelated entry-point/test
 delta were removed instead of creating a parallel policy owner. Thirty-six
-focused governance contracts, Ruff, and diff checks pass. #1566 remains Draft
-until #1564 reaches protected merge; fresh exact-head hosted Checks and
-independent review remain required after restacking on `develop`.
+focused governance contracts, Ruff, and diff checks pass. Central targeted
+review run `33938802963` is queued with merge and branch update disabled because
+leaf branch filters do not attach their suites to this stacked base. #1566
+remains Draft until #1564 reaches protected merge; fresh exact-head hosted
+Checks and independent review remain required after restacking on `develop`.
 Former child #1567 was restacked to
 `4456fabe0d4906f29d07f2b54fbf374462108798`; its sole prior child test failed
 three current parent contracts and was removed rather than weakening the
