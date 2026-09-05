@@ -7,10 +7,10 @@ Each channel returns a uniform candidate row shape:
 
 Lexical channels rank by pg_trgm word-similarity distance (``<->>``)
 over the SQL expression ``search_normalized_text(<document text>)``,
-which migration 0010_language_agnostic_search indexes with GiST
-trigram indexes. The expressions built here MUST stay textually
-identical to the indexed expressions, or PostgreSQL will not use the
-indexes. Character trigrams are language-agnostic: no per-language
+which migration 0020_search_trigram_storage indexes with full-content GIN
+trigram indexes. The expressions built here preserve the indexed normalization,
+but GIN does not accelerate this distance-only ordering: query performance is
+a separate rollout gate. Character trigrams are language-agnostic: no per-language
 tokenizer or ``to_tsvector`` configuration is involved (G6).
 
 Dense channels rank by pgvector cosine distance over the stored
@@ -106,7 +106,7 @@ def _lexical_scored_statement(
         normalized_query_expression, document_expression
     )
     # ``document <->> query`` = 1 - word_similarity(query, document);
-    # kNN-ordering form served by the GiST trigram indexes.
+    # Preserve exact ranking; GIN does not provide GiST kNN acceleration.
     lexical_distance = document_expression.op("<->>")(
         normalized_query_expression
     )
