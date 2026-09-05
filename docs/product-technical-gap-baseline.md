@@ -537,12 +537,15 @@ The shared endpoint now emits nodes in email-identity order and edges in
 source/target order. Eleven focused warning-as-error tests and Ruff pass; fresh
 hosted Checks and independent review remain required, and no p95 improvement is
 claimed without a measured buyer path.
-PR #1522 (`2d58b23003917319fb6fd5170973f70b88793fb0`) remains the bounded
+PR #1522 (`d65b05992cee54964114c9011a2bbbddd663062f`) remains the bounded
 NetworkGraph option-materialization parent and owns its repository-local Strix
 lock prerequisite. Failed job `101062515199` proved the scanner stopped before
 analysis with `ModuleNotFoundError: No module named 'httpx2'`; the target lock
 now directly pins `httpx2==2.12.0`, its generated hash lock is unchanged, and
-a hash-required Python 3.13 install imports that exact version. #1526 was
+a hash-required Python 3.13 install imports that exact version. Its merged
+#1568 child contributes behavioral cap and ordering tests without a duplicate
+source owner; all review threads are resolved and 21 hosted jobs are queued.
+#1526 was
 repaired non-force at
 `cd99fef3245d1097a0422e9b1f48cb42d51ab6e0`: it restored early-terminating
 option loops, executable option-limit coverage, and a real parent-rerender
