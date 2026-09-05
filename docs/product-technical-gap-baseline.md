@@ -477,19 +477,20 @@ only the gateway token to `contextual-orchestrator/orchestrator/free`; provider
 discovery, capability routing, free-pool membership, and fallback remain with
 the canonical owner. Consumer adoption still requires an immutable protected
 owner release, and open PRs or unreleased branches remain Proposed evidence.
-Stacked PR #1566 (`d665f923d431ac11b8928b35ffc2c7869a670401`)
-is now non-force restacked directly on canonical AGENTS writer #1564. Its
-verified child-only delta adds `agents-md`, Context7, DeepWiki,
+Stacked PR #1566 (`104ecf39d6affae7716ca81b4d167bf09abafcb1`)
+is now non-force restacked directly on canonical AGENTS writer #1564 and
+normally merges current LLM-owner foundation #1549
+(`f038377d7d95d445a0e9f3e37707278d792213a2`). Its operating delta adds
+`agents-md`, Context7, DeepWiki,
 sequential-thinking, remote-MCP ZDR handling, Superpowers test-first debugging,
 the Ponytail minimal-solution ladder, truthful `Co-Authored-By` attribution,
 and current `contextual-orchestrator/orchestrator/free` wording to `AGENTS.md`,
 with two assertions in the existing lifecycle contract test.
-The duplicate 140-line operating procedure and unrelated entry-point/test
-delta were removed instead of creating a parallel policy owner. Thirty-six
-focused governance contracts, Ruff, and diff checks pass. Central scheduler run
-`33938802963` and exact-head review run `33940123774` are queued with merge and
-branch update disabled because leaf branch filters do not attach their suites to
-this stacked base. #1566
+The latest repair restores #1549's deleted LLM-authority regression and missing
+CLAUDE/architecture owner boundary while retaining #1564's loopback-only
+OpenCode endpoint and unset request timeout. Thirty-nine focused governance
+contracts, Ruff, and diff checks pass. Current-head hosted suites remain absent
+because leaf branch filters do not attach them to this stacked base. #1566
 remains Draft until #1564 reaches protected merge; fresh exact-head hosted
 Checks and independent review remain required after restacking on `develop`.
 Former child #1567 was restacked to
