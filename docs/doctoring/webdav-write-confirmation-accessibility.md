@@ -6,6 +6,8 @@ Status: **Proposed** until the exact integrated PR head has current frontend/bro
 
 The Data workspace can dispatch an explicit customer WebDAV write after the user selects a server-authoritative workspace document and a write-capable WebDAV source. The confirmation surface therefore changes customer-owned source-of-truth data when confirmed. A visual warning alone is insufficient: keyboard and assistive-technology users must receive the same bounded decision surface, and `aria-modal="true"` must not claim modality while pointer or keyboard interaction with the underlying page remains possible.
 
+A document action also captures the selected repository asset and, for WebDAV materialization, the selected WebDAV source before the request is dispatched. Allowing either selection to change while that action remains pending would let the completion/status UI appear beside a different document or source than the one actually submitted.
+
 ## Constraints and decision
 
 Naruon keeps the confirmation as an `alertdialog` because it interrupts an explicit external-write action and requires a binary decision. The interaction contract is:
@@ -16,7 +18,8 @@ Naruon keeps the confirmation as an `alertdialog` because it interrupts an expli
 - Tab and Shift+Tab remain within the two confirmation actions;
 - Escape cancels without dispatching the provider write;
 - body scrolling is locked while the confirmation is open;
-- cancel and confirmed completion restore focus to the invoking WebDAV write control; and
+- cancel and confirmed completion restore focus to the invoking WebDAV write control;
+- while any document action is pending, repository-asset and WebDAV-account selection are disabled so the visible selection cannot drift away from the request context; and
 - the confirmed provider request remains the existing server-authoritative, conflict-aware WebDAV materialization path rather than a client-side write.
 
 An inline `alertdialog` with `aria-modal="true"` was rejected. WAI-ARIA APG explicitly warns that `aria-modal="true"` is appropriate only when application code prevents interaction outside the dialog and the visual presentation also obscures outside content. A non-modal inline confirmation was also rejected because this action mutates a customer-owned external source and the existing product contract intentionally requires an interruptive confirmation.
@@ -31,6 +34,8 @@ The implementation follows the same repository accessibility shape already used 
 - `e29f7e58ff1dbc4cb35c20d053016090de9a26ea` aligned the focused fixture with the typed WebDAV/account and repository-asset contracts.
 - `dfd8ec72a3f23e257b42853fbff4eb8d03350a7c` strengthened the regression so `aria-modal` must correspond to a full-viewport interaction boundary and body scroll lock.
 - `43cf974a50d69f3109893f73a53a97d40dd1d70f` implemented the full-viewport modal layer and scroll lock while retaining the focus contract.
+- `78c690de92e2767834c6fac99e331c263410063e` added the source-order regression that requires WebDAV-account and repository-asset selection to remain frozen during a pending document action.
+- `517c8e7ccd6081250ebbceba82dc1dac2fb533aa` disabled WebDAV-account selection and made repository-asset mouse/keyboard selection inert with `aria-disabled` while the action is pending.
 
 These commits establish source-order RED→repair provenance. They are not, by themselves, exact-head GREEN. Promotion from Proposed requires current-head frontend/component and browser/E2E checks without warning-class failures, plus the normal repository review gates.
 
