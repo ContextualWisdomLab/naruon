@@ -29,6 +29,8 @@ NewsdomRecognitionWorker = newsdom_worker_module.NewsdomRecognitionWorker
 RESULT_FAILED = newsdom_worker_module.RESULT_FAILED
 RESULT_PENDING = newsdom_worker_module.RESULT_PENDING
 RESULT_RECOGNIZED = newsdom_worker_module.RESULT_RECOGNIZED
+HWPX_FAILED_STATUS = newsdom_worker_module.HWPX_FAILED_STATUS
+HWPX_PARSED_STATUS = newsdom_worker_module.HWPX_PARSED_STATUS
 process_pending_attachment = newsdom_worker_module.process_pending_attachment
 process_pending_document = newsdom_worker_module.process_pending_document
 
@@ -101,7 +103,13 @@ def _hwpx_payload(*, include_text: bool = True) -> bytes:
             compress_type=zipfile.ZIP_STORED,
         )
         archive.writestr("version.xml", "<version/>")
-        archive.writestr("Contents/content.hpf", "<package/>")
+        archive.writestr(
+            "Contents/content.hpf",
+            """<package xmlns='http://www.idpf.org/2007/opf/'>
+            <manifest><item id='section0' href='section0.xml'/></manifest>
+            <spine><itemref idref='section0'/></spine>
+            </package>""",
+        )
         text = (
             "<hp:p><hp:t>보안 정책</hp:t></hp:p>"
             "<hp:p><hp:t>원본 근거를 보존합니다.</hp:t></hp:p>"
@@ -416,7 +424,7 @@ async def test_hwpx_pending_attachment_is_extracted_and_graph_landed():
     )
 
     assert result == RESULT_RECOGNIZED
-    assert attachment.parse_status == "parsed"
+    assert attachment.parse_status == HWPX_PARSED_STATUS
     assert attachment.parser_key == "hwpx"
     assert attachment.content == "보안 정책\n\n원본 근거를 보존합니다."
     assert len(attachment.content_nodes) == 4
@@ -455,8 +463,8 @@ async def test_hwpx_pending_attachment_records_safe_failure_for_empty_text():
     result = await process_pending_attachment(session=object(), attachment=attachment)
 
     assert result == RESULT_FAILED
-    assert attachment.parse_status == PDF_DOM_RECOGNITION_FAILED_STATUS
-    assert attachment.parse_error_code == "hwpx_recognition_failed"
+    assert attachment.parse_status == HWPX_FAILED_STATUS
+    assert attachment.parse_error_code == "recognition_failed"
 
 
 @pytest.mark.asyncio

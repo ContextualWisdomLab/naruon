@@ -32,7 +32,6 @@ from db.models import (
 from db.session import AsyncSessionLocal
 from services.attachment_parser import (
     HWP_CONVERSION_PENDING_STATUS,
-    HWPX_XML_PACKAGE_PENDING_STATUS,
     decode_deferred_attachment_payload,
 )
 from services.content_graph import ParseResult
@@ -352,29 +351,6 @@ async def process_pending_attachment(
             exc,
         )
         return RESULT_FAILED
-
-    if attachment.parse_status == HWPX_XML_PACKAGE_PENDING_STATUS:
-        try:
-            records = recognize_hwpx(
-                hwpx_bytes=deferred_bytes,
-                source_record_uid=f"attachment-{attachment.id}",
-                display_name=attachment.filename or "",
-            )
-        except HwpxRecognitionError as exc:
-            attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
-            attachment.parse_error_code = "hwpx_recognition_failed"
-            logger.warning(
-                "HWPX attachment %s recognition failed: %s",
-                getattr(attachment, "id", "?"),
-                exc,
-            )
-            return RESULT_FAILED
-        apply_hwpx_recognition_to_attachment(
-            email=email,
-            attachment=attachment,
-            records=records,
-        )
-        return RESULT_RECOGNIZED
 
     pdf_bytes = deferred_bytes
 

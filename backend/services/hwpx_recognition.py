@@ -280,6 +280,9 @@ def recognize_hwpx_package(
             paragraph_count += len(paragraphs)
             sections.append(PdfDomSection(heading="", paragraphs=paragraphs))
 
+    if paragraph_count == 0:
+        raise ValueError("HWPX package contains no readable paragraph text")
+
     source_content_hash = hashlib.sha256(payload).hexdigest()
     parse_result = parse_pdf_dom(
         source_kind=source_kind,
