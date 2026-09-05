@@ -169,6 +169,14 @@ the resulting metadata/Noema gate response, not a demonstrated source defect.
 Its old central run `33902484641` was cancelled before the queue-sweep repair;
 replacement run `33934902852` is queued on protected `.github@b5efbc2` with all
 write modes disabled.
+Tasks bounded-context PR #1515
+(`8a532ef30b295f59daa890ca82aa3eeaf4e5077e`) preserves established HTTP aliases
+while exposing ticket-task semantic names internally. A fresh CodeGraph audit
+found three dead reply-SLA helpers duplicated in the API after behavior moved to
+`reply_sla_escalation_service`; the API copies are removed so the service is the
+single behavior owner. Forty-six naming, Tasks API, and reply-SLA tests pass with
+one skipped, and Ruff/diff checks pass. Twenty-one hosted jobs are queued for the
+new exact head; predecessor review and check evidence does not transfer.
 Draft agent-registry PR #1537
 (`8bb4648a34e29c41e10581f14e21f95bfc7123e1`) similarly keeps legacy generic
 JSON keys only in its anti-corruption loader and publishes semantic fields to
