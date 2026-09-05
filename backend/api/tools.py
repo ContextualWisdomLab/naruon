@@ -861,69 +861,6 @@ registry.register(
 )
 
 
-_URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
-_PROSE_TRAILING_PUNCTUATION = ".,;:!?"
-
-
-def _trim_url_candidate(candidate: str, wrapping_openers: str) -> str:
-    """Remove only closing delimiters proven by adjacent opening wrappers."""
-    delimiters = (("(", ")"), ("[", "]"), ("{", "}"))
-    excess = {
-        closer: min(
-            wrapping_openers.count(opener),
-            max(0, candidate.count(closer) - candidate.count(opener)),
-        )
-        for opener, closer in delimiters
-    }
-    without_prose = candidate.rstrip(_PROSE_TRAILING_PUNCTUATION)
-    end = len(without_prose)
-    while end and excess.get(without_prose[end - 1], 0):
-        excess[without_prose[end - 1]] -= 1
-        end -= 1
-    return without_prose[:end] if end < len(without_prose) else candidate
-
-async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
-    text = params["text"]
-    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
-        )
-    urls: list[str] = []
-    seen: set[str] = set()
-    for match in _URL_PATTERN.finditer(text):
-        wrapper_start = match.start()
-        while wrapper_start and text[wrapper_start - 1].isspace():
-            wrapper_start -= 1
-        wrapper_end = wrapper_start
-        while wrapper_start and text[wrapper_start - 1] in "([{":
-            wrapper_start -= 1
-        candidate = _trim_url_candidate(
-            match.group(), text[wrapper_start:wrapper_end]
-        )
-        try:
-            parsed = urllib.parse.urlsplit(candidate)
-            _ = parsed.port  # validate a declared port without requiring one
-            valid = parsed.hostname is not None
-        except ValueError:
-            valid = False
-        if valid and candidate not in seen:
-            seen.add(candidate)
-            urls.append(candidate)
-    return {"urls": urls}
-
-
-registry.register(
-    ToolInfo(
-        code="url_extractor",
-        name="URL 추출기 (URL Extractor)",
-        description="텍스트 본문에서 HTTP 및 HTTPS URL을 추출합니다.",
-        category="유틸리티",
-        parameters={"text": "string"},
-    ),
-    url_extractor_handler,
-)
-
-
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
