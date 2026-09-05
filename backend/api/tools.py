@@ -601,14 +601,22 @@ registry.register(
 )
 
 
-_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+_EMAIL_ATOM = r"A-Za-z0-9!#$%&'*+/=?^_`{|}~"
+_EMAIL_PATTERN = re.compile(
+    rf"(?<![{_EMAIL_ATOM}.-])"
+    rf"[{_EMAIL_ATOM}-]+(?:\.[{_EMAIL_ATOM}-]+)*@"
+    rf"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z]{2,63}(?![A-Za-z0-9-])"
+)
 _PHONE_PATTERN = re.compile(
-    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}|\d{2,3}-\d{3,4}-\d{4})(?!\d)"
+    r"(?<!\d)(?:(?:\+82[ .-]?10|010)[ .-]?\d{3,4}[ .-]?\d{4}"
+    r"|\d{2,3}-\d{3,4}-\d{4}"
+    r"|(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4})(?!\d)"
 )
 
 
 async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Mask ASCII email and selected domestic or +82 Korean phone formats."""
+    """Mask ASCII email and selected Korean or North American phone formats."""
     text = params["text"]
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
