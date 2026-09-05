@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.26
+**Baseline version:** 1.27
 **Observed on:** 2026-09-05 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -71,16 +71,25 @@ open. No delta or PR was discarded to reduce the queue, and these local passes
 do not transfer approval or hosted evidence between stack heads.
 
 **AGENTS operating knowledge refresh (2026-09-05):** Draft #1566 exact head
-`16fd89f1ed991003b5668a66c882114707f469fc` adds the recurrence rule to test
+`498cf0ca7d25b777a7dafa6bcc839df164babfd0` retains the recurrence rule to test
 application behavior on the actually migrated database, retaining indexes,
 constraints, full-size high-entropy content, and portable identities across
-rollback. Its 43 focused source/governance tests pass with `-W error` and
+rollback. Its 44 focused source/governance tests pass with `-W error` and
 `--noconftest` in the existing environment; this is not a clean-lock, database,
 or browser receipt. CodeRabbit and Devin status contexts are successful, but
 the aggregate changes-requested state has no verified current-head approval.
 The PR remains Draft on #1564; required hosted evidence is not inferred from
-those two contexts. Confidence-ledger (#1559) and fail-closed mutation (#1300)
-follow-ups recorded in its body are not claimed as landed AGENTS text.
+those two contexts. Confidence (#1559) and fail-closed tool mutation (#1300)
+rules formerly recorded only in its body are now proposed AGENTS source.
+Strict confidence rejection is scoped to frontend consumers; backend coercion
+is not claimed fixed. Tool registration/update/delete restrictions explicitly
+preserve supported built-in execution and catalog reads. Normal merges retain
+concurrent remote heads `847ef38ce09ba7deea7b10b3eda731b66d90c1ac` and
+`10ee05c7b1b50b205560fd147ba0c67237a966b0`; their source-guard intent is
+preserved while duplicate wording is consolidated. The combined suite first
+failed one stale wording assertion, then passed 44 tests after alignment.
+An independent consuming-agent scenario review clarified the frontend scope;
+it is not a GitHub approval or product-runtime test.
 
 **Historical tenant provenance portability evidence (2026-09-05T06:57Z;
 current propagation and remaining acceptance gates are above):** stacked
@@ -609,7 +618,7 @@ therefore has one bounded central exact-head scheduler dispatch, run
 `33941908363`, queued with review enabled and merge, auto-merge, and branch
 updates disabled; duplicate current-head dispatch was absent before enqueue.
 The dispatch is wait-state evidence, not an approval or hosted-check substitute.
-#1566 remains Draft; the newer exact head and 43-test source-only scope are
+#1566 remains Draft; the newer exact head and 44-test source-only scope are
 recorded at the top of this baseline. #1564 protected merge, fresh exact-head hosted
 Checks and independent review remain required after restacking on `develop`.
 Former child #1567 was restacked to

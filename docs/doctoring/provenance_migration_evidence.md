@@ -170,10 +170,12 @@ or protected source receipt.
    Integrate the existing #1503 forward repair by ancestry rather than copying
    `0019` to answer its [already-stamped database finding](https://github.com/ContextualWisdomLab/naruon/pull/1502#discussion_r3939592974).
 5. AGENTS.md recurrence rules are owned by #1566
-   (`16fd89f1ed991003b5668a66c882114707f469fc`), not repeated in product PRs.
+   (`498cf0ca7d25b777a7dafa6bcc839df164babfd0`), not repeated in product PRs.
    Its migrated-schema, full-size-content, and retained-identity rollback rules
-   now cover these findings. Forty-three focused source/governance tests pass
+   now cover these findings. Forty-four focused source/governance tests pass
    in the existing environment, not a clean-lock or database acceptance run.
+   Former body-only confidence and tool-mutation rules are now proposed source;
+   normal merges preserve both concurrent documentation and source-guard deltas.
    Current queued checks are wait states; neither a local pass nor PR metadata
    promotes Proposed work to a released or protected contract.
 
