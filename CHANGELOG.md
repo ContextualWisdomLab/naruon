@@ -1,4 +1,7 @@
 ## [Unreleased]
+- Proposed: repair fresh-install and upgrade failures while retaining existing
+  mail and its read state. Real database smoke tests preserve the complete
+  historical upgrade path and verify the repaired installation.
 - Proposed: repair storage failures for long email and document content while
   retaining complete text and search scores. Search latency and deployment
   validation remain required before this change is released.
