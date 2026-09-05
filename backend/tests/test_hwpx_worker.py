@@ -28,14 +28,17 @@ HWPX_PARSED_STATUS = "hwpx_xml_package_parsed"
 HWPX_FAILED_STATUS = "hwpx_xml_package_failed"
 
 
-def _hwpx_payload(*, include_section: bool = True) -> bytes:
+def _hwpx_payload(
+    *, include_section: bool = True, include_version: bool = True
+) -> bytes:
     """Build one minimal standards-shaped HWPX package for worker tests."""
 
     package = io.BytesIO()
     with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_STORED) as archive:
         archive.writestr("mimetype", b"application/hwp+zip")
         # Parent #1353 admission requires version.xml before a payload can be pending.
-        archive.writestr("version.xml", b'<version app="Naruon" />')
+        if include_version:
+            archive.writestr("version.xml", b'<version app="Naruon" />')
         archive.writestr(
             "Contents/content.hpf",
             b"""<?xml version='1.0' encoding='UTF-8'?>
@@ -119,6 +122,8 @@ async def test_pending_hwpx_attachment_is_recognized_without_provider() -> None:
         "Approve the next action.",
     ]
     assert attachment.content_nodes
+    assert attachment.content_nodes[0].source_record_uid.startswith("attachment:")
+    assert attachment.content_nodes[0].source_record_uid != "attachment-73"
 
 
 @pytest.mark.asyncio
@@ -159,6 +164,23 @@ async def test_pending_hwpx_attachment_records_recognizer_failure() -> None:
     assert attachment.parse_error_code == "recognition_failed"
     assert attachment.content_nodes == []
     assert attachment.content_segments == []
+
+
+@pytest.mark.asyncio
+async def test_pending_hwpx_attachment_revalidates_version_member() -> None:
+    """A retained package missing version.xml cannot become parsed."""
+    attachment = _pending_hwpx_attachment(_hwpx_payload(include_version=False))
+
+    result = await process_pending_attachment(
+        session=object(),
+        attachment=attachment,
+        config_resolver=_must_not_resolve_provider,
+        request_fn=_must_not_call_newsdom,
+    )
+
+    assert result == RESULT_FAILED
+    assert attachment.parse_status == HWPX_FAILED_STATUS
+    assert attachment.parse_error_code == "invalid_pending_payload"
 
 
 @pytest.mark.asyncio

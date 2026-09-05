@@ -89,13 +89,17 @@ def _read_member(
     entry: zipfile.ZipInfo,
     *,
     label: str,
+    max_bytes: int = MAX_HWPX_XML_MEMBER_BYTES,
 ) -> bytes:
     """Read one already-selected XML member within its expansion budget."""
 
-    if entry.is_dir() or entry.file_size > MAX_HWPX_XML_MEMBER_BYTES:
+    if entry.is_dir() or entry.file_size > max_bytes:
         raise ValueError(f"HWPX {label} XML member exceeds the expansion limit")
-    payload = archive.read(entry)
-    if len(payload) != entry.file_size or len(payload) > MAX_HWPX_XML_MEMBER_BYTES:
+    try:
+        payload = archive.read(entry)
+    except (NotImplementedError, zipfile.BadZipFile) as exc:
+        raise ValueError(f"HWPX {label} XML member could not be read") from exc
+    if len(payload) != entry.file_size or len(payload) > max_bytes:
         raise ValueError(f"HWPX {label} XML member exceeds the expansion limit")
     return payload
 
@@ -171,10 +175,10 @@ def _paragraph_text(paragraph) -> str:
 
     parts: list[str] = []
 
-    def visit(element, *, is_root: bool = False) -> None:
+    def visit(element) -> None:
         for child in element:
             local_name = _local_name(child.tag)
-            if local_name == "p" and not is_root:
+            if local_name == "p":
                 continue
             if local_name == "t":
                 parts.append("".join(child.itertext()))
@@ -185,7 +189,7 @@ def _paragraph_text(paragraph) -> str:
             else:
                 visit(child)
 
-    visit(paragraph, is_root=True)
+    visit(paragraph)
     return "".join(parts).strip()
 
 
@@ -229,12 +233,21 @@ def recognize_hwpx_package(
     with archive:
         entries = _package_entries(archive)
         mimetype_entry = entries.get("mimetype")
+        version_entry = entries.get("version.xml")
         content_hpf_entry = entries.get(_CONTENT_HPF_PATH)
-        if mimetype_entry is None or content_hpf_entry is None:
+        if (
+            mimetype_entry is None
+            or version_entry is None
+            or content_hpf_entry is None
+        ):
             raise ValueError("HWPX package is missing required identity metadata")
-        if mimetype_entry.is_dir() or mimetype_entry.file_size > 128:
-            raise ValueError("HWPX package has an invalid mimetype member")
-        if archive.read(mimetype_entry) != _HWPX_MIMETYPE:
+        mimetype_payload = _read_member(
+            archive,
+            mimetype_entry,
+            label="mimetype",
+            max_bytes=128,
+        )
+        if mimetype_payload != _HWPX_MIMETYPE:
             raise ValueError("HWPX package has an invalid mimetype member")
 
         content_hpf_payload = _read_member(
@@ -266,6 +279,9 @@ def recognize_hwpx_package(
             paragraphs = _section_paragraphs(section_root)
             paragraph_count += len(paragraphs)
             sections.append(PdfDomSection(heading="", paragraphs=paragraphs))
+
+    if paragraph_count == 0:
+        raise ValueError("HWPX package contains no readable paragraph text")
 
     source_content_hash = hashlib.sha256(payload).hexdigest()
     parse_result = parse_pdf_dom(

@@ -50,6 +50,7 @@ def _hwpx_package(
     sections: dict[str, str],
     spine: tuple[str, ...],
     manifest_hrefs: dict[str, str] | None = None,
+    include_version: bool = True,
 ) -> bytes:
     """Build a small HWPX package with explicit manifest and spine order."""
     hrefs = manifest_hrefs or {
@@ -58,7 +59,8 @@ def _hwpx_package(
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("mimetype", b"application/hwp+zip")
-        archive.writestr("version.xml", b'<version app="Naruon" />')
+        if include_version:
+            archive.writestr("version.xml", b'<version app="Naruon" />')
         archive.writestr(
             "Contents/content.hpf",
             _content_hpf(
@@ -100,6 +102,90 @@ def test_recognize_hwpx_follows_spine_and_preserves_paragraph_provenance() -> No
         "/document[1]/section[2]/paragraph[1]",
         "/document[1]/section[2]/paragraph[2]",
     ]
+
+    changed_records = recognition.recognize_hwpx_package(
+        _hwpx_package(
+            sections={"section0": _section_xml("변경된 문서")},
+            spine=("section0",),
+        ),
+        filename="proposal.hwpx",
+        source_kind="attachment",
+        source_record_uid="attachment-42",
+    )
+    assert changed_records.parse_result.nodes[0].content_node_uid != (
+        records.parse_result.nodes[0].content_node_uid
+    )
+    assert changed_records.parse_result.segments[0].content_segment_uid != (
+        records.parse_result.segments[0].content_segment_uid
+    )
+
+
+def test_recognize_hwpx_rejects_missing_version_member() -> None:
+    """Revalidate the required version member before section recognition."""
+    payload = _hwpx_package(
+        sections={"section0": _section_xml("safe")},
+        spine=("section0",),
+        include_version=False,
+    )
+
+    with pytest.raises(ValueError, match="missing required identity"):
+        recognition.recognize_hwpx_package(
+            payload,
+            filename="missing-version.hwpx",
+            source_kind="attachment",
+            source_record_uid="attachment-47",
+        )
+
+
+@pytest.mark.parametrize("member_name", ("mimetype", "Contents/content.hpf"))
+def test_recognize_hwpx_normalizes_zip_read_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    member_name: str,
+) -> None:
+    """Convert ZIP read implementation failures into bounded parse errors."""
+    payload = _hwpx_package(
+        sections={"section0": _section_xml("safe")},
+        spine=("section0",),
+    )
+    original_read = zipfile.ZipFile.read
+
+    def broken_read(archive, member, *args, **kwargs):
+        if getattr(member, "filename", member) == member_name:
+            raise zipfile.BadZipFile("simulated read failure")
+        return original_read(archive, member, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", broken_read)
+
+    with pytest.raises(ValueError, match="could not be read"):
+        recognition.recognize_hwpx_package(
+            payload,
+            filename="read-failure.hwpx",
+            source_kind="attachment",
+            source_record_uid="attachment-48",
+        )
+
+
+def test_paragraph_text_does_not_duplicate_nested_paragraphs() -> None:
+    """Nested paragraph nodes are skipped by the containing paragraph."""
+    nested_section = (
+        f'<hs:sec xmlns:hs="{_HS_NS}" xmlns:hp="{_HP_NS}">'
+        "<hp:p><hp:p><hp:run><hp:t>nested</hp:t></hp:run></hp:p></hp:p>"
+        "</hs:sec>"
+    )
+    payload = _hwpx_package(
+        sections={"section0": nested_section},
+        spine=("section0",),
+    )
+
+    records = recognition.recognize_hwpx_package(
+        payload,
+        filename="nested.hwpx",
+        source_kind="attachment",
+        source_record_uid="attachment-49",
+    )
+
+    assert records.parse_text == "nested"
+    assert records.paragraph_count == 1
 
 
 def test_recognize_hwpx_rejects_manifest_path_traversal() -> None:

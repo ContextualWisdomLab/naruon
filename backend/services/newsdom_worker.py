@@ -13,6 +13,7 @@ with in-memory model instances and injected adapters.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import random
 from collections.abc import Awaitable, Callable
@@ -29,7 +30,10 @@ from db.models import (
     Email,
 )
 from db.session import AsyncSessionLocal
-from services.attachment_parser import decode_deferred_attachment_payload
+from services.attachment_parser import (
+    HWP_CONVERSION_PENDING_STATUS,
+    decode_deferred_attachment_payload,
+)
 from services.content_graph import ParseResult
 from services.hwpx_recognition import (
     HWPX_FAILED_STATUS,
@@ -67,6 +71,20 @@ HWPX_PARSER_KEY = "hwpx"
 ConfigResolver = Callable[
     [AsyncSession, str | None], Awaitable[NewsdomRuntimeConfig | None]
 ]
+
+
+def _attachment_source_record_uid(email: Email, attachment: Attachment) -> str:
+    """Return opaque provenance derived from stable message and source data."""
+    identity = "\x00".join(
+        (
+            email.message_id or "",
+            email.thread_id or "",
+            attachment.filename or "",
+            attachment.content or "",
+        )
+    )
+    digest = hashlib.sha256(identity.encode("utf-8", errors="surrogatepass"))
+    return f"attachment:{digest.hexdigest()[:32]}"
 
 
 def _append_parse_result_to_attachment(
@@ -279,6 +297,10 @@ async def process_pending_attachment(
         attachment.parse_status = _attachment_failed_status(attachment)
         attachment.parse_error_code = "orphan_attachment"
         return RESULT_FAILED
+    if attachment.parse_status == HWP_CONVERSION_PENDING_STATUS:
+        # Binary HWP needs a separately sandboxed converter and must not be
+        # handed to the PDF or HWPX recognizers.
+        return RESULT_PENDING
 
     if attachment.parse_status == HWPX_PENDING_STATUS:
         try:
@@ -301,7 +323,7 @@ async def process_pending_attachment(
                 email=email,
                 attachment=attachment,
                 hwpx_bytes=hwpx_bytes,
-                source_record_uid=f"attachment-{attachment.id}",
+                source_record_uid=_attachment_source_record_uid(email, attachment),
             )
         except ValueError as exc:
             attachment.parse_status = HWPX_FAILED_STATUS
@@ -314,8 +336,12 @@ async def process_pending_attachment(
             return RESULT_FAILED
         return RESULT_RECOGNIZED
 
+    expected_content_type = attachment.parse_content_type or "application/pdf"
     try:
-        pdf_bytes = decode_deferred_attachment_payload(attachment.content)
+        deferred_bytes = decode_deferred_attachment_payload(
+            attachment.content,
+            expected_content_type,
+        )
     except ValueError as exc:
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         attachment.parse_error_code = "invalid_pending_payload"
@@ -325,6 +351,8 @@ async def process_pending_attachment(
             exc,
         )
         return RESULT_FAILED
+
+    pdf_bytes = deferred_bytes
 
     config = await config_resolver(session, email.organization_id)
     if config is None:
@@ -343,7 +371,7 @@ async def process_pending_attachment(
             attachment=attachment,
             pdf_bytes=pdf_bytes,
             config=config,
-            source_record_uid=f"attachment-{attachment.id}",
+            source_record_uid=_attachment_source_record_uid(email, attachment),
             request_fn=request_fn,
         )
     except NewsdomConfigurationError as exc:
