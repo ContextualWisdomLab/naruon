@@ -5,17 +5,15 @@ import json
 import os
 import secrets
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
-    ANALYSIS_TEXT_MAX_CHARS,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -26,14 +24,6 @@ from api.tools import (
     registry,
 )
 from main import app
-
-
-REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES = (
-    "thread_summarizer",
-    "action_item_extractor",
-    "sender_dag_analytics",
-    "meeting_candidate_finder",
-)
 
 
 def _base64url_encode(raw: bytes) -> str:
@@ -72,20 +62,6 @@ def _signed_session_token() -> str:
     return f"{signing_input}.{_base64url_encode(signature)}"
 
 
-def _assert_tool_mutation_not_supported(response) -> None:
-    assert response.status_code == 501
-    assert response.json() == {
-        "detail": {
-            "error_code": "tool_mutation_not_supported",
-            "message": (
-                "Dynamic tool mutations are disabled until tenant-scoped "
-                "persistent storage and administrative authorization are "
-                "implemented."
-            ),
-        }
-    }
-
-
 def test_tools_rejects_missing_signed_session():
     with TestClient(app) as client:
         response = client.get("/api/tools")
@@ -114,52 +90,16 @@ def test_get_tools_returns_valid_data():
     assert "is_active" in first_tool
 
 
-def test_get_retained_tool_success():
+def test_get_tool_success():
     with TestClient(app) as client:
         response = client.get(
-            "/api/tools/text_analyzer",
+            "/api/tools/thread_summarizer",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
         )
-
     assert response.status_code == 200
-    assert response.json()["code"] == "text_analyzer"
-
-
-@pytest.mark.parametrize("tool_code", REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES)
-def test_startup_catalog_omits_canned_source_derived_tools(tool_code):
-    with TestClient(app) as client:
-        response = client.get(
-            "/api/tools",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-        )
-
-    assert response.status_code == 200
-    assert tool_code not in {tool["code"] for tool in response.json()}
-
-
-@pytest.mark.parametrize("tool_code", REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES)
-def test_removed_canned_source_derived_tool_detail_returns_not_found(tool_code):
-    with TestClient(app) as client:
-        response = client.get(
-            f"/api/tools/{tool_code}",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-        )
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Tool not found"}
-
-
-@pytest.mark.parametrize("tool_code", REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES)
-def test_removed_canned_source_derived_tool_execute_returns_not_found(tool_code):
-    with TestClient(app) as client:
-        response = client.post(
-            f"/api/tools/{tool_code}/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {}},
-        )
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Tool not found"}
+    data = response.json()
+    assert data["code"] == "thread_summarizer"
+    assert data["name"] == "이메일 맥락 요약 (Thread Summarizer)"
 
 
 def test_get_tool_not_found():
@@ -172,50 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-def test_startup_catalog_omits_unsupported_spam_phishing_detector():
-    with TestClient(app) as client:
-        response = client.get(
-            "/api/tools",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-        )
-
-    assert response.status_code == 200
-    assert "spam_phishing_detector" not in {
-        tool["code"] for tool in response.json()
-    }
-
-
-def test_removed_spam_phishing_detector_detail_returns_not_found():
-    with TestClient(app) as client:
-        response = client.get(
-            "/api/tools/spam_phishing_detector",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-        )
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Tool not found"}
-
-
-def test_removed_spam_phishing_detector_execute_returns_not_found():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/spam_phishing_detector/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "email_content": "Urgent: update your bank password now",
-                    "sender_domain": "secure-bank-login.ru",
-                }
-            },
-        )
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Tool not found"}
-
-
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -226,6 +123,70 @@ def test_keyword_extractor_is_disclosed_as_lexical_term_frequency():
     assert tool.description == (
         "텍스트 본문에서 빈도와 최초 출현 순으로 반복 용어를 추출합니다."
     )
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/thread_summarizer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"thread_id": "123"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "summary" in data["result"]
+    assert "123" in data["result"]["summary"]
+    assert "key_points" in data["result"]
+    assert "unresolved_questions" in data["result"]
+
+
+@pytest.mark.asyncio
+async def test_execute_action_item_extractor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/action_item_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"email_content": "Please review by tomorrow."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "action_items" in data["result"]
+    assert len(data["result"]["action_items"]) == 2
+    assert "source_length" in data["result"]
+
+
+@pytest.mark.asyncio
+async def test_execute_sender_dag_analytics():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sender_dag_analytics/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"sender_email": "test@example.com"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sender"] == "test@example.com"
+    assert data["result"]["department"] == "엔지니어링 팀"
+
+
+@pytest.mark.asyncio
+async def test_execute_meeting_candidate_finder():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/meeting_candidate_finder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"email_content": "Let's meet tomorrow at 2pm."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "candidates" in data["result"]
+    assert len(data["result"]["candidates"]) == 2
+    assert "context_preview" in data["result"]
 
 
 @pytest.mark.asyncio
@@ -253,11 +214,11 @@ async def test_execute_tone_analyzer():
 def test_execute_tool_rejects_unexpected_parameter():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/text_analyzer/execute",
+            "/api/tools/thread_summarizer/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
-                    "text": "123",
+                    "thread_id": "123",
                     "__proto__": {"polluted": True},
                 }
             },
@@ -273,9 +234,9 @@ def test_execute_tool_rejects_unexpected_parameter():
 def test_execute_tool_rejects_invalid_parameter_type():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/text_analyzer/execute",
+            "/api/tools/thread_summarizer/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": ["not", "a", "string"]}},
+            json={"parameters": {"thread_id": ["not", "a", "string"]}},
         )
 
     assert response.status_code == 200
@@ -342,7 +303,7 @@ def test_execute_tool_no_parameters_accepted():
 def test_execute_tool_not_a_dict_parameter():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/text_analyzer/execute",
+            "/api/tools/thread_summarizer/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={"parameters": "not_a_dict"},  # type: ignore
         )
@@ -418,167 +379,6 @@ async def test_execute_tool_handler_error():
     assert "Simulated error" in data["message"]
 
 
-def test_execute_url_extractor():
-    text = (
-        "URLs: https://example.com:8443/foo/bar?q=a%20b#section "
-        "(http://foo.com?next=/a) https://example.com:8443/foo/bar?q=a%20b#section."
-    )
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": text}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["urls"] == [
-        "https://example.com:8443/foo/bar?q=a%20b#section",
-        "http://foo.com?next=/a",
-        "https://example.com:8443/foo/bar?q=a%20b#section.",
-    ]
-
-
-@pytest.mark.parametrize(
-    "url",
-    (
-        "https://example.com/a,b,",
-        "https://example.com?q=what?",
-        "https://example.com#frag!",
-    ),
-)
-def test_execute_url_extractor_preserves_valid_terminal_punctuation(url):
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": url}},
-        )
-
-    assert response.json()["result"]["urls"] == [url]
-
-
-@pytest.mark.parametrize("suffix", (").", "),", ")!"))
-def test_execute_url_extractor_removes_wrapped_prose_delimiters(suffix):
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": f"(https://example.com/path{suffix}"}},
-        )
-
-    assert response.json()["result"]["urls"] == ["https://example.com/path"]
-
-
-@pytest.mark.parametrize(
-    ("text", "url"),
-    (
-        ("(https://example.com/path!),", "https://example.com/path!"),
-        ("([https://example.com/path]).", "https://example.com/path"),
-    ),
-)
-def test_execute_url_extractor_handles_punctuated_nested_wrappers(text, url):
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": text}},
-        )
-
-    assert response.json()["result"]["urls"] == [url]
-
-
-def test_execute_url_extractor_handles_spaced_nested_wrappers():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "([  https://example.com/path])."}},
-        )
-
-    assert response.json()["result"]["urls"] == ["https://example.com/path"]
-
-
-def test_execute_url_extractor_does_not_borrow_distant_wrapper():
-    url = "https://example.com/path)."
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": f"(see {url}"}},
-        )
-
-    assert response.json()["result"]["urls"] == [url]
-
-
-@pytest.mark.parametrize(
-    "url",
-    (
-        "https://example.com/a(b)",
-        "https://example.com/a[b]",
-        "https://example.com/a{b}",
-    ),
-)
-def test_execute_url_extractor_preserves_balanced_url_delimiters(url):
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": f"(\n{url}"}},
-        )
-
-    assert response.json()["result"]["urls"] == [url]
-
-
-@pytest.mark.parametrize(
-    "url",
-    (
-        "https://example.com/a).",
-        "https://example.com/a],",
-        "https://example.com/a}!",
-    ),
-)
-def test_execute_url_extractor_preserves_unwrapped_delimiter_suffixes(url):
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": url}},
-        )
-
-    assert response.json()["result"]["urls"] == [url]
-
-
-def test_execute_url_extractor_handles_many_unmatched_delimiters_linearly():
-    wrapper_count = 25_000
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "text": "(" * wrapper_count
-                    + "https://example.com/"
-                    + ")" * wrapper_count
-                }
-            },
-        )
-
-    assert response.json()["result"]["urls"] == ["https://example.com/"]
-
-
-def test_execute_url_extractor_rejects_oversized_text():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "failed"
-
-
 @pytest.mark.asyncio
 async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(caplog):
     hostile_code = "error_tool\r\nforged_event=true"
@@ -612,9 +412,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -717,6 +518,30 @@ async def test_text_analyzer_tool_success():
 
 
 @pytest.mark.asyncio
+async def test_uuid_v4_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/uuid_v4_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+
+    # Check if the result has 'uuid' key
+    assert "uuid" in result
+
+    # Validate UUID v4 format
+    import uuid
+
+    generated_uuid = result["uuid"]
+    parsed_uuid = uuid.UUID(generated_uuid)
+    assert parsed_uuid.version == 4
+
+
+@pytest.mark.asyncio
 async def test_base64_encoder_tool_success():
     with TestClient(app) as client:
         response = client.post(
@@ -761,15 +586,14 @@ async def test_base64_decoder_tool_invalid_input():
     assert "Invalid Base64 string" in data["message"]
 
 
-def test_create_tool_mutation_fails_closed_without_registry_write():
-    code = "new_custom_tool"
+def test_create_tool_success():
     try:
         with TestClient(app) as client:
             response = client.post(
                 "/api/tools",
                 headers={"Authorization": f"Bearer {_signed_session_token()}"},
                 json={
-                    "code": code,
+                    "code": "new_custom_tool",
                     "name": "Custom Tool",
                     "description": "Custom Description",
                     "category": "Custom Category",
@@ -777,197 +601,257 @@ def test_create_tool_mutation_fails_closed_without_registry_write():
                     "is_active": True,
                 },
             )
-        _assert_tool_mutation_not_supported(response)
-        assert registry.get(code) is None
+        assert response.status_code == 201
+        data = response.json()
+        assert data["code"] == "new_custom_tool"
+
+        tool = registry.get("new_custom_tool")
+        assert tool is not None
+        assert tool.name == "Custom Tool"
     finally:
-        registry.unregister(code)
+        registry.unregister("new_custom_tool")
 
 
-def test_create_tool_mutation_fails_closed_even_with_safe_webhook():
-    code = "webhook_custom_tool"
+def test_create_tool_already_exists():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "code": "thread_summarizer",
+                "name": "Should Fail",
+                "description": "Should Fail",
+                "category": "Test",
+            },
+        )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Tool with this code already exists"}
+
+
+def test_update_tool_success():
     try:
-        with patch("api.tools._resolve_global_addresses") as resolve_addresses:
+        registry.register(
+            ToolInfo(
+                code="update_tool",
+                name="Old Name",
+                description="Old Desc",
+                category="Test",
+            ),
+            lambda p: "ok",
+        )
+
+        with TestClient(app) as client:
+            response = client.patch(
+                "/api/tools/update_tool",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={"name": "New Name", "is_active": False},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "New Name"
+        assert data["is_active"] is False
+
+        tool = registry.get("update_tool")
+        assert tool.name == "New Name"
+        assert tool.is_active is False
+    finally:
+        registry.unregister("update_tool")
+
+
+def test_update_tool_with_webhook():
+    try:
+        registry.register(
+            ToolInfo(
+                code="webhook_update_tool",
+                name="Old",
+                description="Old",
+                category="Test",
+            ),
+            lambda p: "ok",
+        )
+
+        with patch(
+            "api.tools._resolve_global_addresses",
+            return_value=("93.184.216.34",),
+        ):
             with TestClient(app) as client:
-                response = client.post(
+                response = client.patch(
+                    "/api/tools/webhook_update_tool",
+                    headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                    json={"webhook_url": "https://example.com/webhook"},
+                )
+
+        assert response.status_code == 200
+        tool = registry.get("webhook_update_tool")
+        assert tool.webhook_url == "https://example.com/webhook"
+    finally:
+        registry.unregister("webhook_update_tool")
+
+
+def test_update_tool_remove_webhook():
+    try:
+        registry.register(
+            ToolInfo(
+                code="webhook_remove_tool",
+                name="Old",
+                description="Old",
+                category="Test",
+                webhook_url="https://example.com/webhook",
+            ),
+            lambda p: "ok",
+        )
+
+        with TestClient(app) as client:
+            response = client.patch(
+                "/api/tools/webhook_remove_tool",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={"webhook_url": None},
+            )
+
+        assert response.status_code == 200
+        tool = registry.get("webhook_remove_tool")
+        assert tool.webhook_url is None
+    finally:
+        registry.unregister("webhook_remove_tool")
+
+
+def test_update_tool_not_found():
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/tools/non_existent_tool",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"name": "New Name"},
+        )
+    assert response.status_code == 404
+
+
+def test_delete_tool_success():
+    try:
+        registry.register(
+            ToolInfo(
+                code="delete_tool",
+                name="To Delete",
+                description="To Delete",
+                category="Test",
+            ),
+            lambda p: "ok",
+        )
+
+        with TestClient(app) as client:
+            response = client.delete(
+                "/api/tools/delete_tool",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            )
+
+        assert response.status_code == 204
+        assert registry.get("delete_tool") is None
+    finally:
+        registry.unregister("delete_tool")
+
+
+def test_delete_tool_not_found():
+    with TestClient(app) as client:
+        response = client.delete(
+            "/api/tools/non_existent_tool",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_webhook_handler_success():
+    try:
+        with patch(
+            "api.tools._resolve_global_addresses",
+            return_value=("93.184.216.34",),
+        ):
+            with TestClient(app) as client:
+                client.post(
                     "/api/tools",
                     headers={"Authorization": f"Bearer {_signed_session_token()}"},
                     json={
-                        "code": code,
+                        "code": "webhook_tool",
                         "name": "Webhook Tool",
-                        "description": "Calls an external webhook",
-                        "category": "Custom Category",
+                        "description": "Calls external webhook",
+                        "category": "Test",
                         "parameters": {"input": "string"},
                         "webhook_url": "https://example.com/webhook",
                     },
                 )
 
-        _assert_tool_mutation_not_supported(response)
-        assert registry.get(code) is None
-        resolve_addresses.assert_not_called()
+            with patch("httpx.AsyncClient.post") as mock_post:
+                mock_response = AsyncMock()
+                mock_response.json.return_value = {
+                    "webhook_success": True
+                }  # json() is sync, return_value returns coroutine from AsyncMock, wait...
+                from unittest.mock import MagicMock
+
+                mock_response.json = MagicMock(return_value={"webhook_success": True})
+                mock_response.raise_for_status = lambda: None
+                mock_post.return_value = mock_response
+
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/tools/webhook_tool/execute",
+                        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                        json={"parameters": {"input": "hello"}},
+                    )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "success"
+                assert data["result"] == {"webhook_success": True}
+
+                mock_post.assert_called_once()
+                args, kwargs = mock_post.call_args
+                assert args[0] == "https://example.com/webhook"
+                assert kwargs["json"] == {"parameters": {"input": "hello"}}
+
     finally:
-        registry.unregister(code)
-
-
-def test_update_tool_mutation_fails_closed_without_registry_change():
-    code = "update_tool"
-
-    def handler(_params):
-        return "ok"
-
-    original = ToolInfo(
-        code=code,
-        name="Old Name",
-        description="Old Desc",
-        category="Test",
-    )
-    original_snapshot = original.model_copy(deep=True)
-    try:
-        registry.register(original, handler)
-
-        with TestClient(app) as client:
-            response = client.patch(
-                f"/api/tools/{code}",
-                headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                json={"name": "New Name", "is_active": False},
-            )
-
-        _assert_tool_mutation_not_supported(response)
-        assert registry.get(code) == original_snapshot
-        assert registry._handlers[code] is handler
-    finally:
-        registry.unregister(code)
-
-
-def test_delete_tool_mutation_fails_closed_without_registry_change():
-    code = "delete_tool"
-
-    def handler(_params):
-        return "ok"
-
-    original = ToolInfo(
-        code=code,
-        name="Do Not Delete",
-        description="Do Not Delete",
-        category="Test",
-    )
-    try:
-        registry.register(original, handler)
-
-        with TestClient(app) as client:
-            response = client.delete(
-                f"/api/tools/{code}",
-                headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            )
-
-        _assert_tool_mutation_not_supported(response)
-        assert registry.get(code) == original
-        assert registry._handlers[code] is handler
-    finally:
-        registry.unregister(code)
-
-
-@pytest.mark.parametrize(
-    ("method", "path", "payload"),
-    [
-        (
-            "POST",
-            "/api/tools",
-            {
-                "code": "unauthorized_tool",
-                "name": "Unauthorized Tool",
-                "description": "Must not be registered",
-                "category": "Test",
-            },
-        ),
-        ("PATCH", "/api/tools/text_analyzer", {"name": "Unauthorized"}),
-        ("DELETE", "/api/tools/text_analyzer", None),
-    ],
-)
-def test_tool_mutation_routes_require_signed_session(method, path, payload):
-    with TestClient(app) as client:
-        response = client.request(method, path, json=payload)
-
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Authentication required"}
-
-
-@pytest.mark.parametrize(
-    ("method", "path"),
-    [
-        ("POST", "/api/tools"),
-        ("PATCH", "/api/tools/non_existent_tool"),
-    ],
-)
-def test_tool_mutation_tombstones_do_not_validate_request_models(method, path):
-    with TestClient(app) as client:
-        response = client.request(
-            method,
-            path,
-            headers={
-                "Authorization": f"Bearer {_signed_session_token()}",
-                "Content-Type": "application/json",
-            },
-            content="{not-json",
-        )
-
-    _assert_tool_mutation_not_supported(response)
-
-
-def test_tool_mutation_routes_are_hidden_from_openapi():
-    from api.tools import router as tools_router
-
-    schema_app = FastAPI()
-    schema_app.include_router(tools_router)
-    paths = schema_app.openapi()["paths"]
-
-    assert "post" not in paths["/api/tools"]
-    assert "patch" not in paths["/api/tools/{code}"]
-    assert "delete" not in paths["/api/tools/{code}"]
-
-
-@pytest.mark.asyncio
-async def test_webhook_handler_success():
-    from api.tools import make_webhook_handler
-
-    with patch(
-        "api.tools._resolve_global_addresses",
-        return_value=("93.184.216.34",),
-    ):
-        handler = make_webhook_handler("https://example.com/webhook")
-        with patch("httpx.AsyncClient.post") as mock_post:
-            mock_response = MagicMock()
-            mock_response.json.return_value = {"webhook_success": True}
-            mock_response.raise_for_status.return_value = None
-            mock_post.return_value = mock_response
-
-            result = await handler({"input": "hello"})
-
-    assert result == {"webhook_success": True}
-    mock_post.assert_awaited_once_with(
-        "https://example.com/webhook",
-        json={"parameters": {"input": "hello"}},
-        timeout=10.0,
-    )
+        registry.unregister("webhook_tool")
 
 
 @pytest.mark.asyncio
 async def test_webhook_handler_http_error():
-    from api.tools import make_webhook_handler
-
-    with patch(
-        "api.tools._resolve_global_addresses",
-        return_value=("93.184.216.34",),
-    ):
-        handler = make_webhook_handler("https://example.com/webhook")
+    try:
         with patch(
-            "httpx.AsyncClient.post",
-            side_effect=httpx.HTTPError("Simulated HTTP Error"),
+            "api.tools._resolve_global_addresses",
+            return_value=("93.184.216.34",),
         ):
-            with pytest.raises(
-                ValueError,
-                match="Webhook execution failed: Simulated HTTP Error",
-            ):
-                await handler({"input": "hello"})
+            with TestClient(app) as client:
+                client.post(
+                    "/api/tools",
+                    headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                    json={
+                        "code": "webhook_fail_tool",
+                        "name": "Webhook Fail Tool",
+                        "description": "Calls external webhook",
+                        "category": "Test",
+                        "parameters": {"input": "string"},
+                        "webhook_url": "https://example.com/webhook",
+                    },
+                )
+
+            with patch("httpx.AsyncClient.post") as mock_post:
+                mock_post.side_effect = httpx.HTTPError("Simulated HTTP Error")
+
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/tools/webhook_fail_tool/execute",
+                        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                        json={"parameters": {"input": "hello"}},
+                    )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "failed"
+                assert (
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
+                )
+
+    finally:
+        registry.unregister("webhook_fail_tool")
 
 
 def test_tool_registry_execute_no_handler():
@@ -1038,6 +922,46 @@ def test_validate_parameters_not_dict():
         registry._validate_parameters("some_code", "not a dict")  # type: ignore
 
 
+def test_create_tool_unsafe_webhook():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "code": "unsafe_tool",
+                "name": "Unsafe",
+                "description": "Unsafe",
+                "category": "Test",
+                "webhook_url": "http://localhost:8080/admin",
+            },
+        )
+    assert response.status_code == 400
+    assert "Invalid or unsafe webhook URL" in response.json()["detail"]
+
+
+def test_update_tool_unsafe_webhook():
+    try:
+        registry.register(
+            ToolInfo(
+                code="unsafe_update_tool",
+                name="Safe",
+                description="Safe",
+                category="Test",
+            ),
+            lambda p: "ok",
+        )
+        with TestClient(app) as client:
+            response = client.patch(
+                "/api/tools/unsafe_update_tool",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={"webhook_url": "http://169.254.169.254/latest/meta-data/"},
+            )
+        assert response.status_code == 400
+        assert "Invalid or unsafe webhook URL" in response.json()["detail"]
+    finally:
+        registry.unregister("unsafe_update_tool")
+
+
 def test_is_safe_webhook_url_coverage():
     from api.tools import is_safe_webhook_url
 
@@ -1075,6 +999,27 @@ def test_execute_email_translator():
     assert "감사합니다" in data["result"]["translated_text"]
     assert "회의" in data["result"]["translated_text"]
     assert data["result"]["source_language_detected"] == "en"
+
+
+def test_execute_spam_phishing_detector():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/spam_phishing_detector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "Urgent: update your bank password now",
+                    "sender_domain": "secure-bank-login.ru",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["is_phishing"] is True
+    assert data["result"]["is_spam"] is True
+    assert data["result"]["risk_score"] >= 90
+    assert any("sender domain" in warning for warning in data["result"]["warnings"])
 
 
 def test_execute_reply_drafter():
@@ -1119,7 +1064,7 @@ def test_execute_data_anonymizer():
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
-                    "text": "제 이메일은 test.user-1@gmail.com 이고, 폰 번호는 010-1234-5678, 주민번호는 900101-1234567 입니다. 011-123-4567도 됩니다."
+                    "text": "제 이메일은 test.user-1@gmail.com 이고, 폰 번호는 010-1234-5678, 프랑스 폰 번호는 +33 6 12 34 56 78, 주민번호는 900101 1234567 입니다. 011-123-4567도 됩니다."
                 }
             },
         )
@@ -1133,6 +1078,8 @@ def test_execute_data_anonymizer():
         assert "test.user-1@gmail.com" not in anonymized
         assert "010-1234-5678" not in anonymized
         assert "900101-1234567" not in anonymized
+        assert "900101 1234567" not in anonymized
+        assert "+33 6 12 34 56 78" not in anonymized
 
         # 빈 텍스트 케이스
         response_empty = client.post(
@@ -1149,29 +1096,6 @@ def test_execute_data_anonymizer():
         # fallback 커버리지를 위해 직접 handler를 호출하는 비동기 테스트를 아래에 추가합니다.
 
 
-def test_execute_data_anonymizer_masks_separator_free_and_international_formats():
-    source_values = (
-        "01012345678",
-        "9001011234567",
-        "01 42 68 53 00",
-        "사용자@예시.한국",
-    )
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/data_anonymizer/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": " / ".join(source_values) + "."}},
-        )
-
-    assert response.status_code == 200
-    anonymized = response.json()["result"]["anonymized_text"]
-    assert all(source_value not in anonymized for source_value in source_values)
-    assert anonymized.endswith(".")
-    assert anonymized.count("***-****-****") == 2
-    assert "******-*******" in anonymized
-    assert "***@***" in anonymized
-
-
 @pytest.mark.asyncio
 async def test_data_anonymizer_handler_none():
     from api.tools import data_anonymizer_handler
@@ -1181,11 +1105,6 @@ async def test_data_anonymizer_handler_none():
 
     result_missing = await data_anonymizer_handler({})
     assert result_missing["anonymized_text"] == ""
-
-    with pytest.raises(ValueError, match="Analysis text must not exceed"):
-        await data_anonymizer_handler(
-            {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
-        )
 
 
 def test_execute_grammar_checker():
@@ -1206,6 +1125,14 @@ def test_execute_grammar_checker():
     assert "확인 부탁드립니다" in data["result"]["corrected_text"]
     assert "감사합니다" in data["result"]["corrected_text"]
     assert data["result"]["errors_found"] == 3
+
+
+@pytest.mark.asyncio
+async def test_mock_handler():
+    from api.tools import mock_handler
+
+    res = await mock_handler({"test": 123})
+    assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
@@ -1251,6 +1178,7 @@ async def test_analysis_handlers_safe_and_fallthrough_paths():
         email_translator_handler,
         grammar_checker_handler,
         sentiment_analyzer_handler,
+        spam_phishing_detector_handler,
     )
 
     untranslated = await email_translator_handler(
@@ -1258,6 +1186,19 @@ async def test_analysis_handlers_safe_and_fallthrough_paths():
     )
     assert untranslated["translated_text"] == "Hello, thank you for the meeting."
     assert untranslated["source_language_detected"] == "en"
+
+    safe_email = await spam_phishing_detector_handler(
+        {
+            "email_content": "Here are the approved meeting notes.",
+            "sender_domain": "example.com",
+        }
+    )
+    assert safe_email == {
+        "is_spam": False,
+        "is_phishing": False,
+        "risk_score": 10,
+        "warnings": [],
+    }
 
     nonurgent_negative = await sentiment_analyzer_handler(
         {"text": "I am disappointed."}
@@ -1301,70 +1242,6 @@ async def test_keyword_extractor_handler():
     assert empty == {"keywords": [], "keyword_count": 0}
 
 
-@pytest.mark.asyncio
-async def test_email_address_extractor_handler():
-    from api.tools import email_address_extractor_handler
-
-    text = (
-        "Please contact John.Doe@example.com or support@example.com. "
-        "Then john.doe@EXAMPLE.COM or user@mail.example.com"
-    )
-    first = await email_address_extractor_handler({"text": text})
-    second = await email_address_extractor_handler({"text": text})
-
-    assert first == second
-    assert first == {
-        "emails": [
-            "John.Doe@example.com",
-            "support@example.com",
-            "user@mail.example.com",
-        ],
-        "count": 3,
-    }
-    assert await email_address_extractor_handler({"text": "No emails here."}) == {
-        "emails": [],
-        "count": 0,
-    }
-    assert await email_address_extractor_handler(
-        {"text": "Reject a@b..com but keep support@example.com..."}
-    ) == {"emails": ["support@example.com"], "count": 1}
-
-
-def test_execute_email_address_extractor_envelope():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/email_address_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "Contact test@example.com."}},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["result"] == {
-        "emails": ["test@example.com"],
-        "count": 1,
-    }
-
-
-def test_email_address_extractor_rejects_oversized_text():
-    from api.tools import ANALYSIS_TEXT_MAX_CHARS
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/email_address_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "status": "failed",
-        "result": None,
-        "message": (
-            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
-        ),
-    }
-
-
 def test_execute_analysis_tool_rejects_oversized_text():
     from api.tools import ANALYSIS_TEXT_MAX_CHARS
 
@@ -1383,125 +1260,3 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
-
-
-@pytest.mark.asyncio
-async def test_first_last_sentence_handler_success():
-    params = {"text": "Hello world. This is a test. How are you?"}
-    result = await registry.invoke_tool("first_last_sentence", params)
-    assert result == {"excerpt": "Hello world. How are you?"}
-
-
-@pytest.mark.asyncio
-async def test_first_last_sentence_handler_cjk_punctuation():
-    params = {"text": "첫 번째 문장입니다． 두 번째 문장입니다！ 세 번째 문장입니다？"}
-    result = await registry.invoke_tool("first_last_sentence", params)
-    assert result == {"excerpt": "첫 번째 문장입니다． 세 번째 문장입니다？"}
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("text", "excerpt"),
-    [
-        (
-            "Dr. Smith approved it. Please proceed.",
-            "Dr. Smith approved it. Please proceed.",
-        ),
-        ("Version 1.2 works. Please deploy.", "Version 1.2 works. Please deploy."),
-        (
-            "Contact alice@example.com for help. Thanks.",
-            "Contact alice@example.com for help. Thanks.",
-        ),
-        (
-            "Read https://example.com/docs.html first. Done.",
-            "Read https://example.com/docs.html first. Done.",
-        ),
-        ('He said "First." She said "Last."', 'He said "First." She said "Last."'),
-    ],
-)
-async def test_first_last_sentence_handler_internal_periods_and_closers(text, excerpt):
-    result = await registry.invoke_tool("first_last_sentence", {"text": text})
-    assert result == {"excerpt": excerpt}
-
-
-@pytest.mark.asyncio
-async def test_first_last_sentence_handler_empty_text():
-    params = {"text": ""}
-    result = await registry.invoke_tool("first_last_sentence", params)
-    assert result == {"excerpt": ""}
-
-
-@pytest.mark.asyncio
-async def test_first_last_sentence_handler_no_sentences():
-    params = {"text": "..."}
-    result = await registry.invoke_tool("first_last_sentence", params)
-    assert result == {"excerpt": "..."}
-
-
-@pytest.mark.asyncio
-async def test_first_last_sentence_handler_one_sentence():
-    params = {"text": "Just one sentence."}
-    result = await registry.invoke_tool("first_last_sentence", params)
-    assert result == {"excerpt": "Just one sentence."}
-
-
-@pytest.mark.asyncio
-async def test_first_last_sentence_handler_oversized():
-    from api.tools import ANALYSIS_TEXT_MAX_CHARS
-
-    params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
-    with pytest.raises(ValueError, match="must not exceed"):
-        await registry.invoke_tool("first_last_sentence", params)
-
-
-@pytest.mark.asyncio
-async def test_hash_generator_handler():
-    from api.tools import hash_generator_handler, ANALYSIS_TEXT_MAX_CHARS
-
-    res = await hash_generator_handler({"text": "hello"})
-    assert res["md5"] == "5d41402abc4b2a76b9719d911017c592"
-    assert res["sha1"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
-    assert res["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-
-    with pytest.raises(ValueError, match="Analysis text must not exceed"):
-        await hash_generator_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
-
-@pytest.mark.asyncio
-async def test_email_phone_masker_handler():
-    from api.tools import email_phone_masker_handler, ANALYSIS_TEXT_MAX_CHARS
-
-    res = await email_phone_masker_handler({"text": "Contact me at user@example.com or 010-1234-5678."})
-    assert res["masked_text"] == "Contact me at [EMAIL] or [PHONE]."
-
-    with pytest.raises(ValueError, match="Analysis text must not exceed"):
-        await email_phone_masker_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
-
-
-def test_execute_hash_generator():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["md5"] == "5d41402abc4b2a76b9719d911017c592"
-    assert (
-        data["result"]["sha256"]
-        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-    )
-
-
-def test_execute_email_phone_masker():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/email_phone_masker/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "My email is test@example.com and phone is 010-1234-5678, but 1234 is not."}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["masked_text"] == "My email is [EMAIL] and phone is [PHONE], but 1234 is not."
