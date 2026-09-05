@@ -5,7 +5,7 @@
 > `(user_id, organization_id, workspace_id)` and all production callers must
 > provide an explicit workspace; no implicit workspace scope is accepted.
 
-**Status:** Accepted (Naruon-local attachment ingestion policy)
+**Status:** Proposed (Naruon-local attachment ingestion policy; unmerged PR #1486)
 **Date:** 2026-08-30
 **Decision owner:** Naruon maintainers
 **Scope:** Naruon's email-attachment parsing boundary
@@ -166,6 +166,19 @@ No paper PDF is copied into this repository: the stable source citation is
 linked instead, avoiding an unsupported redistribution assumption.
 
 ## Revisions
+
+### 2026-09-05: Status and sibling lease evidence correction
+
+The former Accepted label preceded protected-branch adoption. This file is
+absent from the verified `develop` head
+`042b0c70531b229af3acbd0421a2f23098d848b3`; PR #1486 remains Draft.
+All implementation and test statements below describe proposal history, not
+protected-main, released, or deployed behavior. No valid delta is withdrawn.
+The separate reply-SLA scheduler still had the physical-connection lease and
+expired-record defects described below for the attachment workers. Its own
+real PostgreSQL RED/GREEN, cancellation and manual-write conflict evidence is
+recorded in [the scheduler decision supplement](../doctoring/reply_sla_physical_lease.md).
+Worker evidence must not be transferred between implementations.
 
 Two real gaps were found and fixed after initial review, both narrowing rather
 than reversing the original decision:

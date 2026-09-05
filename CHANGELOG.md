@@ -1,4 +1,7 @@
 ## [Unreleased]
+- 답장 후속 작업을 저장한 뒤에도 다른 작업 공간의 처리가 이어지도록 예약 처리와
+  동시 요청 충돌 복구를 보완했습니다. DB 연결이 끊기면 해당 처리 회차를 중단하고
+  다음 회차에서 다시 확인합니다. PR #1486의 검증 중인 변경이며 아직 배포하지 않았습니다.
 - **(Semgrep 오탐 대응, naruon#1486) `backend/alembic/versions/0011_email_read_state.py`의
   `op.execute(_UPGRADE_SQL)`/`op.execute(_DOWNGRADE_SQL)` 두 호출에 `nosemgrep` 억제 주석을
   추가했습니다.** Semgrep OSS의 `sqlalchemy-execute-raw-query`/`formatted-sql-query` 규칙이
