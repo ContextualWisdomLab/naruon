@@ -102,24 +102,6 @@ def _email_matches_auth(email: Email, auth_context: AuthContext) -> bool:
     )
 
 
-def _safe_email_subject(subject: str | None) -> str:
-    trimmed_subject = (subject or "제목 없음").replace("\x00", " ").strip()
-    if not trimmed_subject or contains_html_markup(trimmed_subject):
-        return "제목 정리 필요"
-    return " ".join(trimmed_subject.split())[:120]
-
-
-def _reply_sla_task_title(email: Email) -> str:
-    return f"미답변 팔로업: {_safe_email_subject(email.subject)}"
-
-
-def _email_date_utc(email: Email) -> datetime.datetime:
-    message_date = email.date
-    if message_date.tzinfo is None:
-        return message_date.replace(tzinfo=datetime.timezone.utc)
-    return message_date
-
-
 def _task_response(
     ticket_task: TicketTask,
     source_email_id: str | None,
