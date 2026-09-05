@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from database_session.models import Email, TicketTask
+from db.models import Email, TicketTask
 from services import reply_sla_escalation_service as escalation_service
 
 pytestmark = pytest.mark.asyncio

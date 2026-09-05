@@ -165,6 +165,13 @@ These percentages cover these two modules only, not repository-wide test,
 docstring, edge-case completeness, browser behavior or protected CI. The exact
 post-commit rerun and SHA-256 receipts are recorded on the PR head.
 
+A later mechanical naming pass accidentally renamed the existing `db.models`
+import in the new unit-only file. Its isolated collection failed with
+`ModuleNotFoundError`; intermediate local commit `7ce6592` is **not** a GREEN
+receipt. The import is restored in a forward correction, preserving the
+framework/package boundary. The earlier 165-pass receipt is historical, and
+the full suite must run again on the corrected committed head before push.
+
 The first expanded test collection exposed Starlette 1.3.1's fallback to
 deprecated `httpx` when its intended `httpx2` test client was absent. The existing
 Naruon #1469 development pin `httpx2==2.5.0` is reused in the dev dependency group
