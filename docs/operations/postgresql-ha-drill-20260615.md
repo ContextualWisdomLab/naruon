@@ -49,6 +49,7 @@ Outcome:
 Production boundary:
 
 This drill validates the local primary/replica evaluation stack and manual
-promotion path. Production HA still requires operator-owned WAL archival,
-restore drills from archived WAL, monitoring/alerting, and a decision on manual
-promotion versus an HA coordinator such as Patroni or Repmgr.
+promotion path. Production HA still requires operator-owned monitoring,
+alerting, and a decision on manual promotion versus an HA coordinator such as
+Patroni or Repmgr; WAL archival and restore drills from archived WAL are now
+exercised separately in `docs/operations/postgresql-pitr-drill-2026-08-25.md`.
