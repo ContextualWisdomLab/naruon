@@ -8,9 +8,11 @@ Naruon owns this repository-local supply-chain gate because it validates the Pyt
 
 ## Buyer and operator decision
 
-A syntactically valid `--hash=sha256:` value is not sufficient evidence that a lock actually names a file published for the declared package release. Before dependency installation, Naruon therefore compares each exact project/version lock entry with trusted PyPI release metadata and requires at least one SHA-256 intersection with an eligible artifact.
+A syntactically valid `--hash=sha256:` value is not sufficient evidence that a lock actually names a file published for the declared package release. For changes that can alter Python lock or provenance evidence, Naruon therefore compares each exact project/version lock entry with trusted PyPI release metadata before dependency installation and requires at least one SHA-256 intersection with an eligible artifact.
 
-A passing receipt means the operator may continue to later dependency-install and platform-compatibility gates. A failing receipt means the operator should regenerate or investigate the lock; it must not be treated as a transient application-test failure or bypassed.
+The deterministic offline lock-declaration validator remains unconditional in Application CI. The network-derived PyPI gate is intentionally scoped to supply-chain-relevant changes so an unrelated product PR does not become non-deterministically blocked by a public-index outage. If the workflow cannot establish a comparison base, it fails safe by requiring the network gate rather than silently skipping it.
+
+A passing registry receipt means the operator may continue to later dependency-install and platform-compatibility gates for the relevant change. A failing required receipt means the operator should regenerate or investigate the lock; it must not be treated as a transient application-test failure or bypassed.
 
 ## Implemented boundary
 
@@ -26,11 +28,11 @@ For every discovered active `requirements*.txt` hash lock, the validator:
 8. emits path-relative, deterministic reason codes and match counts without artifact URLs, provider exception strings, credentials, or absolute runner paths;
 9. caches release metadata per `(project, version)` during one repository scan so repeated pins do not multiply external requests.
 
-Application CI runs this network-derived evidence after the deterministic offline lock-declaration gate and before dependency installation.
+Application CI always runs deterministic offline lock provenance first. It then classifies the pull-request or push diff against the event base. Changes to `requirements*.txt`, either lock-provenance validator, their focused backend tests/doctoring, or the Application CI workflow itself require the network-derived PyPI evidence before dependency installation. Other changes skip only this public-network check; they do not skip exact-pin/hash validation, dependency installation with `--require-hashes`, tests, or the rest of the protected CI gate. A missing, zero, or otherwise unusable comparison base defaults to `required=true`.
 
 ## Failure semantics
 
-The gate is fail-closed. Important stable reasons include:
+When selected, the registry gate is fail-closed. Important stable reasons include:
 
 - `lock-path-outside-repository`: a lock resolves outside the repository root;
 - `lock-read-failed`: the lock cannot be read as repository UTF-8 text;
@@ -41,7 +43,7 @@ The gate is fail-closed. Important stable reasons include:
 - `registry-release-has-no-allowed-artifacts`: the release has no eligible non-yanked wheel or source distribution SHA-256;
 - `registry-hash-mismatch`: eligible release artifacts exist but none of their SHA-256 values appears in the lock.
 
-Network/provider exception text is deliberately not copied into the machine receipt. The workflow log may contain transport diagnostics from the trusted runtime, but the persisted summary is bounded to non-secret decision evidence.
+Network/provider exception text is deliberately not copied into the machine receipt. The workflow log may contain transport diagnostics from the trusted runtime, but the persisted summary is bounded to non-secret decision evidence. Skipping the network gate because a diff is outside the supply-chain scope is a workflow routing decision, not a passing registry receipt and not evidence that PyPI was queried.
 
 ## Why PyPI release JSON is used in this slice
 
@@ -71,11 +73,11 @@ Issue #1229 remains open until those applicable boundaries, especially target-aw
 
 The built-in network path accepts only credential-free `https://pypi.org` as its origin. Project and version values become percent-encoded path segments; the receipt never copies returned file URLs. Metadata response size and content type are bounded before JSON parsing. No provider credential is needed or permitted for this public-index slice.
 
-The main residual risk is authority scope: proving a hash is published by PyPI is not the same as proving publisher identity, artifact intent, target compatibility, or absence of compromise. Those remain separate gates rather than being collapsed into one green status.
+The main residual risks are authority scope and availability. Proving a hash is published by PyPI is not the same as proving publisher identity, artifact intent, target compatibility, or absence of compromise. Conversely, a temporary PyPI availability failure is not evidence that unrelated Naruon product code is invalid. The CI scope therefore preserves fail-closed registry evidence whenever lock/provenance authority can change while keeping unrelated product CI independent of the public index.
 
 ## Verification
 
-The active PR uses RED-first tests covering matching and stale hashes, yanked and unsupported artifact types, release-identity mismatch, provider failure redaction, repeated-release fetch deduplication, trusted-origin validation, deterministic path-relative receipts, and CI ordering before installation. Exact current-head GitHub checks and independent review remain authoritative; predecessor-head results do not transfer.
+The active PR uses RED-first tests covering matching and stale hashes, yanked and unsupported artifact types, release-identity mismatch, provider failure redaction, repeated-release fetch deduplication, trusted-origin validation, deterministic path-relative receipts, CI ordering before installation, and the diff-scoped/fail-safe network-gate contract. Exact current-head GitHub checks and independent review remain authoritative; predecessor-head results do not transfer.
 
 ## References
 
