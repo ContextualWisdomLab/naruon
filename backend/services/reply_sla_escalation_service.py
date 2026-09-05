@@ -20,16 +20,16 @@ class ReplySlaTaskConflict(Exception):
 
 @dataclass(frozen=True)
 class ReplySlaEscalatedTask:
-    task: TicketTask
+    ticket_task: TicketTask
     source_email_id: str | None
 
 
 @dataclass(frozen=True)
 class ReplySlaEscalationResult:
-    evaluated: int
-    created: int
+    evaluated_email_count: int
+    created_task_count: int
     overdue_hours: int
-    tasks: list[ReplySlaEscalatedTask]
+    ticket_tasks: list[ReplySlaEscalatedTask]
 
 
 def canonical_reply_sla_thread_key(email: Email) -> str:
@@ -296,10 +296,10 @@ async def create_reply_sla_escalation_tasks(
 
     if not overdue_replies:
         return ReplySlaEscalationResult(
-            evaluated=len(pending_replies),
-            created=0,
+            evaluated_email_count=len(pending_replies),
+            created_task_count=0,
             overdue_hours=overdue_hours,
-            tasks=[],
+            ticket_tasks=[],
         )
 
     try:
@@ -313,11 +313,14 @@ async def create_reply_sla_escalation_tasks(
         )
 
     return ReplySlaEscalationResult(
-        evaluated=len(pending_replies),
-        created=created_count,
+        evaluated_email_count=len(pending_replies),
+        created_task_count=created_count,
         overdue_hours=overdue_hours,
-        tasks=[
-            ReplySlaEscalatedTask(task=task, source_email_id=source_email_id)
+        ticket_tasks=[
+            ReplySlaEscalatedTask(
+                ticket_task=task,
+                source_email_id=source_email_id,
+            )
             for task, source_email_id in escalated_tasks
         ],
     )
