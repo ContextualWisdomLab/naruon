@@ -112,3 +112,34 @@ def test_legacy_registry_keys_remain_accepted_at_adapter_boundary() -> None:
     assert adapted_agent.agent_description == "Legacy registry compatibility fixture"
     assert adapted_agent.agent_capabilities == ("mail.read",)
     assert adapted_agent.agent_enabled is True
+
+
+def test_conflicting_semantic_and_legacy_fields_are_rejected() -> None:
+    """Do not dispatch an ambiguous registry entry during a staged migration."""
+    adapted_agent = _agent_from_entry(
+        "ambiguous-agent",
+        {
+            "agent_display_name": "Canonical Agent",
+            "name": "Different Legacy Agent",
+            "agent_framework_name": "pydantic-ai",
+            "agent_entrypoint": "services.agent:run_agent",
+        },
+    )
+
+    assert adapted_agent is None
+
+
+def test_matching_semantic_and_legacy_fields_remain_compatible() -> None:
+    """Permit an exact duplicate value while deployed registries migrate."""
+    adapted_agent = _agent_from_entry(
+        "migrating-agent",
+        {
+            "agent_display_name": "Migrating Agent",
+            "name": "Migrating Agent",
+            "agent_framework_name": "pydantic-ai",
+            "agent_entrypoint": "services.agent:run_agent",
+        },
+    )
+
+    assert adapted_agent is not None
+    assert adapted_agent.agent_display_name == "Migrating Agent"

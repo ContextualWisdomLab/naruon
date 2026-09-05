@@ -78,6 +78,24 @@ def _agent_from_entry(
     registry_entry: dict[str, Any],
 ) -> RegisteredAgent | None:
     """Translate one registry document entry into the semantic internal model."""
+    field_aliases = (
+        ("agent_entrypoint", "entrypoint"),
+        ("agent_display_name", "name"),
+        ("agent_framework_name", "framework"),
+        ("agent_description", "description"),
+        ("agent_capabilities", "capabilities"),
+        ("agent_enabled", "enabled"),
+        ("writeback_policy", "writeback"),
+    )
+    if any(
+        semantic_name in registry_entry
+        and legacy_name in registry_entry
+        and registry_entry[semantic_name] != registry_entry[legacy_name]
+        for semantic_name, legacy_name in field_aliases
+    ):
+        logger.debug("Skipping agent %s: conflicting semantic and legacy fields", agent_id)
+        return None
+
     agent_entrypoint = _registry_field_value(
         registry_entry,
         "agent_entrypoint",

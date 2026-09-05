@@ -35,6 +35,10 @@ previous generic field names as fallbacks so existing deployed registry files ca
 be upgraded independently. The `RegisteredAgent` object exposed to application
 callers uses only the semantic internal names.
 
+If one entry supplies both names with different values, the loader rejects that
+entry instead of guessing which registration should control dispatch. Supplying
+the same value under both names remains valid during a staged migration.
+
 The compatibility path is covered by
 `backend/tests/test_agent_registry.py::test_legacy_registry_keys_remain_accepted_at_adapter_boundary`.
 The same test module pins the current registry document and internal dataclass
