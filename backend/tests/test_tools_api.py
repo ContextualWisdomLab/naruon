@@ -1086,7 +1086,38 @@ async def test_mock_handler():
     assert "123" in res
 
 
+
+@pytest.mark.asyncio
+async def test_contact_info_extractor_handler_success():
+    from api.tools import contact_info_extractor_handler
+    result = await contact_info_extractor_handler({"text": "Hello, contact me at abc@example.com or 123-456-7890. Also 010-1234-5678."})
+    assert "abc@example.com" in result["emails"]
+    assert "123-456-7890" in result["phone_numbers"]
+    assert "010-1234-5678" in result["phone_numbers"]
+
+@pytest.mark.asyncio
+async def test_contact_info_extractor_handler_max_chars():
+    from api.tools import contact_info_extractor_handler, ANALYSIS_TEXT_MAX_CHARS
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await contact_info_extractor_handler({"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
+@pytest.mark.asyncio
+async def test_readability_scorer_handler_success():
+    from api.tools import readability_scorer_handler
+    result = await readability_scorer_handler({"text": "This is a simple sentence! And this is another one."})
+    assert result["sentences"] == 2
+    assert result["words"] == 10
+    assert result["characters"] == 42
+    assert isinstance(result["score"], float)
+
+@pytest.mark.asyncio
+async def test_readability_scorer_handler_max_chars():
+    from api.tools import readability_scorer_handler, ANALYSIS_TEXT_MAX_CHARS
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await readability_scorer_handler({"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+
 def test_validate_webhook_url_no_host():
+
     from api.tools import validate_webhook_url
 
     with pytest.raises(ValueError, match="Webhook URL must include a host"):

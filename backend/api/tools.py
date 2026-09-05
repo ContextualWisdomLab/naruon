@@ -770,6 +770,64 @@ registry.register(
 
 
 
+
+async def contact_info_extractor_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    email_pattern = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+    emails = list(dict.fromkeys(email_pattern.findall(text)))
+
+    phone_pattern = re.compile(r"\(?\d{2,3}\)?[-.\s]?\d{3,4}[-.\s]?\d{4}")
+    phones = list(dict.fromkeys(phone_pattern.findall(text)))
+
+    return {
+        "emails": emails,
+        "phone_numbers": phones
+    }
+
+registry.register(
+    ToolInfo(
+        code="contact_info_extractor",
+        name="연락처 정보 추출기 (Contact Info Extractor)",
+        description="텍스트에서 이메일 주소와 전화번호를 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    contact_info_extractor_handler,
+)
+
+
+async def readability_scorer_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
+
+    sentences = max(1, len(re.split(r'[.!?]+', text)) - 1)
+    words = max(1, len(text.split()))
+    characters = len(text.replace(" ", ""))
+
+    score = max(0.0, 100.0 - (characters / words * 10.0) - (words / sentences * 2.0))
+
+    return {
+        "score": round(score, 2),
+        "sentences": sentences,
+        "words": words,
+        "characters": characters
+    }
+
+registry.register(
+    ToolInfo(
+        code="readability_scorer",
+        name="가독성 분석기 (Readability Scorer)",
+        description="텍스트의 가독성 점수와 문장, 단어, 글자 수를 계산합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    readability_scorer_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
