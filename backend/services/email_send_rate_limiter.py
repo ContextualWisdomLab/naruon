@@ -36,10 +36,14 @@ class EmailSendRateLimitDecision:
     reason: Literal["allowed", "quota_exhausted"]
 
 
-def rate_limit_scope_hash(user_id: str, organization_id: str | None) -> str:
+def rate_limit_scope_hash(
+    user_id: str, organization_id: str | None, workspace_id: str
+) -> str:
     """Return a non-reversible identifier for one authorized send scope."""
     organization_scope = organization_id or "<personal>"
-    value = f"{SEND_RATE_LIMIT_NAMESPACE}\0{organization_scope}\0{user_id}"
+    value = (
+        f"{SEND_RATE_LIMIT_NAMESPACE}\0{organization_scope}\0{workspace_id}\0{user_id}"
+    )
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -97,7 +101,9 @@ async def enforce_send_email_rate_limit(
     """
     observed_at = now or _utc_now()
     scope_hash = rate_limit_scope_hash(
-        auth_context.user_id, auth_context.organization_id
+        auth_context.user_id,
+        auth_context.organization_id,
+        auth_context.workspace_id,
     )
     async with AsyncSessionLocal() as session:
         if not _session_uses_postgresql(session):

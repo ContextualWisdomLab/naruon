@@ -97,13 +97,15 @@ class _PostgresSession:
             self.lock_held = False
 
 
-def _context(user_id="user-1", organization_id="org-1"):
+def _context(
+    user_id="user-1", organization_id="org-1", workspace_id: str | None = None
+):
     return AuthContext(
         user_id=user_id,
         role="member",
         organization_id=organization_id,
         group_ids=(),
-        workspace_id=f"workspace-{organization_id or user_id}",
+        workspace_id=workspace_id or f"workspace-{organization_id or user_id}",
     )
 
 
@@ -120,17 +122,29 @@ async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leak
 
     same_scope = await asyncio.gather(*(attempt("user-1") for _ in range(11)))
     other_scope = await asyncio.gather(*(attempt("user-2") for _ in range(10)))
+    other_workspace = await asyncio.gather(
+        *(
+            enforce_send_email_rate_limit(
+                _context("user-1", workspace_id="workspace-2"), now=observed_at
+            )
+            for _ in range(10)
+        )
+    )
 
     assert sum(decision.allowed for decision in same_scope) == 10
     assert sum(not decision.allowed for decision in same_scope) == 1
     assert all(decision.allowed for decision in other_scope)
+    assert all(decision.allowed for decision in other_workspace)
 
     rollover = await enforce_send_email_rate_limit(
         _context("user-1"),
         now=observed_at + datetime.timedelta(seconds=61),
     )
     assert rollover.allowed is True
-    scope_uid = f'email_send_scope:{rate_limit_scope_hash("user-1", "org-1")}'
+    scope_uid = (
+        "email_send_scope:"
+        f'{rate_limit_scope_hash("user-1", "org-1", "workspace-org-1")}'
+    )
     assert sum(event.resource_uid == scope_uid for event in store.events) == 12
 
 
@@ -236,7 +250,7 @@ async def test_rate_limiter_real_postgres_reserves_and_denies(monkeypatch):
     context = _context("rate-limit-smoke-user", "rate-limit-smoke-org")
     scope_uid = (
         "email_send_scope:"
-        f"{rate_limit_scope_hash(context.user_id, context.organization_id)}"
+        f"{rate_limit_scope_hash(context.user_id, context.organization_id, context.workspace_id)}"
     )
     observed_at = datetime.datetime.now(datetime.timezone.utc)
 
