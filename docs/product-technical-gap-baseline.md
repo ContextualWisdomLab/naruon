@@ -1,12 +1,57 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.29
+**Baseline version:** 1.30
 **Observed on:** 2026-09-05 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-**Bounded source retention and worker recovery refresh (2026-09-05):** Draft
+**Physical-connection lease and interruption recovery refresh (2026-09-05):**
+Draft [#1469](https://github.com/ContextualWisdomLab/naruon/pull/1469) advances
+normally to `a312ea5e516fe1d696cfb35ffff7d3a731ad9cd2`, tree
+`83bf3605c961dc7be1c304585762a58de0124ba7`, preserving the complete
+`1b757d5` delta and direct #1427 base `cb08b1c3ea2aba8844fc29ef703c34368cc55e47`.
+Actual PostgreSQL commit/rollback contention exposed two stranded leases: an
+unrelated pool reader received the worker's still-locked backend, and another
+replica could not acquire after the worker completed. The repair holds one
+physical connection across both phases and per-item transactions. It requires
+confirmed unlock, aborts a disconnected cycle without unleased reconnection,
+invalidates before session-close rollback, and resumes after the last completed
+item rather than skipping unattempted prefetched rows.
+
+The exact final head passes **305 tests, zero failures/errors/skips, in 225.30 s**
+with clean-lock synchronization, fresh/repeated migrations, the complete 17-file
+suite, and `-W error`. The worker measures **258/258 statements, 58/58 branches,
+zero exclusions, and 22/22 documented function/class definitions**. The unchanged
+40,758,835-byte NASA PDF remains intact in migrated PostgreSQL with active
+indexes. Real DB cases cover commit/rollback contention, one-slot completion,
+acquisition/processing cancellation, backend termination, and failed release.
+An actual task-cancellation case gates session close to verify invalidation
+ordering; the gate simulates blocked cleanup, not a real network black hole.
+The two independent review findings first failed five tests and then passed;
+final read-only re-review found no remaining actionable finding in that scope.
+
+- Final JUnit SHA-256: `a7bf4bab7352c8c1fd9e720b48f59d63057de29a5fdf049ebe2faef8ff3d6ea2`.
+- Worker coverage JSON SHA-256: `025ff2ea21aa66efc15bdbc9afc8ab3499591d085219b327d278b240a60b7363`.
+- [Exact-head doctoring and sequence](https://github.com/ContextualWisdomLab/naruon/blob/a312ea5e516fe1d696cfb35ffff7d3a731ad9cd2/docs/doctoring/bounded-attachment-parse-source-contract.md)
+  records RED/GREEN, rejected alternatives, primary PostgreSQL/SQLAlchemy
+  references, and retained source/ADR lineage. ADR-0023 remains Proposed.
+
+| Requirement / owner | Verified scope | Remaining action |
+| --- | --- | --- |
+| PRD: pending files resume after interruption; Naruon recognition | Independent-replica reacquisition and original-byte retention; unattempted cursor recovery | Signed browser recovery, actionable retry states, live interruption evidence |
+| TRD: lease covers the complete sweep; Naruon worker | One held connection, supported one-slot pool, explicit unlock, fail-closed disconnect | Pool capacity and representative concurrent load; external provider idempotency is not proved |
+| Sibling root repair; import #1317 / scheduler #1486 | Read-only trace identifies related connection-lifetime patterns; existing owners preserved | Reproduce and repair each owner's actual contention/cancellation paths; do not transfer worker tests as sibling GREEN |
+
+No new dependency, shared model timeout, mutable provider adoption, schema/index
+removal, or protection change was introduced. Test-owned PostgreSQL/network
+cleanup completed. Required hosted checks and qualifying current-head review,
+the protected prerequisite stack, immutable NewsDOM release/pin, actual 64 MiB
+recognition, and realistic p95/capacity evidence remain open. Passing this worker
+module's coverage does not establish whole-product 100% coverage, exactly-once
+external execution, security-alert closure, or a protected/released product.
+
+**Historical bounded source retention and worker recovery receipt (2026-09-05):** Draft
 [#1469](https://github.com/ContextualWisdomLab/naruon/pull/1469), exact head
 `1b757d5aa25c469157f8f03301964eb3061ed0fe`, tree
 `6b520c3cbe824d4017b97c39ef61fa702434e04a`, normally inherits #1427
@@ -129,13 +174,18 @@ open. No delta or PR was discarded to reduce the queue, and these local passes
 do not transfer approval or hosted evidence between stack heads.
 
 **AGENTS operating knowledge refresh (2026-09-05):** Draft #1566 exact head
-`498cf0ca7d25b777a7dafa6bcc839df164babfd0` retains the recurrence rule to test
+`162c0df8049126944c60041c3374b4e47d8c16b4` preserves `498cf0ca7d25b777a7dafa6bcc839df164babfd0`
+and adds physical lease ownership, invalidate-before-close cancellation,
+last-completed cursor recovery, real independent-replica checks, and explicit
+source-only/runtime boundaries. It also retains the recurrence rule to test
 application behavior on the actually migrated database, retaining indexes,
 constraints, full-size high-entropy content, and portable identities across
-rollback. Its 44 focused source/governance tests pass with `-W error` and
+rollback. Its **45 focused source/governance tests pass in 0.26 s** with `-W error` and
 `--noconftest` in the existing environment; this is not a clean-lock, database,
-or browser receipt. CodeRabbit and Devin status contexts are successful, but
-the aggregate changes-requested state has no verified current-head approval.
+or browser receipt. Exact JUnit SHA-256 is
+`8638ac125122626cb722bb3d67a23812abc1bd6ba3453df0f893693964097fd9`.
+CodeRabbit and Devin status contexts are successful, but fresh enumeration found
+zero qualifying current-head reviews and zero required check-runs.
 The PR remains Draft on #1564; required hosted evidence is not inferred from
 those two contexts. Confidence (#1559) and fail-closed tool mutation (#1300)
 rules formerly recorded only in its body are now proposed AGENTS source.
