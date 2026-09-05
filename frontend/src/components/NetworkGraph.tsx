@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -85,10 +85,6 @@ function isGraphId(value: unknown): value is number | string {
   return typeof value === 'number' || typeof value === 'string';
 }
 
-function graphIdEquals(left: unknown, right: unknown) {
-  return isGraphId(left) && isGraphId(right) && String(left) === String(right);
-}
-
 function stableEdgeId(edge: Edge, index: number) {
   if (isGraphId(edge.id)) return edge.id;
   return `relationship-${index}-${String(edge.from)}-${String(edge.to)}`;
@@ -127,11 +123,6 @@ function titleText(value: unknown) {
   return value == null ? '' : String(value).trim();
 }
 
-function findNodeLabel(nodes: Node[], id: number | string) {
-  const node = nodes.find((candidate) => graphIdEquals(candidate.id, id));
-  return String(node?.label ?? id);
-}
-
 /**
  * Index graph records by public id, keeping the first instance.
  *
@@ -157,15 +148,9 @@ function firstGraphEntryById<T>(
   return map;
 }
 
-function describeEdge(edge: Edge, nodes: Node[], nodeMap?: Map<string | number, string>) {
-  let fromLabel, toLabel;
-  if (nodeMap) {
-    fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
-    toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
-  } else {
-    fromLabel = findNodeLabel(nodes, edge.from);
-    toLabel = findNodeLabel(nodes, edge.to);
-  }
+function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
+  const fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
+  const toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
   const title = titleText(edge.title);
   return title ? `${fromLabel} -> ${toLabel} (${title})` : `${fromLabel} -> ${toLabel}`;
 }
@@ -175,6 +160,7 @@ import { apiClient } from '@/lib/api-client';
 export default function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
+  const unavailableRelationshipDescriptionId = useId();
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -233,7 +219,7 @@ export default function NetworkGraph() {
         if (!edge) return;
         setRelationshipOptionId(String(edge.id));
         setNodeOptionId('');
-        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodeMap)}`);
         setGraphActionStatus('그래프에서 관계를 선택했습니다.');
       };
 
@@ -303,9 +289,9 @@ export default function NetworkGraph() {
     return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
       edge,
       id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodes, nodeMap)}`,
+      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
     }));
-  }, [edgeMap, nodes, nodeMap]);
+  }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
     return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
@@ -318,7 +304,7 @@ export default function NetworkGraph() {
   const selectRelationship = (edge: Edge, status: string) => {
     setRelationshipOptionId(String(edge.id));
     setNodeOptionId('');
-    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodeMap)}`);
     setGraphActionStatus(status);
     if (isGraphId(edge.id)) {
       networkRef.current?.selectEdges?.([edge.id]);
@@ -404,14 +390,30 @@ export default function NetworkGraph() {
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleSelectFirstRelationship}
-            disabled={!firstEdge}
-            className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+          <span
+            tabIndex={!firstEdge ? 0 : undefined}
+            aria-describedby={!firstEdge ? unavailableRelationshipDescriptionId : undefined}
+            title={!firstEdge ? "표시할 관계 데이터가 없습니다." : undefined}
+            className={
+              !firstEdge
+                ? "cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                : undefined
+            }
           >
-            첫 관계 보기
-          </button>
+            {!firstEdge && (
+              <span id={unavailableRelationshipDescriptionId} className="sr-only">
+                표시할 관계 데이터가 없습니다.
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleSelectFirstRelationship}
+              disabled={!firstEdge}
+              className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ${!firstEdge ? "pointer-events-none" : ""}`}
+            >
+              첫 관계 보기
+            </button>
+          </span>
           <button
             type="button"
             onClick={handleZoomGraph}
