@@ -285,20 +285,37 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+  // ⚡ Bolt: Use bounded for...of loop to prevent O(N) intermediate array allocation
+  // 🎯 Why: Array.from().slice() allocates a full O(N) array for values, blocking the thread on large maps
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
-      edge,
-      id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
+    const result = [];
+    let index = 0;
+    for (const edge of edgeMap.values()) {
+      if (index >= 5) break;
+      result.push({
+        edge,
+        id: String(edge.id),
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+      });
+      index++;
+    }
+    return result;
   }, [edgeMap, nodeMap]);
 
+  // ⚡ Bolt: Use bounded for...of loop to prevent O(N) intermediate array allocation
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
-      id: String(node.id),
-      label: `노드: ${String(node.label ?? node.id)}`,
-      node,
-    }));
+    const result = [];
+    let index = 0;
+    for (const node of nodeInstanceMap.values()) {
+      if (index >= 8) break;
+      result.push({
+        id: String(node.id),
+        label: `노드: ${String(node.label ?? node.id)}`,
+        node,
+      });
+      index++;
+    }
+    return result;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
