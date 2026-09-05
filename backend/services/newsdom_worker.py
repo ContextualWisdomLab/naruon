@@ -29,8 +29,18 @@ from db.models import (
     Email,
 )
 from db.session import AsyncSessionLocal
-from services.attachment_parser import decode_deferred_attachment_payload
+from services.attachment_parser import (
+    HWP_CONVERSION_PENDING_STATUS,
+    HWPX_XML_PACKAGE_PENDING_STATUS,
+    decode_deferred_attachment_payload,
+)
 from services.content_graph import ParseResult
+from services.hwpx_recognition import (
+    HWPX_CONTENT_TYPE,
+    HwpxRecognitionError,
+    HwpxRecognitionRecords,
+    recognize_hwpx,
+)
 from services.newsdom_client import (
     NewsdomConfigurationError,
     NewsdomRequestError,
@@ -114,6 +124,25 @@ def apply_recognition_to_attachment(
     attachment.content = records.parse_text
     attachment.parse_content_type = PDF_PARSE_CONTENT_TYPE
     attachment.parser_key = PDF_PARSER_KEY
+    attachment.parse_status = PDF_DOM_RECOGNITION_PARSED_STATUS
+    attachment.parse_error_code = None
+    _append_parse_result_to_attachment(
+        email=email,
+        attachment=attachment,
+        parse_result=records.parse_result,
+    )
+
+
+def apply_hwpx_recognition_to_attachment(
+    *,
+    email: Email,
+    attachment: Attachment,
+    records: HwpxRecognitionRecords,
+) -> None:
+    """Land locally extracted HWPX text and graph records on an attachment."""
+    attachment.content = records.parse_text
+    attachment.parse_content_type = HWPX_CONTENT_TYPE
+    attachment.parser_key = "hwpx"
     attachment.parse_status = PDF_DOM_RECOGNITION_PARSED_STATUS
     attachment.parse_error_code = None
     _append_parse_result_to_attachment(
@@ -217,8 +246,16 @@ async def process_pending_attachment(
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         attachment.parse_error_code = "orphan_attachment"
         return RESULT_FAILED
+    expected_content_type = attachment.parse_content_type or "application/pdf"
+    if attachment.parse_status == HWP_CONVERSION_PENDING_STATUS:
+        # HWP binary conversion requires a separately sandboxed converter. Keep
+        # the source pending rather than sending a non-PDF payload to NewsDOM.
+        return RESULT_PENDING
     try:
-        pdf_bytes = decode_deferred_attachment_payload(attachment.content)
+        deferred_bytes = decode_deferred_attachment_payload(
+            attachment.content,
+            expected_content_type,
+        )
     except ValueError as exc:
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         attachment.parse_error_code = "invalid_pending_payload"
@@ -228,6 +265,31 @@ async def process_pending_attachment(
             exc,
         )
         return RESULT_FAILED
+
+    if attachment.parse_status == HWPX_XML_PACKAGE_PENDING_STATUS:
+        try:
+            records = recognize_hwpx(
+                hwpx_bytes=deferred_bytes,
+                source_record_uid=f"attachment-{attachment.id}",
+                display_name=attachment.filename or "",
+            )
+        except HwpxRecognitionError as exc:
+            attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
+            attachment.parse_error_code = "hwpx_recognition_failed"
+            logger.warning(
+                "HWPX attachment %s recognition failed: %s",
+                getattr(attachment, "id", "?"),
+                exc,
+            )
+            return RESULT_FAILED
+        apply_hwpx_recognition_to_attachment(
+            email=email,
+            attachment=attachment,
+            records=records,
+        )
+        return RESULT_RECOGNIZED
+
+    pdf_bytes = deferred_bytes
 
     config = await config_resolver(session, email.organization_id)
     if config is None:
@@ -486,7 +548,12 @@ class NewsdomRecognitionWorker:
     def _pending_attachment_statement(self, after_id: int | None):
         """Build the next deterministic attachment batch query."""
         statement = select(Attachment).where(
-            Attachment.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+            Attachment.parse_status.in_(
+                (
+                    PDF_DOM_RECOGNITION_PENDING_STATUS,
+                    HWPX_XML_PACKAGE_PENDING_STATUS,
+                )
+            )
         )
         if after_id is not None:
             statement = statement.where(Attachment.id > after_id)
