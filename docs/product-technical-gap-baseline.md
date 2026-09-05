@@ -251,7 +251,7 @@ remains `042b0c70531b229af3acbd0421a2f23098d848b3`. Naruon #1558
 which carries its complete valid delta plus the newer exact-head repair rules.
 #1558 remains open until #1564 reaches protected merge or an independent
 equivalence check confirms succession; no count-only closure is authorized. #1538
-(`adddd507111ff17b6a235bdcedad9a68d1842080`)
+(`6a09b3ab90325a9045e90495e77a88b0f58fad27`)
 is the single writer for bounded ASCII email and selected Korean/North American
 phone masking. A second remote acknowledgement commit again removed verified
 behavior; the non-force corrective head restores the complete ASCII dot-atom
@@ -265,28 +265,28 @@ tests, Ruff, and diff checks pass. The tool single-writer chain is now #1565 ->
 fail-closed mutation and source-bound removals. The shared matcher now rejects
 malformed empty domain labels and restores selected North American phone forms;
 84 combined contracts pass. Draft PR #1496
-(`a0e877e159dff39f32de120bc408aa277dd6b306`)
+(`17b732a71dd9f77fd8cce083e1cd065774380665`)
 is non-force restacked on that current owner head. Its three-file, 226-addition
 delta contains only the URL extractor and tests; 103 combined contracts pass
 without warnings. GitHub reports the stack clean, while protected parent integration and fresh exact-head
 review/Checks remain required. Draft PR #1512
-(`ecf40d8390e8f60a94ac248a679f999ef817bb52`) follows current #1496 head
-`a0e877e159dff39f32de120bc408aa277dd6b306`, consumes the canonical matcher,
+(`c5582d64ad096e68079799d992dedba44ef8f55e`) follows current #1496 head
+`17b732a71dd9f77fd8cce083e1cd065774380665`, consumes the canonical matcher,
 rejects empty domain labels and trailing ellipses, and records its RFC 5322
 ASCII subset. A review acknowledgement had deleted the parent URL implementation
 and regressions, causing a reproduced 404; the repaired head restores the exact
 parent files and leaves a four-file, 131-addition email-extractor delta with no
 deletion. The combined 106 tests pass with warnings as errors, alongside Ruff
 and diff checks. Draft PR #1555
-(`ccd386ee86dd54b06b8957bfa794597336675294`) follows #1512 and carries
+(`369b7a3a862390ec168c7b0565e44ecd679de322`) follows #1512 and carries
 only the first/last-sentence extractor. It consumes both parent matchers and
 preserves U+FF0E, decimal/title periods, URL/email periods, repeated terminators,
 and trailing quotation or bracket punctuation. After a non-force parent merge,
 the current stack passes 117
 combined tests, Ruff, and diff checks. No predecessor gate evidence transfers
 after these base/head changes. Draft PR #1482
-(`9ca53299ef88165b4e6fae21af55e73004735a41`) is restacked last on exact #1555
-head `ccd386ee86dd54b06b8957bfa794597336675294`,
+(`052f79e11da8f1d465cbf95dbdcc44be3f44f519`) is restacked last on exact #1555
+head `369b7a3a862390ec168c7b0565e44ecd679de322`,
 reuses the canonical email and phone matchers, and adds bounded Unicode-email,
 French-phone, and separator-optional Korean resident-registration masking. Its
 catalog claim excludes complete de-identification, and NIST SP 800-188 grounds
@@ -294,7 +294,12 @@ that boundary. A concurrent acknowledgement ancestry was absorbed without a
 force-push while preserving the validated tree. The effective child delta is
 three files with 163 additions and no deletion; the combined tool and privacy
 contract suite passes 120 tests with warnings as errors, plus Ruff and diff
-checks. PR #1502
+checks. Timeline evidence on #1538, #1496, and #1482 shows that posting repair
+evidence as an issue comment caused `google-labs-jules[bot]` to reply and was
+followed by an unsigned, user-attributed rewrite from a stale agent workspace.
+Those rewrites deleted validated parent security and dependency contracts.
+Until the bound Jules sessions are terminated, this stack records evidence in
+the PR body and this baseline instead of posting new trigger comments. PR #1502
 (`0b9e324a91fd2148b2b2759cca875ac7d50c86a0`) pins its PostgreSQL service
 image by digest and has local migration, real PostgreSQL, and 97-test evidence.
 Its previous frontend failure occurred before tests because Corepack resolved
