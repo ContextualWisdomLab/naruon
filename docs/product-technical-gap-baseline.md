@@ -29,6 +29,19 @@ for distinct-provider structured-output recovery; its focused 31-test suite
 passes after a non-force merge of current `main`, while hosted current-head
 checks and independent review remain pending.
 
+**Tenant provenance portability evidence (2026-09-05T06:22Z):** stacked
+Naruon PR #1497 (`705d8ece2c97edc8575ea59766fd8f68bf4cdb82`)
+keeps export/import identity mappings scoped by target user, organization, and
+workspace, validates archive closure before mutation, and restores records in
+one transaction with PostgreSQL advisory locks for portable identities and
+email imports. Global content identifiers remain collision-detecting rather
+than silently overwriting another tenant's records. Focused provenance and data
+API proof is `93 passed, 114 skipped, 17 deselected`; the skips are PostgreSQL
+environment paths, so this is not real-database restore evidence. The PR remains
+Draft and Proposed because prerequisite #1427 is Draft and current-head hosted
+checks/review are pending. Required successor work is a real PostgreSQL
+bootstrap/import/re-import/rollback receipt before protected merge.
+
 **Governed review evidence refresh (2026-09-05T06:08Z):** Naruon PR #1564
 (`615be4514add6a21eef743f591a65a5f8fef4dee`) records the reusable exact-head,
 non-force restack, isolated-test bootstrap, successor-delta, and protected-merge
