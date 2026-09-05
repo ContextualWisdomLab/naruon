@@ -109,6 +109,13 @@ unchanged published PDF. Sweep IDs are captured before transactions; after
 rollback, remaining pending records are explicitly reloaded with their required
 relationships so one failed item does not abort the prefetched batch. Normal
 successful batches retain their existing query path.
+The recognition sweep holds one physical connection across both phases and
+their per-item transactions. A disconnect aborts the cycle rather than
+reconnecting without its lease; cancellation or uncertain lease release
+invalidates the connection before reuse. Real PostgreSQL tests cover pooled
+readers and one-slot recovery. Pool sizing must allow this whole-sweep checkout;
+it is not exactly-once external provider execution. See ADR-0023 for alternatives
+and the sibling scheduler/import repair boundaries.
 This does not establish released recognition capacity;
 the [PDF upload owner](docs/adr/0021-bounded-pdf-dom-upload-contract.md), immutable
 provider release, exact consumer pin, and capacity evidence remain prerequisites.

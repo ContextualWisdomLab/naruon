@@ -81,6 +81,34 @@ required relationships. This preserves per-item transaction isolation without
 adding queries to successful batches. A new session framework or whole-queue
 reload is unnecessary; retaining expired ORM attributes reproduces the failure.
 
+### Sweep connection ownership
+
+At #1469 `1b757d5aa25c469157f8f03301964eb3061ed0fe`, real PostgreSQL
+regressions reproduced a second failure: after either an item commit or rollback,
+an unrelated reader borrowed the worker's still-locked backend. The worker ended
+without releasing that backend's lease, so another replica could not take over.
+The affected components are `NewsdomRecognitionWorker._sweep`, both per-item
+sweeps, and the lease helpers; the shared database pool configuration is unchanged.
+
+Choose an externally held connection and bind the existing work session to it
+for both phases. An ordinary item transaction error remains isolated. A lost
+database connection aborts the cycle; it cannot continue on a new backend without
+reacquiring leadership. Release requires an explicit true response. Cancellation,
+an acquisition error, or unconfirmed release invalidates the connection before
+it can return to the pool. See the real failure and recovery checks in doctoring.
+
+| Option | Benefit | Constraint or rejection reason |
+|---|---|---|
+| Keep an engine-bound work session | Existing API; no additional resource owner | Reproduced stranded lease after both transaction outcomes; rejected |
+| Separate lease-only connection | Work transactions cannot return the lease holder | Needs a second pool slot and can deadlock a configured one-slot pool; rejected for this worker |
+| Transaction-level lock | Automatic transaction cleanup | Per-item commits end coordination before the complete sweep; rejected |
+| One externally held connection | Preserves item commits and works with one pool slot | Chosen; occupies that slot for the whole sweep and discards it after uncertain cleanup |
+
+This decision concerns availability, correctness, and pool capacity. It does not
+promise exactly-once external recognition: loss of a database connection during
+an already-running provider request can permit another replica to begin work.
+Provider idempotency or durable fenced claims require separate contract evidence.
+
 ## Consequences
 
 - The proposal retains attachments larger than 20 MiB through 64 MiB, but does
@@ -95,6 +123,13 @@ reload is unnecessary; retaining expired ORM attributes reproduces the failure.
 - Unsupported binaries remain visible in scoped quality counts without exposing
   their bytes, identifiers, or provider content.
 - The contract is independent of any Figma design and has no Storybook scene.
+- Pool capacity must allow the recognition worker to retain one connection
+  throughout a sweep, including external recognition. Interruption can cause a
+  new connection on the next cycle. A rollback-triggering item error keeps the
+  original backend when it remains healthy.
+- If runtime verification fails, stop the worker using its existing lifecycle
+  control and preserve pending sources. Do not restore the known leaking
+  lease path or discard admitted bytes. Repair and revalidate before restart.
 
 ## Confirmation
 
@@ -111,6 +146,10 @@ reload is unnecessary; retaining expired ORM attributes reproduces the failure.
   rejected outcomes and transaction rollback. Two-record worker sweeps also
   abort the first real transaction and verify that the next record is processed
   without expired-attribute I/O. This is not recognition evidence.
+- The same real corpus suite checks another pool user's backend identity,
+  independent-replica lease acquisition, one-slot completion, acquisition and
+  processing cancellation, backend termination, and failed release. Unit tests
+  cover both source types' disconnect handling and strict unlock responses.
 - The import transport remains covered by
   `backend/tests/test_email_import_service.py`.
 - The PDF DOM upload contract is being integrated separately by stacked PR
@@ -132,6 +171,13 @@ https://www.rfc-editor.org/rfc/rfc4648.html
 
 National Aeronautics and Space Administration. (2019). *Earth at night*.
 https://www.nasa.gov/ebooks/earth-at-night/
+
+PostgreSQL Global Development Group. (n.d.). *Explicit locking: Advisory locks*.
+PostgreSQL 16 documentation.
+https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS
+
+SQLAlchemy Authors. (n.d.). *Session basics: Committing*. SQLAlchemy 2.0 documentation.
+https://docs.sqlalchemy.org/en/20/orm/session_basics.html#committing
 
 Souppaya, M., Scarfone, K., & Dodson, D. (2022). *Secure software development
 framework (SSDF) version 1.1: Recommendations for mitigating the risk of

@@ -18,6 +18,7 @@ import random
 from collections.abc import Awaitable, Callable
 
 from sqlalchemy import bindparam, func, select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,7 +29,7 @@ from db.models import (
     Document,
     Email,
 )
-from db.session import AsyncSessionLocal
+from db.session import AsyncSessionLocal, engine
 from services.attachment_parser import decode_deferred_attachment_payload
 from services.content_graph import ParseResult
 from services.newsdom_client import (
@@ -373,8 +374,8 @@ async def _try_acquire_sweep_lease(session: AsyncSession) -> bool | None:
 
 
 async def _release_sweep_lease(session: AsyncSession) -> None:
-    """Release the PostgreSQL advisory lock for a recognition sweep."""
-    await session.scalar(
+    """Release the sweep lock and require confirmation from its owning backend."""
+    released = await session.scalar(
         select(
             func.pg_advisory_unlock(
                 func.hashtext(bindparam("namespace_key")),
@@ -383,6 +384,8 @@ async def _release_sweep_lease(session: AsyncSession) -> None:
         ),
         _SWEEP_LOCK_PARAMS,
     )
+    if released is not True:
+        raise RuntimeError("NewsDOM sweep lease release could not be confirmed.")
 
 
 class NewsdomRecognitionWorker:
@@ -460,28 +463,34 @@ class NewsdomRecognitionWorker:
                     break
 
     async def _sweep(self) -> None:
-        """Process one leased attachment and document sweep."""
-        async with AsyncSessionLocal() as session:
-            lease = await _try_acquire_sweep_lease(session)
-            if lease is False:
-                logger.debug(
-                    "NewsDOM recognition sweep skipped: another replica holds "
-                    "the lease."
-                )
-                return
+        """Keep one physical connection through item transactions and lease release."""
+        async with (
+            engine.connect() as connection,
+            AsyncSessionLocal(bind=connection) as session,
+        ):
             try:
+                lease = await _try_acquire_sweep_lease(session)
+                if lease is False:
+                    logger.debug(
+                        "NewsDOM recognition sweep skipped: another replica holds "
+                        "the lease."
+                    )
+                    return
                 await self._sweep_attachments(session)
                 await self._sweep_documents(session)
-            finally:
                 if lease is True:
+                    await session.rollback()
                     await _release_sweep_lease(session)
+            except BaseException:
+                # Acquisition cancellation and uncertain release may leave a
+                # session lock. End that backend before session-close rollback.
+                await connection.invalidate()
+                raise
 
     async def _sweep_attachments(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of pending attachments."""
         rows = await self._load_pending_attachments(session)
         pending_rows = [(attachment.id, attachment) for attachment in rows]
-        if pending_rows:
-            self._attachment_cursor = pending_rows[-1][0]
         reload_pending_rows = False
         for attachment_id, attachment in pending_rows:
             try:
@@ -507,7 +516,9 @@ class NewsdomRecognitionWorker:
                         attachment_id,
                         result,
                     )
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, DBAPIError) and exc.connection_invalidated:
+                    raise
                 await session.rollback()
                 # Rollback expires the entire prefetched batch, including IDs
                 # and email relationships; later rows need explicit async loads.
@@ -517,6 +528,7 @@ class NewsdomRecognitionWorker:
                     attachment_id,
                     exc_info=True,
                 )
+            self._attachment_cursor = attachment_id
 
     def _pending_attachment_statement(self, after_id: int | None):
         """Build the next deterministic attachment batch query."""
@@ -561,8 +573,6 @@ class NewsdomRecognitionWorker:
         """Process a bounded, starvation-free batch of pending documents."""
         rows = await self._load_pending_documents(session)
         pending_rows = [(document.document_id, document) for document in rows]
-        if pending_rows:
-            self._document_cursor = pending_rows[-1][0]
         reload_pending_rows = False
         for document_id, document in pending_rows:
             try:
@@ -588,7 +598,9 @@ class NewsdomRecognitionWorker:
                         document_id,
                         result,
                     )
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, DBAPIError) and exc.connection_invalidated:
+                    raise
                 await session.rollback()
                 reload_pending_rows = True
                 logger.error(
@@ -596,6 +608,7 @@ class NewsdomRecognitionWorker:
                     document_id,
                     exc_info=True,
                 )
+            self._document_cursor = document_id
 
     def _pending_document_statement(self, after_id: str | None):
         """Build the next deterministic workspace-document batch query."""

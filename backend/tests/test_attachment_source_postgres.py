@@ -1,5 +1,6 @@
 """Real published PDF retention on a migrated database, without recognition claims."""
 
+import asyncio
 import base64
 import hashlib
 import logging
@@ -9,7 +10,8 @@ from pathlib import Path
 import httpx
 import pytest
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 
 from db.models import Attachment, Document, Email, Workspace
@@ -198,6 +200,7 @@ async def test_published_pdf_survives_pending_rejection_and_transaction_rollback
             return await configured_provider(session, organization_id)
 
         monkeypatch.setattr(newsdom_worker_module, "AsyncSessionLocal", session_factory)
+        monkeypatch.setattr(newsdom_worker_module, "engine", engine)
         worker = newsdom_worker_module.NewsdomRecognitionWorker(
             config_resolver=fail_first_transaction,
         )
@@ -221,4 +224,239 @@ async def test_published_pdf_survives_pending_rejection_and_transaction_rollback
                 assert getattr(persisted_source, source_key.key) == record_identity
                 assert getattr(persisted_source, status_field) == expected_status
     finally:
+        await engine.dispose()
+
+
+async def _persist_pending_published_pdf(session_factory, published_pdf_bytes):
+    """Store the unchanged corpus using the real parser and migrated source schema."""
+    parsed_source = parse_email_attachment(
+        filename="earth_at_night_508.pdf", content_type="application/pdf",
+        raw_content=published_pdf_bytes,
+    )
+    async with session_factory.begin() as session:
+        source_record = Attachment(
+            email=Email(
+                user_id="pdf-lease-user", organization_id="pdf-lease-org",
+                message_id="pdf-lease-source", sender="NASA", subject="Earth at Night",
+                body="Earth at Night", date=datetime(2019, 12, 9, tzinfo=timezone.utc),
+            ),
+            filename=parsed_source.filename, content=parsed_source.content,
+            content_type=parsed_source.content_type, parse_status=parsed_source.parse_status,
+            parser_key=parsed_source.parser_key, parse_content_type=parsed_source.parse_content_type,
+        )
+        session.add(source_record)
+        await session.flush()
+        return source_record.id
+
+
+@pytest.mark.parametrize("transaction_outcome", ["commit", "rollback"])
+@pytest.mark.asyncio
+async def test_sweep_lease_survives_item_transaction_and_releases_on_owning_backend(
+    fresh_database_url, published_pdf_bytes, transaction_outcome, monkeypatch, caplog,
+):
+    """An unrelated pooled reader must not inherit or strand the worker's lease."""
+    _run_migrations(fresh_database_url)
+    engine = create_async_engine(fresh_database_url, pool_size=2, max_overflow=0)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    probe_engine = create_async_engine(fresh_database_url, pool_size=1, max_overflow=0)
+    probe_factory = async_sessionmaker(probe_engine, expire_on_commit=False)
+    document_phase_entered = asyncio.Event()
+    continue_document_phase = asyncio.Event()
+    worker_backend_ids = []
+
+    async def resolve_unavailable_provider(session, _organization_id):
+        """Exercise a real per-item commit or an aborted PostgreSQL transaction."""
+        worker_backend_ids.append(await session.scalar(text("SELECT pg_backend_pid()")))
+        if transaction_outcome == "rollback":
+            await session.execute(text("SELECT 1 / 0"))
+        return None
+
+    monkeypatch.setattr(newsdom_worker_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(newsdom_worker_module, "engine", engine)
+    worker = newsdom_worker_module.NewsdomRecognitionWorker(
+        config_resolver=resolve_unavailable_provider,
+    )
+    original_document_sweep = worker._sweep_documents
+
+    async def pause_before_document_phase(session):
+        """Let a concurrent reader borrow a pool connection between real phases."""
+        document_phase_entered.set()
+        await continue_document_phase.wait()
+        await original_document_sweep(session)
+
+    monkeypatch.setattr(worker, "_sweep_documents", pause_before_document_phase)
+    sweep_task = None
+    try:
+        source_identity = await _persist_pending_published_pdf(session_factory, published_pdf_bytes)
+
+        with caplog.at_level(logging.ERROR, logger="services.newsdom_worker"):
+            sweep_task = asyncio.create_task(worker._sweep())
+            await asyncio.wait_for(document_phase_entered.wait(), timeout=30)
+            async with session_factory() as pooled_reader, probe_factory() as replica_probe:
+                reader_backend_id = await pooled_reader.scalar(text("SELECT pg_backend_pid()"))
+                try:
+                    assert await newsdom_worker_module._try_acquire_sweep_lease(replica_probe) is False
+                    continue_document_phase.set()
+                    await asyncio.wait_for(sweep_task, timeout=30)
+                    released_after_sweep = await newsdom_worker_module._try_acquire_sweep_lease(
+                        replica_probe
+                    )
+                    if released_after_sweep:
+                        await newsdom_worker_module._release_sweep_lease(replica_probe)
+                    assert released_after_sweep is True, (
+                        "completed sweep stranded its lease on a pooled reader: "
+                        f"worker backends={worker_backend_ids}, reader backend={reader_backend_id}"
+                    )
+                    assert worker_backend_ids and reader_backend_id not in worker_backend_ids
+                finally:
+                    # Only this test's reader can inherit the known worker lock on a failing build.
+                    if reader_backend_id in worker_backend_ids:
+                        await newsdom_worker_module._release_sweep_lease(pooled_reader)
+
+        async with session_factory() as session:
+            retained_source = await session.get(Attachment, source_identity)
+            assert retained_source.id == source_identity
+            assert retained_source.parse_status == "pdf_dom_recognition_pending"
+            assert base64.b64decode(retained_source.content, validate=True) == published_pdf_bytes
+        worker_errors = [
+            record for record in caplog.records
+            if record.name == "services.newsdom_worker" and record.levelno >= logging.ERROR
+        ]
+        assert len(worker_errors) == (1 if transaction_outcome == "rollback" else 0)
+    finally:
+        continue_document_phase.set()
+        if sweep_task is not None:
+            await asyncio.gather(sweep_task, return_exceptions=True)
+        await probe_engine.dispose()
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "exit_mode", [
+        "complete", "acquire_cancel", "processing_cancel", "disconnect", "unlock_error",
+        "close_before_invalidation",
+    ],
+)
+@pytest.mark.asyncio
+async def test_single_connection_sweep_releases_lease_after_completion_or_interruption(
+    fresh_database_url, published_pdf_bytes, exit_mode, monkeypatch,
+):
+    """A real one-slot pool must recover without stranded locks or lost PDF bytes."""
+    _run_migrations(fresh_database_url)
+    engine = create_async_engine(
+        fresh_database_url, pool_size=1, max_overflow=0, pool_timeout=1,
+    )
+    provider_entered = asyncio.Event()
+    close_entered = asyncio.Event()
+    allow_session_close = asyncio.Event()
+    close_observations = []
+
+    class ObservedCloseSession(AsyncSession):
+        """Keep real SQLAlchemy exit behavior and observe its pre-rollback connection."""
+
+        async def close(self):
+            """A gated cleanup models rollback waiting for an unresponsive backend."""
+            if self.info.get("lease_cleanup_probe"):
+                close_observations.append(self.bind.invalidated)
+                close_entered.set()
+                await allow_session_close.wait()
+            await super().close()
+
+    session_factory = async_sessionmaker(engine, class_=ObservedCloseSession, expire_on_commit=False)
+    probe_engine = create_async_engine(fresh_database_url, pool_size=1, max_overflow=0)
+    probe_factory = async_sessionmaker(probe_engine, expire_on_commit=False)
+    worker_backend_ids = []
+    document_phase_calls = []
+    monkeypatch.setattr(newsdom_worker_module, "engine", engine)
+    monkeypatch.setattr(newsdom_worker_module, "AsyncSessionLocal", session_factory)
+    original_acquire = newsdom_worker_module._try_acquire_sweep_lease
+    original_release = newsdom_worker_module._release_sweep_lease
+
+    async def acquire_then_record(session):
+        """Model a lost acknowledgement only after PostgreSQL actually grants the lock."""
+        acquired = await original_acquire(session)
+        assert acquired is True
+        worker_backend_ids.append(await session.scalar(text("SELECT pg_backend_pid()")))
+        if exit_mode == "acquire_cancel":
+            raise asyncio.CancelledError("controlled acquisition cancellation")
+        return acquired
+
+    async def resolve_unavailable_provider(session, _organization_id):
+        """Cancel or disconnect the real work transaction without calling a model."""
+        if exit_mode == "close_before_invalidation":
+            session.info["lease_cleanup_probe"] = True
+            provider_entered.set()
+            await asyncio.Event().wait()
+        if exit_mode == "processing_cancel":
+            raise asyncio.CancelledError("controlled processing cancellation")
+        if exit_mode == "disconnect":
+            async with probe_engine.connect() as probe_connection:
+                assert await probe_connection.scalar(
+                    text("SELECT pg_terminate_backend(:worker_backend_id)"),
+                    {"worker_backend_id": worker_backend_ids[0]},
+                ) is True
+            await session.scalar(text("SELECT 1"))
+            pytest.fail("terminated worker backend unexpectedly remained usable")
+        return None
+
+    async def abort_unlock_transaction(session):
+        """Leave release unconfirmed using an actual PostgreSQL statement failure."""
+        await session.execute(text("SELECT 1 / 0"))
+
+    worker = newsdom_worker_module.NewsdomRecognitionWorker(
+        config_resolver=resolve_unavailable_provider,
+    )
+    original_document_sweep = worker._sweep_documents
+
+    async def record_document_phase(session):
+        """Track whether a lost lease incorrectly permits the second worker phase."""
+        document_phase_calls.append(True)
+        await original_document_sweep(session)
+
+    monkeypatch.setattr(worker, "_sweep_documents", record_document_phase)
+    monkeypatch.setattr(newsdom_worker_module, "_try_acquire_sweep_lease", acquire_then_record)
+    if exit_mode == "unlock_error":
+        monkeypatch.setattr(newsdom_worker_module, "_release_sweep_lease", abort_unlock_transaction)
+    sweep_task = None
+    try:
+        source_identity = await _persist_pending_published_pdf(session_factory, published_pdf_bytes)
+        if exit_mode == "close_before_invalidation":
+            sweep_task = asyncio.create_task(worker._sweep())
+            await asyncio.wait_for(provider_entered.wait(), timeout=30)
+            sweep_task.cancel()
+            await asyncio.wait_for(close_entered.wait(), timeout=30)
+            try:
+                assert close_observations == [True], "session close started before lease invalidation"
+            finally:
+                allow_session_close.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(sweep_task, timeout=30)
+        elif exit_mode == "complete":
+            await asyncio.wait_for(worker._sweep(), timeout=30)
+        elif exit_mode in {"acquire_cancel", "processing_cancel"}:
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(worker._sweep(), timeout=30)
+        else:
+            with pytest.raises(DBAPIError) as raised_error:
+                await asyncio.wait_for(worker._sweep(), timeout=30)
+            if exit_mode == "disconnect":
+                assert raised_error.value.connection_invalidated is True
+        assert len(document_phase_calls) == (1 if exit_mode in {"complete", "unlock_error"} else 0)
+
+        async with probe_factory() as replica_probe:
+            acquired_after_sweep = await original_acquire(replica_probe)
+            assert acquired_after_sweep is True
+            await original_release(replica_probe)
+        async with session_factory() as session:
+            next_backend_id = await session.scalar(text("SELECT pg_backend_pid()"))
+            assert (next_backend_id == worker_backend_ids[0]) == (exit_mode == "complete")
+            retained_source = await session.get(Attachment, source_identity)
+            assert retained_source.parse_status == "pdf_dom_recognition_pending"
+            assert base64.b64decode(retained_source.content, validate=True) == published_pdf_bytes
+    finally:
+        allow_session_close.set()
+        if sweep_task is not None:
+            sweep_task.cancel()
+            await asyncio.gather(sweep_task, return_exceptions=True)
+        await probe_engine.dispose()
         await engine.dispose()

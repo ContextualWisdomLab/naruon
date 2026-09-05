@@ -168,8 +168,9 @@ AsyncSession. Both sweep methods now capture primitive IDs before processing.
 After a rollback, each remaining cached ID is queried explicitly with the
 existing pending-status filter and attachment email eager loading. Deleted or
 no-longer-pending items are skipped. The failed item is not retried within that
-sweep, the cursor remains the original batch tail, and normal successful
-batches incur no new queries. Requerying the whole queue or changing the global
+sweep. That initial correction kept the cursor at the prefetched batch tail;
+the later disconnect repair below advances it only after an item finishes.
+Normal successful batches incur no new queries. Requerying the whole queue or changing the global
 session configuration was rejected: either broadens a bounded sweep or leaves
 rollback expiration unresolved (SQLAlchemy Authors, n.d.-a, n.d.-b).
 
@@ -188,6 +189,91 @@ the older 276-test receipt below did not cover this worker error path.
 Exact 20 MiB, 20 MiB + 1 byte, 64 MiB, and 64 MiB + 1 byte payloads are separately
 exercised by the parser/client/worker **unit** tests. They use deterministic
 synthetic bytes and are not presented as structurally valid real-PDF evidence.
+
+### Physical-connection lease regression
+
+The new real PostgreSQL test failed twice against runtime head
+`1b757d5aa25c469157f8f03301964eb3061ed0fe`: **2 failed in 16.31 s**.
+After the real worker committed its pending attachment, its recorded backend and
+an unrelated pooled reader's backend were both `79`; the rollback case recorded
+`149` for both. An independent replica could not acquire the lease after either
+sweep completed. These PIDs identify ephemeral test backends only, not stable
+runtime identities. The full NASA PDF, normal migration chain, and search
+indexes were retained. RED JUnit SHA-256:
+`ce3f52eebe36323639ed80ad7e5517428f2f58efa527300b14b5e94af2ef927b`.
+
+SQLAlchemy returns an engine-bound session's connection to its pool when its
+transaction ends. PostgreSQL session advisory locks instead remain with their
+backend until explicit release or session termination; acquisition on that same
+backend is reentrant. The prior unlock ignored its false response on another
+backend (SQLAlchemy Authors, n.d.-c; PostgreSQL Global Development Group, n.d.).
+Keeping the Python session object therefore did not preserve lease ownership.
+
+The repair uses `engine.connect()` around the complete worker cycle and passes
+that connection to the existing `AsyncSessionLocal(bind=connection)`. Per-item
+commit and healthy rollback stay intact. A SQLAlchemy `DBAPIError` marked
+`connection_invalidated` escapes either per-item handler and stops the cycle.
+After successful phases, rollback clears the final read transaction before an
+explicitly confirmed unlock. An error or cancellation during acquisition, work,
+or release invalidates the held connection before session close, including
+cancellation while acquisition may have succeeded.
+No new dependency, pool setting, service, retry loop, or model time limit is added.
+
+Independent review then exposed two defects in the first connection repair.
+Advancing a cursor to the prefetched batch tail before processing could skip
+unattempted records after disconnect; a continuously growing queue might never
+revisit them. Both cursors now advance only after completed work or a healthy
+item rollback. Second, an outer error handler ran only after SQLAlchemy's
+shielded session close, whose rollback could wait on an unresponsive backend.
+The handler now invalidates inside the session context, before that close starts.
+Four attachment/document resume cases and one real-PG cancellation case with a
+controlled close gate failed before these changes: **5 failed in 12.06 s**.
+The close gate tests ordering; it does not claim a real network black-hole test.
+After correction the same cases passed **5 tests in 11.01 s**. RED/GREEN JUnit
+SHA-256 values are respectively
+`928fd980b386358a22aa79f392336d199f401fd14b52c86f2e36d32e64c13e73` and
+`098492308dc900cdb86f28cee3dfe43c53963f9baa70839c378837a0517655f0`.
+
+```mermaid
+sequenceDiagram
+    participant Worker as Recognition worker
+    participant Backend as Held PostgreSQL backend
+    participant Reader as Concurrent pool reader
+    Worker->>Backend: Acquire sweep lease
+    loop Each admitted source
+        Worker->>Backend: Process, then commit or rollback
+    end
+    Reader->>Backend: Cannot borrow the held connection
+    Worker->>Backend: Confirm unlock, then return connection
+    Note over Worker,Backend: On uncertain ownership, invalidate and stop
+```
+
+The first corrected run passed **43 tests in 43.92 s**, including the two real
+contention cases and existing worker/retention tests. This intermediate result
+predates the extended lifecycle suite; final exact-head evidence belongs in the
+PR receipt. Additional checks exercise a one-slot pool with the real corpus,
+completed work, cancellation after actual acquisition, processing cancellation,
+termination of the test-owned backend, and an actual failed unlock transaction.
+They verify fresh-replica acquisition, connection replacement only after failure,
+and unchanged source bytes/status. Unit tests also require explicit true unlock
+responses and prohibit either source handler from continuing after disconnect.
+
+An initial unit harness revision expected the new bind keyword too early and
+failed in setup; it is not the product RED. After correcting that harness while
+leaving runtime unchanged, **12 tests failed** on missing invalidation, ignored
+unlock confirmation, or continued processing after disconnect. Corrected unit
+RED JUnit SHA-256:
+`bfc4fe4e2ade14ae9df144a92629c459fb83f65edfb09534c464dbfda75f5797`.
+
+Read-only sibling tracing found the same engine-bound lock pattern in reply SLA
+scheduling and email import. Import owner [#1317](https://github.com/ContextualWisdomLab/naruon/pull/1317)
+at `1b422f15e6e5f56be679f691c8ff925c9a420fb1` already proposes a separate
+connection and NUL-safe owner key; scheduler [#1486](https://github.com/ContextualWisdomLab/naruon/pull/1486)
+at `b32954dbf6066bc0d953887e8ca06820588f2c5f` changes workspace iteration but
+retains the old lease lifetime. This is a repair dependency, not permission to
+copy or overwrite those owners. Their actual contention and cancellation paths
+still need independent RED/GREEN evidence; this worker result does not prove
+either sibling fixed. No exactly-once provider-call or throughput claim follows.
 
 ### Earlier combined local execution receipt
 
@@ -262,6 +348,19 @@ https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html#preventing-implici
 
 SQLAlchemy Authors. (n.d.-b). *Session basics: Rolling back*. SQLAlchemy 2.0 documentation.
 https://docs.sqlalchemy.org/en/20/orm/session_basics.html#rolling-back
+
+SQLAlchemy Authors. (n.d.-c). *Session basics: Committing*. SQLAlchemy 2.0 documentation.
+https://docs.sqlalchemy.org/en/20/orm/session_basics.html#committing
+
+PostgreSQL Global Development Group. (n.d.). *Explicit locking: Advisory locks*.
+PostgreSQL 16 documentation.
+https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS
+
+The lease repair again encountered Context7's quota limit and used the official
+documents above plus the pinned SQLAlchemy 2.0.51 runtime and real PostgreSQL
+regression. The installed `adr-author` package lacked its required
+`adr-identity.instructions.md`; the existing MADR-shaped Proposed ADR was amended
+without allocating an ID, generating tracking state, or claiming acceptance.
 
 Context7 quota was exhausted and DeepWiki had no repository wiki during the
 initial repair. Official HTTPX/RFC/NASA sources and exact Git refs were used
