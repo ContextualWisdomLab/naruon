@@ -55,7 +55,11 @@ def test_agent_lifecycle_governance_artifacts_stay_aligned() -> None:
     assert '"model": "contextual-orchestrator/orchestrator/free"' in opencode_config
     assert '"enabled_providers": ["contextual-orchestrator"]' in opencode_config
     assert '"baseURL": "http://127.0.0.1:8100/v1"' in opencode_config
-    assert '"apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}"' in opencode_config
+    assert (
+        '"Authorization": "Bearer {env:CONTEXTUAL_ORCHESTRATOR_TOKEN}"'
+        in opencode_config
+    )
+    assert '"apiKey"' not in opencode_config
     assert "CONTEXTUAL_ORCHESTRATOR_BASE_URL" not in opencode_config
     assert opencode_config.count('"timeout": false') == 1
     assert "STRIX_GITHUB_MODELS_TOKEN" not in opencode_config

@@ -68,7 +68,7 @@ def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     provider = config["provider"]["contextual-orchestrator"]
     assert provider["options"] == {
         "baseURL": "http://127.0.0.1:8100/v1",
-        "apiKey": "{env:CONTEXTUAL_ORCHESTRATOR_TOKEN}",
+        "headers": {"Authorization": "Bearer {env:CONTEXTUAL_ORCHESTRATOR_TOKEN}"},
         "timeout": False,
     }
     assert set(provider["models"]) == {"orchestrator/free"}
