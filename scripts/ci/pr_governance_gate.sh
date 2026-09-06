@@ -344,12 +344,10 @@ CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
 CODERABBIT_APPROVAL_PENDING_PATTERN='CodeRabbit has no unresolved comments, but it has not reviewed the latest commit'
 CODERABBIT_APPROVAL_NOTICE_SPAN_PATTERN='<!-- approval_notice_start -->.*?<!-- approval_notice_end -->'
 
-# Fetched and evaluated before the check-run/status lookup below so the
-# no-check-run OpenCode fallback can tell "CodeRabbit has never engaged"
-# (check AND issue-comment both silent) apart from "CodeRabbit is actively
-# reviewing, just hasn't reached the latest commit yet" (an approval-pending
-# issue comment despite no check-run yet). Only the former is eligible for
-# the fallback; the latter must still wait on CodeRabbit itself.
+# Fetch comments once for both pending notices and substantive blockers.
+# Without CodeRabbit check/status evidence, an exact-head structured OpenCode
+# approval may satisfy the fallback even when a pending notice exists.
+# Separate findings still block; a notice without either evidence source waits.
 if ! ISSUE_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" 2>"$ISSUE_COMMENTS_ERROR_FILE")"; then
   printf 'issue comment lookup failed:\n'
   printf '%s\n' "$(<"$ISSUE_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
@@ -483,7 +481,7 @@ CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s \
 )"
 if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then
   add_blocker "Current-head CodeRabbit issue comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
-elif [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ] && [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
+elif [ "$CODERABBIT_COUNT" = "0" ] && [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ] && [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
   add_waiting "Waiting for CodeRabbit to review the latest commit on ${HEAD_REF_OID}."
 fi
 
