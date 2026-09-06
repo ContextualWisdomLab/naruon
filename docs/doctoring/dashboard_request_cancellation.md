@@ -9,11 +9,19 @@ dashboard made responses irrelevant without aborting those fetches. The same
 file's startup-search effect already aborts its controller during cleanup.
 
 Reuse that native pattern for the dashboard generation. Combine its controller
-with the existing timeout signal using `AbortSignal.any`, then mark the
-generation cancelled before aborting in cleanup. This preserves the five API
-routes, signed-cookie transport, independent source states and request-version
-guard. It does not change model timeouts or claim that abort rolls back work
-already accepted by a server. These are read requests, not provider writes.
+with the existing timeout signal, then mark the generation cancelled before
+aborting in cleanup. This preserves the five API routes, signed-cookie transport,
+independent source states and request-version guard. It does not change model
+timeouts or claim that abort rolls back work already accepted by a server. These
+are read requests, not provider writes.
+
+When both `AbortSignal.any` and `AbortSignal.timeout` exist, use the native
+combinators. If either static method is unavailable, compose the same boundary
+with a generation-local `AbortController`, the request-controller abort event,
+and the unchanged 15,000 ms timer. Abort clears the fallback timer and listener;
+timeout uses a `TimeoutError` DOMException. This avoids inventing a repository-
+wide browser floor solely for this feature while keeping modern browsers on the
+native path.
 
 Do not replace the timeout, increase its duration, add a client wrapper, or
 depend on ignoring stale responses alone. A retry gets a fresh controller;
@@ -38,9 +46,17 @@ and four EmailDetail act diagnostics outside this repair. Their existing owner
 repairs must be inherited and revalidated; this is not warning-free full-suite
 evidence or permission to suppress those diagnostics.
 
-MDN lists `AbortSignal.any` as Baseline 2024; older browsers need an explicit
-support decision before adoption. Do not claim a repository-wide browser
-support policy from the local engine smoke checks or add a speculative polyfill.
+Review `3944626310` later identified that direct use of the two static
+combinators made dashboard startup depend on browser support that the repository
+had never declared. Source-order RED commit
+`d510f5a99cf69f50db3bacfb3105260e78981345` adds a focused regression that
+removes those static methods and requires five dashboard request signals to
+remain cancellable and to abort at the existing 15-second deadline. The
+predecessor implementation calls `AbortSignal.any` unconditionally, so that
+scenario cannot reach the dashboard requests. Causal fix
+`2e937e49ccabda6e848a824d1bc7cee4ceb3ae2c` adds the guarded composition above.
+These commits establish test-first source provenance; they are not themselves a
+claim that hosted CI has executed the final exact head.
 
 ## Follow-up: malformed array members
 
@@ -91,7 +107,10 @@ sources. These are unresolved user-facing implementation-detail leaks, not
 acceptance of the complete product copy. Record them with the product Gap;
 do not expand this availability repair into a translation framework or redesign.
 
-## Reference
+## References
 
 MDN contributors. (2026, September 1). *AbortSignal: any() static method*.
 MDN Web Docs. https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/any_static
+
+MDN contributors. (n.d.). *AbortSignal: timeout() static method*. MDN Web Docs.
+https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static
