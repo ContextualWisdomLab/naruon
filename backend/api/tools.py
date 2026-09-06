@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,9 +755,120 @@ registry.register(
 )
 
 
+async def url_encoder_handler(params: Dict[str, Any]) -> Any:
+    """URL 인코딩 핸들러."""
+    text = params.get("text")
+    if not isinstance(text, str):
+        raise ValueError("URL codec text must be a string")
+    if len(text.encode("utf-8")) > 262144:
+        raise ValueError("URL codec input must not exceed 262144 bytes")
+
+    return {"encoded_text": urllib.parse.quote(text, safe="")}
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Any:
+    """URL 디코딩 핸들러."""
+    text = params.get("text")
+    if not isinstance(text, str):
+        raise ValueError("URL codec text must be a string")
+    if len(text.encode("utf-8")) > 262144:
+        raise ValueError("URL codec input must not exceed 262144 bytes")
+
+    # Strict percent checking
+
+    i = 0
+    text_len = len(text)
+    while i < text_len:
+        if text[i] == "%":
+            if i + 2 >= text_len:
+                raise ValueError("Malformed percent-encoding")
+            if not (
+                text[i + 1] in "0123456789abcdefABCDEF"
+                and text[i + 2] in "0123456789abcdefABCDEF"
+            ):
+                raise ValueError("Malformed percent-encoding")
+            i += 3
+        else:
+            i += 1
+
+    decoded = urllib.parse.unquote_to_bytes(text)
+    try:
+        decoded_str = decoded.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("Invalid UTF-8 percent-encoding")
+
+    return {"decoded_text": decoded_str}
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Any:
+    """JSON 포매터 핸들러."""
+    json_string = params.get("json_string")
+    if not isinstance(json_string, str):
+        raise ValueError("JSON formatter input must be a string")
+
+    if len(json_string.encode("utf-8")) > 1048576:
+        raise ValueError("JSON formatter input must not exceed 1048576 bytes")
+
+    def _raise_value_error(msg: str):
+        raise ValueError(msg)
+
+    def _reject_duplicates(ordered_pairs):
+        seen = set()
+        for k, v in ordered_pairs:
+            if k in seen:
+                raise ValueError("Duplicate JSON object member")
+            seen.add(k)
+        return dict(ordered_pairs)
+
+    try:
+        parsed = json.loads(
+            json_string,
+            object_pairs_hook=_reject_duplicates,
+            parse_constant=lambda x: _raise_value_error(f"Invalid constant: {x}"),
+        )
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False, allow_nan=False)
+        return {"formatted_json": formatted, "is_valid": True}
+    except (json.JSONDecodeError, ValueError) as e:
+        raise ValueError(f"유효하지 않은 JSON 문자열입니다: {str(e)}")
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="일반 텍스트를 URL 인코딩 문자열로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩된 문자열을 일반 텍스트로 디코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_decoder_handler,
+)
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 읽기 좋게 포맷팅하고 유효성을 검사합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
 
 registry.register(
     ToolInfo(
@@ -767,7 +880,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
