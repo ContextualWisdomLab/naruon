@@ -188,6 +188,29 @@ function isDashboardDataUnavailable(status: DashboardDataStatus) {
   return status === 'auth' || status === 'error';
 }
 
+function createDashboardReadSignal(requestSignal: AbortSignal, timeoutMs: number) {
+  if (typeof AbortSignal.any === 'function' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.any([requestSignal, AbortSignal.timeout(timeoutMs)]);
+  }
+
+  const fallbackController = new AbortController();
+  const abortFallback = (reason: unknown) => {
+    if (!fallbackController.signal.aborted) fallbackController.abort(reason);
+  };
+  const handleRequestAbort = () => abortFallback(requestSignal.reason);
+  requestSignal.addEventListener('abort', handleRequestAbort, { once: true });
+  const timeoutId = window.setTimeout(
+    () => abortFallback(new DOMException('The operation timed out.', 'TimeoutError')),
+    timeoutMs,
+  );
+  fallbackController.signal.addEventListener('abort', () => {
+    window.clearTimeout(timeoutId);
+    requestSignal.removeEventListener('abort', handleRequestAbort);
+  }, { once: true });
+  if (requestSignal.aborted) handleRequestAbort();
+  return fallbackController.signal;
+}
+
 function useDashboardData() {
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [pendingReplies, setPendingReplies] = useState<EmailItem[]>([]);
@@ -208,10 +231,7 @@ function useDashboardData() {
     let cancelled = false;
     const requestVersion = reloadVersion;
     const requestController = new AbortController();
-    const dashboardReadSignal = AbortSignal.any([
-      requestController.signal,
-      AbortSignal.timeout(15_000),
-    ]);
+    const dashboardReadSignal = createDashboardReadSignal(requestController.signal, 15_000);
     const isStaleRequest = () => cancelled || requestVersion !== requestVersionRef.current;
     const setSourceStatus = (source: keyof DashboardDataStatuses, status: DashboardDataStatus) => {
       if (isStaleRequest()) return;
