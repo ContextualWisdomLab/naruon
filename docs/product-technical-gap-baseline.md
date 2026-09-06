@@ -1,12 +1,30 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.52
+**Baseline version:** 1.53
 **Observed on:** 2026-09-07 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-07)
+
+### 대시보드 고객용 문구와 누락 시각검증 보완
+
+아래 두 문구 Gap은 [#1578](https://github.com/ContextualWisdomLab/naruon/pull/1578)의
+`8b336829ca2bbf978103d1032836bbff7e01174b`에서 수정 후보로 검증했다.
+대기 작업은 `미완료`, 일정 비교 정보가 있으면 `원본 변경 비교 가능`, 없으면
+`변경 전 원본 확인 필요`로 표시한다. 비교 정보의 존재를 최신 상태·충돌 없음·
+쓰기 권한이나 완료로 해석하지 않으며 API 필드와 기존 응답 검증은 바꾸지 않았다.
+
+직전 `ae5f39d5c2001940843a5f6e97e73f231ead5775`의 전체 484개 검사와
+production build 통과에는 기존 act 경고 7건이 남는다. 현재 head는 E2E만
+29줄 추가했으므로 동일한 runtime/build 입력의 기존 빌드를 사용했으며,
+새 전체 검사나 빌드를 실행했다고 주장하지 않는다. 비교 정보 유무 두 상태를
+desktop/tablet/mobile에서 실행한 추가 6개 검사는 6.0초에 통과했다.
+정확한 문구를 viewport로 이동한 후 캡처한 6장을 작업 Agent와 조정 Agent가
+각각 직접 확인했다. 모바일과 정보 없음 상태까지 해당 문구·인접 행동에
+잘림·겹침은 보이지 않았다. 이전 캡처 누락은 이 범위에서 해소됐으며, 전체
+언어·실제 API·번역 원장·hosted gate·보호 병합은 여전히 별도 미완료다.
 
 ### 잘못된 응답의 화면 중단과 공통 검증 수리
 
