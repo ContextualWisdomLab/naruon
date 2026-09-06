@@ -164,7 +164,13 @@ test('renders Today dashboard pending reply lane with signed API headers', async
   await page.screenshot({ path: testInfo.outputPath('today-pending-replies-mobile-scroll.png'), fullPage: false });
 });
 
-test('recovers the Today dashboard after a source request fails', async ({ page }) => {
+for (const failureResponse of [
+  { name: 'source request fails', status: 503, body: '{"error_code":"source_unavailable"}' },
+  { name: 'source returns malformed members', status: 200, body: '{"emails":[null]}' },
+]) {
+test(`recovers the Today dashboard after a ${failureResponse.name}`, async ({ page }, testInfo) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (pageError) => pageErrors.push(pageError.message));
   const sessionToken = e2eSessionToken({ sub: 'alice', org: 'org-acme', workspace: 'workspace-org-acme' });
   await page.addInitScript((token) => {
     document.cookie = `naruon_session=${token}; Path=/; SameSite=Lax`;
@@ -179,7 +185,7 @@ test('recovers the Today dashboard after a source request fails', async ({ page 
       inboxAttempts += 1;
     }
     if (request.method() === 'GET' && url.pathname === '/api/emails' && !inboxAvailable) {
-      await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error_code":"source_unavailable"}' });
+      await route.fulfill({ status: failureResponse.status, contentType: 'application/json', body: failureResponse.body });
       return;
     }
     await route.fallback();
@@ -190,6 +196,7 @@ test('recovers the Today dashboard after a source request fails', async ({ page 
   const recoveryAlert = dashboard.getByRole('alert');
   await expect(recoveryAlert).toContainText('업무 현황을 모두 불러오지 못했습니다.');
   await expect(dashboard.getByRole('article', { name: '받은 메일' })).toContainText('오류');
+  await page.screenshot({ path: testInfo.outputPath('dashboard-source-unavailable.png') });
 
   inboxAvailable = true;
   await recoveryAlert.getByRole('button', { name: '다시 시도' }).click();
@@ -197,7 +204,9 @@ test('recovers the Today dashboard after a source request fails', async ({ page 
   await expect(recoveryAlert).toHaveCount(0);
   await expect(dashboard.getByRole('article', { name: '받은 메일' })).toContainText('1');
   expect(inboxAttempts).toBeGreaterThanOrEqual(2);
+  expect(pageErrors).toEqual([]);
 });
+}
 
 test('keeps the short mobile AI quick action menu inside the viewport with scrollable actions', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 640 });

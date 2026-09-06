@@ -10,6 +10,7 @@ import dynamic from 'next/dynamic';
 import { CalendarDays, CheckCircle2, Inbox, Network, Send, Settings, Sparkles } from 'lucide-react';
 import { useTasks, type TaskItem } from '@/hooks/useTasks';
 import { apiClient } from '@/lib/api-client';
+import { isMailListItem } from '@/lib/mail-response';
 import { setMobileWorkspaceView, useMobileWorkspaceView } from '@/lib/mobile-workspace';
 import { toSafeReactText } from '@/lib/safe-text';
 import { setWorkspaceStartupView, useWorkspaceStartupView, type WorkspaceStartupView } from '@/lib/workspace-preferences';
@@ -41,6 +42,7 @@ function useStartupSearch(query: string, limit: number) {
     void apiClient.post<{ results: StartupSearchResult[] }>('/api/search', { query, limit }, { signal: controller.signal })
       .then((response) => {
         if (cancelled) return;
+        if (!Array.isArray(response.results) || !response.results.every(isMailListItem)) throw new Error('Invalid search response');
         setResults(response.results);
         setStatus(response.results.length > 0 ? 'success' : 'empty');
       })
@@ -93,6 +95,30 @@ interface EmailItem {
   date?: string;
   snippet: string;
   unread?: boolean;
+}
+
+function isDashboardRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isDashboardTask(value: unknown): value is TaskItem {
+  return isDashboardRecord(value)
+    && typeof value.id === 'string' && value.id.length > 0
+    && typeof value.title === 'string'
+    && typeof value.status === 'string' && ['open', 'in_progress', 'blocked', 'done'].includes(value.status)
+    && typeof value.priority === 'string' && ['low', 'normal', 'high', 'urgent'].includes(value.priority)
+    && typeof value.created_at === 'string' && typeof value.updated_at === 'string';
+}
+
+function isDashboardCalendarSource(value: unknown): value is CalendarWritebackSource {
+  return isDashboardRecord(value)
+    && typeof value.source_id === 'string' && value.source_id.length > 0
+    && (value.provider === undefined || typeof value.provider === 'string')
+    && (value.protocol === undefined || typeof value.protocol === 'string')
+    && (value.capabilities === undefined || (Array.isArray(value.capabilities)
+      && value.capabilities.every((capability: unknown) => typeof capability === 'string')))
+    && (value.writeback_enabled === undefined || typeof value.writeback_enabled === 'boolean')
+    && (value.etag === undefined || value.etag === null || typeof value.etag === 'string');
 }
 
 function isWritableCalendarSource(source: CalendarWritebackSource) {
@@ -199,7 +225,7 @@ function useDashboardData() {
     void apiClient.get<{ emails: EmailItem[] }>('/api/emails', { signal: dashboardReadSignal })
       .then((response) => {
         if (isStaleRequest()) return;
-        if (!Array.isArray(response.emails)) throw new Error('Invalid dashboard email response');
+        if (!Array.isArray(response.emails) || !response.emails.every(isMailListItem)) throw new Error('Invalid dashboard email response');
         setEmails(response.emails);
         setSourceStatus('emails', 'ready');
       })
@@ -212,7 +238,7 @@ function useDashboardData() {
     void apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3', { signal: dashboardReadSignal })
       .then((response) => {
         if (isStaleRequest()) return;
-        if (!Array.isArray(response.emails)) throw new Error('Invalid pending-reply response');
+        if (!Array.isArray(response.emails) || !response.emails.every(isMailListItem)) throw new Error('Invalid pending-reply response');
         setPendingReplies(response.emails);
         setSourceStatus('pendingReplies', 'ready');
       })
@@ -225,7 +251,7 @@ function useDashboardData() {
     void apiClient.get<TaskItem[]>('/api/tasks', { signal: dashboardReadSignal })
       .then((response) => {
         if (isStaleRequest()) return;
-        if (!Array.isArray(response)) throw new Error('Invalid dashboard task response');
+        if (!Array.isArray(response) || !response.every(isDashboardTask)) throw new Error('Invalid dashboard task response');
         setTasks(response);
         setSourceStatus('tasks', 'ready');
       })
@@ -238,7 +264,7 @@ function useDashboardData() {
     void apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources', { signal: dashboardReadSignal })
       .then((response) => {
         if (isStaleRequest()) return;
-        if (!Array.isArray(response)) throw new Error('Invalid calendar-source response');
+        if (!Array.isArray(response) || !response.every(isDashboardCalendarSource)) throw new Error('Invalid calendar-source response');
         setCalendarSources(response);
         setSourceStatus('calendarSources', 'ready');
       })

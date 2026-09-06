@@ -42,6 +42,55 @@ MDN lists `AbortSignal.any` as Baseline 2024; older browsers need an explicit
 support decision before adoption. Do not claim a repository-wide browser
 support policy from the local engine smoke checks or add a speculative polyfill.
 
+## Follow-up: malformed array members
+
+Review [3944460600](https://github.com/ContextualWisdomLab/naruon/pull/1570#discussion_r3944460600)
+described a gap still present at `b88161f0c9515b39b101fe3fa8444be3b1895022`.
+The envelope checks accepted arrays containing null or invalid records. Render
+filters then dereferenced those values outside the promise rejection handler,
+so an unavailable source could crash the dashboard instead of offering retry.
+
+Validate the consumed email, task and calendar shapes before their state
+setters; both email endpoints share one predicate. Use native type checks and
+reject the whole invalid source rather than silently filtering members, which
+would misreport counts and task completion rates. Preserve valid empty arrays,
+independent sibling responses, cancellation and signed-cookie transport.
+No dependency or general-purpose schema framework is needed for these three
+local shapes. Project folders currently consume only length and are unchanged.
+
+The first 12 null/empty-record/number cases failed before the repair. Additional
+cases cover numeric email subject, object date, array task status (no string
+coercion), and string calendar capabilities. Existing successful payloads and
+retry/StrictMode tests remain regression evidence. Backend contracts checked:
+`EmailListItem` in `backend/api/emails.py`, `TicketTaskResponse` in
+`backend/api/tasks.py`, and `WritebackSource` in `backend/api/calendar.py`.
+The guards cover consumed fields, not backend semantic correctness or
+schema-wide conformance.
+
+The first production-browser run disproved the initial local-only repair:
+the three HTTP 503 recovery cases passed, but all three HTTP 200/null-member
+cases failed. The trace recorded `Cannot read properties of null (reading 'id')`
+and the page error boundary replaced the dashboard. `EmailList` was mounted
+alongside the dashboard and accepted `data.emails || []` before mapping
+`email.id`; dashboard unit tests mocked that component and missed the path.
+Keep that failed trace and result; do not omit the malformed-response case.
+
+Three additional EmailList inbox/sent/search regressions failed before the
+sibling repair. Move the mail predicate to `frontend/src/lib/mail-response.ts`
+and apply it to both dashboard mail sources and every located `/api/search`
+consumer (EmailList, WorkspaceHome startup search, MobileApiPanel, SearchLayout).
+This is a now-demonstrated shared responsibility, not a speculative wrapper.
+Keep task/calendar predicates local. EmailList reports a fixed user-facing
+message on validation failure rather than displaying payload values or internal
+validator details. Optional nullable reply counts remain accepted because the
+backend emits them. Original cancellation and envelope failures stay covered.
+
+Scoped visual follow-up: the initial successful 503 desktop capture still
+shows `source-linked` under pending tasks and `충돌 토큰 있음` under calendar
+sources. These are unresolved user-facing implementation-detail leaks, not
+acceptance of the complete product copy. Record them with the product Gap;
+do not expand this availability repair into a translation framework or redesign.
+
 ## Reference
 
 MDN contributors. (2026, September 1). *AbortSignal: any() static method*.

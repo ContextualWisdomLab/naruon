@@ -176,6 +176,35 @@ describe("WorkspaceHome dashboard successor contracts", () => {
     expect(container?.textContent).not.toContain("수신된 메일이 없습니다.");
   });
 
+  it.each([
+    { endpoint: "/api/emails", message: "최근 메일을 확인하지 못했습니다.", malformed: { id: 1, subject: 42, sender: "example@example.com", snippet: "" } },
+    { endpoint: "/api/emails/pending-replies?limit=3", message: "답변 대기 메일을 확인하지 못했습니다.", malformed: { id: 1, subject: null, sender: "example@example.com", snippet: "", date: {} } },
+    { endpoint: "/api/tasks", message: "작업 현황을 확인하지 못했습니다.", malformed: { id: "task-example", title: "Example", status: ["open"], priority: "normal", created_at: "", updated_at: "" } },
+    { endpoint: "/api/calendar/writeback-sources", message: "일정 원본 목록 응답을 확인할 수 없습니다.", malformed: { source_id: "calendar-example", writeback_enabled: true, capabilities: "write" } },
+  ].flatMap(({ endpoint, message, malformed }) => [null, {}, 42, malformed].map((member) => ({ endpoint, message, member }))))(
+    "rejects malformed $member in $endpoint without losing the dashboard",
+    async ({ endpoint, message, member }) => {
+      vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+        matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      })));
+      vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith(endpoint)) {
+          const payload = endpoint.startsWith("/api/emails") ? { emails: [member] } : [member];
+          return Promise.resolve({ ok: true, json: async () => payload });
+        }
+        const support = supportResponse(url);
+        if (support) return support;
+        return Promise.resolve({ ok: true, json: async () => url.endsWith("/api/tasks") ? [] : { emails: [] } });
+      }));
+
+      await renderDashboard();
+      await waitForCondition(() => container?.textContent?.includes(message) ?? false);
+      expect(container?.querySelector('[role="alert"] button')?.textContent).toBe("다시 시도");
+      expect(container?.querySelector('[aria-label="홈 지표"]')).not.toBeNull();
+    },
+  );
+
   it("publishes ready source data without waiting for an unrelated stalled core read", async () => {
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
       matches: false,

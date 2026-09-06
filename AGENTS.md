@@ -276,6 +276,11 @@ in this repo.
 
 - First-run frontend sessions should open the Today execution dashboard while
   preserving explicit Dashboard, Email, and Calendar startup choices.
+- A successful HTTP response and `Array.isArray` do not establish dashboard
+  readiness. Validate each consumed member before storing it: null records,
+  malformed display fields, task states, and calendar capabilities must enter
+  the existing unavailable/retry state, not crash rendering or become empty
+  success. Keep valid empty arrays distinct and test each affected source.
 - Workspace navigation changes must keep the desktop primary nav and the
   tablet/mobile drawer in sync for Mail, Calendar, Tasks, Projects, Context
   Search, AI Hub, Data, Security, and Settings; add route and responsive E2E
