@@ -315,7 +315,7 @@ async def test_email_detail_preview_postgres_smoke_lists_opaque_hwpx_key() -> No
     attachment_selects: list[str] = []
 
     def capture_attachment_select(
-        conn, cursor, statement: str, parameters, context, executemany
+        _conn, _cursor, statement: str, _parameters, _context, _executemany
     ) -> None:
         if "from email_attachments" in statement.lower().replace('"', ""):
             attachment_selects.append(statement)
@@ -352,6 +352,15 @@ async def test_email_detail_preview_postgres_smoke_lists_opaque_hwpx_key() -> No
             app.dependency_overrides.pop(get_db, None)
         else:
             app.dependency_overrides[get_db] = previous_override
+        async with engine.begin() as cleanup_conn:
+            await cleanup_conn.execute(
+                text("DELETE FROM email_attachments WHERE email_id = :email_id"),
+                {"email_id": email_id},
+            )
+            await cleanup_conn.execute(
+                text("DELETE FROM email_records WHERE id = :email_id"),
+                {"email_id": email_id},
+            )
         await engine.dispose()
 
     assert detail.status_code == 200, detail.text
