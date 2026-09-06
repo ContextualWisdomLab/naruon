@@ -1,10 +1,62 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.35
+**Baseline version:** 1.36
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Shared-send and nested CI isolation refresh (2026-09-06):** Existing Draft
+[#1417](https://github.com/ContextualWisdomLab/naruon/pull/1417), head
+`1666f76cf94c31e34c2762c9d75f52ea3040b9a2`, tree
+`2a6aa3759b94e923325df7c6568cc6db3f8f63ca`, now normally inherits complete
+CI prerequisite [#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562)
+at `30d8476b5fa1d4379684acaf2f334414597e97c4` and targets that branch.
+The original `a9f334a442538b666e03e694731745d8aab4b45a` send delta is retained.
+Real installation first failed on two Alembic heads; the no-DDL
+`0020_merge_send_registry` joins both parent histories without deleting data.
+The existing limiter runtime and its request rollback remain unchanged.
+
+Its committed head passes **1887 tests / 2 explicit live-only skips, 120.85 s**,
+with fresh/repeated real migrations and completed test-only DB/network cleanup.
+Four database cases cover 80 concurrent attempts over independent user/org/
+workspace scopes, the actual 61-second expiration wait, observed lock-wait
+cancellation with no leaked pool slot, and a signed backend send on a one-slot
+pool. A local mutation removing request rollback fails with HTTP 503 and was
+restored before commit. SMTP and DNS validation remain external-boundary doubles;
+these tests do not prove delivery, browser cookies, representative load or p95.
+JUnit SHA-256: `f581d06533152c7a5f70246abf32398bc59cb604c525c6974e5a960effac7ff2`.
+
+CI owner #1562's ordinary child fixes three migration-test subprocesses that
+discarded the parent's explicit configuration-file selector. Three intercepted
+dispatch cases failed before the fix, without executing an unsafe child or
+reading operator files. On its own committed head/tree
+`89a68659baeab385f195ec37c11ffe6b73b52d3f`, the complete migrated suite passes
+**1874 tests / 2 explicit live-only skips, 54.82 s** with scoped cleanup.
+JUnit SHA-256: `ced9e9330ccc670588f59e52b4bdf8cf288ca6e8368cc414875b918c9b3d7f7b`.
+The actual configuration boundary is child-process dispatch, not merely the
+parent shell. No production default or credential authority was changed.
+
+| Requirement / owner | New local evidence | Remaining acceptance |
+| --- | --- | --- |
+| PRD: shared send quota survives concurrent sessions; #1417 | Production 10/60 quota, independent scope dimensions, real expiration and durable counts | Hosted exact-head checks, protected integration, delivery and multi-process/load evidence |
+| TRD/operability: request and limiter share bounded capacity; #1417 | Signed route and cancellation use real PostgreSQL connections; dropped rollback is detected | Browser cookie/proxy path and deployed interruption |
+| Security/test: nested migrations exclude operator configuration; #1562 | Three RED-to-GREEN child-dispatch probes plus full migrated suite | Independent current-head review and Linux Actions |
+
+Refreshed local Trivy scans of #1417 merge ref
+`abc115c644c408681206712d59a916eee5f7dcfb` and #1562 merge ref
+`72206670444ee0e775de7c72631bdb0592aedcc4` match their respective current trees.
+Both have zero HIGH/CRITICAL fixable vulnerability/misconfiguration findings
+including dev dependencies and zero separate secret-scan findings. Their
+security report hashes are respectively
+`603aff0b0fe41bb7fc5bbd9287799132886ced2eec349ff08f53bd004907c8a4` and
+`c5b36a42a166e67bcc3412273c51dc8b4d0da4f5cbb08127f02c29576aa6e99f`;
+secret report hashes are recorded in each PR. Current-head hosted backend,
+frontend, security and image checks remain queued. Both PRs remain Draft and
+unmerged; no coverage percentage, release or protected advisory resolution is
+claimed. [Send decision and APA references](https://github.com/ContextualWisdomLab/naruon/blob/1666f76cf94c31e34c2762c9d75f52ea3040b9a2/docs/doctoring/shared_send_postgres.md)
+and [CI root-cause record](https://github.com/ContextualWisdomLab/naruon/blob/30d8476b5fa1d4379684acaf2f334414597e97c4/docs/doctoring/application_ci_postgres.md)
+retain failures, alternatives and reproduction boundaries.
 
 **Review admission repair (2026-09-06):** Existing dependency owner
 [#1571](https://github.com/ContextualWisdomLab/naruon/pull/1571) was marked
@@ -29,8 +81,8 @@ queried inventories. The metadata transition is not dispatch or approval
 proof. Retain other incomplete owner stacks as Draft and obtain exact-head
 hosted evidence plus qualifying review before protected landing.
 
-**Migrated PostgreSQL CI refresh (2026-09-06):** Existing Draft
-[#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562) is now
+**Historical migrated PostgreSQL CI receipt before nested-child repair (2026-09-06):** Existing Draft
+[#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562) was measured at
 `4d2e4abc2c369d5e85bced4027b6f81857721ea2`, tree
 `4a140dca9ffb2f5a182794a7e40375f0e7df5edd`. It normally merges the complete
 #1503 prerequisite `19d5860bc27e860acba940390f5792721cd99e5e`, including #1565,
@@ -78,8 +130,8 @@ capture, preserving the target, override and lock blob
 `018f0382c815ea7a35899e64ddb6c3645399fcb6`; owner focused tests, typecheck and
 lint passed before integration. No duplicate patch or suppression was added.
 
-Current local GREEN: GitHub merge ref
-`0ca44cfa8302e6b0228de24a4eed284f1d0c4a99` has parents #1531 base plus current
+Historical local GREEN: GitHub merge ref
+`0ca44cfa8302e6b0228de24a4eed284f1d0c4a99` has parents #1531 base plus then-current
 #1562 head and the same tree `4a140dca9ffb2f5a182794a7e40375f0e7df5edd`.
 Trivy vulnerability/misconfiguration scanning, including development
 dependencies and fixable HIGH/CRITICAL findings, exits zero with no findings.
@@ -89,7 +141,7 @@ A separate all-severity secret-only scan of that committed archive also exits
 zero; report SHA-256:
 `c148c3f0eb704a9c50b7a74fa24fb19d8f467cb26b09d57853c98546ac533c8e`.
 These scans do not prove protected-branch advisory resolution or deployed
-safety. Current-head Application CI `34024085621` and image validation
+safety. Earlier-head Application CI `34024085621` and image validation
 `34024085830` are queued; Bandit `34024085668` is pending, not completed
 evidence. The workflow lookup is PR-trigger-filtered and first-page only,
 not an exhaustive required-check inventory.
@@ -1745,7 +1797,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Installable connector | adapters in source are not an operable product | outbound-only architecture and several adapters exist | #998 | signed packages/OCI, enrollment, rotation, upgrade/rollback, supported matrix |
 | Source lifecycle | configuration does not equal observed provider capability | source IDs, eligibility, consent, and revisions exist in slices | #998, #978 | create/rotate/disable/delete, capability discovery, health, stale-capability invalidation |
 | Durable reconciliation | retry exhaustion alone does not tell the buyer what happened remotely | retry/backoff/exhaustion and signal events exist | #998 | idempotent command, late-success reconciliation, dead-letter action, buyer receipt |
-| Shared send safety | process-local throttles fail with multiple replicas | PR proposes PostgreSQL-backed atomic bucket | #1379, #1417 | concurrency/expiry/isolation/DB-unavailable tests and protected integration |
+| Shared send safety | process-local throttles fail with multiple replicas | Proposed rolling PostgreSQL quota; current local concurrency/expiry/isolation/cancellation evidence above | #1379, #1417 | exact-head hosted checks, independent review, foundation-first protected integration and delivery/load evidence |
 
 ### P0 — Data durability, portability, and customer exit
 
