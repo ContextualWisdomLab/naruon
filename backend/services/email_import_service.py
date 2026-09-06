@@ -14,7 +14,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from sqlalchemy import bindparam, func, or_, select
+from sqlalchemy import bindparam, event, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from core.config import settings
@@ -271,18 +271,23 @@ def _owner_import_lock_key(user_id: str, organization_id: str) -> str:
 async def _acquire_owner_import_quota_lock(
     session: AsyncSession, *, user_id: str, organization_id: str
 ) -> AsyncConnection | bool | None:
+    """Hold an owner lease across item commits; discard unconfirmed acquisition."""
     if not _session_uses_postgresql(session):
         return None
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
         "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
-    # session.commit() is intentionally used for each imported item. A
-    # session-level advisory lock acquired through AsyncSession can therefore
-    # be left on a returned pooled connection; keep a dedicated connection for
-    # the whole import so acquisition and release are guaranteed to match.
+    # The import session binds to its caller's held connection so each item can
+    # commit without returning the leased socket or needing a second pool slot.
+    # Standalone helper callers still own a dedicated lease connection.
     if isinstance(session, AsyncSession):
-        lock_connection = await engine.connect()
+        session_bind = getattr(session, "bind", None)
+        lock_connection = (
+            session_bind
+            if isinstance(session_bind, AsyncConnection)
+            else await engine.connect()
+        )
         try:
             await lock_connection.execute(
                 select(
@@ -293,8 +298,8 @@ async def _acquire_owner_import_quota_lock(
                 ),
                 lock_params,
             )
-        except Exception:
-            await lock_connection.close()
+        except BaseException:
+            await _close_owner_import_connection(lock_connection, discard_connection=True)
             raise
         return lock_connection
 
@@ -311,6 +316,32 @@ async def _acquire_owner_import_quota_lock(
     return True
 
 
+async def _close_owner_import_connection(
+    lock_connection: AsyncConnection, *, discard_connection: bool
+) -> None:
+    """Complete lease cleanup even if the caller is cancelled again while waiting."""
+    async def close_connection() -> None:
+        """Discard an uncertain socket before returning its pool slot."""
+        try:
+            if discard_connection:
+                await lock_connection.invalidate()
+        finally:
+            await lock_connection.close()
+
+    cleanup_task = asyncio.create_task(close_connection())
+    interrupted_cleanup = False
+    while True:
+        try:
+            await asyncio.shield(cleanup_task)
+            break
+        except asyncio.CancelledError:
+            if cleanup_task.cancelled():
+                raise
+            interrupted_cleanup = True
+    if interrupted_cleanup:
+        raise asyncio.CancelledError
+
+
 async def _release_owner_import_quota_lock(
     session: AsyncSession,
     *,
@@ -318,13 +349,14 @@ async def _release_owner_import_quota_lock(
     organization_id: str,
     lock: AsyncConnection | bool | None,
 ) -> None:
+    """Return a lease connection only after PostgreSQL confirms its unlock."""
     if lock is not None and lock is not True:
-        lock_params = {
-            "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-            "owner_key": _owner_import_lock_key(user_id, organization_id),
-        }
         try:
-            await lock.execute(
+            lock_params = {
+                "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
+                "owner_key": _owner_import_lock_key(user_id, organization_id),
+            }
+            lock_result = await lock.execute(
                 select(
                     func.pg_advisory_unlock(
                         func.hashtext(bindparam("namespace_key")),
@@ -333,9 +365,14 @@ async def _release_owner_import_quota_lock(
                 ),
                 lock_params,
             )
+            if lock_result.scalar_one() is not True:
+                raise RuntimeError("email import lease release unconfirmed")
             await lock.commit()
-        finally:
-            await lock.close()
+        except BaseException:
+            await _close_owner_import_connection(lock, discard_connection=True)
+            raise
+        else:
+            await _close_owner_import_connection(lock, discard_connection=False)
         return
     if lock is not True:
         return
@@ -360,10 +397,15 @@ def _parse_email_content_results(
     *,
     message_id: str,
     attachment_payloads: list[dict],
+    owner_scope_key: str | None = None,
 ) -> EmailContentParseResults:
+    """Scope persisted graph identities; embedding-only previews may omit scope."""
+    source_scope = (owner_scope_key,) if owner_scope_key is not None else ()
     body_parse_result = parse_content(
         source_kind="email_body",
-        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        source_record_uid=_content_graph_source_record_uid(
+            "email", *source_scope, message_id
+        ),
         content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
         content_type=str(parsed.get("body_content_type") or "text/plain"),
         display_name="Email body",
@@ -386,6 +428,7 @@ def _parse_email_content_results(
                 source_kind="attachment",
                 source_record_uid=_content_graph_source_record_uid(
                     "attachment",
+                    *source_scope,
                     message_id,
                     str(attachment_index),
                     str(attachment_payload.get("filename") or "attachment.txt"),
@@ -500,6 +543,11 @@ async def _extract_and_generate_embeddings(
         parsed,
         message_id=str(parsed.get("message_id") or message_id or "email-import"),
         attachment_payloads=attachment_payloads,
+        owner_scope_key=(
+            _owner_import_lock_key(batch_context.user_id, batch_context.organization_id)
+            if batch_context is not None and batch_context.organization_id is not None
+            else None
+        ),
     )
     embedding_texts, source_ranges = _semantic_embedding_inputs(
         parsed,
@@ -636,6 +684,9 @@ def _append_email_content_graph(
         parsed,
         message_id=message_id,
         attachment_payloads=attachment_payloads,
+        owner_scope_key=_owner_import_lock_key(
+            email_obj.user_id, email_obj.organization_id
+        ),
     )
     body_parse_result, attachment_parse_results = parse_results
     _append_parse_result_records(
@@ -1041,6 +1092,7 @@ async def _import_single_eml(
         parsed,
         message_id=message_id,
         attachment_payloads=attachment_payloads,
+        owner_scope_key=_owner_import_lock_key(user_id, organization_id),
     )
     attachment_payloads, fitted_embeddings = await _extract_and_generate_embeddings(
         parsed,
@@ -1338,6 +1390,73 @@ async def import_email_uploads(
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
 ) -> EmailImportResult:
+    """Import with one held connection, including an existing provider lookup."""
+    if isinstance(session, AsyncSession) and _session_uses_postgresql(session):
+        if session.new or session.dirty or session.deleted:
+            raise ValueError("email import requires settled caller state")
+        import_connection = await session.connection()
+        import_session = AsyncSession(
+            bind=import_connection,
+            expire_on_commit=False,
+            join_transaction_mode="control_fully",
+        )
+        leased_driver = import_connection.sync_connection.connection.dbapi_connection
+
+        def reject_reconnected_import(
+            database_connection,
+            database_cursor,
+            query_statement,
+            query_parameters,
+            execution_context,
+            execute_many,
+        ):
+            """A replacement socket cannot execute SQL under a lost owner's lease."""
+            if database_connection.connection.dbapi_connection is not leased_driver:
+                raise RuntimeError("email import lease connection lost")
+
+        event.listen(
+            import_connection.sync_connection,
+            "before_cursor_execute",
+            reject_reconnected_import,
+        )
+        try:
+            return await _import_email_uploads_on_session(
+                import_session,
+                uploads=uploads,
+                user_id=user_id,
+                organization_id=organization_id,
+                embedding_provider=embedding_provider,
+            )
+        finally:
+            try:
+                try:
+                    await import_session.close()
+                finally:
+                    await session.close()
+            finally:
+                event.remove(
+                    import_connection.sync_connection,
+                    "before_cursor_execute",
+                    reject_reconnected_import,
+                )
+    return await _import_email_uploads_on_session(
+        session,
+        uploads=uploads,
+        user_id=user_id,
+        organization_id=organization_id,
+        embedding_provider=embedding_provider,
+    )
+
+
+async def _import_email_uploads_on_session(
+    session: AsyncSession,
+    *,
+    uploads: list[EmailImportUpload],
+    user_id: str,
+    organization_id: str,
+    embedding_provider: EmailImportEmbeddingProvider | None,
+) -> EmailImportResult:
+    """Keep quota planning and every item transaction inside the owner lease."""
     lock_acquired = await _acquire_owner_import_quota_lock(
         session, user_id=user_id, organization_id=organization_id
     )

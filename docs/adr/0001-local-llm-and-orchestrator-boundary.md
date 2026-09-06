@@ -1,7 +1,17 @@
 # ADR-0001: Local LLM and contextual-orchestrator boundary
 
-- Status: Accepted
+- Status: Proposed
 - Date: 2026-08-11
+
+Status correction (2026-09-06): this record belongs to open Draft PR #1317
+and is absent from protected `develop` snapshot
+`042b0c70531b229af3acbd0421a2f23098d848b3`. Preserve the proposal, but do not
+treat local tests as protected acceptance, an immutable contextual-orchestrator
+release, or deployed provider evidence. Local runtime ordering and the 256-token
+ceiling below remain proposal-specific choices, not permission to duplicate
+canonical discovery/routing. Acceptance needs the released owner contract and
+measured provider compatibility. The [lease repair record](../doctoring/import_lease_lifecycle.md)
+separates actual PostgreSQL replay from the unverified provider/browser path.
 
 ## Context
 

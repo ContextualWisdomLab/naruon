@@ -1,0 +1,11 @@
+From: Queue participant <queue_participant@example.invalid>
+To: Queue discussion <queue_discussion@example.invalid>
+Subject: Long-running queue session question
+Date: Sun, 27 Apr 2014 19:31:42 +0000
+Message-ID: <observed_queue_question_20140427@example.invalid>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Is there a problem with 100 open sessions (behind a connection pooler?)
+for hours like in my case?

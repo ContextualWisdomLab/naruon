@@ -1,7 +1,7 @@
 import logging
 import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -855,6 +855,7 @@ async def test_owner_quota_lock_releases_on_the_same_dedicated_connection():
             return type("Bind", (), {"dialect": dialect})()
 
     lock_connection = AsyncMock()
+    lock_connection.execute.return_value = Mock(scalar_one=Mock(return_value=True))
     session = object.__new__(_PostgresSessionProbe)
     fake_engine = type("Engine", (), {})()
     fake_engine.connect = AsyncMock(return_value=lock_connection)

@@ -61,7 +61,7 @@ documented in `docs/threading-contract.md`.
 
 ## Data and tenancy boundary
 
-The `emails` table has non-null `user_id` and `organization_id` owner keys, and
+The `email_records` table has non-null `user_id` and `organization_id` owner keys, and
 the current email list, detail, thread, search, and network graph endpoints scope
 their queries to the authenticated user plus organization. Fresh local databases
 get these columns from SQLAlchemy metadata; existing local databases get them
@@ -76,6 +76,16 @@ data is mixed in one database.
 not globally. Fixture import upserts and reply-thread lookup use the same owner
 scope so a reused RFC Message-ID from another organization cannot overwrite an
 email row or attach a reply to another tenant's thread.
+
+PR #1317's proposed import repair retains the provider-lookup connection for
+the entire account-level advisory lease, including per-item commits. Uncertain
+acquisition/release discards the physical connection; SQL cannot continue on a
+replacement connection without the lease. Persisted body/attachment graph
+identities include the same account scope so a reused Message-ID cannot collide
+across accounts. The [repair record](docs/doctoring/import_lease_lifecycle.md)
+documents caller transaction ownership, migration prerequisites, real-PostgreSQL
+counterexamples, and the separate hosted/provider/browser gates. This is not a
+protected integration or deployed-runtime claim.
 
 `llm_providers` is also owner-scoped. Provider rows carry non-null `user_id` and
 `organization_id`, provider names are unique only within an organization, and the

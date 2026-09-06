@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
+from alembic.script import ScriptDirectory
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -37,7 +38,40 @@ def test_initial_alembic_revision_records_current_schema_path():
     assert "down_revision = None" in revision_text
     assert "CREATE EXTENSION IF NOT EXISTS vector" in revision_text
     assert "Base.metadata.create_all" in revision_text
-    assert "schema_backfill_sql" in revision_text
+    assert "execute_schema_backfill" in revision_text
+
+
+def test_email_read_state_guards_both_legacy_and_current_table_names():
+    """0011_email_read_state must add is_read to a genuinely historical
+    email_records table missing it (a database whose own 0001 ran before
+    is_read was added to the Email model), not just a legacy "emails" table
+    that, per 0011_email_model_reconciliation's docstring, no migration in
+    this repo's history ever actually created for a real managed database.
+    The upgrade check must guard on column existence, not just table
+    existence, so it stays idempotent against a table that already has the
+    column. downgrade is a no-op: a fresh database's email_records.is_read
+    comes from 0001's live create_all, not from this revision, so there is
+    no way to tell "this revision added it" apart from "the baseline already
+    had it" -- and is_read holds real read/unread state, not rebuildable
+    derived data (same ownership-ambiguity reasoning as
+    0018_workspace_registry's downgrade)."""
+    revision_path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    revision_text = revision_path.read_text()
+
+    assert '"email_records"' in revision_text
+    assert '"emails"' in revision_text
+    assert "has_table" in revision_text
+    assert "_has_column" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "op.drop_column(" not in revision_text
+
+
+def test_document_org_scope_downgrade_preserves_later_assignments():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0016_document_org_scope.py"
+    )
+
+    assert "op.drop_column(" not in revision_path.read_text()
 
 
 def test_provider_writeback_retry_queue_has_incremental_revision():
@@ -368,31 +402,6 @@ def test_email_model_reconciliation_has_incremental_revision():
     assert "Intentionally a no-op" in revision_text
 
 
-def _collect_revision_graph() -> tuple[set[str], set[str]]:
-    """Return (all revision ids, all referenced down_revision ids).
-
-    Parses the ``revision``/``down_revision`` assignments textually (no alembic
-    import, matching the rest of this module). Handles both the single-string
-    ``down_revision = "x"`` form and the merge tuple
-    ``down_revision = ("x", "y")`` form, as long as the assignment is on one
-    line (the convention this repo follows).
-    """
-    import re
-
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revisions: set[str] = set()
-    referenced: set[str] = set()
-    for revision_path in sorted(versions_dir.glob("*.py")):
-        text = revision_path.read_text()
-        rev = re.search(r'^revision = "([^"]+)"', text, re.MULTILINE)
-        assert rev, f"no revision id in {revision_path.name}"
-        revisions.add(rev.group(1))
-        down = re.search(r"^down_revision = (.+)$", text, re.MULTILINE)
-        if down:
-            referenced.update(re.findall(r'"([^"]+)"', down.group(1)))
-    return revisions, referenced
-
-
 def test_alembic_migration_graph_has_a_single_head():
     """``alembic upgrade head`` (scripts/migrate_db.py) is ambiguous and fails
     with "Multiple head revisions are present" whenever the migration graph has
@@ -400,14 +409,24 @@ def test_alembic_migration_graph_has_a_single_head():
     and the 0011_email_read_state branch) once left develop with two heads; this
     guard prevents that regression. A new branch must be reconciled with a merge
     revision before it lands."""
-    revisions, referenced = _collect_revision_graph()
-    heads = revisions - referenced
+    migration_graph = ScriptDirectory(str(BACKEND_ROOT / "alembic"))
+    heads = migration_graph.get_heads()
     assert len(heads) == 1, (
         f"expected exactly one alembic head, found {sorted(heads)}; add a merge "
         "revision (down_revision tuple of the heads) so `alembic upgrade head` "
         "is unambiguous"
     )
-    assert "0019_merge_read_state_ownership" in heads
+    assert heads == ["0020_merge_import_registry"]
+    retained_revisions = {
+        migration_revision.revision
+        for migration_revision in migration_graph.walk_revisions()
+    }
+    assert {
+        "0018_email_read_state_ownership",
+        "0019_merge_read_state_ownership",
+        "0018_workspace_registry",
+        "0019_email_read_state_repair",
+    } <= retained_revisions
 
 
 def test_merge_revision_reconciles_email_read_state_branch():
@@ -570,7 +589,8 @@ def test_email_read_state_revision_uses_canonical_email_records_table():
     assert "_EMAIL_TABLE," in revision_text
 
 
-def test_published_read_state_revision_targets_published_emails_table(monkeypatch):
+def test_read_state_revision_preserves_legacy_emails_table(monkeypatch):
+    """Retain legacy-table compatibility without deleting stored read state."""
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
     )
@@ -580,18 +600,28 @@ def test_published_read_state_revision_targets_published_emails_table(monkeypatc
     spec.loader.exec_module(revision)
     calls = []
     operations = SimpleNamespace(
+        get_bind=lambda: object(),
         add_column=lambda *args: calls.append(("add_column", args)),
         drop_column=lambda *args: calls.append(("drop_column", args)),
     )
+    legacy_inspector = SimpleNamespace(
+        has_table=lambda table_name: table_name == "emails",
+        get_columns=lambda table_name: [],
+    )
     monkeypatch.setattr(revision, "op", operations)
+    monkeypatch.setattr(revision.sa, "inspect", lambda connection: legacy_inspector)
 
     revision.upgrade()
     revision.downgrade()
 
+    assert len(calls) == 1
     assert calls[0][0] == "add_column"
     assert calls[0][1][0] == "emails"
-    assert calls[0][1][1].name == "is_read"
-    assert calls[-1] == ("drop_column", ("emails", "is_read"))
+    read_state_column = calls[0][1][1]
+    assert read_state_column.name == "is_read"
+    assert isinstance(read_state_column.type, sa.Boolean)
+    assert read_state_column.nullable is False
+    assert str(read_state_column.server_default.arg) == "true"
 
 
 def test_read_state_follow_up_revision_is_after_published_revision():
