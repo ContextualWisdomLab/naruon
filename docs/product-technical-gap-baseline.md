@@ -1,12 +1,61 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.42
+**Baseline version:** 1.43
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-## Current publisher repair and verified consumer stack (2026-09-06)
+## Current clean-summary regression repair (2026-09-06)
+
+PRD requirement: clean, authenticated review evidence must allow the next
+eligible step without allowing a real warning or a forged publisher to pass.
+Review #3944130242 reproduced a false blocker introduced by output-first
+matching at `b6d6c286`: `No warnings found` and `No actionable comments were
+generated` matched the warning patterns. The first whole-string regex repair
+still failed. Owner #1531 at `f2e2ac0e9fd84907d49b9646af894e55077cb383`
+instead splits output into lines and removes only complete known clean lines
+before applying the existing blocker policy. Eleven cases cover clean output,
+explicit failure, neutral without skip evidence, forged publishers, mixed
+warning lines and same-line qualifications. Unknown wording is not generally
+interpreted as negation. The full governance harness exited 0; 36 source
+contracts, ShellCheck and whitespace checks passed. Independent source reviews
+are separate from hosted approval.
+[Owner RED/fix/GREEN receipt](https://github.com/ContextualWisdomLab/naruon/pull/1531#discussion_r3944176985).
+
+CI #1562 at `0ec1cf92e161b9f99d04487435a3dd7f0ce3c15c` normally merges the
+complete repair into `938d4b12`, retaining consumer changes. Its gate and
+harness blobs match the owner exactly. The full governance harness and 40
+source contracts passed; the real PostgreSQL runner exited 0 with 1,877 passed
+and two `LIVE_BASE_URL`-dependent skips in 89.41s. Task-labelled containers,
+volumes and networks were independently absent after cleanup.
+[CI current-head receipt](https://github.com/ContextualWisdomLab/naruon/pull/1562#issuecomment-5559771293).
+SMTP #1417 at `ec3e361d13bff6af09db75e5640c426ede48ebbc` normally merges that
+CI parent into `5dea5092`, preserving SMTP throttling. Its own full harness,
+40 source contracts, ShellCheck and whitespace checks passed. Its PostgreSQL
+runner exited 0 with 1,892 passed and the same two live-API skips in 138.59s;
+task-labelled containers, volumes and networks were independently absent.
+[SMTP current-head receipt](https://github.com/ContextualWisdomLab/naruon/pull/1417#issuecomment-5559790933).
+Both consumer heads were pushed normally. Older merge-ref security scans
+remain historical until the new merge refs are scanned.
+
+The default-branch Dependabot API currently reports six open alerts. The
+inspected CI head already pins `js-yaml` 4.3.1, `cryptography` 50.0.0 and the
+scanner lock's `pyasn1` 0.6.4, but `requirements-strix-ci-hashes.txt` still pins
+`aiohttp` 3.14.1. Alerts #88–90 include GHSA-cq5v-8q36-5273 with first patched
+version 3.14.3. The canonical scanner dependency owner must repair and release
+that dependency before consumer adoption; do not duplicate a scanner workflow
+or claim an old zero-finding scan disproves newer advisory evidence. Existing
+#1571 owns the `js-yaml` change. Neither an open repair nor a local pin proves
+the protected default branch is patched.
+
+Visual Inspection of the newest AGENTS and baseline changes remains incomplete
+while the Mac is locked. Keep this gap explicit and inspect after manual
+unlock. Hosted checks, protected merges, immutable release and customer runtime
+outcomes remain unproven; the authority and release-ordering gaps below remain
+open. No PR was closed or history rewritten to obtain this state.
+
+## Earlier publisher repair and verified consumer stack (2026-09-06)
 
 PRD requirement: another check publisher must not impersonate robot review,
 and a successful check label must not hide its blocking warning. Independent
