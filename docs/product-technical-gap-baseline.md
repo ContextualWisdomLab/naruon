@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.40
+**Baseline version:** 1.41
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -36,9 +36,45 @@ governance harness, hosted checks and review evidence; older real-PostgreSQL
 and merge-ref security receipts remain historical, not new-head certification.
 No protected merge, immutable release or live customer outcome is claimed.
 The release-ordering risks below remain open despite this metadata repair.
-The baseline 1.39 desktop visual receipt belongs to `a508e543`; it does not
-verify this newly added section. Inspect this revision in the actual browser
-before marking its visual evidence complete.
+The [baseline 1.40 desktop visual receipt](https://github.com/ContextualWisdomLab/naruon/pull/1557#issuecomment-5559337483)
+belongs to `75d1126062866029ba71d53296166d38a0ed4390` and covers its visible
+heading and handoff section only. Inspect this revision in the actual browser
+before marking its newly changed text visually verified.
+
+### Full-suite output failure and retry acceptance
+
+The first real-PostgreSQL runs at these unchanged consumer heads did not
+complete: each redacted JUnit report contains 649 tests, one internal error,
+zero assertion failures and two skips. The internal error is pytest terminal
+flushing with `BrokenPipeError: [Errno 32] Broken pipe`; neither a complete
+suite nor a successful runner exit was established. The
+[CI failure receipt](https://github.com/ContextualWisdomLab/naruon/pull/1562#issuecomment-5559385503)
+and [SMTP failure receipt](https://github.com/ContextualWisdomLab/naruon/pull/1417#issuecomment-5559385733)
+retain the exact heads and JUnit digests. Their task containers and volumes
+were absent; only the inspected, empty, project-labelled networks were removed.
+
+Same-head retries redirect runner output directly to durable files and retain
+the final exit status separately. This changes observation plumbing, not the
+application, test denominator or timeout policy. The initiating cause of the
+original output-pipe closure remains unconfirmed. A retry is acceptable only
+after the full test result, explicit skip reasons, runner exit, redacted JUnit
+digest and absence of that run's containers, volumes and network are verified.
+Partial progress or a missing observation handle does not authorize restarting
+a live run. This local evidence cannot replace required hosted checks, review,
+merge-ref security evidence or protected-branch delivery.
+
+The [CI same-head retry receipt](https://github.com/ContextualWisdomLab/naruon/pull/1562#issuecomment-5559463002)
+now establishes 1,877 passed tests, two live-API skips for missing
+`LIVE_BASE_URL`, runner exit 0 and no remaining task-labelled Docker resources.
+The redacted JUnit records 1,879 tests with zero errors or failures; its SHA-256
+is `a9c20970c9ff1f4b37524fe350b1d28430b165f9dea49cf77a69e0bf92943b3b`.
+The local head and worktree remained unchanged. The separate
+[SMTP same-head retry receipt](https://github.com/ContextualWisdomLab/naruon/pull/1417#issuecomment-5559469671)
+establishes 1,892 passed tests, the same two live-API skips, runner exit 0 and
+no remaining task-labelled Docker resources, with unchanged local/remote head
+and a clean worktree. Its redacted JUnit contains 1,894 tests, zero errors or
+failures, and SHA-256
+`5cdcf50c05928dab29ca173a46de5856b13ed8c182762857953cee37afbf4672`.
 
 ## Release ordering and foundation verification gaps (2026-09-06)
 
