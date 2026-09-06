@@ -137,21 +137,27 @@ def _reap_probe(process, root):
     process.communicate(timeout=3)
     child_pids = {pid for _, pid, _ in _read_probe_trace(root)}
     deadline = time.monotonic() + 3
-    while any(_probe_is_running(pid) for pid in child_pids) and time.monotonic() < deadline:
+    while (
+        any(_probe_is_running(pid) for pid in child_pids)
+        and time.monotonic() < deadline
+    ):
         time.sleep(0.01)
-    assert not any(_probe_is_running(pid) for pid in child_pids), "probe child was not reaped"
+    assert not any(_probe_is_running(pid) for pid in child_pids), (
+        "probe child was not reaped"
+    )
 
 
 @pytest.mark.parametrize(
-    "blocked_stage, startup_delay",
+    "blocked_stage, startup_delay, signal_window",
     [
-        pytest.param("pytest", 0, id="pytest"),
-        pytest.param("down", 0, id="down"),
-        pytest.param("pytest", 6, id="slow_startup"),
+        pytest.param("pytest", 0, "running", id="pytest"),
+        pytest.param("down", 0, "running", id="down"),
+        pytest.param("pytest", 6, "running", id="slow_startup"),
+        pytest.param("pytest", 0, "before_pid", id="before_pid"),
     ],
 )
 def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
-    tmp_path, blocked_stage, startup_delay
+    tmp_path, blocked_stage, startup_delay, signal_window
 ):
     """Require cancellation status, completed teardown, and sanitized evidence."""
     checkout = tmp_path / "checkout"
@@ -170,23 +176,48 @@ def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
     # A shell exec supports interpreter paths containing spaces and adds no child.
     # Python -c sets argv[0] to -c; restore the controlled executable name first.
     executable_source = (
-        "#!/bin/sh\nexec " + shlex.quote(sys.executable) + " -I -c "
-        + shlex.quote("import sys; sys.argv.pop(0)\n" + source) + ' "$0" "$@"\n'
+        "#!/bin/sh\nexec "
+        + shlex.quote(sys.executable)
+        + " -I -c "
+        + shlex.quote("import sys; sys.argv.pop(0)\n" + source)
+        + ' "$0" "$@"\n'
     )
     for target in (
-        command_dir / "docker", command_dir / "openssl", command_dir / "sleep",
+        command_dir / "docker",
+        command_dir / "openssl",
+        command_dir / "sleep",
         python_double,
     ):
         target.write_text(executable_source)
         target.chmod(0o700)
+    probe_environment = {
+        "PATH": str(command_dir) + os.pathsep + os.defpath,
+        "RUNNER_TEMP": str(tmp_path),
+        "GITHUB_ACTIONS": "false",
+    }
+    if signal_window == "before_pid":
+        # Inject a real signal at the shell boundary without editing the runner.
+        launch_probe = tmp_path / "launch_probe.sh"
+        launch_probe.write_text(r"""
+probe_launch_window() {
+  if [[ ${log_name:-} == pytest.log && $1 == 'active_command_pid=$!' ]]; then
+    local observation_end=$((SECONDS + 30))
+    while [[ ! -f "$RUNNER_TEMP/ready" ]]; do
+      [[ $SECONDS -lt $observation_end ]] || exit 76
+      /bin/sleep 0.01
+    done
+    : > "$RUNNER_TEMP/launch_window"
+    kill -TERM "$$"
+  fi
+}
+set -T
+trap 'probe_launch_window "$BASH_COMMAND"' DEBUG
+""")
+        probe_environment["BASH_ENV"] = str(launch_probe)
     process = subprocess.Popen(
         ["/bin/bash", str(runner)],
         cwd=checkout,
-        env={
-            "PATH": str(command_dir) + os.pathsep + os.defpath,
-            "RUNNER_TEMP": str(tmp_path),
-            "GITHUB_ACTIONS": "false",
-        },
+        env=probe_environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -201,7 +232,8 @@ def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
             time.sleep(0.01)
         evidence_dir = next(tmp_path.glob("naruon-postgres.*"))
         sanitized_before_down = not (evidence_dir / "pytest_raw.xml").exists()
-        process.send_signal(signal.SIGTERM)
+        if signal_window == "running":
+            process.send_signal(signal.SIGTERM)
         if blocked_stage == "down":
             # Give the handler a turn before allowing teardown to complete.
             time.sleep(0.1)
@@ -211,11 +243,18 @@ def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
         except subprocess.TimeoutExpired:
             pytest.fail("SIGTERM did not interrupt the foreground command")
         assert process.returncode == 143, "cancellation must remain a failed run"
+        if signal_window == "before_pid":
+            assert (tmp_path / "launch_window").exists(), (
+                "launch signal was not injected"
+            )
         trace = _read_probe_trace(tmp_path)
         events = [event for event, _, _ in trace]
         assert events.count("down") == 1 and events.count("down_done") == 1
         deadline = time.monotonic() + 3
-        while any(_probe_is_running(pid) for _, pid, _ in trace) and time.monotonic() < deadline:
+        while (
+            any(_probe_is_running(pid) for _, pid, _ in trace)
+            and time.monotonic() < deadline
+        ):
             time.sleep(0.01)
         assert not any(_probe_is_running(pid) for _, pid, _ in trace), (
             "runner left a task-owned command or cleanup timer alive"
@@ -231,6 +270,8 @@ def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
         report_redacted = "[redacted] [redacted]" in report
         assert report_redacted, "sanitized report must retain redaction evidence"
         if blocked_stage == "down":
-            assert sanitized_before_down, "sanitize before potentially blocking teardown"
+            assert sanitized_before_down, (
+                "sanitize before potentially blocking teardown"
+            )
     finally:
         _reap_probe(process, tmp_path)

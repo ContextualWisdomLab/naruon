@@ -220,7 +220,52 @@ env -i PATH="$PATH" NARUON_ENV_FILE=/dev/null backend/.venv/bin/python -m pytest
   -q -W error backend/tests/test_ci_postgres_signals.py backend/tests/test_ci_postgres_runner.py
 ```
 
+## Cancellation before process ownership is recorded (2026-09-06)
+
+At owner `b2e98a52588db72e501c0843b33816e2e5bc698b`, `run_evidence`
+starts a background pipeline before assigning `active_command_pid`. A SIGTERM
+in that interval enters `cancel_execution` with no recorded PID. Teardown can
+finish while the original command group remains alive. The caller is the same
+runner used by `.github/workflows/app-ci.yml`; consumers must inherit the owner
+repair, not copy the shell function.
+
+The `before_pid` signal case runs an unchanged copy of the actual runner with
+task-owned command doubles and a task-owned `BASH_ENV` DEBUG hook. It waits for
+the real child process to reach its controlled barrier, then sends SIGTERM
+immediately before PID assignment. Assertions cover process exit, completed
+cleanup, no surviving recorded children/timer, and redacted reports. The first
+probe used unsupported `BASHPID` on macOS Bash 3.2 and was invalid; replacing it
+with the parent shell's `$$` produced the meaningful RED: the five-second
+communication assertion failed while `down` and `down_done` were already in
+the trace. Test teardown released and reaped its own processes.
+
+The fix records a pending signal during only the launch/PID-registration
+interval and handles it once ownership is known. It clears pending state before
+entering teardown. Existing process-group termination, cancellation status,
+report sanitization and the 20-second cleanup bound remain unchanged. The new
+case passes, followed by all 19 runner/signal tests, ShellCheck and Ruff. A
+generic process manager, ignored signals, longer cleanup bound, or per-caller
+workaround would not address this ownership interval. Bash's documented
+asynchronous `wait`/trap behavior informs the design, but the boundary result
+comes from the executed repository regression, not the manual alone (Free
+Software Foundation, 2002).
+
+This is **not the established cause of the earlier exit137 incident**. At
+unchanged `b2e9`, the full test phase passed 1875 cases with two live-only skips;
+consumer `dc8b53d38ddf80b726b5dc6cff1d21f2c25d293e` passed 1890 with the same
+two skips. Both runners then exited137 during Docker removal. That is consistent
+with the cleanup watchdog, but retained logs do not prove signal attribution or
+why the daemon operation was slow. The later unchanged-owner diagnostic passed
+18 cases and completed real migration/cleanup with exit0 (JUnit SHA-256
+`e3d0ebafe18391ba49f9159505f0c1672e4c67d7c530ddcf126534962b0ead17`);
+it does not replace either failed full lifecycle. Keep the incident open, retain
+the original failed receipts in the PR, and revalidate complete owner/consumer
+lifecycles plus their hosted gates on each new exact head.
+
 ## References
+
+Free Software Foundation. (2002). *Signals*. In *Bash reference manual*
+(Version 2.05a). https://ftp.gnu.org/pub/old-gnu/Manuals/bash-2.05a/html_node/bashref_51.html
 
 Python Software Foundation. (n.d.). *subprocess—Subprocess management*.
 Python 3.14 documentation. Retrieved September 6, 2026, from
