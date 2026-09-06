@@ -380,10 +380,6 @@ in this repo.
   password-shaped field names in logs or raised exception text; use generic
   operation phrases such as "account configuration incomplete" instead of
   credential-type labels.
-- XOAUTH2 입력의 SASL 구분자 거부 검사와 사용자명·토큰 각각의 회귀 테스트를
-  함께 보존한다. 기존 보안 검사를 명시적으로 삭제한 PR은 최신 base 병합만으로
-  자동 복구되지 않을 수 있다. 변경 이력과 병합 결과를 확인하고, 정상 입력의
-  정확한 전송 바이트 및 두 입력 경로의 거부를 다시 검증한다.
 - SMTP, IMAP, and POP3 host validation must reject legacy numeric IP literal
   forms such as decimal integers, hexadecimal integers, and octal dotted forms
   before DNS or socket connection; `socket.getaddrinfo` may resolve those forms

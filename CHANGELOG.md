@@ -1,11 +1,4 @@
 ## [Unreleased]
-### 메일 인증 입력 검증 복원
-
-- 오래된 PR에서 삭제됐던 인증 입력 검사를 복원해, 입력에 필드 구분자를 넣어
-  인증 메시지 구조를 바꾸는 시도를 거부합니다. 정상 인증 메시지 형식은 유지합니다.
-  이번 복원은 PR 전체의 충돌·검증 완료나 실제 메일 서비스 인증 성공을 뜻하지 않습니다.
-  [재현 및 복원 근거](docs/doctoring/xoauth2-delimiter-guard-restoration.md)를 남겼습니다.
-
 ### 보안 패치 (CodeQL extended current-head)
 
 - `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 버전으로 동기화했습니다. Strix 잠금은 `google-cloud-aiplatform==1.160.0`의 `<7` 제약을 위반하던 `protobuf==7.35.1`을 이미 검증된 `6.33.6`으로 복구해 다시 해석·설치 가능하게 했습니다.
