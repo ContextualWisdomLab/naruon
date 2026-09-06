@@ -577,23 +577,6 @@ registry.register(
 )
 
 
-async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params["text"]
-    return {"encoded_text": urllib.parse.quote(text, safe="")}
-
-
-registry.register(
-    ToolInfo(
-        code="url_encoder",
-        name="URL 인코더 (URL Encoder)",
-        description="일반 텍스트를 URL 인코딩된 문자열로 변환합니다.",
-        category="유틸리티",
-        parameters={"text": "string"},
-    ),
-    url_encoder_handler,
-)
-
-
 async def base64_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
     return {"encoded_text": base64.b64encode(text.encode("utf-8")).decode("utf-8")}
@@ -608,23 +591,6 @@ registry.register(
         parameters={"text": "string"},
     ),
     base64_encoder_handler,
-)
-
-
-async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    encoded_text = params["encoded_text"]
-    return {"decoded_text": urllib.parse.unquote(encoded_text)}
-
-
-registry.register(
-    ToolInfo(
-        code="url_decoder",
-        name="URL 디코더 (URL Decoder)",
-        description="URL 인코딩된 문자열을 일반 텍스트로 변환합니다.",
-        category="유틸리티",
-        parameters={"encoded_text": "string"},
-    ),
-    url_decoder_handler,
 )
 
 
@@ -740,8 +706,6 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
-
-
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -803,6 +767,7 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
+
 
 
 @router.get("/tools", response_model=list[ToolInfo])
