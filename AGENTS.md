@@ -339,14 +339,6 @@ in this repo.
   responses must sanitize stored subject/body/snippet/address display fields
   before returning them. Preserve message/thread identifiers separately from
   UI-safe subject/body, address, and attachment display text.
-- Recognized HWPX mail/Data preview may expose a read-only Inkspan edit
-  handoff, but it must fail closed when a released/installed Hangul document
-  engine is absent. Do not hand recognized paragraph text to Markdown/HTML
-  Inkspan as an editable document, do not overwrite the original attachment,
-  do not invent a write API, and do not vendor unreleased inkspan Draft #320
-  HangulDocumentEngine code. Preserve the exact opaque `asset_key` and the
-  already authorized workspace scope; tell the buyer to keep reading the
-  recognized text or choose another file.
 - Email file import must keep frontend file pickers, `/api/emails/import-files`,
   and `services.email_import_service` in the same source-backed contract:
   supported uploads are `.eml`, `.zip`, and `.mbox`; imported email and
@@ -454,12 +446,6 @@ in this repo.
   topic components, or label evidence by a bare document, model, topic, rank,
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
-- Mail attachment surfaces must list the current email's files with opaque
-  `asset_key` values and open the signed
-  `/api/data/repository-assets/{asset_key}/preview` contract. Do not expose
-  sequential attachment ids, render missing preview text as empty document
-  content, or send buyers only to the Data repository list as a substitute for
-  opening the HWPX file on the selected mail.
 - Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
   `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
   desynchronizes first-wins label maps from the selected node or edge when
@@ -607,14 +593,6 @@ in this repo.
   vector counts, unsupported embedding model names, static quality totals, or
   provider-write success claims; Data mocks and E2E fixtures must preserve the
   bearer-session call and omit public identity headers.
-- Repository-asset preview is read-only and scoped. Unknown keys and
-  cross-workspace access both return 404 `repository_asset_not_found` so
-  existence cannot leak. Recognized HWPX text comes from stored ordered
-  paragraphs; pending or failed recognition must keep the current asset detail
-  and show an explicit next action. Do not treat missing preview text as empty
-  content, and do not fetch preview indiscriminately in E2E helpers — mock
-  known assets such as `roadmap.md` and `blank-notes.md`, then fail unmatched
-  preview routes closed.
 - Project workspace lists, milestones, task links, and decision logs must be
   source-backed by signed `/api/webdav/folders` and `/api/tasks` data or
   explicitly labeled pending. Do not reintroduce static project names, inert
