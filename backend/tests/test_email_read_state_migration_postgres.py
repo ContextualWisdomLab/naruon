@@ -32,6 +32,7 @@ def _run_migrations(database_url: str, revision: str = "head") -> None:
         [sys.executable, str(_BACKEND_ROOT / "scripts" / "migrate_db.py"), revision],
         cwd=_BACKEND_ROOT,
         env={
+            "NARUON_ENV_FILE": "/dev/null",
             "DATABASE_URL": database_url,
             "AUTH_SESSION_HMAC_SECRET": secrets.token_urlsafe(48),
         },
@@ -61,6 +62,7 @@ def _run_downgrade(database_url: str, revision: str) -> None:
         [sys.executable, "-c", script],
         cwd=_BACKEND_ROOT,
         env={
+            "NARUON_ENV_FILE": "/dev/null",
             "DATABASE_URL": database_url,
             "AUTH_SESSION_HMAC_SECRET": secrets.token_urlsafe(48),
         },
