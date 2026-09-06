@@ -1,12 +1,56 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.41
+**Baseline version:** 1.42
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-## Current governance repair and stack handoff (2026-09-06)
+## Current publisher repair and verified consumer stack (2026-09-06)
+
+PRD requirement: another check publisher must not impersonate robot review,
+and a successful check label must not hide its blocking warning. Independent
+review identified both pre-existing metadata risks at `fac3437c`; six focused
+counterexamples reproduced an incorrect success. The common gate now verifies
+App/Bot provenance before selecting evidence and inspects output before
+accepting success/skipped conclusions. Owner #1531 at
+`b6d6c286040f16d3d6ef93959eff53abe0eb6d3e` retains the prior stale-notice repair;
+its ten publisher/output cases, full fake-GitHub harness and 36 source tests
+pass. [Owner repair and bounded visual receipt](https://github.com/ContextualWisdomLab/naruon/pull/1531#issuecomment-5559591367).
+
+The complete owner delta was ordinarily merged into CI #1562 at
+`938d4b1203bf0573cf94466e9a21935c870dd684`, then SMTP #1417 at
+`5dea5092dfb40e86159570bbeda9148b0148e890`. Each inherited exactly three files
+(85 added, 13 removed lines), with no conflicts or discarded consumer changes.
+Each head has its own passing full governance harness and 40 source tests.
+CI full PostgreSQL: 1,877 passed in 133.85s; SMTP: 1,892 passed in 209.96s.
+Each skipped two live-API tests requiring `LIVE_BASE_URL`; those live paths
+remain unverified. Both runners exited 0 and their task-labelled containers,
+volumes and networks were independently confirmed absent.
+[CI exact-head receipt](https://github.com/ContextualWisdomLab/naruon/pull/1562#issuecomment-5559638216)
+and [SMTP exact-head receipt](https://github.com/ContextualWisdomLab/naruon/pull/1417#issuecomment-5559638349)
+retain redacted JUnit digests and separate merge-ref security evidence.
+
+Those receipts also bind fresh scans to merge refs `11a371d8` and `f0c602de`:
+Trivy HIGH/CRITICAL fixable vulnerability/misconfiguration scans including
+supported development dependencies, plus separate all-severity secret scans,
+all exited 0 with no reported findings. This bounded local evidence does not
+certify all vulnerabilities, hosted checks, protected merge or deployed behavior.
+The observed #1531 Ready event at 13:42:07 UTC names the shared account, not an
+identifiable agent; its head is unchanged. Do not infer a specific writer,
+repeat the transition, or treat review admission as merge authorization.
+
+AGENTS #1566 at `29a56150cabe821927b2a9ff5169e4e593b52e1e` records publisher
+authentication and durable test-output/exit/cleanup guidance; its 40 document
+contracts passed with `-W error`. [Guidance receipt](https://github.com/ContextualWisdomLab/naruon/pull/1566#issuecomment-5559629212).
+The Mac was locked at the new visual-inspection attempt. Neither that new
+AGENTS text nor this baseline revision has current visual evidence; inspect
+both after unlock rather than reusing older screenshots. Foundation CodeQL's
+authorized recovery and exact-job callback remain incomplete; preserve the
+[authority diagnosis](https://github.com/ContextualWisdomLab/naruon/pull/1564#issuecomment-5559525534)
+and repair the existing central owner without expanding dispatch principals.
+
+## Earlier governance repair and stack handoff (2026-09-06)
 
 PRD requirement: a completed review must not leave an otherwise eligible
 change waiting indefinitely because a bot's issue comment has not refreshed.
