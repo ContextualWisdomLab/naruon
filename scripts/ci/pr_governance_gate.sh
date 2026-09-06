@@ -341,6 +341,7 @@ CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potent
 CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
 CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|changes requested|request changes'
 CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
+CODERABBIT_CLEAN_OUTPUT_LINE_PATTERN='^[ \t]*(No actionable comments? (were )?generated|No warnings found)[.!]?[ \t\r]*$'
 CODERABBIT_APPROVAL_PENDING_PATTERN='CodeRabbit has no unresolved comments, but it has not reviewed the latest commit'
 CODERABBIT_APPROVAL_NOTICE_SPAN_PATTERN='<!-- approval_notice_start -->.*?<!-- approval_notice_end -->'
 
@@ -419,10 +420,13 @@ if [ "$CODERABBIT_COUNT" = "0" ]; then
 else
   CODERABBIT_PENDING="$(printf '%s' "$CODERABBIT_MATCHES" | jq '[.[] | select(.status != "completed")] | length')"
   CODERABBIT_STATUS_PENDING="$(printf '%s' "$CODERABBIT_STATUS_MATCHES" | jq '[.[] | select((.state // "" | ascii_downcase) == "pending")] | length')"
-  CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
+  CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq --arg pattern "$CODERABBIT_BLOCKING_PATTERN" \
+    --arg clean_line "$CODERABBIT_CLEAN_OUTPUT_LINE_PATTERN" '
     [.[]
       | select(.status == "completed")
-      | ([.output.title, .output.summary, .output.text] | map(. // "") | join("\n")) as $check_output
+      # Remove only whole known clean lines, never an output containing one.
+      | ([.output.title, .output.summary, .output.text] | map(. // "") | join("\n")
+          | split("\n") | map(select(test($clean_line; "i") | not)) | join("\n")) as $check_output
       | select((.conclusion // "") as $conclusion
         | if $check_output | test($pattern; "i") then true
           elif $conclusion == "success" or $conclusion == "skipped" then false
