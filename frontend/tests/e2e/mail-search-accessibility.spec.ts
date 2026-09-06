@@ -95,7 +95,7 @@ test('keeps sender relationship actions outside the live status and exposes capt
   });
 
   await page.goto('/search');
-  await expect(page.getByRole('heading', { name: 'Q2 출시 계획 및 우선순위 조정' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Q2 출시 계획 및 우선순위 조정' })).toBeVisible();
 
   const relationshipStatus = page.getByRole('status').filter({
     hasText: '이 맥락 검색 결과에 연결된 발신자 관계가 아직 없습니다.',
