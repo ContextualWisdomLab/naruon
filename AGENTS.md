@@ -25,7 +25,7 @@ in this repo.
   (`runAsNonRoot: true`, `readOnlyRootFilesystem: true`, plus writable volume
   mounts as needed) — do not ignore it.
 - A local `trivy` scan with a stale DB misses findings: run
-  `trivy --download-db-only` first, and scan the **merge ref**, not just the PR
+  `trivy image --download-db-only` first, and scan the **merge ref**, not just the PR
   head.
 - The org `code_scanning` ruleset is intentionally **CodeQL-only** (multiple
   code-scanning tools can't converge on one PR ref). Gating is enforced by the

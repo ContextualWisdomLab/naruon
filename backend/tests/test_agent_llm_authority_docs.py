@@ -136,6 +136,7 @@ def test_agent_guidance_requires_safe_negative_probes_and_real_ci_outcomes() -> 
         "inherited provider and replica settings",
         "sanitize reports before potentially blocking teardown",
         "task-owned process groups",
+        "trivy image --download-db-only",
     ):
         assert required_phrase in normalized_agents
 
