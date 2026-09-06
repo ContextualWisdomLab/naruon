@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 from db.session import get_db
-from db.models import Email
+from db.models import Attachment, Email
 from api.data import _opaque_asset_key
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
@@ -164,6 +164,16 @@ def _email_list_item(
         # default column value is applied at flush; coalesce unflushed None -> read
         is_read=email.is_read if email.is_read is not None else True,
         requires_reply=requires_reply,
+    )
+
+
+def _mail_attachment_load_option():
+    """Load only metadata required to render mail attachment references."""
+
+    return selectinload(Email.attachments).load_only(
+        Attachment.filename,
+        Attachment.parser_key,
+        raiseload=True,
     )
 
 
@@ -674,7 +684,7 @@ async def get_email(
     # Ensure auth context validates the request payload and scopes access
     result = await db.execute(
         select(Email)
-        .options(selectinload(Email.attachments))
+        .options(_mail_attachment_load_option())
         .where(
             Email.id == email_id,
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
@@ -698,7 +708,7 @@ async def get_email_thread(
     lookup_values = thread_lookup_values(thread_id)
     result = await db.execute(
         select(Email)
-        .options(selectinload(Email.attachments))
+        .options(_mail_attachment_load_option())
         .where(
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             or_(
