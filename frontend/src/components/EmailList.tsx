@@ -126,25 +126,30 @@ export function EmailList({
   const [isSearching, setIsSearching] = useState(false);
   const [emptyStateMode, setEmptyStateMode] = useState<'folder' | 'search'>('folder');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const requestSequenceRef = useRef(0);
 
   const fetchEmails = useCallback(async (query = "") => {
     const normalizedQuery = query.trim();
+    const requestSequence = requestSequenceRef.current + 1;
+    requestSequenceRef.current = requestSequence;
     setEmptyStateMode(normalizedQuery === "" ? 'folder' : 'search');
     setLoading(true);
     setError(null);
+    setIsSearching(normalizedQuery !== "");
     try {
-      if (normalizedQuery === "") {
-        setEmails(await fetchFolderEmails(folder));
-      } else {
-        setIsSearching(true);
-        const data = await apiClient.post<{ results: EmailItem[] }>('/api/search', { query });
-        setEmails(data.results || []);
-      }
+      const nextEmails = normalizedQuery === ""
+        ? await fetchFolderEmails(folder)
+        : (await apiClient.post<{ results: EmailItem[] }>('/api/search', { query })).results || [];
+      if (requestSequence !== requestSequenceRef.current) return;
+      setEmails(nextEmails);
     } catch (err: unknown) {
+      if (requestSequence !== requestSequenceRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load emails");
     } finally {
-      setLoading(false);
-      setIsSearching(false);
+      if (requestSequence === requestSequenceRef.current) {
+        setLoading(false);
+        setIsSearching(false);
+      }
     }
   }, [folder]);
 
