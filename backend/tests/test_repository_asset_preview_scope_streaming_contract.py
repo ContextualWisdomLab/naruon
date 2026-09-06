@@ -1,9 +1,9 @@
 """Regression contracts for repository-asset preview isolation and streaming.
 
 These tests deliberately exercise the query boundary rather than a permissive
-mock of ``AsyncSession.execute``. A preview lookup must include the signed
-organization scope for workspace documents, and a ``yield_per`` attachment scan
-must use the asynchronous streaming API.
+mock of ``AsyncSession.execute``. Document reads and mutations must include the
+signed organization scope, and a ``yield_per`` attachment scan must use the
+asynchronous streaming API.
 """
 
 from __future__ import annotations
@@ -80,12 +80,26 @@ def _auth_context(*, organization_id: str | None) -> AuthContext:
     )
 
 
+def _assert_document_statement_scope(
+    statement: Any,
+    organization_id: str | None,
+) -> None:
+    sql = str(statement).lower()
+    assert "workspace_documents.workspace_id" in sql
+    assert "workspace_documents.organization_id" in sql
+    if organization_id is None:
+        assert "workspace_documents.organization_id is null" in sql
+    else:
+        params = statement.compile().params
+        assert organization_id in params.values()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("organization_id", ["org-acme", None])
 async def test_document_preview_lookup_carries_signed_organization_scope(
     organization_id: str | None,
 ) -> None:
-    """Workspace id alone is not a tenant boundary for persisted documents."""
+    """Workspace id alone is not a tenant boundary for preview reads."""
 
     session = _CaptureDocumentSession()
 
@@ -96,14 +110,28 @@ async def test_document_preview_lookup_carries_signed_organization_scope(
     )
 
     assert session.statement is not None
-    sql = str(session.statement).lower()
-    assert "workspace_documents.workspace_id" in sql
-    assert "workspace_documents.organization_id" in sql
-    if organization_id is None:
-        assert "workspace_documents.organization_id is null" in sql
-    else:
-        params = session.statement.compile().params
-        assert organization_id in params.values()
+    _assert_document_statement_scope(session.statement, organization_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("organization_id", ["org-acme", None])
+async def test_document_mutation_lookup_carries_signed_organization_scope(
+    organization_id: str | None,
+) -> None:
+    """Status-changing document actions must use the same tenant boundary."""
+
+    session = _CaptureDocumentSession()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await data_api._get_workspace_document(
+            session,  # type: ignore[arg-type]
+            _auth_context(organization_id=organization_id),
+            "doc-shared",
+        )
+
+    assert exc_info.value.status_code == 404
+    assert session.statement is not None
+    _assert_document_statement_scope(session.statement, organization_id)
 
 
 @pytest.mark.asyncio
