@@ -477,6 +477,9 @@ in this repo.
   the visible app language; do not rely on the SVG icon alone for Calendar,
   Tasks, drawer, modal, or toolbar actions.
 - Execution steps resulting in `Timeout`, `Fatal`, `Warn`, or `Denied` outputs are considered hard failures. Tests must run without these warnings to be considered passing.
+- 비동기 effect가 있는 React 화면의 첫 렌더도 `await act(async () => ...)`로
+  기다린 뒤 단언한다. 테스트 종료 코드만 확인하지 말고, 원래 오류 출력을
+  유지하는 spy로 정리 단계까지 `act` 경고가 없는지 검사한다.
 - Strix success artifacts must also be scanned for `Timeout`, `Fatal`, `Warn`,
   or `Denied` output before accepting clean evidence. Filter only narrowly known
   third-party Strix internal warnings, such as the
