@@ -73,6 +73,27 @@ awaited by default.
 
 ## Evidence commands
 
+### Multiline robot notices and collected regressions (2026-09-06)
+
+At predecessor `550798ccafebea4b1a9a65018e63b9661ff25a53`, a multiline
+CodeRabbit approval notice could be mistaken for a substantive blocker even
+after an exact-head OpenCode fallback was accepted. The existing fake-GitHub
+shell harness reproduced this after adding realistic line breaks: it published
+a failure instead of the expected ready state. The common notice-removal
+expression now uses jq's `m` flag so dot matches newlines; `s` only changes
+anchor semantics. Only the non-greedy marker-delimited notice is removed;
+separate blocking warnings must remain blockers. No approval or review rule
+is weakened and no external GitHub mutation occurs in this harness.
+
+Run `bash scripts/ci/test_pr_governance_gate.sh` for the full metadata scenarios.
+The four-workflow stacked-base regression lives in
+`backend/tests/test_stacked_pr_workflow_contract.py`, where Application CI
+collects it; the root-level copy was moved, not discarded or duplicated.
+Local harness evidence is not a hosted approval or protected merge.
+
+Reference: jqlang. (n.d.). *Regular expressions*. In *jq 1.7 manual*.
+https://jqlang.org/manual/v1.7/#regular-expressions
+
 Use the same head SHA across all checks:
 
 ```bash

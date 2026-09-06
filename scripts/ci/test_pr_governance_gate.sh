@@ -253,10 +253,10 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"No actionable comments were generated in the recent review. Blocking issue remains on 0123456789abcdef0123456789abcdef01234567."}]'
         ;;
       coderabbit_approval_pending|missing_coderabbit_adversarial_approval_with_pending_notice)
-        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->CodeRabbit has no unresolved comments, but it has not reviewed the latest commit. CodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} --><!-- approval_notice_end -->"}]'
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit. \\nCodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} -->\\n<!-- approval_notice_end -->"}]'
         ;;
       coderabbit_approval_pending_with_separate_blocking_warning)
-        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->CodeRabbit has no unresolved comments, but it has not reviewed the latest commit. CodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} --><!-- approval_notice_end -->\\n\\nSeparately: Pre-merge blocking warning for 0123456789abcdef0123456789abcdef01234567."}]'
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit. \\nCodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} -->\\n<!-- approval_notice_end -->\\n\\nSeparately: Pre-merge blocking warning for 0123456789abcdef0123456789abcdef01234567."}]'
         ;;
       github_code_quality_blocking_comment)
         printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Potential issue for 0123456789abcdef0123456789abcdef01234567"}]'
