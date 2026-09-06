@@ -1,10 +1,33 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.34
+**Baseline version:** 1.35
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Review admission repair (2026-09-06):** Existing dependency owner
+[#1571](https://github.com/ContextualWisdomLab/naruon/pull/1571) was marked
+Ready for independent review at unchanged head
+`3f568412da61f12ba36c71765bf915acc8abb85d`; the timeline records
+`ready_for_review` at `2026-09-06T09:26:51Z`. Its own 52 frontend files / 439
+tests, lint/typecheck and frozen installation pass. Its merge ref
+`beaaf7415a9ae57caaff9c53d0cb612924da7ec0` (tree
+`21bb392248542c8b8c7b498dd4f2af292d8c1d51`) has zero local HIGH/CRITICAL
+fixable Trivy vulnerability/misconfiguration findings with dev dependencies
+included; report SHA-256
+`5a0016d6af002ed06cc6ab3425d78d3265f435eddf05db8f171c79fa5097e2bb`.
+No unresolved review thread was returned. This is a standalone owner receipt,
+not borrowed #1562 evidence.
+
+Requiring approval before leaving Draft prevented central review dispatch:
+[protected OpenCode admission source](https://github.com/ContextualWisdomLab/.github/blob/43024633eba9d96b0456970391360da5a171fbda/.github/workflows/opencode-review.yml#L360-L369)
+declines a live Draft. Ready enables review but does not waive any merge gate
+or make a Proposed foundation consumable. Current-head OpenCode run
+`34024017879` remains queued; no new post-transition run was observed in the
+queried inventories. The metadata transition is not dispatch or approval
+proof. Retain other incomplete owner stacks as Draft and obtain exact-head
+hosted evidence plus qualifying review before protected landing.
 
 **Migrated PostgreSQL CI refresh (2026-09-06):** Existing Draft
 [#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562) is now
@@ -253,7 +276,7 @@ checks identify the following existing repair lanes; no alert was dismissed.
 | Alerts and current source | Existing owner / next action |
 | --- | --- |
 | Alerts [88](https://github.com/ContextualWisdomLab/naruon/security/dependabot/88)/[89](https://github.com/ContextualWisdomLab/naruon/security/dependabot/89)/[90](https://github.com/ContextualWisdomLab/naruon/security/dependabot/90): `aiohttp==3.14.1` in `requirements-strix-ci-hashes.txt`; the strictest first-patched version is 3.14.3 | #1244 `50351e8cacc65b4124ba2145e00d41aeceef0775` proposes the 3.14.3 hashed lock. Repair its exact CodeQL/noema evidence; do not duplicate the dependency PR or count it as protected-patched |
-| Alert [91](https://github.com/ContextualWisdomLab/naruon/security/dependabot/91): frontend `js-yaml@4.3.0`; first patched 4.3.1 | Draft #1571 `3f568412da61f12ba36c71765bf915acc8abb85d` owns the override/lock and ES2017-compatible regression (owner refreshed 2026-09-06). Complete exact-head security/review gates; #1459's inspected 4.3.0 lock is not this repair |
+| Alert [91](https://github.com/ContextualWisdomLab/naruon/security/dependabot/91): frontend `js-yaml@4.3.0`; first patched 4.3.1 | Ready-for-review #1571 `3f568412da61f12ba36c71765bf915acc8abb85d` owns the override/lock and ES2017-compatible regression (owner refreshed 2026-09-06). Complete exact-head security/review gates; #1459's inspected 4.3.0 lock is not this repair |
 | Alerts [87](https://github.com/ContextualWisdomLab/naruon/security/dependabot/87)/[86](https://github.com/ContextualWisdomLab/naruon/security/dependabot/86): alert ranges exclude `cryptography==50.0.0` and `pyasn1==0.6.4`, already present in protected manifest/locks, but alerts are still open | Reconcile dependency-graph/manifests and the security record; do not call these closed or suppress them. #1494's 50.0.1 proposal is separate and retains pyasn1 0.6.4 |
 
 **Noema owner-boundary refresh (2026-09-04):** Noema protected
@@ -321,8 +344,8 @@ open. No delta or PR was discarded to reduce the queue, and these local passes
 do not transfer approval or hosted evidence between stack heads.
 
 **AGENTS operating knowledge refresh (2026-09-06):** Draft #1566 exact head
-`7beb0fa6c2d67611f67518d9e43fe206266585cb` preserves normal parent
-`0c94ffe0e9d81bc4803c3f82e5dc6d51eb8c7291` and the prior skills/procedure
+`8ec73818dc74ffb9f06173b062433162067e7d9e` preserves normal parent
+`7beb0fa6c2d67611f67518d9e43fe206266585cb` and the prior skills/procedure
 playbook. It distinguishes general JSON Schema from a provider-supported
 subset, an offline counterexample from a hosted root-cause claim, and an owning
 transport's cleanup from borrowed stream helpers. It also requires safe
@@ -330,7 +353,14 @@ task-owned negative probes, real process exit checks, cancellation cleanup,
 and the verified `trivy image --download-db-only` command. The exact-head
 documentation/governance suite passes **48 tests, zero failures/errors/skips,
 0.09 s**; JUnit SHA-256
-`3620e1a5ce298c903f3b8d452ddffb2ca1d80b32d0bac83941e2b6f7a3a0a3ce`.
+`668953583b5bbcb4349433f09105ea35f566dcb7ce57f806170bb98f0fc0ac13`.
+The latest guidance separates Ready review admission from merge authority,
+preserves incomplete foundation Draft state, and requires head/base checks
+before and after transition. An independent instruction-consumption check
+classified four scenarios without permitting any merge: complete independent
+slice, incomplete foundation, changed head, and stale approval. Its scope and
+identity-check ambiguities were clarified. No new text-presence assertion was
+added and this bounded exercise is not a GitHub review or runtime gate test.
 These source checks do not establish a repaired provider/runtime or central
 Noema #1641 GREEN. The PR stays on #1564's
 `codex/agents-pr-lifecycle-knowhow@615be4514add6a21eef743f591a65a5f8fef4dee`,
