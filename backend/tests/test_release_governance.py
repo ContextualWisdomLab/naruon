@@ -651,7 +651,10 @@ def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushe
     workflow = read_repo_text(".github/workflows/app-ci.yml")
 
     assert "pull_request:" in workflow
-    assert "python -m pytest" in workflow
+    assert "run: bash scripts/ci/run_backend_postgres.sh" in workflow
+    assert "python -m venv backend/.venv" in workflow
+    assert "backend/.venv/bin/python -m pip install" in workflow
+    assert "always() && steps.backend_tests.outputs.evidence_dir" in workflow
     assert "PYTHONWARNINGS: error" in workflow
     assert 'DISABLE_BACKGROUND_WORKERS: "1"' in workflow
     assert "npm test" in workflow
