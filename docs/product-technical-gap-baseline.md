@@ -1,10 +1,40 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.32
+**Baseline version:** 1.33
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Migrated PostgreSQL CI refresh (2026-09-06):** Existing Draft
+[#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562) is now
+`ef858172152615d54b393ea3ca5748ab2c4e03db`, tree
+`67dab67ba5534258c690a110724d9ef6da503623`. It normally merges the complete
+#1503 prerequisite `19d5860bc27e860acba940390f5792721cd99e5e`, including #1565,
+while retaining #1531 base `550798ccafebea4b1a9a65018e63b9661ff25a53` and all
+#1554/stacked-trigger history. The old head exited zero with all five search DB
+tests skipped; a real empty DB then failed in migration 0001. The existing
+migration owner repairs installation; the CI owner supplies the execution path.
+
+On the committed head, the shared test-only Compose runner installed fresh
+history, repeated Alembic, and ran **1871 passed, 2 skipped, zero failures/errors
+in 29.40 s**. The two skipped cases require `LIVE_BASE_URL`; all ten PostgreSQL
+tests executed. No customer mailbox, actual provider, browser cookie/proxy,
+deployed service, representative p95 or full-coverage claim follows. Generated
+DB/network cleanup completed; JUnit SHA-256 is
+`acacf9f829e65619dfed341270b6a5a864f27cd08bfcffb51864de53e8905e8e`.
+
+| Requirement / owner | Verified local scope | Remaining action |
+| --- | --- | --- |
+| PRD: storage/search regressions cannot hide behind unavailable DB; #1562 | Real fresh/repeat migrations and complete suite; required DB skip/xfail and skipped collection fail | Terminal exact-head Linux Actions and prerequisite-first protected integration |
+| TRD/security: tests cannot inherit operator provider/replica settings; Naruon bootstrap | Explicit existing bootstrap selector, minimal child environment, task-owned negative probes | Hosted security evidence; no new tenant credential authority or provider routing |
+| Operability: cancelled tests preserve failure and finish scoped cleanup; #1562 | Real SIGTERM command doubles, owned process groups, report redaction before bounded cleanup, timer reaping | Independent current-head review; live product recovery is separate |
+
+[Exact-head doctoring, failure receipts and APA sources](https://github.com/ContextualWisdomLab/naruon/blob/ef858172152615d54b393ea3ca5748ab2c4e03db/docs/doctoring/application_ci_postgres.md)
+records the decision before merging prerequisites. The independent agent's two
+signal probes passed; they are not GitHub approval or database tests. Required
+hosted checks and default-branch dependency alerts remain separate. No PR was
+closed, no provider source copied and no release claimed.
 
 **Import physical-lease and signed backend refresh (2026-09-06):** Existing
 Draft [#1317](https://github.com/ContextualWisdomLab/naruon/pull/1317) now has
@@ -31,7 +61,7 @@ inbox or representative performance workload.
 | --- | --- | --- |
 | PRD: importing or cancelling mail must not strand later imports; Naruon import | Source retained after committed-item interruption; independent replica can reacquire; duplicates and other accounts remain separate | Browser HttpOnly cookie/proxy, deployed interruption and user-visible recovery |
 | TRD: one physical lease covers per-item commits; Naruon import | Native transaction adoption, strict unlock confirmation, repeated-cancel cleanup, no SQL on a replacement connection, owner-scoped new graph IDs | Caller must have only settled/read-only work; flushed/raw-SQL writes are not detected by the pending-ORM guard |
-| CI installation contract; existing #1562 / #1503 owners | Local tests use real migrations, not ORM-only bootstrap | Provision migrated PostgreSQL in existing Application CI owner; no workflow copy or unavailable-DB skip |
+| CI installation contract; existing #1562 / #1503 owners | Local tests use real migrations; #1562 now has its own committed-head full-suite receipt above | Finish exact-head hosted checks and protected integration; no workflow copy or unavailable-DB skip |
 
 - Exact JUnit SHA-256: `238da7ad1c6e772cd087a3576f7c81d4d81780a6f0f0b4b3986a229910da965c`.
 - [Exact-head decision, UML, failure receipts, source attribution and APA references](https://github.com/ContextualWisdomLab/naruon/blob/af362d58190c0bf2ed122d718473fe3c2bd503c4/docs/doctoring/import_lease_lifecycle.md).
@@ -256,14 +286,16 @@ open. No delta or PR was discarded to reduce the queue, and these local passes
 do not transfer approval or hosted evidence between stack heads.
 
 **AGENTS operating knowledge refresh (2026-09-06):** Draft #1566 exact head
-`5b5a49c3bc7b32fbdbbc2bee468a38f0761f9183` preserves normal parent
-`e30e3ab1faa1a75506fef8e05df7e5f204a88be9` and the prior skills/procedure
+`7beb0fa6c2d67611f67518d9e43fe206266585cb` preserves normal parent
+`0c94ffe0e9d81bc4803c3f82e5dc6d51eb8c7291` and the prior skills/procedure
 playbook. It distinguishes general JSON Schema from a provider-supported
 subset, an offline counterexample from a hosted root-cause claim, and an owning
-transport's cleanup from borrowed stream helpers. The exact-head
-documentation/governance suite passes **47 tests, zero failures/errors/skips,
-0.10 s**; JUnit SHA-256
-`40d3162ad1d568ad337218c0f389b6ff68b0c5d0ac2c809e53ad5150c0ae6a55`.
+transport's cleanup from borrowed stream helpers. It also requires safe
+task-owned negative probes, real process exit checks, cancellation cleanup,
+and the verified `trivy image --download-db-only` command. The exact-head
+documentation/governance suite passes **48 tests, zero failures/errors/skips,
+0.09 s**; JUnit SHA-256
+`3620e1a5ce298c903f3b8d452ddffb2ca1d80b32d0bac83941e2b6f7a3a0a3ce`.
 These source checks do not establish a repaired provider/runtime or central
 Noema #1641 GREEN. The PR stays on #1564's
 `codex/agents-pr-lifecycle-knowhow@615be4514add6a21eef743f591a65a5f8fef4dee`,
@@ -922,7 +954,7 @@ user-visible labels, and the five-relationship/eight-node caps. The focused
 independent review are still required before protected integration.
 Governance owner #1531
 (`550798ccafebea4b1a9a65018e63b9661ff25a53`) retains the CodeRabbit/OpenCode
-fallback and stacked-base contract. Trigger repair #1562
+fallback and stacked-base contract. Historical trigger-repair receipt #1562
 (`bc91b36dec70c14e0cde526e2330638f5e0ce352`) is non-force restacked on that
 owner. It removes pull-request base
 filters from Application CI, Bandit, and image validation, scopes validation
