@@ -59,6 +59,13 @@ class MockResult:
     def __iter__(self):
         return iter(self.all())
 
+    def __aiter__(self):
+        async def _rows():
+            for row in self.all():
+                yield row
+
+        return _rows()
+
     def scalar_one_or_none(self):
         if isinstance(self.obj, list):
             return self.obj[0] if self.obj else None
@@ -119,6 +126,9 @@ class PreviewMockSession:
                 for attachment, email in self.attachment_rows
             ]
         )
+
+    async def stream(self, query):
+        return await self.execute(query)
 
 
 def _base64url_encode(data: bytes) -> str:
