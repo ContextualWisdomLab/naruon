@@ -170,10 +170,10 @@ describe("SearchLayout product events", () => {
     )).toBe(true);
 
     await waitForCondition(() => Array.from(container?.querySelectorAll<HTMLButtonElement>("button") ?? []).some(
-      (button) => button.textContent?.includes("발신자 관계 캡처") && !button.disabled,
+      (button) => button.textContent?.includes("발신자 관계 캡처") && button.getAttribute('aria-disabled') !== 'true',
     ));
     const captureButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent?.includes("발신자 관계 캡처") && !button.disabled,
+      (button) => button.textContent?.includes("발신자 관계 캡처") && button.getAttribute('aria-disabled') !== 'true',
     );
     expect(captureButton?.textContent).toContain("발신자 관계 캡처");
 

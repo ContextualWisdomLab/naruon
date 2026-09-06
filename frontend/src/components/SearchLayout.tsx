@@ -216,10 +216,16 @@ function SenderDagPanel({
             </p>
             <button
               type="button"
-              onClick={onCapture}
-              disabled={captureStatus === "loading"}
+              onClick={(e) => {
+                if (captureStatus === "loading") {
+                  e.preventDefault();
+                  return;
+                }
+                onCapture();
+              }}
+              aria-disabled={captureStatus === "loading"}
               aria-busy={captureStatus === "loading"}
-              className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-wait disabled:opacity-60 sm:w-auto inline-flex items-center justify-center"
+              className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 aria-disabled:cursor-wait aria-disabled:opacity-60 sm:w-auto inline-flex items-center justify-center"
             >
               {captureStatus === "loading" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -676,9 +682,15 @@ export function SearchLayout() {
           </div>
           <button
             type="submit"
-            disabled={loading}
+            onClick={(e) => {
+              if (loading) {
+                e.preventDefault();
+                return;
+              }
+            }}
+            aria-disabled={loading}
             aria-busy={loading}
-            className="h-12 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait disabled:opacity-60 inline-flex items-center justify-center"
+            className="h-12 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-disabled:cursor-wait aria-disabled:opacity-60 inline-flex items-center justify-center"
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
             {loading ? "맥락 검색 중" : "맥락 검색"}
@@ -818,10 +830,16 @@ export function SearchLayout() {
                     </Link>
                     <button
                       type="button"
-                      onClick={captureSenderRelationship}
-                      disabled={!canCaptureRelationship || captureStatus === "loading"}
+                      onClick={(e) => {
+                        if (!canCaptureRelationship || captureStatus === "loading") {
+                          e.preventDefault();
+                          return;
+                        }
+                        captureSenderRelationship();
+                      }}
+                      aria-disabled={!canCaptureRelationship || captureStatus === "loading"}
                       aria-busy={captureStatus === "loading"}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       {captureStatus === "loading" ? (
                         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
