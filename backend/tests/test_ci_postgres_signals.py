@@ -55,6 +55,9 @@ elif arguments[:2] == ["-m", "pytest"]:
 else:
     raise SystemExit(64)
 
+if stage == "up":
+    time.sleep(__STARTUP_DELAY__)
+
 def _record_probe_event(event):
     """Append only task-owned event names and process identities."""
     with (root / "trace").open("a") as stream:
@@ -139,9 +142,16 @@ def _reap_probe(process, root):
     assert not any(_probe_is_running(pid) for pid in child_pids), "probe child was not reaped"
 
 
-@pytest.mark.parametrize("blocked_stage", ["pytest", "down"])
+@pytest.mark.parametrize(
+    "blocked_stage, startup_delay",
+    [
+        pytest.param("pytest", 0, id="pytest"),
+        pytest.param("down", 0, id="down"),
+        pytest.param("pytest", 6, id="slow_startup"),
+    ],
+)
 def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
-    tmp_path, blocked_stage
+    tmp_path, blocked_stage, startup_delay
 ):
     """Require cancellation status, completed teardown, and sanitized evidence."""
     checkout = tmp_path / "checkout"
@@ -156,6 +166,7 @@ def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
     source = source.replace("__BLOCKED_STAGE__", repr(blocked_stage))
     source = source.replace("__DATABASE_CANARY__", repr(DATABASE_CANARY))
     source = source.replace("__SESSION_CANARY__", repr(SESSION_CANARY))
+    source = source.replace("__STARTUP_DELAY__", repr(startup_delay))
     # A shell exec supports interpreter paths containing spaces and adds no child.
     # Python -c sets argv[0] to -c; restore the controlled executable name first.
     executable_source = (
@@ -182,7 +193,8 @@ def test_runner_sigterm_finishes_scoped_cleanup_and_sanitizes_reports(
         start_new_session=True,
     )
     try:
-        deadline = time.monotonic() + 5
+        # Startup launches several interpreters; cancellation is timed only below.
+        deadline = time.monotonic() + 30
         while not (tmp_path / "ready").exists():
             if process.poll() is not None or time.monotonic() >= deadline:
                 pytest.fail("runner did not reach the controlled blocking stage")
