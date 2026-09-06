@@ -289,7 +289,7 @@ return (
                     <p className="text-sm font-bold text-red-700">문서 자산 근거를 불러오지 못했습니다.</p>
                   )}
                   {dataSurfaceStatus === 'ready' && repositoryAssets.length === 0 && (
-                    <p role="status" aria-live="polite" className="text-sm text-muted-foreground">이 워크스페이스에 원본 연결 첨부 자산이 아직 없습니다.</p>
+                    <p className="text-sm text-muted-foreground">이 워크스페이스에 원본 연결 첨부 자산이 아직 없습니다.</p>
                   )}
                   {repositoryAssets.map((asset) => {
                     const assetSelected = selectedRepositoryAsset?.asset_key === asset.asset_key;
@@ -585,7 +585,7 @@ return (
                       <p className="text-xs text-muted-foreground">고객 WebDAV 경로 기준으로 연결된 프로젝트 폴더입니다.</p>
                     </div>
                   )) : (
-                    <p role="status" aria-live="polite" className="text-sm text-muted-foreground col-span-full">AI가 구조화한 프로젝트 폴더가 없습니다.</p>
+                    <p className="text-sm text-muted-foreground col-span-full">AI가 구조화한 프로젝트 폴더가 없습니다.</p>
                   )}
                 </div>
               </div>
@@ -602,7 +602,7 @@ return (
                     <div className="p-4 text-sm font-bold text-red-700">데이터 품질 표면을 확인하지 못했습니다.</div>
                   )}
                   {dataSurfaceStatus === 'ready' && connectorEvents.length === 0 && (
-                    <div role="status" aria-live="polite" className="p-4 text-sm text-muted-foreground">이 워크스페이스에 기록된 커넥터 근거가 아직 없습니다.</div>
+                    <div className="p-4 text-sm text-muted-foreground">이 워크스페이스에 기록된 커넥터 근거가 아직 없습니다.</div>
                   )}
                   {connectorEvents.map((event) => (
                     <div key={event.event_uid} className="p-4 flex flex-col gap-3 hover:bg-secondary/10 transition-colors sm:flex-row sm:items-center sm:justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
