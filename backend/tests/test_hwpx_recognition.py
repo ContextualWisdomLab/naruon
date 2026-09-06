@@ -5,8 +5,10 @@ import zipfile
 
 import pytest
 
-import services.hwpx_recognition as hwpx_module
-from services.hwpx_recognition import HwpxRecognitionError, recognize_hwpx
+from services import hwpx_recognition as hwpx_module
+
+HwpxRecognitionError = hwpx_module.HwpxRecognitionError
+recognize_hwpx = hwpx_module.recognize_hwpx
 
 
 def _package(
