@@ -1,12 +1,29 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.46
+**Baseline version:** 1.47
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-06)
+
+### EmailDetail 테스트 경고 수리와 남은 검증
+
+기존 UI 소유자 #1245의 `885ee0c266c74cda5a19635cbc47ab6d33b488cf`에서
+입력 이벤트 4개를 `await act`로 감쌌다. 원래 출력을 유지하는 회귀 검사만
+추가했을 때 4개 실패·22개 통과였고, 수리 뒤 관련 테스트 30개가 해당 경고
+없이 통과했다. 같은 컴포넌트의 문맥별 선택 콜백 의존성 누락도 strict lint
+실패로 재현한 뒤 의존성 한 줄을 추가했다. AGENTS와 기존 doctoring 문서에
+재발 방지 절차와 React 공식 근거를 남겼다.
+[UI 소유자 수리 근거](https://github.com/ContextualWisdomLab/naruon/pull/1245#issuecomment-5560009693).
+
+전체 strict lint, 타입 검사, 프로덕션 빌드는 exit 0이다. 전체 커버리지
+실행은 52파일·442테스트가 통과했지만 CalendarLayout 경고 3개가 남았다.
+lines 86.76%, statements 84.06%, functions 85.67%, branches 75.18%로
+100% 목표에는 못 미친다. 이 수리는 EmailDetail 경고의 해결이며 Calendar
+경고, 전체 제품 검증, 최신 Visual Inspection 또는 보호 병합 완료가 아니다.
+의존성 PR에 UI 변경을 섞지 않았고 기존 #1245의 유효 변경은 보존했다.
 
 ### Security prerequisite adoption and central coverage owner
 
