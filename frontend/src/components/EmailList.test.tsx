@@ -102,7 +102,7 @@ describe("EmailList", () => {
     await flushAsyncWork();
 
     const emptyStatuses = Array.from(container.querySelectorAll<HTMLElement>('[role="status"]')).filter(
-      (node) => node.textContent?.includes("받은 메일이 없습니다"),
+      (node) => node.textContent?.includes("맥락 검색 결과가 없습니다"),
     );
     expect(emptyStatuses).toHaveLength(1);
     expect(emptyStatuses[0]?.getAttribute("aria-live")).toBe("polite");
