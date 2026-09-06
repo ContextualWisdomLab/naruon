@@ -1,42 +1,47 @@
-# DAV single-decode and local LLM-provider network boundaries
+# DAV/WebDAV single-decode and tenant boundary
+
+## Scope
+
+This decision is limited to Naruon's DAV/WebDAV edge and workspace-document authorization boundary. The historical filename is retained to avoid churn, but LLM-provider routing, provider URL admission, DNS rebinding controls, and provider-network policy are not owned by this change.
+
+## Problem
+
+A DAV path can cross an authorization boundary if percent-encoding is decoded more than once. For example, a residual encoded slash can become a hierarchy separator during a second decode after the edge has already authorized a different canonical path. The DAV surface must also advertise only capabilities that the server actually implements, and workspace-document access must remain scoped by organization identity.
 
 ## Decision
 
-Naruon treats the framework-decoded DAV application path as the authorization input. Authorization does not recursively decode the same string. Residual percent encodings are preserved when they remain literal data, and fail closed when another decode could introduce path separators, traversal dots, backslashes, C0/DEL controls, or NUL. This keeps routing, owner checks, logging, and DAV handlers on one canonical path representation.
+- Decode the incoming DAV path exactly once at the edge.
+- Reject a decoded path that still contains a syntactically valid percent triplet whose second decoding could change path semantics.
+- Normalize and authorize the repository-relative path only after that single decode.
+- Downstream DAV/WebDAV services consume the canonical path and do not decode it again.
+- Advertise DAV Level 1 capability truth only; do not claim unsupported DAV levels or extension tokens.
+- Workspace-document reads and creates require the caller's `org_id` and preserve organization scoping through the repository boundary.
 
-For local LLM runtimes, `ALLOW_LOCAL_LLM_PROVIDERS` is an explicit development/deployment opt-in rather than a general exception from SSRF controls. Loopback addresses remain permitted only under that opt-in. An exact operator-allowlisted single-label provider hostname may additionally resolve only into the private address families intended for site/container networking: RFC 1918 IPv4 private-use networks or RFC 4193 IPv6 unique-local addresses. The allowlist does not authorize IPv4 link-local/metadata space, multicast, unspecified, reserved, broadcast, or other special-purpose non-global address classes.
+These rules keep path interpretation, capability truth, and tenant authorization inside the Naruon DAV/document bounded context.
 
-## Why this boundary is narrower than `is_private`
+## Verification
 
-Python's IP classification helpers intentionally aggregate several non-global categories for convenience. Product authorization needs a positive description of the address classes that are actually required. RFC 1918 defines the three private IPv4 blocks used by private internets, and RFC 4193 defines IPv6 unique-local addresses for local communications. By contrast, RFC 3927 defines IPv4 link-local `169.254.0.0/16`, and RFC 6890 records special-purpose registry properties such as whether a block is globally reachable or forwardable. Therefore an operator hostname allowlist cannot safely mean "accept every address for which a library reports non-global/private".
+The executable contract is covered by:
 
-This positive-network contract also preserves the existing DNS-pinning design: every resolved address is validated against the same hostname-scoped policy before it can enter the pinned transport, and the transport revalidates the address again before connecting.
+- `backend/tests/test_dav_path_canonicalization.py`
+- `backend/tests/test_dav_auth.py`
+- `backend/tests/test_dav_integration.py`
+- `backend/tests/test_dav_propfind.py`
+- `backend/tests/test_webdav_security.py`
+- `backend/tests/test_workspace_document_tenancy.py`
 
-## Verification contract
+The PR must also pass the repository's current exact-head required workflows. Evidence from a predecessor SHA is not merge authority.
 
-The security regression suite must prove all of the following:
+## External owner boundary
 
-- an exact allowlisted local provider plus explicit local-provider opt-in can reach RFC 1918 container/private addresses;
-- local-provider opt-in without exact hostname allowlisting does not admit RFC 1918 addresses;
-- loopback remains conditional on the explicit local-provider opt-in;
-- an allowlisted local provider still rejects `169.254.169.254`, multicast, unspecified, broadcast/reserved, and other non-authorized special-purpose classes;
-- the DAV path contract rejects ambiguous residual structural encodings without recursively transforming literal percent data;
-- the canonical DAV path is the same value used by authorization and downstream routing.
-
-The current slice does not claim that private-network access is generally safe, that DNS alone is an authorization mechanism, or that these controls replace tenant authorization, TLS identity, credential isolation, outbound method/path policy, or provider-specific authentication.
+LLM-provider selection, provider URL/routing policy, provider-network SSRF policy, DNS-rebinding protection, credentials, and fallback behavior belong to the released `contextual-orchestrator` owner path. This PR restores `backend/services/llm_provider_urls.py` and `backend/tests/test_llm_provider_urls.py` to the protected `develop` versions and does not change provider policy. Broader removal or migration of Naruon's protected legacy direct-provider implementation is handled by the canonical docs/governance and contextual-orchestrator integration lane rather than by this DAV repair.
 
 ## Rollback
 
-If local-provider compatibility requires another address family, do not widen the exception to all non-global addresses. Add the smallest explicit network class only after a concrete deployment requirement, threat analysis, tests, and operator-visible configuration contract are established. If the DAV canonicalization contract changes, update authorization and route-level tests together so parsing and authorization cannot diverge.
+Rollback reverts only the DAV/document changes in this branch. It must not introduce a second decoder or expand DAV capability advertisement. Provider-policy files remain at the protected-base versions throughout this repair.
 
-## References (APA 7th)
+## Traceability
 
-Berners-Lee, T., Fielding, R., & Masinter, L. (2005). *Uniform Resource Identifier (URI): Generic syntax* (RFC 3986). RFC Editor. https://doi.org/10.17487/RFC3986
+Berners-Lee, T., Fielding, R., & Masinter, L. (2005). *Uniform Resource Identifier (URI): Generic syntax* (RFC 3986, §§ 2.1, 2.4). Internet Engineering Task Force. https://doi.org/10.17487/RFC3986
 
-Cheshire, S., Aboba, B., & Guttman, E. (2005). *Dynamic configuration of IPv4 link-local addresses* (RFC 3927). RFC Editor. https://doi.org/10.17487/RFC3927
-
-Cotton, M., Vegoda, L., Bonica, R., & Haberman, B. (2013). *Special-purpose IP address registries* (BCP 153, RFC 6890). RFC Editor. https://doi.org/10.17487/RFC6890
-
-Hinden, R., & Haberman, B. (2005). *Unique local IPv6 unicast addresses* (RFC 4193). RFC Editor. https://doi.org/10.17487/RFC4193
-
-Rekhter, Y., Moskowitz, B., Karrenberg, D., de Groot, G. J., & Lear, E. (1996). *Address allocation for private internets* (BCP 5, RFC 1918). RFC Editor. https://doi.org/10.17487/RFC1918
+Dusseault, L. (Ed.). (2007). *HTTP extensions for Web Distributed Authoring and Versioning (WebDAV)* (RFC 4918, § 10.1). Internet Engineering Task Force. https://doi.org/10.17487/RFC4918
