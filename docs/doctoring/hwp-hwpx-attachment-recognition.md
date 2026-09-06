@@ -11,20 +11,22 @@ pending or rejection status.
 This keeps email import deterministic and evidence-preserving while later
 sandboxed workers perform heavier extraction.
 
-## Shipped boundary
+## Active deferred-import boundary — PR #1353
 
 - `.hwpx` and `.owpml` files with generic binary MIME types are resolved to the
   HWPX parser family.
 - HWPX content types are recognized as deferred OWPML XML packages.
 - HWPX bytes must be a bounded single-disk ZIP package with one unambiguous
   `mimetype` member whose exact content is `application/hwp+zip`, a `version.xml`
-  member, and either package-manifest or section evidence.
+  member, and at least one canonical `Contents/sectionN.xml` member. Package
+  manifest presence alone is not sufficient admission evidence because the
+  recognition worker cannot materialize a sectionless package.
 - The importer validates the end-of-central-directory entry count and directory
   size before Python materializes ZIP members, then bounds aggregate member-name
   bytes and the tiny `mimetype` payload before reading it.
 - Duplicate `mimetype` members, wrong signature text, encrypted signature
-  members, unsupported ZIP structures, malformed ZIP metadata, and exceeded
-  limits fail closed as `invalid_hwpx_payload`.
+  members, unsupported ZIP structures, malformed ZIP metadata, sectionless
+  packages, and exceeded limits fail closed as `invalid_hwpx_payload`.
 - Import does not decompress document sections, extract files, execute active
   content, or fetch external resources. Later workers must repeat path,
   compression, XML, resource, and expansion-ratio validation before extraction.
@@ -72,6 +74,13 @@ regressions for wrong and duplicate `mimetype` members, entry count,
 central-directory bytes, aggregate name bytes, and signature-member bytes.
 Commit `b737ae83c94ee8a5aaf9c22a8239056e26ffe029` then implemented the bounded
 end-of-central-directory preflight and exact signature validation.
+
+A later review found that import admission still accepted a package with a
+manifest but no section XML, while the recognition worker must reject that same
+package because there is no materializable `Contents/sectionN.xml`. RED commit
+`44a268b988f9a3092368bd774a26582647e319a9` adds the manifest-only regression;
+causal fix `4281904b438ac50c2d6c40d14207119c383227a8` requires section evidence at
+import admission so the queue and worker share one fail-closed boundary.
 
 The initial HWP slice likewise admitted any OLE Compound File if the caller
 supplied an HWP extension or media type. Commit
