@@ -1,6 +1,7 @@
 """Execute the CI runner's lifecycle; real database evidence is separate."""
 
 import os
+import importlib
 from pathlib import Path
 import shutil
 import shlex
@@ -11,6 +12,33 @@ import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 pytest_plugins = ["pytester"]
+
+
+@pytest.mark.parametrize(
+    "module_name, helper_name",
+    [
+        ("test_workspace_document_migration", "_run_migrations"),
+        ("test_email_read_state_migration_postgres", "_run_migrations"),
+        ("test_email_read_state_migration_postgres", "_run_downgrade"),
+    ],
+)
+def test_migration_children_exclude_implicit_operator_files(
+    monkeypatch, module_name, helper_name
+):
+    """Intercept dispatch: losing the explicit selector must fail before any child runs."""
+    helper_module = importlib.import_module(f".{module_name}", __package__)
+    selected_sources = []
+
+    def child_boundary(command, **options):
+        """Record only the non-sensitive selector; never spawn or read dotenv."""
+        selected_sources.append(options["env"].get("NARUON_ENV_FILE"))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(helper_module.subprocess, "run", child_boundary)
+    getattr(helper_module, helper_name)(
+        "postgresql+asyncpg://test.invalid/test", "base"
+    )
+    assert selected_sources == ["/dev/null"]
 
 
 @pytest.mark.parametrize(

@@ -58,6 +58,7 @@ def _run_migrations(database_url: str, revision: str = "head") -> None:
         [sys.executable, str(BACKEND_ROOT / "scripts" / "migrate_db.py"), revision],
         cwd=BACKEND_ROOT,
         env={
+            "NARUON_ENV_FILE": "/dev/null",
             "DATABASE_URL": database_url,
             "AUTH_SESSION_HMAC_SECRET": secrets.token_urlsafe(48),
         },

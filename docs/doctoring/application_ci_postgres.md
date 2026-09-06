@@ -158,7 +158,38 @@ equivalent numbered capture; do not raise the product target or rewrite the
 patched lock. Preserve the original prerequisite merge, then integrate that
 owner's ordinary child commit and revalidate the combined tree.
 
+## Nested migration isolation repair (2026-09-06)
+
+Shared-send consumer #1417 exposed a remaining boundary at CI owner head
+`4d2e4abc2c369d5e85bced4027b6f81857721ea2`. The workspace migration helper and
+the email-read-state upgrade/downgrade helpers construct new subprocess
+environments containing only a database URL and generated signing material.
+Python replaces the inherited environment when `env` is supplied; consequently
+all three calls lose the parent's explicit `NARUON_ENV_FILE=/dev/null` selector
+and can re-enable implicit operator dotenv lookup. The parent runner's clean
+environment alone cannot prove nested isolation (Python Software Foundation,
+n.d.). Do not execute those unsafe children to demonstrate the defect.
+
+`test_migration_children_exclude_implicit_operator_files` intercepts the actual
+three helpers' subprocess boundary, records only the selector, and never starts
+the child or reads a dotenv file. After correcting the test's relative package
+import, all three cases failed with `[None]` instead of `['/dev/null']`.
+Adding the explicit selector at each child launch made all three pass. This
+is test/bootstrap configuration; no application defaults, secrets, tenant
+authorization, migration DDL, or dependency pins change. A generic environment
+wrapper is unnecessary for these three concrete callers.
+
+Re-run the entire real-database runner, including its nested migration tests,
+before treating this repair as local GREEN. Record exact head, denominator,
+JUnit hash and completed task-only cleanup in the PR. Consumer #1417 must
+inherit the complete ordinary child commit, not copy these helper edits.
+Earlier-head security scans remain historical until their merge ref is rescanned.
+
 ## References
+
+Python Software Foundation. (n.d.). *subprocess—Subprocess management*.
+Python 3.14 documentation. Retrieved September 6, 2026, from
+https://docs.python.org/3.14/library/subprocess.html
 
 Docker, Inc. (n.d.). *Docker compose up*. Retrieved September 6, 2026, from
 https://docs.docker.com/reference/cli/docker/compose/up/
