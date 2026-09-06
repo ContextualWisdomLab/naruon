@@ -196,6 +196,10 @@ test(`recovers the Today dashboard after a ${failureResponse.name}`, async ({ pa
   const recoveryAlert = dashboard.getByRole('alert');
   await expect(recoveryAlert).toContainText('업무 현황을 모두 불러오지 못했습니다.');
   await expect(dashboard.getByRole('article', { name: '받은 메일' })).toContainText('오류');
+  await expect(dashboard.getByRole('article', { name: '대기 작업' })).toContainText('미완료');
+  await expect(dashboard).toContainText('원본 변경 비교 가능');
+  await expect(dashboard).not.toContainText('source-linked');
+  await expect(dashboard).not.toContainText('충돌 토큰');
   await page.screenshot({ path: testInfo.outputPath('dashboard-source-unavailable.png') });
 
   inboxAvailable = true;
