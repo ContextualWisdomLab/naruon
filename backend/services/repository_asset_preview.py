@@ -8,9 +8,13 @@ state so missing text cannot be mistaken for empty content.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
+from services.inkspan_edit_handoff import (
+    InkspanEditHandoff,
+    build_inkspan_edit_handoff,
+)
 from services.text_safety import strip_html_markup
 
 PreviewState = Literal["recognized", "pending", "failed", "unavailable"]
@@ -74,6 +78,7 @@ class RepositoryAssetPreview:
     next_action: str
     error_code: str | None
     provider_write_executed: bool = False
+    edit_handoff: InkspanEditHandoff | None = None
 
 
 def _safe_paragraph(value: object) -> str:
@@ -225,6 +230,12 @@ def _blocked_preview(
     )
 
 
+def _with_edit_handoff(preview: RepositoryAssetPreview) -> RepositoryAssetPreview:
+    """Attach a fail-closed Inkspan handoff without changing preview semantics."""
+
+    return replace(preview, edit_handoff=build_inkspan_edit_handoff(preview))
+
+
 def build_attachment_preview(
     asset_key: str,
     attachment: object,
@@ -237,30 +248,34 @@ def build_attachment_preview(
     is_hwpx = parser_family == HWPX_PARSER_FAMILY or parse_status.startswith("hwpx_")
 
     if parse_status in _DEFERRED_PENDING_STATUSES:
-        return _blocked_preview(
-            asset_key=asset_key,
-            asset_type="email_attachment",
-            preview_state="pending",
-            parser_family=parser_family,
-            next_action=NEXT_ACTION_WAIT_FOR_RECOGNITION,
-            error_code=(
-                ERROR_HWPX_RECOGNITION_PENDING
-                if is_hwpx
-                else "recognition_pending"
-            ),
+        return _with_edit_handoff(
+            _blocked_preview(
+                asset_key=asset_key,
+                asset_type="email_attachment",
+                preview_state="pending",
+                parser_family=parser_family,
+                next_action=NEXT_ACTION_WAIT_FOR_RECOGNITION,
+                error_code=(
+                    ERROR_HWPX_RECOGNITION_PENDING
+                    if is_hwpx
+                    else "recognition_pending"
+                ),
+            )
         )
     if parse_status in _FAILED_PARSE_STATUSES:
-        return _blocked_preview(
-            asset_key=asset_key,
-            asset_type="email_attachment",
-            preview_state="failed",
-            parser_family=parser_family,
-            next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
-            error_code=(
-                ERROR_HWPX_RECOGNITION_FAILED
-                if is_hwpx
-                else "recognition_failed"
-            ),
+        return _with_edit_handoff(
+            _blocked_preview(
+                asset_key=asset_key,
+                asset_type="email_attachment",
+                preview_state="failed",
+                parser_family=parser_family,
+                next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
+                error_code=(
+                    ERROR_HWPX_RECOGNITION_FAILED
+                    if is_hwpx
+                    else "recognition_failed"
+                ),
+            )
         )
 
     segment_source = content_segments if content_segments is not None else attachment
@@ -283,21 +298,25 @@ def build_attachment_preview(
             )
         paragraph_texts = _paragraphs_from_text(raw_content)
     if paragraph_texts:
-        return _recognized_preview(
+        return _with_edit_handoff(
+            _recognized_preview(
+                asset_key=asset_key,
+                asset_type="email_attachment",
+                parser_family=parser_family,
+                paragraph_texts=paragraph_texts,
+            )
+        )
+    return _with_edit_handoff(
+        _blocked_preview(
             asset_key=asset_key,
             asset_type="email_attachment",
+            preview_state="failed",
             parser_family=parser_family,
-            paragraph_texts=paragraph_texts,
+            next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
+            error_code=(
+                ERROR_HWPX_RECOGNITION_FAILED if is_hwpx else "recognition_failed"
+            ),
         )
-    return _blocked_preview(
-        asset_key=asset_key,
-        asset_type="email_attachment",
-        preview_state="failed",
-        parser_family=parser_family,
-        next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
-        error_code=(
-            ERROR_HWPX_RECOGNITION_FAILED if is_hwpx else "recognition_failed"
-        ),
     )
 
 
@@ -318,13 +337,15 @@ def build_document_preview(
             error_code=document_status,
         )
     if document_status in _DOCUMENT_PENDING_STATUSES:
-        return _blocked_preview(
-            asset_key=asset_key,
-            asset_type="workspace_document",
-            preview_state="pending",
-            parser_family=None,
-            next_action=NEXT_ACTION_WAIT_FOR_RECOGNITION,
-            error_code="recognition_pending",
+        return _with_edit_handoff(
+            _blocked_preview(
+                asset_key=asset_key,
+                asset_type="workspace_document",
+                preview_state="pending",
+                parser_family=None,
+                next_action=NEXT_ACTION_WAIT_FOR_RECOGNITION,
+                error_code="recognition_pending",
+            )
         )
     document_content = getattr(document, "document_content", None)
     if _source_text_is_oversized(document_content):
@@ -336,17 +357,21 @@ def build_document_preview(
         )
     paragraph_texts = _paragraphs_from_text(document_content)
     if paragraph_texts:
-        return _recognized_preview(
+        return _with_edit_handoff(
+            _recognized_preview(
+                asset_key=asset_key,
+                asset_type="workspace_document",
+                parser_family=None,
+                paragraph_texts=paragraph_texts,
+            )
+        )
+    return _with_edit_handoff(
+        _blocked_preview(
             asset_key=asset_key,
             asset_type="workspace_document",
+            preview_state="failed",
             parser_family=None,
-            paragraph_texts=paragraph_texts,
+            next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
+            error_code="document_content_unavailable",
         )
-    return _blocked_preview(
-        asset_key=asset_key,
-        asset_type="workspace_document",
-        preview_state="failed",
-        parser_family=None,
-        next_action=NEXT_ACTION_CHOOSE_ANOTHER_FILE,
-        error_code="document_content_unavailable",
     )

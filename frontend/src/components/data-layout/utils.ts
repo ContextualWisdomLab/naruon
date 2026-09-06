@@ -5,6 +5,8 @@ import {
   WebdavAccountLookup,
   WebdavWritebackIntentResponse,
   DataQualitySurfaceResponse,
+  InkspanEditHandoffErrorCode,
+  InkspanEditHandoffNextAction,
   RepositoryAssetPreview,
   RepositoryAssetPreviewNextAction,
   RepositoryAssetPreviewState,
@@ -153,6 +155,36 @@ export function getRepositoryAssetPreviewNextActionLabel(
       return '이 파일의 본문을 읽을 수 없습니다. 다른 파일을 선택하세요.';
     default: {
       const exhaustive: never = nextAction;
+      return exhaustive;
+    }
+  }
+}
+
+/** Return the exact next action after a fail-closed Inkspan edit handoff. */
+export function getInkspanEditHandoffNextActionLabel(
+  nextAction: InkspanEditHandoffNextAction,
+) {
+  switch (nextAction) {
+    case 'keep_reading_recognized_text':
+      return '인식된 본문을 계속 읽거나 다른 파일을 선택하세요.';
+    default: {
+      const exhaustive: never = nextAction;
+      return exhaustive;
+    }
+  }
+}
+
+/** Return why Edit in Inkspan is unavailable without leaking capability ids. */
+export function getInkspanEditHandoffUnavailableReason(
+  errorCode: InkspanEditHandoffErrorCode,
+) {
+  switch (errorCode) {
+    case 'inkspan_hangul_capability_unavailable':
+      return '설치된 Inkspan에 HWPX 편집 기능이 없습니다. 인식된 본문을 계속 읽거나 다른 파일을 선택하세요.';
+    case 'inkspan_edit_contract_unavailable':
+      return 'Inkspan HWPX 편집 경로가 준비되지 않았습니다. 원본은 덮어쓰지 않습니다. 인식된 본문을 계속 읽으세요.';
+    default: {
+      const exhaustive: never = errorCode;
       return exhaustive;
     }
   }

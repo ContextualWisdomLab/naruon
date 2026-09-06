@@ -381,6 +381,23 @@ class DataDocumentActionResponse(BaseModel):
     message: str
 
 
+class DataInkspanEditHandoffResponse(BaseModel):
+    """Read-only Inkspan capability probe that never mutates the source file."""
+
+    source_asset_key: str
+    source_asset_type: Literal["email_attachment", "workspace_document"]
+    parser_family: str | None
+    handoff_state: Literal["unavailable"]
+    editor_capability_name: str
+    mutation_allowed: bool
+    converts_source_to_plain_text: bool
+    overwrites_original: bool
+    provider_write_executed: bool
+    next_action: str
+    error_code: str
+    editable_document_payload: None = None
+
+
 class DataRepositoryAssetPreviewResponse(BaseModel):
     """Read-only preview of recognized or blocked repository-asset text."""
 
@@ -395,6 +412,7 @@ class DataRepositoryAssetPreviewResponse(BaseModel):
     provider_write_executed: bool
     provenance: Literal["server-authoritative"]
     audit_event: Literal["data.repository_asset.preview.viewed"]
+    edit_handoff: DataInkspanEditHandoffResponse | None = None
 
 
 class DataDocumentWebdavMaterializationResponse(BaseModel):
@@ -2593,6 +2611,7 @@ def _preview_response(
 ) -> DataRepositoryAssetPreviewResponse:
     """Wrap a service preview in the signed read-only API envelope."""
 
+    edit_handoff = preview.edit_handoff
     return DataRepositoryAssetPreviewResponse(
         asset_key=preview.asset_key,
         asset_type=preview.asset_type,
@@ -2605,6 +2624,24 @@ def _preview_response(
         provider_write_executed=False,
         provenance="server-authoritative",
         audit_event="data.repository_asset.preview.viewed",
+        edit_handoff=(
+            None
+            if edit_handoff is None
+            else DataInkspanEditHandoffResponse(
+                source_asset_key=edit_handoff.source_asset_key,
+                source_asset_type=edit_handoff.source_asset_type,
+                parser_family=edit_handoff.parser_family,
+                handoff_state=edit_handoff.handoff_state,
+                editor_capability_name=edit_handoff.editor_capability_name,
+                mutation_allowed=False,
+                converts_source_to_plain_text=False,
+                overwrites_original=False,
+                provider_write_executed=False,
+                next_action=edit_handoff.next_action,
+                error_code=edit_handoff.error_code,
+                editable_document_payload=None,
+            )
+        ),
     )
 
 

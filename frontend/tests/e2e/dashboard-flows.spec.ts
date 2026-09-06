@@ -37,6 +37,8 @@ test('opens recognized HWPX paragraph text from the selected mail attachment', a
   await page.getByRole('button', { name: 'decision.hwpx 인식된 본문 열기' }).click();
   await expect(page.getByText('Quarterly decision record')).toBeVisible();
   await expect(page.getByText('Approve the next action.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'decision.hwpx Inkspan에서 편집' })).toBeDisabled();
+  await expect(page.getByText('설치된 Inkspan에 HWPX 편집 기능이 없습니다. 인식된 본문을 계속 읽거나 다른 파일을 선택하세요.')).toBeVisible();
   await expect(page.getByText('본문이 없습니다')).toHaveCount(0);
 });
 

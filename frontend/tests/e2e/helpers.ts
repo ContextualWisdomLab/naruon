@@ -1348,6 +1348,20 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
           next_action: 'read_recognized_text',
           error_code: null,
           provider_write_executed: false,
+          edit_handoff: {
+            source_asset_key: 'asset_mail_hwpx_recognized',
+            source_asset_type: 'email_attachment',
+            parser_family: 'hwpx',
+            handoff_state: 'unavailable',
+            editor_capability_name: 'inkspan_hangul_document_engine',
+            mutation_allowed: false,
+            converts_source_to_plain_text: false,
+            overwrites_original: false,
+            provider_write_executed: false,
+            next_action: 'keep_reading_recognized_text',
+            error_code: 'inkspan_hangul_capability_unavailable',
+            editable_document_payload: null,
+          },
         });
         return;
       }
