@@ -470,7 +470,7 @@ CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s \
   [.[][]
     | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
     | select(
-        ((.body // "") | gsub($notice_span_pattern; ""; "s")) as $body
+        ((.body // "") | gsub($notice_span_pattern; ""; "m")) as $body
         | ($body | split("<details>")[0]) as $summary
         | ($body | test($pattern; "i"))
           and (
