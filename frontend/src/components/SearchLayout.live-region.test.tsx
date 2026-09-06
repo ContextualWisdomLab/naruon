@@ -84,6 +84,30 @@ describe("SearchLayout live-region semantics", () => {
     vi.unstubAllGlobals();
   });
 
+  it("announces an empty search result set as a polite status", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) return Promise.resolve(jsonResponse({ results: [] }));
+      if (url.endsWith("/api/search/answer")) return Promise.resolve(jsonResponse({ answer: null }));
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("맥락 검색 결과가 없습니다.") ?? false);
+
+    const emptyResultStatus = Array.from(container.querySelectorAll<HTMLElement>("[role='status']")).find(
+      (node) => node.textContent?.includes("맥락 검색 결과가 없습니다."),
+    );
+    expect(emptyResultStatus).not.toBeUndefined();
+    expect(emptyResultStatus?.getAttribute("aria-live")).toBe("polite");
+  });
+
   it("announces the empty sender relationship message without wrapping its action button in a status region", async () => {
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
