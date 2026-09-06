@@ -519,6 +519,95 @@ async def test_text_analyzer_tool_success():
     assert result["word_count"] == 6
 
 
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    from api.tools import hash_generator_handler
+
+    # MD5
+    res = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
+    assert res["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+    # SHA1
+    res = await hash_generator_handler({"text": "hello", "algorithm": "sha1"})
+    assert res["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+    # SHA256 (default)
+    res = await hash_generator_handler({"text": "hello"})
+    assert res["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    assert res["algorithm"] == "sha256"
+
+    # SHA512
+    res = await hash_generator_handler({"text": "hello", "algorithm": "sha512"})
+    assert res["hash"] == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+
+    # Unsupported
+    with pytest.raises(ValueError, match="Unsupported hash algorithm"):
+        await hash_generator_handler({"text": "hello", "algorithm": "invalid_algo"})
+
+@pytest.mark.asyncio
+async def test_url_encoder_decoder_tool_success():
+    from api.tools import url_encoder_decoder_handler
+
+    # Encode
+    res = await url_encoder_decoder_handler({"text": "hello world!", "action": "encode"})
+    assert res["result"] == "hello%20world%21"
+
+    # Decode
+    res = await url_encoder_decoder_handler({"text": "hello%20world%21", "action": "decode"})
+    assert res["result"] == "hello world!"
+
+    # Invalid action
+    with pytest.raises(ValueError, match="Action must be 'encode' or 'decode'"):
+        await url_encoder_decoder_handler({"text": "test", "action": "invalid"})
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_success():
+    from api.tools import json_formatter_handler
+
+    # Valid JSON
+    res = await json_formatter_handler({"text": '{"a": 1, "b": "test"}'})
+    assert '"a": 1' in res["formatted_json"]
+    assert '"b": "test"' in res["formatted_json"]
+
+    # Invalid JSON
+    with pytest.raises(ValueError, match="Invalid JSON string"):
+        await json_formatter_handler({"text": '{"a": 1, '})
+
+def test_execute_analysis_tool_rejects_oversized_text_for_new_tools():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    payload_text = "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)
+
+    with TestClient(app) as client:
+        # hash_generator
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": payload_text, "algorithm": "sha256"}},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "failed"
+
+        # url_encoder_decoder
+        response = client.post(
+            "/api/tools/url_encoder_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": payload_text, "action": "encode"}},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "failed"
+
+        # json_formatter
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": payload_text}},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "failed"
+
+
 @pytest.mark.asyncio
 async def test_uuid_v4_generator_tool_success():
     with TestClient(app) as client:

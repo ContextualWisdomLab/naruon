@@ -753,6 +753,96 @@ registry.register(
 )
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    algorithm = params.get("algorithm", "sha256").lower()
+    encoded_text = text.encode("utf-8")
+
+    if algorithm == "md5":
+        digest = hashlib.md5(encoded_text).hexdigest()
+    elif algorithm == "sha1":
+        digest = hashlib.sha1(encoded_text).hexdigest()
+    elif algorithm == "sha256":
+        digest = hashlib.sha256(encoded_text).hexdigest()
+    elif algorithm == "sha512":
+        digest = hashlib.sha512(encoded_text).hexdigest()
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    return {"hash": digest, "algorithm": algorithm}
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="입력된 텍스트를 지정된 해시 알고리즘(md5, sha1, sha256, sha512)으로 해싱합니다.",
+        category="개발자 도구",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def url_encoder_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    action = params.get("action", "encode").lower()
+
+    if action == "encode":
+        result = urllib.parse.quote(text)
+    elif action == "decode":
+        result = urllib.parse.unquote(text)
+    else:
+        raise ValueError("Action must be 'encode' or 'decode'")
+
+    return {"result": result, "action": action}
+
+registry.register(
+    ToolInfo(
+        code="url_encoder_decoder",
+        name="URL 인코더/디코더 (URL Encoder/Decoder)",
+        description="URL 문자열을 인코딩하거나 디코딩합니다.",
+        category="개발자 도구",
+        parameters={"text": "string", "action": "string"},
+    ),
+    url_encoder_decoder_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+
+    try:
+        parsed = json.loads(text)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 읽기 쉬운 형태로 포맷팅합니다.",
+        category="개발자 도구",
+        parameters={"text": "string"},
+    ),
+    json_formatter_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
