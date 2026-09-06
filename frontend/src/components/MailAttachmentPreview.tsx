@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import type { MailAttachmentRef } from '@/lib/email-threading';
 import { toMailDisplayText } from '@/lib/mail-text';
@@ -28,6 +28,7 @@ function unavailablePreview(assetKey: string): RepositoryAssetPreview {
 export function MailAttachmentPreview({ attachments }: MailAttachmentPreviewProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null);
   const [previewByKey, setPreviewByKey] = useState<Record<string, RepositoryAssetPreview>>({});
+  const requestSequenceByAsset = useRef<Record<string, number>>({});
 
   if (attachments.length === 0) {
     return null;
@@ -39,19 +40,30 @@ export function MailAttachmentPreview({ attachments }: MailAttachmentPreviewProp
     : null;
 
   const openAttachment = async (attachment: MailAttachmentRef) => {
-    setSelectedAssetKey(attachment.asset_key);
+    const assetKey = attachment.asset_key;
+    const requestSequence = (requestSequenceByAsset.current[assetKey] ?? 0) + 1;
+    requestSequenceByAsset.current[assetKey] = requestSequence;
+    const isLatestRequest = () => requestSequenceByAsset.current[assetKey] === requestSequence;
+
+    setSelectedAssetKey(assetKey);
     try {
       const preview = await apiClient.get<RepositoryAssetPreview>(
-        `/api/data/repository-assets/${encodeURIComponent(attachment.asset_key)}/preview`,
+        `/api/data/repository-assets/${encodeURIComponent(assetKey)}/preview`,
       );
-      setPreviewByKey((current) => ({ ...current, [attachment.asset_key]: preview }));
+      if (!isLatestRequest()) {
+        return;
+      }
+      setPreviewByKey((current) => ({ ...current, [assetKey]: preview }));
     } catch (error: unknown) {
+      if (!isLatestRequest()) {
+        return;
+      }
       setPreviewByKey((current) => {
-        const existing = current[attachment.asset_key];
+        const existing = current[assetKey];
         if (existing?.preview_state === 'recognized') {
           return current;
         }
-        return { ...current, [attachment.asset_key]: unavailablePreview(attachment.asset_key) };
+        return { ...current, [assetKey]: unavailablePreview(assetKey) };
       });
       void getApiErrorStatus(error);
     }
