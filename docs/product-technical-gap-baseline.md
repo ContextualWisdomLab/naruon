@@ -1,12 +1,35 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.48
-**Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
+**Baseline version:** 1.49
+**Observed on:** 2026-09-07 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-## Current clean-summary regression repair (2026-09-06)
+## Current clean-summary regression repair (2026-09-07)
+
+### UI 통합 검증과 아직 남은 배포 근거
+
+#1245의 `38c375e96693b69f5ce14c2a8bd50379f77e79e5`는 의존성 #1244를
+정상 병합했고, #1488의 `4d19c69d6d122033f7237acef81a1fc468df8dbf`는
+그 변경과 Calendar 수리를 함께 승계했다. 도중에 추가된 외부 empty commit
+`a2ecfc37b6585d9e32fc20c0616dc88efc6683da`도 버리지 않고 정상 병합했다.
+스택은 #1244 → #1245 → #1488이며 세 PR은 여전히 열려 있다.
+
+#1488의 tracked tree는 검사한 `a9ee00d776750e6bf750c751359d06514e784599`와
+동일하다. 전체 55파일·449테스트, 경고를 허용하지 않는 ESLint, 타입 검사는
+각각 exit 0이었다. 테스트 로그에서 기존 Calendar·EmailDetail의 act 경고가
+사라졌다. 확장 manifest 탐지를 적용한 tracked-head archive의
+MEDIUM/HIGH/CRITICAL fixable 취약점·secret·misconfiguration 검사도 exit 0,
+발견 0건이다. 결과 JSON SHA-256은
+`03832494af9b6ed5282f01a92d60c5ddcf60e495b64460cda5c88c1ceea6a114`다.
+[통합 검증 기록](https://github.com/ContextualWisdomLab/naruon/pull/1488#issuecomment-5560116879).
+
+이 기록은 로컬 tree 동등성과 검사 결과만 입증한다. 빌드 로그에는 라우트
+출력이 있지만 원래 프로세스 종료 코드를 확보하지 못했으므로 빌드 성공의
+독립 근거로 쓰지 않는다. 새 head의 hosted Checks, merge-ref 검사, 100%
+커버리지, 보호 병합과 배포는 별도 검증이 필요하다. 최신 AGENTS 화면 검사도
+Mac 잠금 때문에 미완료다. 아래 9월 6일 수리 기록은 통합 전 상태를 보존한다.
 
 ### Calendar 경고 수리와 운영 지침 전파
 
