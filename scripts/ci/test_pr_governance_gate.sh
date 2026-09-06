@@ -143,8 +143,11 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     forged_check|forged_check_pending_notice)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"github-actions"},"status":"completed","conclusion":"success"}]}'
       ;;
-    forged_status|forged_status_pending_notice)
+    forged_status|forged_status_pending_notice|missing_status_creator|wrong_status_creator_type|github_code_quality_status)
       printf '{"check_runs":[]}'
+      ;;
+    github_code_quality_check)
+      printf '{"check_runs":[{"name":"GitHub Code Quality","app":{"slug":"github-code-quality"},"status":"completed","conclusion":"success"}]}'
       ;;
     coderabbit_success_with_warning|coderabbit_skipped_with_warning)
       conclusion="${GH_SCENARIO#coderabbit_}"
@@ -181,6 +184,15 @@ fi
 
 if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/status ]]; then
   case "${GH_SCENARIO:-pass}" in
+    missing_status_creator)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"success"}]}'
+      ;;
+    wrong_status_creator_type)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"success","creator":{"login":"coderabbitai[bot]","type":"User"}}]}'
+      ;;
+    github_code_quality_status)
+      printf '{"statuses":[{"context":"GitHub Code Quality","state":"success","creator":{"login":"github-code-quality[bot]","type":"Bot"}}]}'
+      ;;
     forged_status|forged_status_pending_notice)
       printf '{"statuses":[{"context":"CodeRabbit","state":"success","creator":{"login":"unrelated-app[bot]","type":"Bot"}}]}'
       ;;
@@ -524,7 +536,7 @@ assert_coderabbit_pending_waits_without_hard_comment() {
 
 assert_robot_evidence_requires_publisher_and_clean_output() {
   local scenario temp_dir
-  for scenario in forged_check forged_check_pending_notice forged_status forged_status_pending_notice; do
+  for scenario in forged_check forged_check_pending_notice forged_status forged_status_pending_notice missing_status_creator wrong_status_creator_type; do
     temp_dir="$(mktemp -d)"
     run_gate "$scenario" "$temp_dir"
     assert_exit_code 0 "$temp_dir"
@@ -537,6 +549,13 @@ assert_robot_evidence_requires_publisher_and_clean_output() {
     run_gate "$scenario" "$temp_dir"
     assert_exit_code 0 "$temp_dir"
     assert_in_file 'conclusion=failure' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
+  for scenario in github_code_quality_check github_code_quality_status; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'conclusion=success' "$temp_dir/gh.log"
     assert_not_in_file '^pr merge' "$temp_dir/gh.log"
   done
 }
