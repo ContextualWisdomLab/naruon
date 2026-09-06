@@ -8,6 +8,18 @@
 
 ## Current clean-summary regression repair (2026-09-07)
 
+### Central scan 실패의 소유 경계
+
+중앙 #1879의 [Strix 실행 34031339200](https://github.com/ContextualWisdomLab/.github/actions/runs/34031339200)은
+API 재확인 결과 `23eb2833794f829985e3cef81e8da77fe10b91e1`에서
+completed/failure다. job `101486795855`는 2026-09-06 13:13:17Z에 시작해
+14:54:04Z에 실패로 종료했다. 조정 Agent가 전달한 artifact `9991542931`
+분석은 `orchestrator/free` 요청 5,377초 뒤 HTTP 500을 보고한다. 이 상세
+분석은 이 문서 작성 lane에서 원시 로그를 다시 읽은 결과와 구분한다.
+900초 제한에 걸렸다고 단정하지 않으며 CO의 근본 원인도 아직 미확정이다.
+Naruon에서 provider 우회나 scanner 복제를 추가하지 않고 canonical owner의
+RCA와 새 exact-head 실행 결과를 기다리는 동안 독립 제품 검증을 계속한다.
+
 ### UI 통합 검증과 아직 남은 배포 근거
 
 후속 관찰: #1488의 `22b4c5de4cd3496ef16465cb5ce881fa6abd6add`는
