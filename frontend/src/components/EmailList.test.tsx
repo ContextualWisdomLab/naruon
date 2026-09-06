@@ -88,6 +88,26 @@ describe("EmailList", () => {
     expect(selectedThread?.className).toContain("min-h-20");
   });
 
+  it("announces an empty inbox through exactly one polite status region", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse({ emails: [] })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailList onSelectEmail={vi.fn()} selectedEmailId={null} />);
+    });
+    await flushAsyncWork();
+
+    const emptyStatuses = Array.from(container.querySelectorAll<HTMLElement>('[role="status"]')).filter(
+      (node) => node.textContent?.includes("받은 메일이 없습니다"),
+    );
+    expect(emptyStatuses).toHaveLength(1);
+    expect(emptyStatuses[0]?.getAttribute("aria-live")).toBe("polite");
+  });
+
   it("uses the missing-title fallback for blank email subjects", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
