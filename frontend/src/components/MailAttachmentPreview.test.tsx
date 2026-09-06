@@ -200,6 +200,70 @@ describe("MailAttachmentPreview", () => {
     expect(container?.textContent).not.toContain("본문이 없습니다");
   });
 
+  it("keeps the latest recognized preview when an older pending response arrives late", async () => {
+    let resolveFirst!: (response: Response) => void;
+    let resolveSecond!: (response: Response) => void;
+    const firstResponse = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondResponse = new Promise<Response>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(firstResponse)
+      .mockReturnValueOnce(secondResponse);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPreview([recognizedAttachment]);
+    const openButton = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.includes("decision.hwpx"),
+    );
+    expect(openButton).toBeDefined();
+
+    await act(async () => {
+      openButton?.click();
+    });
+    await act(async () => {
+      openButton?.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveSecond(jsonResponse({
+        asset_key: "asset_mail_hwpx_recognized",
+        asset_type: "email_attachment",
+        preview_state: "recognized",
+        parser_family: "hwpx",
+        paragraph_texts: ["Latest recognized paragraph"],
+        preview_text: "Latest recognized paragraph",
+        next_action: "read_recognized_text",
+        error_code: null,
+        provider_write_executed: false,
+      }));
+    });
+    await flushAsyncWork();
+    expect(container?.textContent).toContain("Latest recognized paragraph");
+
+    await act(async () => {
+      resolveFirst(jsonResponse({
+        asset_key: "asset_mail_hwpx_recognized",
+        asset_type: "email_attachment",
+        preview_state: "pending",
+        parser_family: "hwpx",
+        paragraph_texts: [],
+        preview_text: null,
+        next_action: "wait_for_recognition",
+        error_code: "hwpx_recognition_pending",
+        provider_write_executed: false,
+      }));
+    });
+    await flushAsyncWork();
+
+    expect(container?.textContent).toContain("Latest recognized paragraph");
+    expect(container?.textContent).not.toContain("인식이 끝날 때까지 기다리거나 다른 파일을 선택하세요");
+  });
+
   it("renders nothing when the selected mail has no attachments", () => {
     renderPreview([]);
     expect(container?.querySelector('[aria-label="메일 첨부 파일"]')).toBeNull();
