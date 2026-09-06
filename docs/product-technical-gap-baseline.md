@@ -1,12 +1,48 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.44
+**Baseline version:** 1.45
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-06)
+
+### Combined dependency prerequisite, not protected delivery
+
+Existing #1244 now has head `156a816c3e799bc8cc2cf87e5e1a2ffb8cc1c78f`, a
+normal merge of its `50351e8c` predecessor and #1571's `3f568412`. Both original
+deltas are preserved byte-for-byte: the scanner hash-lock matches #1244 and
+the three frontend files match #1571. Both PRs remain open; no valid delta was
+discarded or history rewritten. This provides one combined prerequisite before
+adopting the repairs into foundation/consumer branches.
+
+A tracked archive of `156a816c` passed the expanded Trivy 0.74.0 scan with
+MEDIUM/HIGH/CRITICAL fixable vulnerability, secret and misconfiguration checks.
+The actual results include 102 scanner-lock packages with `aiohttp` 3.14.3 and
+580 frontend-lock packages with `js-yaml` 4.3.1. The JSON SHA-256 is
+`7b8eecdc96f745ebce86087f599ed3846ce363e92bc2af45b0e664d951b9ed17`.
+This matches the inspected central gate's severity threshold, but is still
+local evidence rather than its hosted SARIF, authorization or review result.
+The earlier worktree scan is not used as immutable-archive evidence.
+
+Frozen pnpm installation, lint and the two dependency-lock tests exited 0.
+The hash-required uv dry run resolved the scanner lock without installing it;
+it is not proof that every published distribution hash has been downloaded and
+verified. An initial `pnpm test --` invocation unintentionally ran all 52 files
+and 439 tests. Although assertions passed, CalendarLayout and EmailDetail
+emitted React `act(...)` diagnostics, so that run is not warning-free acceptance.
+Do not hide the diagnostics or substitute the two focused tests for full-suite
+cleanliness. A separate frozen-install reproduction on parent `50351e8c`
+ran the original Calendar and EmailDetail tests: 33 passed, exit 0, with the
+same CalendarLayout/EmailDetail diagnostics (three/four occurrences). This
+establishes that the warnings predate this integration, not their full root
+cause. Route the existing test defects to their owner without expanding the
+dependency diff or suppressing output. #1244 remains Draft while warning
+repair and hosted gates are incomplete.
+[Combined prerequisite receipt](https://github.com/ContextualWisdomLab/naruon/pull/1244#issuecomment-5559874389).
+
+### Governance and earlier scan evidence
 
 PRD requirement: clean, authenticated review evidence must allow the next
 eligible step without allowing a real warning or a forged publisher to pass.
