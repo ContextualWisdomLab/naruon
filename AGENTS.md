@@ -279,6 +279,13 @@ in this repo.
   and base, live rulesets, required checks, unresolved threads, and applicable
   current-head CodeRabbit or structured OpenCode fallback evidence. After the
   merge, verify the merge commit and protected target branch.
+- Never authenticate review evidence by its display name or status context.
+  Verify the check App or exact Bot creator against the owner contract; reject
+  missing or unrelated publishers. Inspect blocking output even when the check
+  conclusion is success or skipped. Cover forged publishers with and without
+  pending notices, missing/wrong-type creators, and trusted positive cases.
+  [Governance repair #1531](https://github.com/ContextualWisdomLab/naruon/pull/1531#issuecomment-5559591367)
+  records the counterexamples; an open repair PR is not protected integration.
 - Ready for review is review admission, not merge authorization. Keep a PR
   Draft while its delta, ownership, conflict repair or required foundation is
   incomplete. Once the bounded slice is independently reviewable and its
@@ -706,6 +713,14 @@ subject to U.S. copyright, while attribution remains required.
   well as fixture skips. Check the actual process exit status: a printed pytest
   error can still exit zero when expected-failure metadata is retained. Exercise
   these cases with real pytest reports, not only source-string assertions.
+- For long-running verification, redirect output directly to task-owned durable
+  files and capture the final runner exit separately. A disconnected observation
+  pipe can fail test output and cleanup; partial progress or a missing tool
+  handle is not completion or permission to restart a process still alive.
+  Verify the full redacted report, explicit skip reasons, exit status and
+  absence of that run's labelled containers, volumes and networks independently.
+  Keep failed attempts and retry receipts separate; do not infer the original
+  pipe-closure cause from a successful retry or alter application timeouts.
 - Negative configuration probes must use task-owned decoy files or controlled
   readers and key-only assertions. Never read an operator file to prove that it
   should not be read, or let assertion introspection print credential mappings.
