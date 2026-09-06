@@ -203,12 +203,12 @@ async def test_email_detail_without_attachments_returns_empty_list(
 @pytest.mark.asyncio
 @pytest.mark.postgres
 async def test_email_detail_preview_postgres_smoke_lists_opaque_hwpx_key() -> None:
-    """Mail detail returns the same opaque key the scoped preview can open."""
+    """Mail detail returns the same opaque key without loading attachment bodies."""
 
     import uuid
 
     import asyncpg
-    from sqlalchemy import text
+    from sqlalchemy import event, text
     from sqlalchemy.exc import OperationalError
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -312,6 +312,15 @@ async def test_email_detail_preview_postgres_smoke_lists_opaque_hwpx_key() -> No
     )
     previous_override = app.dependency_overrides.get(get_db)
     app.dependency_overrides[get_db] = override_real_db
+    attachment_selects: list[str] = []
+
+    def capture_attachment_select(
+        conn, cursor, statement: str, parameters, context, executemany
+    ) -> None:
+        if "from email_attachments" in statement.lower().replace('"', ""):
+            attachment_selects.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", capture_attachment_select)
     try:
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -322,6 +331,13 @@ async def test_email_detail_preview_postgres_smoke_lists_opaque_hwpx_key() -> No
             base_url="http://test",
         ) as real_client:
             detail = await real_client.get(f"/api/emails/{email_id}")
+            detail_attachment_selects = tuple(attachment_selects)
+            attachment_selects.clear()
+            thread = await real_client.get(
+                "/api/emails/thread/thread-mail-preview-hwpx"
+            )
+            thread_attachment_selects = tuple(attachment_selects)
+            attachment_selects.clear()
             preview = await real_client.get(
                 f"/api/data/repository-assets/{expected_key}/preview"
             )
@@ -329,6 +345,9 @@ async def test_email_detail_preview_postgres_smoke_lists_opaque_hwpx_key() -> No
                 "/api/data/repository-assets/asset_missing_mail_preview/preview"
             )
     finally:
+        event.remove(
+            engine.sync_engine, "before_cursor_execute", capture_attachment_select
+        )
         if previous_override is None:
             app.dependency_overrides.pop(get_db, None)
         else:
@@ -341,6 +360,13 @@ async def test_email_detail_preview_postgres_smoke_lists_opaque_hwpx_key() -> No
     assert attachments[0]["asset_key"] == expected_key
     assert attachments[0]["file_name"] == "decision.hwpx"
     assert "id" not in attachments[0]
+    assert thread.status_code == 200, thread.text
+    assert len(thread.json()["thread"]) == 1
+    assert detail_attachment_selects
+    assert thread_attachment_selects
+    for statement in (*detail_attachment_selects, *thread_attachment_selects):
+        normalized_statement = statement.lower().replace('"', "")
+        assert "email_attachments.content" not in normalized_statement
     assert preview.status_code == 200, preview.text
     assert preview.json()["preview_state"] == "recognized"
     assert preview.json()["paragraph_texts"] == [
