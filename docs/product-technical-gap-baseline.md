@@ -1,12 +1,38 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.51
+**Baseline version:** 1.52
 **Observed on:** 2026-09-07 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-07)
+
+### 잘못된 응답의 화면 중단과 공통 검증 수리
+
+#1570의 `c298e4d93dfa5dcdefeac3a9312f92804b234584`는 원격에서 확인한
+수리 head다. 최초 배열 항목 회귀 검사 12건을 재현한 뒤 대시보드만 고쳤을
+때는 단위 검사 464건이 통과했지만 브라우저의 잘못된 응답 사례 3건은 실패했다.
+함께 렌더링된 EmailList가 null 항목의 id를 읽어 화면을 중단했다. 단위 검사의
+EmailList mock이 이 경로를 가렸으므로 그 통과를 실제 화면 검증으로 취급하지 않는다.
+
+최종 수정은 받은편지함·보낸편지함·검색 결과 소비 경로에 하나의 메일 형식
+검증을 적용하고, 잘못된 항목을 버려 수치를 줄이지 않고 해당 원본을 오류로
+표시한다. 응답 전체가 null이어도 내부 예외 문구를 화면에 내보내지 않는다.
+최종 동일 tree의 483개 검사가 통과했으나 기존 Calendar·EmailDetail act 경고
+7건은 남았다. strict lint와 최종 production build는 exit 0이다. 같은 브라우저
+6개 사례는 26.8초에 통과했고 pageerror가 없다는 assertion도 통과했다.
+원래 실패 3건과 trace는 보존했다. 실제 API·인증·전체 schema 검증이나 경고
+없는 전체 검증, 보호 병합의 근거는 아니다.
+[리뷰 수리 기록](https://github.com/ContextualWisdomLab/naruon/pull/1570#discussion_r3944510233).
+
+잘못된 응답의 desktop/tablet/mobile 캡처 3장을 작업 Agent와 조정 Agent가
+각각 직접 확인했다. 검사 영역에서 오류 안내·재시도 버튼·정상 원본 카드는
+유지됐고 잘림·겹침은 보이지 않았다. 모바일 줄바꿈을 잘림으로 계산하지 않는다.
+다만 대기 작업의 `source-linked`, 일정 원본의 `충돌 토큰 있음`은 내부 구현을
+노출하는 미해결 문구다. 후속 조치는 사용자 행동 중심 문구와 접근성 이름을
+함께 고치고 8개 언어의 versioned DB 번역 원장 계약을 확인하는 것이다.
+번역 파일 복제나 프레임워크 추가로 이 수리의 범위를 넓히지 않는다.
 
 ### AGENTS 렌더 확인과 stacked gate의 실제 적용 범위
 
