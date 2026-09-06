@@ -185,6 +185,41 @@ JUnit hash and completed task-only cleanup in the PR. Consumer #1417 must
 inherit the complete ordinary child commit, not copy these helper edits.
 Earlier-head security scans remain historical until their merge ref is rescanned.
 
+## Signal-probe startup observation repair (2026-09-06)
+
+Consumer #1417 at `56025b17d752b8fbe2c759d9420876a73e26d51c`, inheriting CI
+owner `30d8476b5fa1d4379684acaf2f334414597e97c4`, failed its immutable-head
+full rerun before SIGTERM was sent: `runner did not reach the controlled
+blocking stage` at `test_ci_postgres_signals.py:188`. The result was 1888 passed,
+one failure and two live-only skips. The failed JUnit SHA-256 is
+`27c1ac50cb7073bdb5299170618e6ee204ad437199658285f68cb44621e593bb`.
+Retained task-only trace subsequently reached `pytest`, `down`, and `down_done`;
+its ready marker was later than the test's teardown release marker. Thus the
+five-second pre-signal observation expired during startup, not during the
+cancellation assertion. A passing isolated rerun does not erase this failure.
+
+A new six-second controlled startup-delay case reproduces the same RED without
+real Docker, a database or operator files. Give only pre-signal startup a
+30-second observation bound; several fresh interpreter launches are setup,
+not the behavior being timed. Keep the existing five-second post-SIGTERM wait,
+exit 143, exactly one completed teardown, redaction, and no surviving owned
+child/timer assertions unchanged. This addresses an overly strict timing
+precondition (pytest Development Team, n.d.-c), not an application performance
+target. The runner shell, deployment/model timeouts and cleanup bounds do not
+change. The new delayed case remains in the complete suite; no skip, automatic
+retry, fixture warm-up or failure suppression is added. Revalidate the CI owner
+and normally inherit its full child in #1417 before accepting their new heads.
+
+Focused reproduction uses the repository conftest (the migration-helper probes
+import application settings); `--noconftest` is valid for the standalone signal
+file but makes the combined invocation fail on missing test configuration.
+Keep implicit operator files excluded in either case:
+
+```sh
+env -i PATH="$PATH" NARUON_ENV_FILE=/dev/null backend/.venv/bin/python -m pytest \
+  -q -W error backend/tests/test_ci_postgres_signals.py backend/tests/test_ci_postgres_runner.py
+```
+
 ## References
 
 Python Software Foundation. (n.d.). *subprocess—Subprocess management*.
@@ -206,6 +241,9 @@ from https://docs.pytest.org/en/stable/reference/reference.html#pytest.hookspec.
 pytest Development Team. (n.d.-b). *How to use skip and xfail to deal with tests
 that cannot succeed*. Retrieved September 6, 2026, from
 https://docs.pytest.org/en/stable/how-to/skipping.html
+
+pytest Development Team. (n.d.-c). *Flaky tests*. Retrieved September 6, 2026,
+from https://docs.pytest.org/en/stable/explanation/flaky.html
 
 GitHub. (n.d.). *Upload a build artifact* (Version 7.0.1) [Computer software].
 https://github.com/actions/upload-artifact/tree/v7.0.1
