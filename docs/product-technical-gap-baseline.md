@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.33
+**Baseline version:** 1.34
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -8,21 +8,25 @@
 
 **Migrated PostgreSQL CI refresh (2026-09-06):** Existing Draft
 [#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562) is now
-`ef858172152615d54b393ea3ca5748ab2c4e03db`, tree
-`67dab67ba5534258c690a110724d9ef6da503623`. It normally merges the complete
+`4d2e4abc2c369d5e85bced4027b6f81857721ea2`, tree
+`4a140dca9ffb2f5a182794a7e40375f0e7df5edd`. It normally merges the complete
 #1503 prerequisite `19d5860bc27e860acba940390f5792721cd99e5e`, including #1565,
 while retaining #1531 base `550798ccafebea4b1a9a65018e63b9661ff25a53` and all
 #1554/stacked-trigger history. The old head exited zero with all five search DB
 tests skipped; a real empty DB then failed in migration 0001. The existing
 migration owner repairs installation; the CI owner supplies the execution path.
+Ordinary merges also preserve dependency owner #1571's complete original delta
+and compatibility repair `3f568412da61f12ba36c71765bf915acc8abb85d`.
 
 On the committed head, the shared test-only Compose runner installed fresh
 history, repeated Alembic, and ran **1871 passed, 2 skipped, zero failures/errors
-in 29.40 s**. The two skipped cases require `LIVE_BASE_URL`; all ten PostgreSQL
+in 29.29 s**. The two skipped cases require `LIVE_BASE_URL`; all ten PostgreSQL
 tests executed. No customer mailbox, actual provider, browser cookie/proxy,
 deployed service, representative p95 or full-coverage claim follows. Generated
 DB/network cleanup completed; JUnit SHA-256 is
-`acacf9f829e65619dfed341270b6a5a864f27cd08bfcffb51864de53e8905e8e`.
+`e2f2ac6593cd0a088b23624d4c4506a5a479346c7eb99becbffd8215d7001b40`.
+Frozen pnpm 11.5.3 installation, all 52 frontend test files / 439 tests
+(4.28 s), lint and TypeScript checks pass on this same committed head.
 
 | Requirement / owner | Verified local scope | Remaining action |
 | --- | --- | --- |
@@ -30,22 +34,42 @@ DB/network cleanup completed; JUnit SHA-256 is
 | TRD/security: tests cannot inherit operator provider/replica settings; Naruon bootstrap | Explicit existing bootstrap selector, minimal child environment, task-owned negative probes | Hosted security evidence; no new tenant credential authority or provider routing |
 | Operability: cancelled tests preserve failure and finish scoped cleanup; #1562 | Real SIGTERM command doubles, owned process groups, report redaction before bounded cleanup, timer reaping | Independent current-head review; live product recovery is separate |
 
-[Exact-head doctoring, failure receipts and APA sources](https://github.com/ContextualWisdomLab/naruon/blob/ef858172152615d54b393ea3ca5748ab2c4e03db/docs/doctoring/application_ci_postgres.md)
+[Exact-head doctoring, failure receipts and APA sources](https://github.com/ContextualWisdomLab/naruon/blob/4d2e4abc2c369d5e85bced4027b6f81857721ea2/docs/doctoring/application_ci_postgres.md)
 records the decision before merging prerequisites. The independent agent's two
 signal probes passed; they are not GitHub approval or database tests. Required
 hosted checks and default-branch dependency alerts remain separate. No PR was
 closed, no provider source copied and no release claimed.
 
-The refreshed HIGH/CRITICAL fixable Trivy scan of GitHub merge ref
-`a7d2d409d146a134817df4c258ece4ab8e171508` has exactly the same tree as #1562
-above and exits **1** for `frontend/pnpm-lock.yaml`: `js-yaml@4.3.0`,
+Historical RED: the refreshed HIGH/CRITICAL fixable Trivy scan of GitHub merge
+ref `a7d2d409d146a134817df4c258ece4ab8e171508`, tree
+`67dab67ba5534258c690a110724d9ef6da503623`, for the preceding #1562 head
+`ef858172152615d54b393ea3ca5748ab2c4e03db` exited **1** for
+`frontend/pnpm-lock.yaml`: `js-yaml@4.3.0`,
 [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj),
 patched in `4.3.1` / `3.15.1`. No HIGH/CRITICAL misconfiguration was found;
-a separate secret-only scan exited zero. Neither clears this dependency
-finding. Repair the current frontend dependency owner, retain the regression
-and re-scan the new exact merge tree; do not suppress the rule. Current-head
-Application CI `34023224010`, Bandit `34023223992`, and image validation
-`34023224037` are queued, not completed evidence.
+a separate secret-only scan exited zero. Neither cleared that dependency
+finding. The first integration candidate then passed Vitest but failed
+TypeScript with TS1503: its named regular-expression capture was incompatible
+with the product's ES2017 target. #1571 repaired the test with a numbered
+capture, preserving the target, override and lock blob
+`018f0382c815ea7a35899e64ddb6c3645399fcb6`; owner focused tests, typecheck and
+lint passed before integration. No duplicate patch or suppression was added.
+
+Current local GREEN: GitHub merge ref
+`0ca44cfa8302e6b0228de24a4eed284f1d0c4a99` has parents #1531 base plus current
+#1562 head and the same tree `4a140dca9ffb2f5a182794a7e40375f0e7df5edd`.
+Trivy vulnerability/misconfiguration scanning, including development
+dependencies and fixable HIGH/CRITICAL findings, exits zero with no findings.
+Report SHA-256:
+`cc64d4f5ad685b52e98079a243915a636e35ea04fc51a38220ab079897354933`.
+A separate all-severity secret-only scan of that committed archive also exits
+zero; report SHA-256:
+`c148c3f0eb704a9c50b7a74fa24fb19d8f467cb26b09d57853c98546ac533c8e`.
+These scans do not prove protected-branch advisory resolution or deployed
+safety. Current-head Application CI `34024085621` and image validation
+`34024085830` are queued; Bandit `34024085668` is pending, not completed
+evidence. The workflow lookup is PR-trigger-filtered and first-page only,
+not an exhaustive required-check inventory.
 
 **Import physical-lease and signed backend refresh (2026-09-06):** Existing
 Draft [#1317](https://github.com/ContextualWisdomLab/naruon/pull/1317) now has
@@ -229,7 +253,7 @@ checks identify the following existing repair lanes; no alert was dismissed.
 | Alerts and current source | Existing owner / next action |
 | --- | --- |
 | Alerts [88](https://github.com/ContextualWisdomLab/naruon/security/dependabot/88)/[89](https://github.com/ContextualWisdomLab/naruon/security/dependabot/89)/[90](https://github.com/ContextualWisdomLab/naruon/security/dependabot/90): `aiohttp==3.14.1` in `requirements-strix-ci-hashes.txt`; the strictest first-patched version is 3.14.3 | #1244 `50351e8cacc65b4124ba2145e00d41aeceef0775` proposes the 3.14.3 hashed lock. Repair its exact CodeQL/noema evidence; do not duplicate the dependency PR or count it as protected-patched |
-| Alert [91](https://github.com/ContextualWisdomLab/naruon/security/dependabot/91): frontend `js-yaml@4.3.0`; first patched 4.3.1 | Draft #1571 `c3cf4efc478a264a0a010df82d1ea90b48776610` owns the override/lock update. Complete exact-head security/review gates; #1459's inspected 4.3.0 lock is not this repair |
+| Alert [91](https://github.com/ContextualWisdomLab/naruon/security/dependabot/91): frontend `js-yaml@4.3.0`; first patched 4.3.1 | Draft #1571 `3f568412da61f12ba36c71765bf915acc8abb85d` owns the override/lock and ES2017-compatible regression (owner refreshed 2026-09-06). Complete exact-head security/review gates; #1459's inspected 4.3.0 lock is not this repair |
 | Alerts [87](https://github.com/ContextualWisdomLab/naruon/security/dependabot/87)/[86](https://github.com/ContextualWisdomLab/naruon/security/dependabot/86): alert ranges exclude `cryptography==50.0.0` and `pyasn1==0.6.4`, already present in protected manifest/locks, but alerts are still open | Reconcile dependency-graph/manifests and the security record; do not call these closed or suppress them. #1494's 50.0.1 proposal is separate and retains pyasn1 0.6.4 |
 
 **Noema owner-boundary refresh (2026-09-04):** Noema protected
@@ -488,8 +512,10 @@ workspace override to require patched 4.3.1 and carries an executable lock
 contract. Pinned pnpm 11.5.3 reproduced lock hash
 `018f0382c815ea7a35899e64ddb6c3645399fcb6` byte-for-byte; a narrower update
 command was rejected because it changed unrelated Vite and WASM closure entries.
-Both focused tests and diff validation pass. Hosted Checks remain queued, so
-protected completion and independent current-head review are pending.
+Both focused tests and diff validation passed at that historical head; the
+2026-09-06 integration exposed TS1503 despite Vitest success. The current
+owner repair and new merge-ref security receipt are recorded above. Protected
+completion and independent current-head review remain pending.
 
 **DAV authorization boundary refresh (2026-09-05T01:08Z):** Ready PR #1345
 (`8146c56587acea5c4aa859ba9366eef0f39540d7`) is now non-force merged with
