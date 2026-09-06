@@ -54,6 +54,12 @@ awaited by default.
   resolution via GITHUB_PATH.
 - Authoritative `Review skipped` evidence counts only when the same check
   output carries no blocking warning/failure language alongside it.
+- A review-like check name or status context is not publisher authentication.
+  Check evidence requires the `coderabbitai` or `github-code-quality` App slug;
+  status evidence requires the corresponding exact `[bot]` creator and Bot type.
+  Missing or unrelated publishers cannot replace the OpenCode fallback.
+  Successful and skipped check conclusions still block when their own output
+  contains the blocking warning/failure evidence described above.
 - `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are
   addressed or superseded on the current head.
 - Blocker comments use the idempotent
@@ -102,6 +108,20 @@ OpenCode approval exists. Existing pending/failed check handling and separate
 substantive-comment blockers remain authoritative. The full shell harness
 covers success checks and success statuses with stale notices separately;
 the notice-only waiting fixture now correctly contains no check evidence.
+
+Independent readiness review at `fac3437c03d928e45632763530a4f130dfe505fd`
+identified two pre-existing metadata risks, not regressions introduced by the
+stale-notice repair: name-only publisher matching and success/skipped results
+bypassing output inspection. Six isolated fake-GitHub scenarios each emitted
+an incorrect success before the fix: an unrelated App check or status creator,
+each with and without the pending notice, and success/skipped checks carrying
+a pre-merge blocking warning. Publisher authentication now precedes evidence
+selection, and output inspection precedes conclusion acceptance. The real
+current-head CodeRabbit status creator was checked as `coderabbitai[bot]`, Bot.
+These are local metadata-gate findings; no protected-branch bypass or malicious
+publication in production was established. Keep the full harness, authoritative
+positive cases, fallback and separate-comment blockers intact when repairing
+this boundary; do not grant another publisher access to silence a wait state.
 
 Reference: jqlang. (n.d.). *Regular expressions*. In *jq 1.7 manual*.
 https://jqlang.org/manual/v1.7/#regular-expressions
