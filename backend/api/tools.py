@@ -706,8 +706,6 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
-
-
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -770,71 +768,6 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
-
-async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text") or ""
-    return {"encoded_url": urllib.parse.quote(text, safe="")}
-
-
-registry.register(
-    ToolInfo(
-        code="url_encoder",
-        name="URL 인코더 (URL Encoder)",
-        description="텍스트를 URL(퍼센트) 인코딩합니다.",
-        category="유틸리티",
-        parameters={"text": "string"},
-    ),
-    url_encoder_handler,
-)
-
-
-async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    encoded_url = params.get("encoded_url") or ""
-    return {"decoded_url": urllib.parse.unquote(encoded_url)}
-
-
-registry.register(
-    ToolInfo(
-        code="url_decoder",
-        name="URL 디코더 (URL Decoder)",
-        description="URL(퍼센트) 인코딩된 텍스트를 디코딩합니다.",
-        category="유틸리티",
-        parameters={"encoded_url": "string"},
-    ),
-    url_decoder_handler,
-)
-
-
-def _reject_non_standard_json_constants(val: str) -> float:
-    raise ValueError(f"Non-standard JSON constant: {val}")
-
-
-async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    json_string = params.get("json_string") or ""
-    try:
-        parsed_json = json.loads(
-            json_string, parse_constant=_reject_non_standard_json_constants
-        )
-        formatted_json = json.dumps(
-            parsed_json, indent=2, ensure_ascii=False, allow_nan=False
-        )
-        return {"formatted_json": formatted_json}
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON string: {e}") from e
-    except ValueError as e:
-        raise ValueError(f"Invalid JSON string: {e}") from e
-
-
-registry.register(
-    ToolInfo(
-        code="json_formatter",
-        name="JSON 포매터 (JSON Formatter)",
-        description="JSON 문자열을 읽기 쉬운 들여쓰기 형식으로 포맷팅합니다.",
-        category="유틸리티",
-        parameters={"json_string": "string"},
-    ),
-    json_formatter_handler,
-)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
