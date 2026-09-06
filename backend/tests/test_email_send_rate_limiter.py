@@ -1,12 +1,23 @@
 import asyncio
 import datetime
+import time
 import uuid
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
+import jwt
+from httpx import ASGITransport, AsyncClient
+
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.auth import AuthContext
-from db.models import SecurityAuditEvent
+from api import emails as emails_api
+from core.config import settings
+from db.models import SecurityAuditEvent, TenantConfig
+from db.session import get_db
+from main import app
 import services.email_send_rate_limiter as limiter_module
 
 
@@ -63,9 +74,7 @@ class _PostgresSession:
         if query_text.startswith("delete from security_audit_events"):
             values = tuple(query.compile().params.values())
             resource_uid = next(
-                value
-                for value in values
-                if str(value).startswith("email_send_scope:")
+                value for value in values if str(value).startswith("email_send_scope:")
             )
             event_action = next(
                 value
@@ -90,9 +99,7 @@ class _PostgresSession:
         if "security_audit_events" in query_text:
             values = tuple(query.compile().params.values())
             resource_uid = next(
-                value
-                for value in values
-                if str(value).startswith("email_send_scope:")
+                value for value in values if str(value).startswith("email_send_scope:")
             )
             event_action = next(
                 value
@@ -181,7 +188,7 @@ async def test_sliding_window_limits_concurrent_workers_without_cross_scope_leak
     assert rollover.allowed is True
     scope_uid = (
         "email_send_scope:"
-        f'{limiter_module.rate_limit_scope_hash("user-1", "org-1", "workspace-org-1")}'
+        f"{limiter_module.rate_limit_scope_hash('user-1', 'org-1', 'workspace-org-1')}"
     )
     assert sum(event.resource_uid == scope_uid for event in store.events) == 2
 
@@ -213,14 +220,19 @@ async def test_sliding_window_blocks_boundary_burst(monkeypatch):
                 now=started_at + datetime.timedelta(seconds=offset_seconds),
             )
         ).allowed
-    assert sum(
-        event.event_action == "email_send_rate_limit.quota_exhausted"
-        for event in store.events
-    ) == 1
+    assert (
+        sum(
+            event.event_action == "email_send_rate_limit.quota_exhausted"
+            for event in store.events
+        )
+        == 1
+    )
 
 
 @pytest.mark.asyncio
-async def test_limiter_prunes_expired_allowed_state_but_keeps_denial_evidence(monkeypatch):
+async def test_limiter_prunes_expired_allowed_state_but_keeps_denial_evidence(
+    monkeypatch,
+):
     store = _SharedAttemptStore()
     observed_at = datetime.datetime(2026, 8, 19, 12, 0, tzinfo=datetime.timezone.utc)
     scope_hash = limiter_module.rate_limit_scope_hash(
@@ -261,11 +273,14 @@ async def test_limiter_prunes_expired_allowed_state_but_keeps_denial_evidence(mo
     assert decision.allowed is True
     assert expired_allowed not in store.events
     assert durable_denial in store.events
-    assert sum(
-        event.event_action == "email_send_rate_limit.allowed"
-        and event.resource_uid == scope_uid
-        for event in store.events
-    ) == 1
+    assert (
+        sum(
+            event.event_action == "email_send_rate_limit.allowed"
+            and event.resource_uid == scope_uid
+            for event in store.events
+        )
+        == 1
+    )
     delete_query_index = next(
         index
         for index, query in enumerate(session.queries)
@@ -280,7 +295,9 @@ async def test_limiter_prunes_expired_allowed_state_but_keeps_denial_evidence(mo
 
 
 @pytest.mark.asyncio
-async def test_limiter_uses_owned_transaction_and_non_sensitive_audit_state(monkeypatch):
+async def test_limiter_uses_owned_transaction_and_non_sensitive_audit_state(
+    monkeypatch,
+):
     store = _SharedAttemptStore()
     session = _PostgresSession(store)
     monkeypatch.setattr(limiter_module, "AsyncSessionLocal", lambda: session)
@@ -316,7 +333,9 @@ async def test_limiter_uses_database_clock_after_scope_lock(monkeypatch):
         if "pg_advisory_xact_lock" in query
     )
     clock_query_index = next(
-        index for index, query in enumerate(session.queries) if "clock_timestamp" in query
+        index
+        for index, query in enumerate(session.queries)
+        if "clock_timestamp" in query
     )
     assert lock_query_index < clock_query_index
     audit = next(item for item in session.added if isinstance(item, SecurityAuditEvent))
@@ -344,79 +363,280 @@ async def test_rate_limiter_fails_closed_when_shared_state_is_unavailable():
         limiter_module.AsyncSessionLocal = original_factory
 
 
-@pytest.mark.postgres
-@pytest.mark.asyncio
-async def test_rate_limiter_real_postgres_reserves_and_denies(monkeypatch):
-    from core.config import settings
+@pytest_asyncio.fixture
+async def migrated_limiter_sessions(monkeypatch):
+    """Use the runner's migrated schema, never create missing runtime tables."""
     from asyncpg.exceptions import InvalidAuthorizationSpecificationError
     from asyncpg.exceptions import InvalidPasswordError
-    from db.models import Base
-    from sqlalchemy import delete, select
     from sqlalchemy.exc import OperationalError
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-    engine = create_async_engine(settings.DATABASE_URL)
-    try:
-        async with engine.begin() as connection:
-            await connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
-            await connection.run_sync(Base.metadata.create_all)
-    except (
-        InvalidAuthorizationSpecificationError,
-        InvalidPasswordError,
-        OperationalError,
-        OSError,
-    ):
-        await engine.dispose()
-        pytest.skip("PostgreSQL smoke database unavailable")
-
+    engine = create_async_engine(settings.DATABASE_URL, pool_size=4, max_overflow=0)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", session_factory)
-    monkeypatch.setattr(limiter_module, "SEND_RATE_LIMIT_MAX_ATTEMPTS", 1)
     scope_suffix = uuid.uuid4().hex
-    context = _context(
-        f"rate-limit-smoke-user-{scope_suffix}",
-        f"rate-limit-smoke-org-{scope_suffix}",
-    )
-    scope_uid = (
-        "email_send_scope:"
-        f"{limiter_module.rate_limit_scope_hash(context.user_id, context.organization_id, context.workspace_id)}"
-    )
-    observed_at = datetime.datetime.now(datetime.timezone.utc)
-
-    async def cleanup() -> None:
-        async with session_factory() as session:
-            await session.execute(
-                delete(SecurityAuditEvent).where(
-                    SecurityAuditEvent.resource_uid == scope_uid
-                )
-            )
-            await session.commit()
-
     try:
-        await cleanup()
         try:
-            first = await limiter_module.enforce_send_email_rate_limit(
-                context, now=observed_at
-            )
-            second = await limiter_module.enforce_send_email_rate_limit(
-                context, now=observed_at
-            )
             async with session_factory() as session:
-                actions = (
-                    await session.execute(
-                        select(SecurityAuditEvent.event_action)
-                        .where(SecurityAuditEvent.resource_uid == scope_uid)
-                        .order_by(SecurityAuditEvent.event_action)
-                    )
-                ).scalars().all()
+                await session.execute(select(SecurityAuditEvent.event_uid).limit(0))
+        except (
+            InvalidAuthorizationSpecificationError,
+            InvalidPasswordError,
+            OperationalError,
+            OSError,
+        ):
+            pytest.skip("PostgreSQL smoke database unavailable")
+        monkeypatch.setattr(limiter_module, "AsyncSessionLocal", session_factory)
+        try:
+            yield session_factory, scope_suffix
         finally:
-            await cleanup()
+            async with session_factory() as session:
+                await session.execute(
+                    delete(SecurityAuditEvent).where(
+                        SecurityAuditEvent.actor_user_id.in_(
+                            [f"send-user-{scope_suffix}", f"send-peer-{scope_suffix}"]
+                        )
+                    )
+                )
+                await session.commit()
     finally:
         await engine.dispose()
 
-    assert first.allowed is True
-    assert second.allowed is False
-    assert actions == [
+
+@pytest.mark.postgres
+@pytest.mark.asyncio
+async def test_real_postgres_concurrent_quota_isolates_each_scope_dimension(
+    migrated_limiter_sessions,
+):
+    """Missing locks or a missing scope dimension must violate the 10/20 result."""
+    session_factory, scope_suffix = migrated_limiter_sessions
+    contexts = [
+        _context(f"send-user-{scope_suffix}", "send-org", "send-workspace"),
+        _context(f"send-peer-{scope_suffix}", "send-org", "send-workspace"),
+        _context(f"send-user-{scope_suffix}", "send-other-org", "send-workspace"),
+        _context(f"send-user-{scope_suffix}", "send-org", "send-other-workspace"),
+    ]
+    decisions = await asyncio.gather(
+        *(
+            limiter_module.enforce_send_email_rate_limit(context)
+            for context in contexts
+            for _ in range(20)
+        )
+    )
+    for scope_index, context in enumerate(contexts):
+        scope_decisions = decisions[scope_index * 20 : (scope_index + 1) * 20]
+        assert sum(decision.allowed for decision in scope_decisions) == 10
+        async with session_factory() as session:
+            action_counts = dict(
+                (
+                    await session.execute(
+                        select(SecurityAuditEvent.event_action, func.count())
+                        .where(
+                            SecurityAuditEvent.actor_user_id == context.user_id,
+                            SecurityAuditEvent.organization_id
+                            == context.organization_id,
+                            SecurityAuditEvent.workspace_id == context.workspace_id,
+                        )
+                        .group_by(SecurityAuditEvent.event_action)
+                    )
+                ).all()
+            )
+        assert action_counts == {
+            "email_send_rate_limit.allowed": 10,
+            "email_send_rate_limit.quota_exhausted": 1,
+        }
+
+
+@pytest.mark.postgres
+@pytest.mark.asyncio
+async def test_real_postgres_window_expires_on_database_clock(
+    migrated_limiter_sessions,
+):
+    """Wait the real production window; no reduced quota or injected timestamp."""
+    session_factory, scope_suffix = migrated_limiter_sessions
+    context = _context(f"send-user-{scope_suffix}")
+    for _ in range(10):
+        assert (await limiter_module.enforce_send_email_rate_limit(context)).allowed
+    assert not (await limiter_module.enforce_send_email_rate_limit(context)).allowed
+    await asyncio.sleep(61)
+    assert (await limiter_module.enforce_send_email_rate_limit(context)).allowed
+    async with session_factory() as session:
+        actions = (
+            (
+                await session.execute(
+                    select(SecurityAuditEvent.event_action).where(
+                        SecurityAuditEvent.actor_user_id == context.user_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert sorted(actions) == [
         "email_send_rate_limit.allowed",
         "email_send_rate_limit.quota_exhausted",
     ]
+
+
+@pytest.mark.postgres
+@pytest.mark.asyncio
+async def test_cancelled_lock_wait_returns_single_pool_slot(
+    migrated_limiter_sessions,
+    monkeypatch,
+):
+    """A cancelled in-flight reservation must release its connection, not quota."""
+    session_factory, scope_suffix = migrated_limiter_sessions
+    context = _context(f"send-user-{scope_suffix}")
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
+        connect_args={"server_settings": {"application_name": scope_suffix}},
+    )
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", async_sessionmaker(engine))
+    pending_attempt = None
+    try:
+        async with session_factory() as lock_session:
+            scope_hash = limiter_module.rate_limit_scope_hash(
+                context.user_id, context.organization_id, context.workspace_id
+            )
+            await lock_session.execute(
+                select(func.pg_advisory_xact_lock(limiter_module._lock_key(scope_hash)))
+            )
+            pending_attempt = asyncio.create_task(
+                limiter_module.enforce_send_email_rate_limit(context)
+            )
+            async with asyncio.timeout(5):
+                while True:
+                    # Statistics are transaction-cached; refresh the observation
+                    # without releasing the transaction-scoped barrier lock.
+                    await lock_session.execute(select(func.pg_stat_clear_snapshot()))
+                    waiting_count = (
+                        await lock_session.execute(
+                            text(
+                                "SELECT count(*) FROM pg_stat_activity "
+                                "WHERE application_name = :application_name "
+                                "AND wait_event = 'advisory'"
+                            ),
+                            {"application_name": scope_suffix},
+                        )
+                    ).scalar_one()
+                    if waiting_count:
+                        break
+                    await asyncio.sleep(0.01)
+            pending_attempt.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending_attempt
+            assert engine.pool.checkedout() == 0
+            await lock_session.rollback()
+        assert (await limiter_module.enforce_send_email_rate_limit(context)).allowed
+        async with session_factory() as session:
+            assert (
+                await session.execute(
+                    select(func.count())
+                    .select_from(SecurityAuditEvent)
+                    .where(SecurityAuditEvent.actor_user_id == context.user_id)
+                )
+            ).scalar_one() == 1
+    finally:
+        if pending_attempt is not None:
+            pending_attempt.cancel()
+            await asyncio.gather(pending_attempt, return_exceptions=True)
+        await engine.dispose()
+
+
+@pytest.mark.postgres
+@pytest.mark.asyncio
+async def test_signed_send_route_shares_single_pool_slot(
+    migrated_limiter_sessions, monkeypatch
+):
+    """Dropping the request rollback must prevent this signed send from finishing."""
+    _, scope_suffix = migrated_limiter_sessions
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
+    )
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    user_id = f"send-user-{scope_suffix}"
+
+    async def request_session():
+        """Keep the real request session open until the HTTP request exits."""
+        async with session_factory() as session:
+            yield session
+
+    async def smtp_boundary(*, message_params, smtp_config):
+        """Do not send mail; verify only the call at the network boundary."""
+        assert message_params.to_address == "recipient@example.com"
+        assert smtp_config.smtp_server == "mail.example.invalid"
+        assert smtp_config.smtp_username == user_id
+        assert engine.pool.checkedout() == 0
+        return {"status": "sent", "simulated": False}
+
+    monkeypatch.setitem(app.dependency_overrides, get_db, request_session)
+    monkeypatch.setattr(limiter_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(emails_api, "send_email", smtp_boundary)
+    monkeypatch.setattr(
+        emails_api,
+        "validate_smtp_destination",
+        lambda smtp_server, smtp_port: (smtp_server, smtp_port),
+    )
+    token = jwt.encode(
+        {
+            "ver": 1,
+            "iss": "naruon-control-plane",
+            "aud": "naruon-api",
+            "sub": user_id,
+            "role": "member",
+            "org": "send-org",
+            "groups": [],
+            "workspace": "send-workspace",
+            "exp": int(time.time()) + 300,
+        },
+        settings.AUTH_SESSION_HMAC_SECRET.get_secret_value(),
+        algorithm="HS256",
+    )
+    try:
+        async with session_factory() as session:
+            session.add(
+                TenantConfig(
+                    user_id=user_id,
+                    organization_id="send-org",
+                    smtp_port=587,
+                    smtp_server="mail.example.invalid",
+                    smtp_username=user_id,
+                )
+            )
+            await session.commit()
+        async with AsyncClient(
+            transport=ASGITransport(app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/api/emails/send",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "to": "recipient@example.com",
+                    "subject": "Pool regression",
+                    "body": "Body",
+                },
+            )
+        assert response.status_code == 200, response.json()
+        assert response.json() == {"status": "sent", "simulated": False}
+        assert engine.pool.checkedout() == 0
+        async with session_factory() as session:
+            assert (
+                await session.execute(
+                    select(func.count())
+                    .select_from(SecurityAuditEvent)
+                    .where(SecurityAuditEvent.actor_user_id == user_id)
+                )
+            ).scalar_one() == 1
+    finally:
+        try:
+            async with session_factory() as session:
+                await session.execute(
+                    delete(TenantConfig).where(TenantConfig.user_id == user_id)
+                )
+                await session.commit()
+        finally:
+            await engine.dispose()
