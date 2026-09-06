@@ -140,6 +140,22 @@ fi
 
 if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
   case "${GH_SCENARIO:-pass}" in
+    clean_summary_success|clean_summary_skipped|clean_summary_neutral|clean_summary_failure|clean_without_skip_neutral|forged_clean_success|mixed_summary_success|mixed_summary_skipped|mixed_summary_neutral|qualified_summary_success|qualified_but_success)
+      conclusion="${GH_SCENARIO##*_}"
+      app_slug='coderabbitai'
+      summary='No warnings found.'
+      output_text='No actionable comments were generated'
+      case "$GH_SCENARIO" in
+        forged_clean_success) app_slug='github-actions' ;;
+        clean_summary_skipped) summary=$' \tno WARNINGS found! \t\r' ;;
+        clean_summary_neutral) output_text=$'Review skipped\nNo actionable comments were generated' ;;
+        mixed_summary_*) output_text=$'Review skipped\nNo actionable comments were generated\nPre-merge blocking warning' ;;
+        qualified_summary_success) summary='No warnings found except blocking issues' ;;
+        qualified_but_success) summary='No warnings found, but a blocking issue remains' ;;
+      esac
+      jq -cn --arg app_slug "$app_slug" --arg conclusion "$conclusion" --arg summary "$summary" --arg text "$output_text" \
+        '{check_runs:[{name:"CodeRabbit",app:{slug:$app_slug},status:"completed",conclusion:$conclusion,output:{summary:$summary,text:$text}}]}'
+      ;;
     forged_check|forged_check_pending_notice)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"github-actions"},"status":"completed","conclusion":"success"}]}'
       ;;
@@ -536,7 +552,7 @@ assert_coderabbit_pending_waits_without_hard_comment() {
 
 assert_robot_evidence_requires_publisher_and_clean_output() {
   local scenario temp_dir
-  for scenario in forged_check forged_check_pending_notice forged_status forged_status_pending_notice missing_status_creator wrong_status_creator_type; do
+  for scenario in forged_check forged_check_pending_notice forged_status forged_status_pending_notice missing_status_creator wrong_status_creator_type forged_clean_success; do
     temp_dir="$(mktemp -d)"
     run_gate "$scenario" "$temp_dir"
     assert_exit_code 0 "$temp_dir"
@@ -556,6 +572,24 @@ assert_robot_evidence_requires_publisher_and_clean_output() {
     run_gate "$scenario" "$temp_dir"
     assert_exit_code 0 "$temp_dir"
     assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
+}
+
+assert_clean_summaries_preserve_real_blockers() {
+  local scenario temp_dir
+  for scenario in clean_summary_success clean_summary_skipped clean_summary_neutral; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
+  for scenario in clean_summary_failure clean_without_skip_neutral mixed_summary_success mixed_summary_skipped mixed_summary_neutral qualified_summary_success qualified_but_success; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'conclusion=failure' "$temp_dir/gh.log"
     assert_not_in_file '^pr merge' "$temp_dir/gh.log"
   done
 }
@@ -1058,6 +1092,7 @@ assert_existing_marker_comment_is_patched
 assert_resolved_marker_comment_is_updated_on_ready_gate
 assert_coderabbit_pending_waits_without_hard_comment
 assert_robot_evidence_requires_publisher_and_clean_output
+assert_clean_summaries_preserve_real_blockers
 assert_coderabbit_success_commit_status_completes_gate
 assert_coderabbit_pending_commit_status_waits
 assert_coderabbit_failed_commit_status_blocks

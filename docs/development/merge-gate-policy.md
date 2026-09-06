@@ -59,7 +59,9 @@ awaited by default.
   status evidence requires the corresponding exact `[bot]` creator and Bot type.
   Missing or unrelated publishers cannot replace the OpenCode fallback.
   Successful and skipped check conclusions still block when their own output
-  contains the blocking warning/failure evidence described above.
+  contains the blocking warning/failure evidence described above. Exclude only
+  complete known clean lines (`No warnings found` and
+  `No actionable comments were generated`), never the whole containing output.
 - `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are
   addressed or superseded on the current head.
 - Blocker comments use the idempotent
@@ -122,6 +124,18 @@ These are local metadata-gate findings; no protected-branch bypass or malicious
 publication in production was established. Keep the full harness, authoritative
 positive cases, fallback and separate-comment blockers intact when repairing
 this boundary; do not grant another publisher access to silence a wait state.
+
+Review #3944130242 exposed a regression at `b6d6c286`: output-first matching
+also rejected those clean summaries. The new focused harness assertion failed
+before repair. Output is now split into lines before matching whole known
+clean statements; case, surrounding whitespace, CRLF and terminal punctuation
+are covered. An initial whole-string regex attempt still failed and was not
+accepted. Eleven scenarios cover clean success/skipped/neutral, an explicit
+failure despite clean text, a separate real warning for each passing conclusion,
+same-line `except`/`but` qualifications, neutral without skip evidence and an
+untrusted publisher with clean text. Unknown wording remains subject to
+the existing blocker policy; this is not a general natural-language negation
+parser. Publisher authentication and separate-comment evidence are unchanged.
 
 Reference: jqlang. (n.d.). *Regular expressions*. In *jq 1.7 manual*.
 https://jqlang.org/manual/v1.7/#regular-expressions
