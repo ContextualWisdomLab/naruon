@@ -48,15 +48,21 @@ evidence or permission to suppress those diagnostics.
 
 Review `3944626310` later identified that direct use of the two static
 combinators made dashboard startup depend on browser support that the repository
-had never declared. Source-order RED commit
-`d510f5a99cf69f50db3bacfb3105260e78981345` adds a focused regression that
-removes those static methods and requires five dashboard request signals to
-remain cancellable and to abort at the existing 15-second deadline. The
-predecessor implementation calls `AbortSignal.any` unconditionally, so that
-scenario cannot reach the dashboard requests. Causal fix
-`2e937e49ccabda6e848a824d1bc7cee4ceb3ae2c` adds the guarded composition above.
-These commits establish test-first source provenance; they are not themselves a
-claim that hosted CI has executed the final exact head.
+had never declared. MDN marks both static methods as Baseline 2024 but explicitly
+notes that older devices or browsers may not support them. The WHATWG DOM Living
+Standard defines `AbortSignal.any()` as propagating the first source abort reason
+and `AbortSignal.timeout()` as aborting with a `TimeoutError` DOMException. The
+fallback therefore preserves the relevant native contract instead of silently
+changing timeout or cancellation semantics.
+
+Source-order RED commit `d510f5a99cf69f50db3bacfb3105260e78981345`
+adds a focused regression that removes those static methods and requires five
+dashboard request signals to remain cancellable and to abort at the existing
+15-second deadline. The predecessor implementation calls `AbortSignal.any`
+unconditionally, so that scenario cannot reach the dashboard requests. Causal
+fix `2e937e49ccabda6e848a824d1bc7cee4ceb3ae2c` adds the guarded composition
+above. These commits establish test-first source provenance; they are not
+by themselves a claim that hosted CI has executed the final exact head.
 
 ## Follow-up: malformed array members
 
@@ -112,5 +118,7 @@ do not expand this availability repair into a translation framework or redesign.
 MDN contributors. (2026, September 1). *AbortSignal: any() static method*.
 MDN Web Docs. https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/any_static
 
-MDN contributors. (n.d.). *AbortSignal: timeout() static method*. MDN Web Docs.
-https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static
+MDN contributors. (2026, September 1). *AbortSignal: timeout() static method*.
+MDN Web Docs. https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static
+
+WHATWG. (2026, August 25). *DOM Living Standard*. https://dom.spec.whatwg.org/
