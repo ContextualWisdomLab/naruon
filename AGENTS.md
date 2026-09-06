@@ -310,6 +310,27 @@ in this repo.
   skipped PostgreSQL or browser paths as unverified, even when the command exits
   zero. Local tests, protected merge, published release, and live operation are
   separate claims; source/config assertions do not prove network behavior.
+- Track protected source SHA, actual consumer pin, configuration scope and
+  revision, API readback, and the matching execution's run ID, attempt, and
+  terminal result separately. A merged parser fix does not update a repository
+  variable or prove successful dispatch. Retain sanitized evidence for each
+  stage; never include secret values or secret-derived fingerprints.
+- Schema or parser support is not authorization. Before changing an allowlist,
+  read the owner decision and require explicit authorization for the exact
+  principal and resource. Do not infer it from test fixtures or a known bot
+  sender. Keep an unresolved authorization decision pending; do not broaden
+  access to make a check pass. Before restoring an agent-owned temporary
+  change, compare the current value and revision with the recorded write, stop
+  on concurrent drift, and preserve the restoration receipt after readback.
+- GitHub re-runs retain the original `github.actor` privileges and event SHA/ref;
+  `github.triggering_actor` can differ. Inspect which identity fields the exact
+  workflow checks before choosing a re-run. Do not blindly rerun a dispatch
+  whose gate rejects the re-run initiator, and do not treat a re-run as evidence
+  for a newer head. Verify an authorized execution on the intended event/head.
+
+  - GitHub. (n.d.-a). [*Contexts reference*](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context).
+  - GitHub. (n.d.-b). [*Re-running workflows and jobs*](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
+
 - When filtering reviews, bind the root `headRefOid` before iterating
   `.reviews[]`; inside that iterator, `.` is the review, not the PR. A useful
   read-only snapshot is `gh pr view <pr> --repo ContextualWisdomLab/naruon

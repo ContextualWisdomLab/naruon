@@ -89,6 +89,25 @@ def test_agent_guidance_requires_physical_lease_ownership_and_interruption_check
         assert required_phrase in normalized_agents
 
 
+def test_agent_guidance_separates_runtime_evidence_from_authorization() -> None:
+    """Retain the operating procedure without treating prose as a live gate test."""
+    normalized_agents = " ".join(_read("AGENTS.md").lower().split())
+    for required_phrase in (
+        "protected source sha, actual consumer pin",
+        "configuration scope and revision",
+        "api readback",
+        "schema or parser support is not authorization",
+        "explicit authorization for the exact principal and resource",
+        "test fixtures or a known bot sender",
+        "compare the current value and revision",
+        "preserve the restoration receipt",
+        "original `github.actor` privileges",
+        "`github.triggering_actor` can differ",
+        "do not blindly rerun",
+    ):
+        assert required_phrase in normalized_agents
+
+
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     """Repository OpenCode model work must use only the canonical logical pool."""
     raw_config = _read("opencode.jsonc")
