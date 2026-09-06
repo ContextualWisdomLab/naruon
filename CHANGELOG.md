@@ -1,9 +1,5 @@
 ## [Unreleased]
-### URL Codec 및 엄격한 JSON Formatter 도구 (Utility Tools)
-
-- `url_encoder` 및 `url_decoder` 도구를 추가하여 URL 인코딩 및 디코딩을 지원합니다. 모든 변환은 엄격하게 문자열 타입만을 허용하며, 크기 제한(262,144바이트 UTF-8) 및 단일 계층 디코딩을 강제합니다.
-- `json_formatter` 도구를 개선하여 더 엄격한 RFC 8259-style을 적용했습니다. 문자열 타입 입력만을 허용하고, 파싱 전 1MB 크기 제한을 적용하며, 중복된 객체 속성이나 비표준 상수(NaN, Infinity 등)를 거부합니다.
-
+- 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
