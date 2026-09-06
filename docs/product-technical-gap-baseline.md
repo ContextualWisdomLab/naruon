@@ -1,12 +1,51 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.45
+**Baseline version:** 1.46
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-06)
+
+### Security prerequisite adoption and central coverage owner
+
+Governance #1531 at `bd0135de778a01a51deae536084447ce2481280c` normally
+merges its `f2e2ac0e` predecessor with dependency #1244's `156a816c`. Its base
+now names #1244's existing branch, making the prerequisite explicit instead of
+merging a vulnerable foundation first. The four dependency files are identical
+to their owner versions. Full governance harness, 36 source contracts,
+ShellCheck and whitespace checks passed. Its tracked archive passed expanded
+MEDIUM/HIGH/CRITICAL fixable vulnerability/secret/misconfiguration scans with
+11 language manifests and zero findings.
+[Governance adoption receipt](https://github.com/ContextualWisdomLab/naruon/pull/1531#issuecomment-5559910149).
+
+CI #1562 at `cdef60348a7da793a24828ec3d2a1bd6cc680f02` normally merges that
+parent into `0ec1cf92`; only the scanner hash-lock changes because the js-yaml
+repair was already present. Its full harness and 40 source contracts passed.
+The PostgreSQL runner exited 0 with 1,877 passed and two live-endpoint skips
+in 137.75s; task containers, volumes and networks were independently absent.
+Its tracked archive also passed the expanded Medium-or-higher scan with all
+11 language manifests present.
+[CI adoption receipt](https://github.com/ContextualWisdomLab/naruon/pull/1562#issuecomment-5559932952).
+
+SMTP #1417 at `489bcbeaf131da123551a187228862b0e47ad549` normally merges
+that CI parent into `ec3e361d` while preserving SMTP behavior. Its own full
+harness, 40 source contracts and expanded Medium-or-higher tracked-archive
+scan passed; all 11 language manifests were present with zero findings. The
+PostgreSQL runner exited 0 with 1,892 passed and two live-endpoint skips in
+125.69s, followed by independently verified task-resource cleanup.
+[SMTP adoption receipt](https://github.com/ContextualWisdomLab/naruon/pull/1417#issuecomment-5559955413).
+These head-archive checks are not claims about new merge refs or hosted checks.
+
+The canonical scanner-discovery repair is now
+[central #1969](https://github.com/ContextualWisdomLab/.github/pull/1969),
+head `61033f205ce058ac3692260dc7a52e4daf05b64b` against `main@dd0b96fe`.
+It changes the existing PR/scheduled scanners and their contract tests; it is
+Draft and not protected-main evidence. Naruon must not copy those workflows
+or treat a local expanded scan as proof the central gate has adopted the fix.
+Existing UI-test warnings, hosted reviews/checks, immutable release and current
+Visual Inspection remain independent unmet requirements.
 
 ### Combined dependency prerequisite, not protected delivery
 
