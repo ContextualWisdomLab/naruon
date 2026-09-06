@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -157,7 +157,9 @@ function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
 
 import { apiClient } from '@/lib/api-client';
 
-export default function NetworkGraph() {
+// ⚡ Bolt: Wrapped NetworkGraph in React.memo to prevent unnecessary and costly re-instantiations
+// of the vis-network graph when parent components like WorkspaceHome re-render.
+export default memo(function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const unavailableRelationshipDescriptionId = useId();
@@ -478,4 +480,4 @@ export default function NetworkGraph() {
       />
     </div>
   );
-}
+});

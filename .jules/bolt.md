@@ -26,3 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - NetworkGraph component missing memoization
+**Learning:** `NetworkGraph` component in `frontend/src/components/NetworkGraph.tsx` instantiates complex third-party DOM-manipulating libraries (`vis-network`) and maps heavy React components. When the parent component (`WorkspaceHome`) frequently re-renders due to layout state or polling changes, the heavy `NetworkGraph` component will cascade into severe performance bottlenecks, re-instantiating the chart.
+**Action:** Always wrap heavy visualization components that use heavy DOM manipulating libraries like `vis-network` in `React.memo` to prevent costly re-instantiation and layout thrashing.
