@@ -129,6 +129,35 @@ resolved to `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` before pinning.
 Remaining acceptance: exact-head hosted Application CI, independent review,
 protected integration and separately configured live/API/browser evidence.
 
+## Merge-ref dependency follow-up (2026-09-06)
+
+After pushing `ef858172152615d54b393ea3ca5748ab2c4e03db`, GitHub merge ref
+`a7d2d409d146a134817df4c258ece4ab8e171508` has the identical tree
+`67dab67ba5534258c690a110724d9ef6da503623`. The refreshed Trivy HIGH/CRITICAL,
+fixable vulnerability/misconfiguration scan exits 1 for `js-yaml@4.3.0` in
+`frontend/pnpm-lock.yaml` (GHSA-5p4m-2wfm-xmqj); no HIGH/CRITICAL
+misconfiguration is found. A separate secret scan exits zero, not a substitute
+for this dependency gate.
+
+Before integration, the existing dependency owner #1571 was verified at
+`c3cf4efc478a264a0a010df82d1ea90b48776610` on protected `develop`. Its complete
+three-file delta pins patched `4.3.1` using the existing pnpm workspace override,
+regenerates the lock, and adds two executable lock/source conformance tests.
+Choose a normal prerequisite merge, preserving its lock provenance and test;
+do not duplicate the patch, suppress the finding or close its owner. This
+changes development tooling, not a shipped browser YAML parser. Re-run frozen
+installation, frontend tests/lint, full backend evidence and the new merge-tree
+security scan. Earlier-head receipts do not transfer.
+
+The first combined candidate installed the frozen lock and passed all 439
+frontend tests and lint, but `pnpm exec tsc --noEmit` exited 2 with TS1503 at
+`frontend/src/dependency-lock.security.test.ts:30`: the named capture requires
+ES2018 while the product targets ES2017. Record that failed candidate rather
+than calling its Vitest pass complete. Repair the existing #1571 test with an
+equivalent numbered capture; do not raise the product target or rewrite the
+patched lock. Preserve the original prerequisite merge, then integrate that
+owner's ordinary child commit and revalidate the combined tree.
+
 ## References
 
 Docker, Inc. (n.d.). *Docker compose up*. Retrieved September 6, 2026, from
@@ -149,3 +178,7 @@ https://docs.pytest.org/en/stable/how-to/skipping.html
 
 GitHub. (n.d.). *Upload a build artifact* (Version 7.0.1) [Computer software].
 https://github.com/actions/upload-artifact/tree/v7.0.1
+
+nodeca. (2026, July 31). *JS-YAML: Quadratic CPU consumption in !!omap
+resolution (3.x and 4.x)* [Security advisory]. GitHub.
+https://github.com/advisories/GHSA-5p4m-2wfm-xmqj
