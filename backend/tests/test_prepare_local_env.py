@@ -24,12 +24,12 @@ def _run(path: Path, example: Path) -> None:
             sys.executable,
             str(SCRIPT),
             "--path",
-            str(path),
+            path.name,
             "--example",
-            str(example),
+            example.name,
         ],
         check=True,
-        cwd=REPO_ROOT,
+        cwd=path.parent,
     )
 
 
@@ -233,3 +233,36 @@ def test_prepare_local_env_rejects_existing_symbolic_link(tmp_path: Path) -> Non
         _run(path, example)
 
     assert target.read_text(encoding="utf-8") == "OPERATOR_VALUE=preserve\n"
+
+def test_prepare_local_env_rejects_output_outside_project_root(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".env.example").write_text("POSTGRES_DB=ai_email\n", encoding="utf-8")
+    outside = tmp_path / "outside.env"
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--path", str(outside)],
+        cwd=project,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert not outside.exists()
+
+
+def test_prepare_local_env_rejects_template_outside_project_root(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside.example"
+    outside.write_text("POSTGRES_DB=ai_email\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--example", str(outside)],
+        cwd=project,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert not (project / ".env").exists()

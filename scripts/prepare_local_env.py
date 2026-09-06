@@ -156,14 +156,32 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _project_local_path(path: Path, project_root: Path) -> Path:
+    """Return a non-symlink path contained by the project root."""
+
+    candidate = path if path.is_absolute() else project_root / path
+    resolved_parent = candidate.parent.resolve()
+    try:
+        resolved_parent.relative_to(project_root)
+    except ValueError as exc:
+        raise ValueError(f"path must stay inside project root: {path}") from exc
+    if candidate.is_symlink():
+        raise ValueError(f"symbolic links are not allowed: {path}")
+    return resolved_parent / candidate.name
+
+
 def main() -> int:
     """Run the local environment preparation command."""
 
-    args = _parser().parse_args()
+    parser = _parser()
+    args = parser.parse_args()
     try:
-        prepare_local_env(args.path, args.example)
-    except OSError as exc:
-        _parser().error(str(exc))
+        project_root = Path.cwd().resolve()
+        path = _project_local_path(args.path, project_root)
+        example = _project_local_path(args.example, project_root)
+        prepare_local_env(path, example)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
     return 0
 
 
