@@ -235,6 +235,18 @@ in this repo.
 
 #### Verification and protected landing
 
+- 보안 검사 exit 0만으로 전체 범위를 검증했다고 쓰지 않는다. exact-head
+  결과의 실제 manifest 목록에 예상 잠금 파일이 있는지 확인한다. 기본
+  탐지에서 빠지는 `requirements-*.txt`도 포함하고 취약 버전 RED와 수정
+  버전 GREEN을 비교한다. 중앙 탐지 수정은
+  [#1969](https://github.com/ContextualWisdomLab/.github/pull/1969), 의존성
+  통합 근거는 [#1244](https://github.com/ContextualWisdomLab/naruon/pull/1244)이며,
+  열린 PR을 보호 브랜치 반영으로 취급하지 않는다.
+- lint/test exit 0과 경고 없는 검증을 구분한다. `eslint --max-warnings 0`과
+  원래 출력을 유지하는 React 경고 spy·단언으로 실패를 재현한다. 비동기
+  렌더와 입력 이벤트는 `await act`로 기다리며 `console.error`를 끄지 않는다.
+  [#1245](https://github.com/ContextualWisdomLab/naruon/pull/1245)의 수리처럼
+  남은 다른 화면의 경고와 커버리지 부족은 별도 미완료 항목으로 기록한다.
 - Tests invoked with `--noconftest` must bootstrap every required setting in
   the test or trusted workflow step. Use explicit test-only values and fresh
   random secrets; do not weaken production validation or depend on a developer
