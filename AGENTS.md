@@ -299,6 +299,9 @@ in this repo.
   and base, live rulesets, required checks, unresolved threads, and applicable
   current-head CodeRabbit or structured OpenCode fallback evidence. After the
   merge, verify the merge commit and protected target branch.
+  Read each job's name alongside its ID, head SHA, status, and conclusion so a
+  successful `Detect changed scope` job is never counted as the later
+  dependency-review or security job's success, even within the same run.
 - Never authenticate review evidence by its display name or status context.
   Verify the check App or exact Bot creator against the owner contract; reject
   missing or unrelated publishers. Inspect blocking output even when the check
