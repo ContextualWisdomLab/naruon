@@ -86,9 +86,11 @@ receipt. A fresh authorized execution on repaired source and its exact-job
 callback remain required; unrelated CodeQL success or rerunning historical
 source does not establish repair. [Exact failure and lineage inspection](https://github.com/ContextualWisdomLab/naruon/pull/1564#issuecomment-5559002855).
 
-Visual inspection of this ledger revision remains **unverified**: the Mac is
-locked and requires manual unlock. Prior desktop/narrow AGENTS screenshots
-apply only to their recorded unchanged head, not this revision or product UI.
+Historical visual limitation: the Mac was locked when baseline 1.39 was
+first committed. After unlock, its `a508e543` desktop heading and visible
+release-ordering section were inspected; [the exact-head receipt](https://github.com/ContextualWisdomLab/naruon/pull/1557#issuecomment-5559170163)
+records the bounded result. Neither that screenshot nor prior AGENTS captures
+certify a later revision, the entire document, or product UI.
 
 Reference: GitHub. (n.d.). *Control the concurrency of workflows and jobs*.
 Retrieved September 6, 2026, from
