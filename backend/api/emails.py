@@ -3,8 +3,10 @@ from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import selectinload
 from db.session import get_db
-from db.models import Email
+from db.models import Attachment, Email
+from api.data import _opaque_asset_key
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -165,6 +167,32 @@ def _email_list_item(
     )
 
 
+def _mail_attachment_load_option():
+    """Load only metadata required to render mail attachment references."""
+
+    return selectinload(Email.attachments).load_only(
+        Attachment.filename,
+        Attachment.parser_key,
+        raiseload=True,
+    )
+
+
+def _mail_attachment_refs(email: Email) -> list["EmailAttachmentRef"]:
+    """Return opaque, display-safe attachment refs for one scoped email."""
+
+    refs: list[EmailAttachmentRef] = []
+    for attachment in getattr(email, "attachments", None) or []:
+        file_name = _safe_email_display_text(getattr(attachment, "filename", None))
+        refs.append(
+            EmailAttachmentRef(
+                asset_key=_opaque_asset_key(email, attachment),
+                file_name=file_name or "email attachment",
+                parser_family=str(getattr(attachment, "parser_key", "") or "") or None,
+            )
+        )
+    return refs
+
+
 def _email_detail_response(email: Email) -> "EmailDetailResponse":
     return EmailDetailResponse(
         id=email.id,
@@ -178,6 +206,7 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
         thread_id=canonical_thread_key(email),
         in_reply_to=email.in_reply_to,
         references=email.references,
+        attachments=_mail_attachment_refs(email),
     )
 
 
@@ -197,6 +226,14 @@ class EmailListItem(BaseModel):
     schedule_conflict: bool = False
 
 
+class EmailAttachmentRef(BaseModel):
+    """Opaque mail-attachment handle that opens the read-only preview contract."""
+
+    asset_key: str
+    file_name: str
+    parser_family: str | None = None
+
+
 class EmailDetailResponse(BaseModel):
     id: int
     message_id: str
@@ -211,6 +248,7 @@ class EmailDetailResponse(BaseModel):
     references: str | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
+    attachments: list[EmailAttachmentRef] = Field(default_factory=list)
 
 
 class UniqueThreadCandidateRequest(BaseModel):
@@ -645,7 +683,9 @@ async def get_email(
 ):
     # Ensure auth context validates the request payload and scopes access
     result = await db.execute(
-        select(Email).where(
+        select(Email)
+        .options(_mail_attachment_load_option())
+        .where(
             Email.id == email_id,
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
         )
@@ -668,6 +708,7 @@ async def get_email_thread(
     lookup_values = thread_lookup_values(thread_id)
     result = await db.execute(
         select(Email)
+        .options(_mail_attachment_load_option())
         .where(
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             or_(

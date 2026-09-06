@@ -1,3 +1,10 @@
+/** Opaque mail-attachment handle that opens the read-only preview contract. */
+export interface MailAttachmentRef {
+  asset_key: string;
+  file_name: string;
+  parser_family: string | null;
+}
+
 export interface ThreadEmailData {
   id: number;
   subject: string | null;
@@ -9,6 +16,7 @@ export interface ThreadEmailData {
   message_id?: string | null;
   in_reply_to?: string | null;
   references?: string | null;
+  attachments?: MailAttachmentRef[];
 }
 
 export interface ReplyPayload {

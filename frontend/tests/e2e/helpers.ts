@@ -24,6 +24,12 @@ const sibling = {
   body: '파트너 미팅 전까지 일정 확인이 필요합니다.',
 };
 
+const mailHwpxAttachment = {
+  asset_key: 'asset_mail_hwpx_recognized',
+  file_name: 'decision.hwpx',
+  parser_family: 'hwpx',
+};
+
 const sentEmail = {
   ...email,
   id: 31,
@@ -980,12 +986,17 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
     }
 
     if (path === '/api/emails/7') {
-      await fulfillJson(route, email);
+      await fulfillJson(route, { ...email, attachments: [mailHwpxAttachment] });
       return;
     }
 
     if (path === '/api/emails/thread/thread-q2') {
-      await fulfillJson(route, { thread: [email, sibling] });
+      await fulfillJson(route, {
+        thread: [
+          { ...email, attachments: [mailHwpxAttachment] },
+          { ...sibling, attachments: [] },
+        ],
+      });
       return;
     }
 
@@ -1320,6 +1331,20 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
           parser_family: null,
           paragraph_texts: ['# Q2 roadmap', 'Ship the buyer-visible Data room.'],
           preview_text: '# Q2 roadmap\n\nShip the buyer-visible Data room.',
+          next_action: 'read_recognized_text',
+          error_code: null,
+          provider_write_executed: false,
+        });
+        return;
+      }
+      if (assetKey === 'asset_mail_hwpx_recognized') {
+        await fulfillJson(route, {
+          asset_key: 'asset_mail_hwpx_recognized',
+          asset_type: 'email_attachment',
+          preview_state: 'recognized',
+          parser_family: 'hwpx',
+          paragraph_texts: ['Quarterly decision record', 'Approve the next action.'],
+          preview_text: 'Quarterly decision record\n\nApprove the next action.',
           next_action: 'read_recognized_text',
           error_code: null,
           provider_write_executed: false,

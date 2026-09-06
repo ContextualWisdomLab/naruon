@@ -188,6 +188,7 @@ traceability, not a substitute for current-head gates.
 | Deferred HWPX worker selection and local execution | `backend/services/newsdom_worker.py` | `test_hwpx_worker.py` | Active stacked PR #1373 |
 | Parsed attachment text + graph provenance | shared content-graph landing path | HWPX worker + recognizer tests | Active stacked PR #1373 |
 | Buyer-visible recognized HWPX paragraph preview | `backend/services/repository_asset_preview.py`, Data attachment view | `test_repository_asset_preview.py`, `RepositoryAssetPreviewPanel.test.tsx` | Active stacked preview PR |
+| Mail-detail HWPX preview via the same read-only contract | `backend/api/emails.py`, `MailAttachmentPreview` | `test_email_attachment_preview.py`, `MailAttachmentPreview.test.tsx` | Active stacked mail preview PR |
 | Binary HWP conversion | future sandboxed converter | none yet | Planned / out of this slice |
 | HWPX tables, images, layout fidelity | future bounded recognizers | none yet | Planned / out of this slice |
 | Protected-`develop` shipped HWP/HWPX recognition | protected branch | integrated release gates | Not yet shipped |
@@ -218,6 +219,19 @@ This presentation layer follows the same document-structure authority as the
 recognizer: KS X 6101/OWPML section and paragraph order is already persisted,
 and the UI only reads that order (Korean Agency for Technology and Standards,
 2024; Hancom Tech, 2025b, 2025c).
+
+## Buyer-visible mail attachment preview — stacked on PR #1404
+
+Recognized HWPX text that is only reachable from Data is not the core mail
+attachment experience. This slice lists the current email's attachments with
+the same opaque `asset_key` and opens the existing read-only preview contract.
+It does not reconstruct tables or images, convert binary HWP, call a model or
+NewsDOM, or change #1353/#1373/#1404 recognition or preview semantics.
+
+Pending HWPX still means wait or choose another file. Failed or unavailable
+preview still means choose another file. Missing text is never presented as
+empty document content. Unknown and cross-workspace resources remain one
+indistinguishable 404.
 
 ## Out of scope
 

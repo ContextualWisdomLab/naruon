@@ -16,8 +16,10 @@ import {
   buildReplyPayload,
   formatEmailDate,
   getConversationMessages,
+  type MailAttachmentRef,
   type ThreadEmailData,
 } from "@/lib/email-threading";
+import { MailAttachmentPreview } from "@/components/MailAttachmentPreview";
 import { toMailBodyText, toMailDisplayText } from "@/lib/mail-text";
 import { toConfidencePercent } from "@/lib/confidence";
 import {
@@ -29,6 +31,7 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  attachments?: MailAttachmentRef[];
 };
 interface LlmData {
   summary: string;
@@ -651,6 +654,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       <Separator />
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
+
+          <MailAttachmentPreview attachments={email.attachments ?? []} />
 
           <DecisionPointCard
             title="맥락 종합"
