@@ -91,6 +91,18 @@ The four-workflow stacked-base regression lives in
 collects it; the root-level copy was moved, not discarded or duplicated.
 Local harness evidence is not a hosted approval or protected merge.
 
+Review finding #3939597997 exposed a second stale-notice path at
+`e058f3ead35f9a19d3c3b20c6ab5fc04d2e2cbb2`: a successful current-head
+CodeRabbit check or status was overwritten by an `in_progress` governance
+result solely because its issue comment still carried the pending notice.
+The new success-check fixture failed the expected ready assertion; the fake
+publisher explicitly emitted `in_progress`. Pending notices now add a wait
+only when CodeRabbit check/status evidence is absent and no qualifying
+OpenCode approval exists. Existing pending/failed check handling and separate
+substantive-comment blockers remain authoritative. The full shell harness
+covers success checks and success statuses with stale notices separately;
+the notice-only waiting fixture now correctly contains no check evidence.
+
 Reference: jqlang. (n.d.). *Regular expressions*. In *jq 1.7 manual*.
 https://jqlang.org/manual/v1.7/#regular-expressions
 

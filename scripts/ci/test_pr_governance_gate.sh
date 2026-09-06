@@ -143,7 +143,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|missing_coderabbit_adversarial_approval_with_pending_notice|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown)
+    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|missing_coderabbit_adversarial_approval_with_pending_notice|coderabbit_approval_pending|coderabbit_status_success_with_pending_notice|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -170,7 +170,7 @@ fi
 
 if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/status ]]; then
   case "${GH_SCENARIO:-pass}" in
-    coderabbit_status_success)
+    coderabbit_status_success|coderabbit_status_success_with_pending_notice)
       printf '{"statuses":[{"context":"CodeRabbit","state":"success","description":"Review approved","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
       ;;
     coderabbit_status_pending)
@@ -252,7 +252,7 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
       coderabbit_no_actionable_with_blocker)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"No actionable comments were generated in the recent review. Blocking issue remains on 0123456789abcdef0123456789abcdef01234567."}]'
         ;;
-      coderabbit_approval_pending|missing_coderabbit_adversarial_approval_with_pending_notice)
+      coderabbit_approval_pending|missing_coderabbit_adversarial_approval_with_pending_notice|coderabbit_check_success_with_pending_notice|coderabbit_status_success_with_pending_notice)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit. \\nCodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} -->\\n<!-- approval_notice_end -->"}]'
         ;;
       coderabbit_approval_pending_with_separate_blocking_warning)
@@ -816,6 +816,19 @@ assert_coderabbit_no_actionable_summary_with_blocker_still_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_coderabbit_success_overrides_stale_pending_notice() {
+  local scenario temp_dir
+  for scenario in coderabbit_check_success_with_pending_notice coderabbit_status_success_with_pending_notice; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+    assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+    assert_not_in_file 'Waiting for CodeRabbit to review the latest commit' "$temp_dir/output.txt"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
+}
+
 assert_coderabbit_approval_pending_waits_without_blocking() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -1016,6 +1029,7 @@ assert_coderabbit_stale_issue_comment_does_not_block
 assert_coderabbit_review_limit_issue_comment_does_not_block
 assert_coderabbit_no_actionable_summary_does_not_block
 assert_coderabbit_no_actionable_summary_with_blocker_still_blocks
+assert_coderabbit_success_overrides_stale_pending_notice
 assert_coderabbit_approval_pending_waits_without_blocking
 assert_coderabbit_approval_pending_notice_does_not_hide_separate_blocking_warning
 assert_coderabbit_current_review_comment_blocks
