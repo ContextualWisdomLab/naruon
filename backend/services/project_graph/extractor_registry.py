@@ -12,8 +12,8 @@ seam:
   per the platform plan's ``kg.extractor`` extension point) register without
   editing core ingest,
 * :func:`resolve_extractor_chain` / :func:`run_extraction`, which build an
-  ordered fallback chain whose **terminal element is always the deterministic
-  keyword extractor** — encoding "rule-based extraction is fallback/reference
+  ordered fallback chain whose terminal element is the deterministic
+  reference extractor — encoding "rule-based extraction is fallback/reference
   only" structurally rather than in an ad-hoc branch.
 
 Routing LLM extraction through **contextual-orchestrator** is modelled as a
@@ -113,7 +113,7 @@ class KgExtractor(Protocol):
 
 
 class DeterministicKeywordExtractor:
-    """The deterministic keyword baseline — the structural fallback extractor.
+    """The deterministic keyword reference extractor and last-resort fallback.
 
     Pure and dependency-free: it needs no credentials and always produces a
     result, which is exactly why the registry keeps it as the terminal element
@@ -177,13 +177,13 @@ class LlmGroundedExtractor:
 
 
 class KgExtractorRegistry:
-    """Selector-keyed registry of extractors with a guaranteed keyword fallback.
+    """Selector-keyed registry with a guaranteed reference-only fallback.
 
     The registry is the pluggable seam: a plugin or a new extractor registers a
     :class:`KgExtractor` under a selector key and becomes selectable via
     ``PROJECT_GRAPH_EXTRACTOR`` without touching the ingest pipeline. Chain
-    resolution always appends the deterministic keyword extractor as the
-    terminal fallback.
+    resolution always appends the deterministic reference extractor as the
+    terminal fallback; it is never the default judgment source.
     """
 
     def __init__(self) -> None:

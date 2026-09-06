@@ -107,18 +107,18 @@ class Settings(BaseSettings):
     PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
     # Which extractor projects segments into the graph, resolved through the
     # named+versioned KG extractor seam (services/project_graph/extractor_registry):
-    #   "keyword"      — deterministic baseline (the structural fallback),
+    #   "keyword"      — explicit deterministic reference extractor only,
     #   "llm"          — grounded LLM extraction (enforced segment citations),
     #   "orchestrator" — the same grounded LLM extraction routed through the
     #                    contextual-orchestrator gateway (see below).
-    # Every selection falls back to "keyword" on any failure, so rule-based
-    # extraction stays fallback/reference only.
-    PROJECT_GRAPH_EXTRACTOR: str = "keyword"
+    # Grounded extraction is the default; "keyword" remains an explicit
+    # diagnostic/reference choice and a last-resort fallback.
+    PROJECT_GRAPH_EXTRACTOR: str = "orchestrator"
     # OpenAI-compatible base URL of the contextual-orchestrator LLM gateway that
     # grounded extraction is routed through when PROJECT_GRAPH_EXTRACTOR is
     # "orchestrator". Must be HTTPS and exact-host allowlisted by
     # ALLOWED_LLM_BASE_URL_HOSTS (enforced by build_llm_provider_http_client);
-    # unset routing fails closed to the deterministic keyword extractor. The
+    # unset routing fails closed to the deterministic reference extractor. The
     # provider API key remains the tenant's Fernet-encrypted credential.
     PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: str | None = None
     DATA_REGION: str = "kr"
@@ -132,7 +132,9 @@ class Settings(BaseSettings):
     )
 
     # OpenAI Settings
+    OPENAI_API_KEY: SecretStr | None = None
     OPENAI_BASE_URL: str | None = None
+    OPENAI_EMBEDDING_BASE_URL: str | None = None
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
 

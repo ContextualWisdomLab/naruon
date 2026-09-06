@@ -92,6 +92,11 @@ mail/calendar/file systems.
   on the allowlisted hostname.
 - Session authority is assigned by the verified HMAC or OIDC code path, not by a
   `_session_verifier` JWT payload claim supplied inside the token.
+- Production membership authentication is expected to use the ecosystem's
+  [Keyverse OIDC/JWKS identity provider](https://github.com/ContextualWisdomLab/keyverse).
+  Configure `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_JWKS_URL`, and
+  `ALLOWED_OIDC_HOSTS` together; the local HMAC session is for controlled smoke
+  tests and is not authoritative cross-workspace membership evidence.
 
 ## Agentic Ontology & Auto-Organization
 
@@ -173,69 +178,38 @@ python3 -m webbrowser http://localhost:3000
 
 ### Apple Silicon / MLX local path (OS별 로컬 API 모델 서버 사용)
 
-기본 `docker-compose.yml`는 Linux Ollama 컨테이너를 그대로 유지합니다. Apple Silicon
-로컬 실 테스트(또는 외부 MLX/OpenAI-compatible 서비스)만 분리하려면 임시 오버라이드 파일을 붙여 실행합니다.
+macOS에서는 `./scripts/naruon_compose.sh`가 OpenAI-compatible 엔드포인트를
+`mlx-lm → llama.cpp → Ollama` 순서로 확인합니다. 먼저 응답하는 호스트 런타임을
+사용하고, 모두 없으면 기존 Ollama 컨테이너를 그대로 빌드·기동합니다.
 
 ```bash
-# 다음 블록은 로컬 실사용 검증용 샘플입니다. 민감한 쿼리로 대체할 수 있지만,
-# 현재 실검증에서는 아래 두 키워드로 테스트합니다.
-cat > .env.mlx <<'EOF'
+# mlx-lm은 서비스로 유지한다. 기본 포트는 8080이다.
+brew services start mlx-lm
+curl -sf http://127.0.0.1:8080/v1/models | head
 
-# 기존 보안값은 그대로 두고, 로컬 모델 경로만 오버라이드
-OPENAI_API_KEY=mlx
-ALLOWED_LLM_BASE_URL_HOSTS=localhost,127.0.0.1,host.docker.internal
-ALLOW_LOCAL_LLM_PROVIDERS=true
-OPENAI_BASE_URL=http://host.docker.internal:11434/v1
-OPENAI_EMBEDDING_MODEL=embeddinggemma
-OPENAI_MODEL=gemma4:e2b-it-qat
-# 포트 충돌이 있으면 아래 두 값으로 변경
-NARUON_FRONTEND_HOST_PORT=127.0.0.1:3000
-NARUON_BACKEND_HOST_PORT=127.0.0.1:8000
-# Linux에서만 host-gateway가 필요합니다.
-NARUON_MLX_EXTRA_HOSTS=host-gateway
-NARUON_MLX_ALLOWED_LLM_BASE_URL_HOSTS=localhost,127.0.0.1,host.docker.internal
-NARUON_MLX_OPENAI_API_KEY=mlx
-NARUON_MLX_BASE_URL=http://host.docker.internal:11434/v1
-NARUON_MLX_EMBEDDING_MODEL=embeddinggemma
-NARUON_MLX_LLM_MODEL=gemma4:e2b-it-qat
-EOF
+./scripts/naruon_compose.sh up -d --build
+```
 
-# 로컬에서만 쓰는 compose 오버라이드는 임시 파일로 만들고 커밋하지 않습니다.
-# OS 분기 없이 환경변수 하나로 host.docker.internal 매핑을 제어합니다.
-# Linux에서 host-gateway가 필요한 환경이면 .env.mlx에서 NARUON_MLX_EXTRA_HOSTS를 덮어씁니다.
-# Apple Silicon 검증 기준: 백엔드는 host.docker.internal:11434의 MLX(OpenAI-compatible)
-# 엔드포인트로 바로 연결해 Ollama 컨테이너 의존을 피합니다.
-mlx_compose_override="$(mktemp "${TMPDIR:-/tmp}/docker-compose.mlx.XXXXXX.yml")"
-cat > "$mlx_compose_override" <<'EOF'
-services:
-  backend:
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      ALLOW_LOCAL_LLM_PROVIDERS: "true"
-      ALLOWED_LLM_BASE_URL_HOSTS: ${NARUON_MLX_ALLOWED_LLM_BASE_URL_HOSTS:-localhost,127.0.0.1,host.docker.internal}
-      OPENAI_API_KEY: ${NARUON_MLX_OPENAI_API_KEY:-mlx}
-      OPENAI_BASE_URL: ${NARUON_MLX_BASE_URL:-http://host.docker.internal:11434/v1}
-      OPENAI_EMBEDDING_MODEL: ${NARUON_MLX_EMBEDDING_MODEL:-embeddinggemma}
-      OPENAI_MODEL: ${NARUON_MLX_LLM_MODEL:-gemma4:e2b-it-qat}
-    extra_hosts:
-      - "host.docker.internal:${NARUON_MLX_EXTRA_HOSTS:-host.docker.internal}"
-    ports:
-      - "${NARUON_BACKEND_HOST_PORT:-127.0.0.1:8000}:8000"
-  frontend:
-    ports:
-      - "${NARUON_FRONTEND_HOST_PORT:-127.0.0.1:3000}:3000"
-EOF
+기본 모델/주소를 바꿀 때는 `NARUON_MLX_BASE_URL`, `NARUON_MLX_LLM_MODEL`,
+`NARUON_MLX_EMBEDDING_MODEL`을 설정합니다. llama.cpp는
+`NARUON_LLAMA_CPP_BASE_URL`을 사용하며 기본 포트는 8081입니다. 별도
+EmbeddingGemma 서버가 `NARUON_MLX_EMBEDDING_BASE_URL` 또는
+`NARUON_LLAMA_CPP_EMBEDDING_BASE_URL`로 지정되면 MLX/llama.cpp chat 경로와
+분리해 검색·임포트에 연결하고, 지정하지 않으면 기본 8082 embedding endpoint를
+자동 탐색합니다. 자동 선택을 무시하려면
+`NARUON_COMPOSE_LLM_RUNTIME=mlx|llama.cpp|ollama`를 지정합니다.
 
-NARUON_ENV_FILE=.env.mlx \
-docker compose --env-file .env.mlx -f docker-compose.yml -f "$mlx_compose_override" up -d --build
+EmbeddingGemma 후보는 `llmfit info taide/embeddinggemma-GTAIDE-300m-2605 --json`
+으로 현재 장비 적합성을 확인합니다. 실제 embedding-capable llama.cpp 캐시를
+준비하고 확인하려면 다음을 실행합니다. 이 서버는 chat fallback과 포트를 분리한
+embedding 전용 예시입니다.
 
-# 혹시 모델 엔드포인트 미노출이 있을 경우는 위 명령 직전에 로컬 MLX 서버/게이트웨이를
-# 먼저 확인합니다. (호스트는 본인 환경별로 달라질 수 있음)
-curl -sf http://127.0.0.1:11434/v1/models >/dev/null && \
-  echo "MLX/OpenAI-compatible server is reachable" || \
-  echo "MLX endpoint is not reachable on 127.0.0.1:11434"
+```bash
+llama-server -hf ggml-org/embeddinggemma-300M-GGUF:Q8_0 \
+  --embeddings --alias embeddinggemma --host 127.0.0.1 --port 8082
+curl -sf http://127.0.0.1:8082/v1/embeddings \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"ggml-org/embeddinggemma-300M-GGUF:Q8_0","input":["embedding smoke"]}'
 ```
 
 실 메일 임포트 + 요약/초안 검증:
@@ -249,26 +223,22 @@ if [ ! -r "$MAIL_DIR" ]; then
   exit 1
 fi
 
-AUTH_SESSION_HMAC_SECRET="$(grep -E '^AUTH_SESSION_HMAC_SECRET=' .env | cut -d= -f2-)"
+LIVE_E2E_SESSION_SECRET="$(sed -n 's/^AUTH_SESSION_HMAC_SECRET=//p' .env)" \
 python3 backend/scripts/private_mail_http_smoke.py \
   --mail-dir "$MAIL_DIR" \
   --base-url http://127.0.0.1:3000 \
   --frontend-base-url http://127.0.0.1:3000 \
   --api-base-url http://127.0.0.1:8000 \
-  --session-secret "$AUTH_SESSION_HMAC_SECRET" \
   --query "중공업 전력PU 회의록" \
   --query "중공업 기전PU 회의록" \
   --match-mode all-terms \
   --limit 20 \
   --batch-size 6 \
   --require-browser-visible \
-  --llm-smoke \
-  --print-session-token
+  --llm-smoke
 ```
 
-`--print-session-token`이 켜진 경우 스크립트가 같은 토큰을 브라우저로 전파하는
-`/auth/session` 호출 예시를 출력합니다. 위 출력의 JS 한 줄을 앱 콘솔에서 실행하면
-`naruon_session` 쿠키가 갱신되어 API로 임포트한 메일이 브라우저와 동일 세션에서 보입니다.
+`LIVE_E2E_SESSION_SECRET`는 프로세스 환경변수로만 전달되며 세션 토큰은 출력하지 않습니다.
 `session_check=ok` 로그는 세션 클레임이 브라우저에서 확인되었음을 뜻하고,
 `session_check=failed(...)`는 토큰 검증/클레임 파싱 문제가 있음을 뜻합니다.
 `--require-browser-visible`은 동일 토큰을 `Cookie: naruon_session=...`로 주입해
@@ -292,20 +262,23 @@ python3 backend/scripts/private_mail_http_smoke.py \
    브라우저 세션 값(`session_check=ok`)이 스크립트 출력에 남아있는지 확인
    - 브라우저에서 동일 이메일을 선택한 뒤 LLM 요약/초안 버튼 동작 확인
 5) 세션 불일치 의심 시 `session_check=failed(...)` 또는 `session_check=skipped(...)`가
-   출력되면 `--print-session-token`의 콘솔 스니펫을 다시 실행하고 새로고침 후 2~4단계를 반복
+   출력되면 같은 `LIVE_E2E_SESSION_SECRET` 환경변수로 smoke를 재실행하고 2~4단계를 반복
 
 실행 전 체크(빠른 사전 진단):
 
 ```bash
-# Podman/Docker 런타임 연결 확인
-podman system connection ls
+# Colima가 제공하는 Docker 런타임 연결 확인
+docker context show
+docker info --format '{{.ServerVersion}} {{.Architecture}}'
 
 # MLX(OpenAI-compatible) 엔드포인트 노출 확인
-curl -sf http://127.0.0.1:11434/v1/models | head
+curl -sf http://127.0.0.1:8080/v1/models | head
 
-# 기존 웹 서비스(Nginx/프록시)가 3000/8000/11434를 가로채고 있지 않은지 확인
+# 기존 웹 서비스(Nginx/프록시)가 3000/8000/8080/8081/11434를 가로채고 있지 않은지 확인
 lsof -iTCP:3000 -sTCP:LISTEN
 lsof -iTCP:8000 -sTCP:LISTEN
+lsof -iTCP:8080 -sTCP:LISTEN
+lsof -iTCP:8081 -sTCP:LISTEN
 lsof -iTCP:11434 -sTCP:LISTEN
 ```
 

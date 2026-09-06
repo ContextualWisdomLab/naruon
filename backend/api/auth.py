@@ -417,20 +417,34 @@ def _reject_signed_session_admin_payload(payload: dict[str, Any]) -> None:
         raise _authentication_error()
 
 
+def _safe_ascii_claim(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    if not value.isascii() or any(
+        ord(character) < 32 or ord(character) == 127 for character in value
+    ):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
 def _required_string_claim(payload: dict[str, Any], name: str) -> str:
-    value = payload.get(name)
-    if not isinstance(value, str) or not value.strip() or not value.isascii():
+    value = _safe_ascii_claim(payload.get(name))
+    if value is None:
         raise _authentication_error()
-    return value.strip()
+    return value
 
 
 def _optional_string_claim(payload: dict[str, Any], name: str) -> str | None:
-    value = payload.get(name)
-    if value is None:
+    raw_value = payload.get(name)
+    if raw_value is None:
         return None
-    if not isinstance(value, str) or not value.strip() or not value.isascii():
+    value = _safe_ascii_claim(raw_value)
+    if value is None:
         raise _authentication_error()
-    return value.strip()
+    return value
 
 
 def _tuple_string_claim(payload: dict[str, Any], name: str) -> tuple[str, ...]:
@@ -441,24 +455,27 @@ def _tuple_string_claim(payload: dict[str, Any], name: str) -> tuple[str, ...]:
         raise _authentication_error()
     normalized: list[str] = []
     for item in value:
-        if not isinstance(item, str) or not item.strip() or not item.isascii():
+        safe_item = _safe_ascii_claim(item)
+        if safe_item is None:
             raise _authentication_error()
-        normalized.append(item.strip())
+        normalized.append(safe_item)
     return tuple(normalized)
 
 
 def _session_audience_claim(payload: dict[str, Any]) -> tuple[str, ...]:
     value = payload.get("aud")
     if isinstance(value, str):
-        if not value.strip() or not value.isascii():
+        safe_value = _safe_ascii_claim(value)
+        if safe_value is None:
             raise _authentication_error()
-        return (value.strip(),)
+        return (safe_value,)
     if isinstance(value, list | tuple):
         normalized: list[str] = []
         for item in value:
-            if not isinstance(item, str) or not item.strip() or not item.isascii():
+            safe_item = _safe_ascii_claim(item)
+            if safe_item is None:
                 raise _authentication_error()
-            normalized.append(item.strip())
+            normalized.append(safe_item)
         return tuple(normalized)
     raise _authentication_error()
 

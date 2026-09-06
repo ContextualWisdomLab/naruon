@@ -70,6 +70,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@db:5432/ai_email
       READONLY_DATABASE_URL: ${READONLY_DATABASE_URL:-}
       DEBUG: "false"
+      ALLOWED_CORS_ORIGINS: ${ALLOWED_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000}
       ALLOW_LOCAL_LLM_PROVIDERS: "true"
       ALLOWED_LLM_BASE_URL_HOSTS: ollama
       # NewsDOM sidecar allowlist. The actual base_url + bearer token are

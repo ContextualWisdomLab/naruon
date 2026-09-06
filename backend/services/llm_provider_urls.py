@@ -16,6 +16,7 @@ LLM_BASE_URL_NOT_ALLOWED = "LLM provider base URL is not allowed"
 _DNS_RESOLUTION_TIMEOUT_SECONDS = 5.0
 _LOCAL_DEV_HOSTNAMES = {"localhost", "localhost.localdomain"}
 _LOCAL_DEV_IP_LITERALS = {"127.0.0.1", "::1"}
+_LOCAL_CONTAINER_HOSTNAMES = {"host.docker.internal"}
 
 
 def _has_url_control_character(value: str) -> bool:
@@ -68,7 +69,10 @@ def _is_allowlisted_local_provider_host(hostname: str) -> bool:
     return (
         settings.ALLOW_LOCAL_LLM_PROVIDERS
         and normalized_hostname in _parse_allowed_hosts()
-        and "." not in normalized_hostname
+        and (
+            "." not in normalized_hostname
+            or normalized_hostname in _LOCAL_CONTAINER_HOSTNAMES
+        )
         and not _is_ip_literal(normalized_hostname)
         and not _looks_like_ip_literal(normalized_hostname)
     )

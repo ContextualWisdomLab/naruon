@@ -254,9 +254,19 @@ def test_compose_wrapper_uses_operator_env_file_without_bulk_secret_injection():
 
     assert "NARUON_ENV_FILE" in wrapper
     assert "${HOME}/.env" in wrapper
-    assert 'docker compose --env-file "${env_file}" "$@"' in wrapper
+    assert 'docker compose --env-file "${env_file}" "${compose_files[@]}" "$@"' in wrapper
     assert "env_file:" not in gateway_compose
     assert "env_file:" not in local_compose
+
+
+def test_macos_compose_keeps_chat_and_embedding_endpoints_separate():
+    wrapper = (REPO_ROOT / "scripts" / "naruon_compose.sh").read_text()
+    macos_compose = (REPO_ROOT / "docker-compose.macos.yml").read_text()
+
+    assert "host_embedding_endpoint_ready" in wrapper
+    assert "NARUON_LLAMA_CPP_EMBEDDING_BASE_URL" in wrapper
+    assert "OPENAI_EMBEDDING_BASE_URL" in macos_compose
+    assert "host.docker.internal:8082/v1" in wrapper or "8082/v1" in wrapper
 
 
 def test_postgres_ha_compose_requires_external_postgres_password():

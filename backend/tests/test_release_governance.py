@@ -1076,7 +1076,19 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "GitHub API request attempt" in workflow
     assert "Trusted governance ref must be a full commit SHA" in workflow
     assert "trusted_archive_candidate" in workflow
+    assert "live pull request base SHA" in workflow
+    assert "Supplied governance base SHA does not match" in workflow
+    assert "Manual governance base SHA must equal" in workflow
     assert "tar -tzf" in workflow
+    assert "PurePosixPath" in workflow
+    assert "member.issym()" in workflow
+    assert "member.islnk()" in workflow
+    assert "member.isdev()" in workflow
+    assert "os.path.commonpath" in workflow
+    assert "if unsafe:" in workflow
+    assert "archive.extractall" in workflow
+    assert "[ -L \"$governance_script\" ]" in workflow
+    assert "tar -xzf \"$trusted_archive\"" not in workflow
     assert "Trusted governance archive materialization attempt" in workflow
     assert "after 4 attempts" in workflow
     assert 'bash "$GOVERNANCE_GATE"' in workflow

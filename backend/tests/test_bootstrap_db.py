@@ -73,6 +73,17 @@ def test_schema_backfill_adds_email_columns(monkeypatch):
     )
 
 
+def test_schema_backfill_targets_the_canonical_email_table(monkeypatch):
+    statements = _get_schema_statements(monkeypatch)
+
+    assert any(
+        "create index if not exists ix_email_records_owner_date" in statement
+        and "on email_records" in statement
+        for statement in statements
+    )
+    assert not any("on emails" in statement for statement in statements)
+
+
 def test_schema_backfill_adds_sender_relationship_columns_and_indexes(monkeypatch):
     statements = _get_schema_statements(monkeypatch)
     assert any(

@@ -15,6 +15,7 @@ import re
 import selectors
 import signal
 import stat
+import sys
 
 # Bandit B404: subprocess is required for the digest-bound verifier process boundary.
 import subprocess  # nosec B404
@@ -28,6 +29,9 @@ MAX_VERIFIER_BYTES = 256 * 1024 * 1024
 VERIFIER_COPY_CHUNK_BYTES = 1024 * 1024
 MAX_STDOUT_BYTES = 64 * 1024
 MAX_STDERR_BYTES = 8 * 1024
+VERIFIER_ENV = {
+    "PATH": os.pathsep.join((str(Path(sys.executable).parent), os.defpath))
+}
 EXIT_USAGE = 64
 EXIT_VERIFIER_UNAVAILABLE = 66
 EXIT_EXECUTION_FAILED = 70
@@ -247,7 +251,7 @@ def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd="/",
-            env={},
+            env=VERIFIER_ENV,
             start_new_session=True,
             close_fds=True,
         )
