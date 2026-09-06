@@ -27,8 +27,8 @@ describe("frontend dependency lock security contract", () => {
 
     const snapshots = lockfile.slice(lockfile.indexOf("\nsnapshots:\n"));
     const eslintConfigSnapshot = snapshots.match(
-      /^\s{2}'@eslint\/eslintrc@[^']+':\n(?<body>(?:\s{4,}.*\n)+)/m,
-    )?.groups?.body;
+      /^\s{2}'@eslint\/eslintrc@[^']+':\n((?:\s{4,}.*\n)+)/m,
+    )?.[1];
 
     expect(eslintConfigSnapshot).toBeDefined();
     expect(eslintConfigSnapshot).toContain("js-yaml: 4.3.1");
