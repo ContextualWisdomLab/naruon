@@ -124,16 +124,13 @@ export function EmailList({
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [emptyStateMode, setEmptyStateMode] = useState<'folder' | 'search'>('folder');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const fetchEmails = useCallback(async (query = "") => {
-    const normalizedQuery = query.trim();
-    setEmptyStateMode(normalizedQuery === "" ? 'folder' : 'search');
     setLoading(true);
     setError(null);
     try {
-      if (normalizedQuery === "") {
+      if (query.trim() === "") {
         setEmails(await fetchFolderEmails(folder));
       } else {
         setIsSearching(true);
@@ -161,6 +158,8 @@ export function EmailList({
         secondaryBadge: '지식 정리',
         focusLabel: '보낸 메일 추적',
         focusText: '응답 대기 스레드와 self-sent 지식 후보를 표시합니다',
+        emptyTitle: '보낸 메일이 없습니다',
+        emptyBody: 'SMTP/IMAP 동기화 후 보낸 스레드와 답변 대기 상태가 표시됩니다.',
       }
     : {
         title: '받은편지함',
@@ -169,21 +168,9 @@ export function EmailList({
         secondaryBadge: '실행 항목',
         focusLabel: '오늘의 판단 포인트',
         focusText: '메일 데이터 기반으로 판단 포인트를 표시합니다',
+        emptyTitle: '맥락 검색 결과가 없습니다',
+        emptyBody: '맥락 검색어를 바꾸거나 메일 동기화 상태를 확인하세요.',
       };
-  const emptyCopy = emptyStateMode === 'search'
-    ? {
-        title: '맥락 검색 결과가 없습니다',
-        body: '맥락 검색어를 바꾸거나 메일 동기화 상태를 확인하세요.',
-      }
-    : folder === 'sent'
-      ? {
-          title: '보낸 메일이 없습니다',
-          body: 'SMTP/IMAP 동기화 후 보낸 스레드와 답변 대기 상태가 표시됩니다.',
-        }
-      : {
-          title: '받은 메일이 없습니다',
-          body: '메일 동기화 후 받은 스레드가 표시됩니다.',
-        };
   const searchBusy = isSearching || loading;
 
   return (
@@ -268,8 +255,8 @@ export function EmailList({
             <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">{error}</div>
           ) : emails.length === 0 ? (
             <div role="status" aria-live="polite" className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-sm text-muted-foreground">
-              <p className="font-bold text-foreground">{emptyCopy.title}</p>
-              <p className="mt-1 text-xs leading-5">{emptyCopy.body}</p>
+              <p className="font-bold text-foreground">{folderCopy.emptyTitle}</p>
+              <p className="mt-1 text-xs leading-5">{folderCopy.emptyBody}</p>
             </div>
           ) : (
             emails.map((email: EmailItem) => (
