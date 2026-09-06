@@ -13,7 +13,3 @@
 ## 2026-06-08 - Accessible Tooltips on Disabled Buttons
 **Learning:** Adding a `title` tooltip directly to a natively `disabled` `<button>` does not work well because disabled buttons are removed from the tab order and ignore pointer events on many platforms, making the tooltip inaccessible to both keyboard-only users and screen readers.
 **Action:** When a disabled button needs a tooltip to explain *why* it is disabled, wrap the button in an accessible container (e.g., `span` or `div` with `tabIndex={0}`), expose the explanation through `aria-describedby`, and keep `title` as a pointer fallback. Also, ensure the button uses `pointer-events-none` so the wrapper can properly catch the hover events.
-
-## 2026-06-08 - Accessible Tooltips on form submit Buttons
-**Learning:** When replacing the `disabled` attribute with `aria-disabled="true"` on `type="submit"` buttons to enhance accessibility, simply returning early in the `onClick` handler is not enough. Without `e.preventDefault()`, the form will still natively submit, leading to bugs.
-**Action:** Always ensure the `onClick` handler explicitly calls `e.preventDefault()` alongside returning early when mitigating form submit buttons with `aria-disabled="true"`.
