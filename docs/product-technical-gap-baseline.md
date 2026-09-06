@@ -1,12 +1,43 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.49
+**Baseline version:** 1.50
 **Observed on:** 2026-09-07 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-07)
+
+### Calendar 브라우저 검사와 고객 표현 Gap
+
+보존 중인 #1569 로컬 통합 head `95dd9e659009061bd0d7fcc9309947623d8b6840`의
+기존 Calendar Playwright 2개 사례를 desktop/tablet/mobile 프로젝트에서
+실행했다. `--workers=1`로 6개 모두 24.9초에 통과했고 프로세스 exit 0을
+확인했다. 서버는 격리된 localhost:18769이며 종료 뒤 listener가 없었다.
+API는 기존 mock을 사용하므로 실제 CalDAV 쓰기나 서버의 인증 검증 근거가
+아니다. 첫 사례는 viewport를 1280×1024와 390×844로 직접 바꾸므로
+프로젝트 이름만으로 세 가지 고유 화면 폭을 검증했다고 계산하지 않는다.
+읽기 전용 사례는 각 프로젝트 viewport를 그대로 사용한다.
+
+이 실행에서 생성된 정상 desktop/mobile, 읽기 전용 tablet/mobile 캡처
+4장을 직접 검사했다. 원본 선택, 읽기 전용 표시와 비활성 버튼은 보였다.
+정상 사례의 가로 넘침·모바일 스크롤 assertion도 통과했다. 그러나 화면에
+`intent`, `ETag`, `If-Match`가 남아 고객에게 내부 구현을 노출한다.
+후속 조치는 이 용어를 사용자 행동·충돌 확인 결과로 바꾸고 접근성 이름과
+E2E 기대값을 함께 검증하는 것이다. 전체 8개 언어, 모든 UI 상태, p95 목표,
+실제 provider 연동이나 AGENTS 최신 렌더 검사를 완료했다고 쓰지 않는다.
+원본 캡처는 작업 증거 디렉터리 `naruon-1569-calendar-e2e-results`에 보존했다.
+외부 삭제 의도 확인 전이므로 이 통합 head의 원격 push는 계속 보류한다.
+
+### 중앙 metadata 검증 범위 수정
+
+[중앙 #1971](https://github.com/ContextualWisdomLab/.github/pull/1971)의
+`8a3c2bb95ee6065c8a15515de3f909d5c476c885`는 API 확인 당시 Draft/open이며
+기존 metadata workflow와 그 테스트, 두 파일을 변경한다. 조정 Agent는
+시간당 metadata 검증의 전체 pytest 호출 하나를 없애고 owner 11파일·60개
+검사는 유지했다고 보고했다. 이 lane의 직접 확인 범위는 PR head·상태·파일
+목록이다. 로컬 수치를 조직 전체 비용 절감률로 바꾸지 않으며, hosted 결과와
+보호 병합 및 별도 concurrency #1899 검증은 미완료로 유지한다.
 
 ### Central scan 실패의 소유 경계
 
