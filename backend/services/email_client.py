@@ -45,6 +45,7 @@ class ValidatedSmtpDestination:
     proto: int
     sockaddr: tuple[Any, ...]
 
+
 @dataclass(frozen=True)
 class EmailMessageParams:
     to_address: str
@@ -53,13 +54,13 @@ class EmailMessageParams:
     in_reply_to: str | None = None
     references: str | None = None
 
+
 @dataclass(frozen=True)
 class SmtpConfig:
     smtp_server: str
     smtp_port: int
     smtp_username: str | None = None
     smtp_password: str | None = None
-
 
 
 def generate_oauth2_string(user: str, access_token: str) -> bytes:
@@ -106,21 +107,15 @@ def _parse_allowed_ports(
 
 
 def _parse_allowed_smtp_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_SMTP_PORTS, "SMTP", SMTP_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_SMTP_PORTS, "SMTP", SMTP_EGRESS_PORTS)
 
 
 def _parse_allowed_imap_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_IMAP_PORTS, "IMAP", IMAP_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_IMAP_PORTS, "IMAP", IMAP_EGRESS_PORTS)
 
 
 def _parse_allowed_pop3_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_POP3_PORTS, "POP3", POP3_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_POP3_PORTS, "POP3", POP3_EGRESS_PORTS)
 
 
 def _parse_allowed_smtp_hosts() -> set[str]:
@@ -565,7 +560,9 @@ def build_email_message(
     message["To"] = _validate_email_header_value(message_params.to_address)
     message["Subject"] = _validate_email_header_value(message_params.subject)
     if message_params.in_reply_to:
-        message["In-Reply-To"] = _validate_email_header_value(message_params.in_reply_to)
+        message["In-Reply-To"] = _validate_email_header_value(
+            message_params.in_reply_to
+        )
     if message_params.references:
         message["References"] = _validate_email_header_value(message_params.references)
     message.set_content(message_params.body)
@@ -595,7 +592,9 @@ async def send_email(
         )
         return {"status": "simulated", "simulated": True}
 
-    smtp_destination = validate_smtp_destination(smtp_config.smtp_server, smtp_config.smtp_port)
+    smtp_destination = validate_smtp_destination(
+        smtp_config.smtp_server, smtp_config.smtp_port
+    )
 
     try:
         smtp_socket = await _connect_validated_smtp_socket(smtp_destination)
