@@ -377,11 +377,13 @@ CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
     | select(
         .app.slug == "coderabbitai"
         or .app.slug == "github-code-quality"
-        or (.name | test("CodeRabbit|coderabbit|GitHub Code Quality|github-code-quality"; "i"))
       )]'
 )"
 CODERABBIT_STATUS_MATCHES="$(printf '%s' "$COMMIT_STATUS_JSON" | jq '
   [.statuses[]
+    | select(.creator.type == "Bot")
+    | select((.creator.login // "" | ascii_downcase) as $login
+        | $login == "coderabbitai[bot]" or $login == "github-code-quality[bot]")
     | select((.context // "") | test("CodeRabbit|coderabbit|GitHub Code Quality|github-code-quality"; "i"))]
   | group_by((.context // "") | ascii_downcase)
   | map(sort_by(.updated_at // .created_at // "") | last)
@@ -420,15 +422,12 @@ else
   CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[]
       | select(.status == "completed")
+      | ([.output.title, .output.summary, .output.text] | map(. // "") | join("\n")) as $check_output
       | select((.conclusion // "") as $conclusion
-        | if $conclusion == "success" or $conclusion == "skipped" then false
+        | if $check_output | test($pattern; "i") then true
+          elif $conclusion == "success" or $conclusion == "skipped" then false
           elif $conclusion == "neutral" then
-            # Skip evidence only counts when the output carries no blocking
-            # language alongside it.
-            (([.output.title, .output.summary, .output.text] | map(. // "") | join("\n")) as $neutral_output
-              | (($neutral_output | test("Review skipped"; "i"))
-                 and (($neutral_output | test($pattern; "i")) | not))
-              | not)
+            ($check_output | test("Review skipped"; "i") | not)
           else true
           end)]
     | length'
