@@ -207,7 +207,7 @@ function SenderDagPanel({
 
   if (relationships.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-background p-4 text-sm font-semibold text-muted-foreground">
+      <div role="status" aria-live="polite" className="rounded-lg border border-border bg-background p-4 text-sm font-semibold text-muted-foreground">
         <p>이 맥락 검색 결과에 연결된 발신자 관계가 아직 없습니다.</p>
         {canCapture ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -617,7 +617,7 @@ export function SearchLayout() {
           {error}
         </div>
       ) : filteredResults.length === 0 ? (
-        <div className="p-5 text-sm font-semibold text-muted-foreground">
+        <div role="status" aria-live="polite" className="p-5 text-sm font-semibold text-muted-foreground">
           맥락 검색 결과가 없습니다.
         </div>
       ) : (

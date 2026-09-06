@@ -352,7 +352,7 @@ export function TasksLayout() {
                 </div>
               </button>
             )) : (
-              <p className="rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">
+              <p role="status" aria-live="polite" className="rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">
                 {taskSearch || priorityFilter !== 'all' ? '필터에 맞는 작업이 없습니다.' : '이 상태의 연결 작업이 없습니다.'}
               </p>
             )}
@@ -384,7 +384,7 @@ export function TasksLayout() {
         <span className={`px-2 py-1 rounded-full text-xs font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-secondary text-secondary-foreground'}`}>{taskStatusLabels[task.status]}</span>
       </button>
     )) : (
-      <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">서명 세션에 연결된 내 작업이 없습니다.</p>
+      <p role="status" aria-live="polite" className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">서명 세션에 연결된 내 작업이 없습니다.</p>
     );
   }, [filteredTicketTasks, setSelectedTaskId, setViewMode, viewMode]);
   const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: TaskViewMode) => {
