@@ -524,14 +524,6 @@ async def test_text_analyzer_tool_success():
 async def test_hash_generator_tool_success():
     from api.tools import hash_generator_handler
 
-    # MD5
-    res = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
-    assert res["hash"] == "5d41402abc4b2a76b9719d911017c592"
-
-    # SHA1
-    res = await hash_generator_handler({"text": "hello", "algorithm": "sha1"})
-    assert res["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
-
     # SHA256 (default)
     res = await hash_generator_handler({"text": "hello"})
     assert res["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"

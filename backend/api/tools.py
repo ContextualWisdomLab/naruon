@@ -763,11 +763,7 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     algorithm = params.get("algorithm", "sha256").lower()
     encoded_text = text.encode("utf-8")
 
-    if algorithm == "md5":
-        digest = hashlib.md5(encoded_text, usedforsecurity=False).hexdigest()
-    elif algorithm == "sha1":
-        digest = hashlib.sha1(encoded_text, usedforsecurity=False).hexdigest()
-    elif algorithm == "sha256":
+    if algorithm == "sha256":
         digest = hashlib.sha256(encoded_text).hexdigest()
     elif algorithm == "sha512":
         digest = hashlib.sha512(encoded_text).hexdigest()
@@ -780,7 +776,7 @@ registry.register(
     ToolInfo(
         code="hash_generator",
         name="해시 생성기 (Hash Generator)",
-        description="입력된 텍스트를 지정된 해시 알고리즘(md5, sha1, sha256, sha512)으로 해싱합니다.",
+        description="입력된 텍스트를 지정된 해시 알고리즘(sha256, sha512)으로 해싱합니다.",
         category="개발자 도구",
         parameters={"text": "string", "algorithm": "string"},
     ),
