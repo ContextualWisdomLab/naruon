@@ -480,6 +480,10 @@ in this repo.
 - 비동기 effect가 있는 React 화면의 첫 렌더도 `await act(async () => ...)`로
   기다린 뒤 단언한다. 테스트 종료 코드만 확인하지 말고, 원래 오류 출력을
   유지하는 spy로 정리 단계까지 `act` 경고가 없는지 검사한다.
+- React 테스트의 상태 갱신 입력은 나중의 버튼 클릭뿐 아니라 native value
+  setter와 `dispatchEvent`도 `await act` 안에서 실행한다. 진단 spy는 원래
+  출력을 유지하고 `act` 경고가 없는지 단언한다. 테스트를 통과시키려고
+  `console.error`를 끄지 않는다.
 - Strix success artifacts must also be scanned for `Timeout`, `Fatal`, `Warn`,
   or `Denied` output before accepting clean evidence. Filter only narrowly known
   third-party Strix internal warnings, such as the
