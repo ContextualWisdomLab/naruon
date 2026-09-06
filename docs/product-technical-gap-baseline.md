@@ -1,10 +1,47 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.31
-**Observed on:** 2026-09-05 (Asia/Seoul)
+**Baseline version:** 1.32
+**Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Import physical-lease and signed backend refresh (2026-09-06):** Existing
+Draft [#1317](https://github.com/ContextualWisdomLab/naruon/pull/1317) now has
+exact head `af362d58190c0bf2ed122d718473fe3c2bd503c4`, tree
+`027eb9d28c2a3677dd11d2ffd878fd4ef1c3fe29`. Its normal merge retains original
+head `1b422f15e6e5f56be679f691c8ff925c9a420fb1` and migration owner #1503
+`19d5860bc27e860acba940390f5792721cd99e5e`; the PR is retargeted to
+`fix/workspace-document-registry-migration` at that exact prerequisite. No valid
+delta or existing migration identifier was removed. The no-DDL
+`0020_merge_import_registry` reconciles both revision branches; local-runtime
+ADR-0001 is Proposed, not protected acceptance.
+
+The clean committed head passes **242 tests, zero failures/errors/skips,
+11.41 s**, after locked dependency sync and fresh/repeated real PostgreSQL
+migrations. It reproduces provider lookup before import with one pool slot,
+actual repeated cancellation and backend termination, simultaneous same-account
+and different-user/organization imports, and an actual signed backend ASGI
+import with unsigned rejection. Connection cleanup and task-only DB/network
+removal were confirmed. No old mocked API fixture name is treated as signed
+DB proof. The public-mail excerpt is anonymized and bounded, not a customer
+inbox or representative performance workload.
+
+| Requirement / owner | Verified scope | Remaining action |
+| --- | --- | --- |
+| PRD: importing or cancelling mail must not strand later imports; Naruon import | Source retained after committed-item interruption; independent replica can reacquire; duplicates and other accounts remain separate | Browser HttpOnly cookie/proxy, deployed interruption and user-visible recovery |
+| TRD: one physical lease covers per-item commits; Naruon import | Native transaction adoption, strict unlock confirmation, repeated-cancel cleanup, no SQL on a replacement connection, owner-scoped new graph IDs | Caller must have only settled/read-only work; flushed/raw-SQL writes are not detected by the pending-ORM guard |
+| CI installation contract; existing #1562 / #1503 owners | Local tests use real migrations, not ORM-only bootstrap | Provision migrated PostgreSQL in existing Application CI owner; no workflow copy or unavailable-DB skip |
+
+- Exact JUnit SHA-256: `238da7ad1c6e772cd087a3576f7c81d4d81780a6f0f0b4b3986a229910da965c`.
+- [Exact-head decision, UML, failure receipts, source attribution and APA references](https://github.com/ContextualWisdomLab/naruon/blob/af362d58190c0bf2ed122d718473fe3c2bd503c4/docs/doctoring/import_lease_lifecycle.md).
+- [Shared migrated-PostgreSQL CI owner request](https://github.com/ContextualWisdomLab/naruon/pull/1562#issuecomment-5557877080).
+
+Focused Ruff and whitespace checks pass. Required hosted checks and qualifying
+review, predecessor-first integration, released owner contracts, actual provider
+embeddings, representative p95, and measured full coverage remain open. The
+existing default-branch dependency alerts are not resolved by this result.
+Hourly instructions preserve these boundaries and their existing schedule.
 
 **Reply-task scheduler and conflict recovery refresh (2026-09-05):** Existing
 Draft [#1486](https://github.com/ContextualWisdomLab/naruon/pull/1486) advances
@@ -86,7 +123,7 @@ final read-only re-review found no remaining actionable finding in that scope.
 | --- | --- | --- |
 | PRD: pending files resume after interruption; Naruon recognition | Independent-replica reacquisition and original-byte retention; unattempted cursor recovery | Signed browser recovery, actionable retry states, live interruption evidence |
 | TRD: lease covers the complete sweep; Naruon worker | One held connection, supported one-slot pool, explicit unlock, fail-closed disconnect | Pool capacity and representative concurrent load; external provider idempotency is not proved |
-| Sibling root repair; import #1317 / scheduler #1486 | #1486 now has its own exact-head migrated PostgreSQL receipt above; #1317 remains a source-bound owner handoff | Reproduce import-owner contention/cancellation; do not transfer either worker's tests as import GREEN |
+| Sibling root repair; import #1317 / scheduler #1486 | Each now has its own exact-head migrated PostgreSQL receipt above | Keep the three lease implementations' evidence separate; finish their own hosted/owner prerequisites |
 
 No new dependency, shared model timeout, mutable provider adoption, schema/index
 removal, or protection change was introduced. Test-owned PostgreSQL/network
@@ -218,7 +255,21 @@ representative search/migration performance, and owner release gates remain
 open. No delta or PR was discarded to reduce the queue, and these local passes
 do not transfer approval or hosted evidence between stack heads.
 
-**AGENTS operating knowledge refresh (2026-09-05):** Draft #1566 exact head
+**AGENTS operating knowledge refresh (2026-09-06):** Draft #1566 exact head
+`5b5a49c3bc7b32fbdbbc2bee468a38f0761f9183` preserves normal parent
+`e30e3ab1faa1a75506fef8e05df7e5f204a88be9` and the prior skills/procedure
+playbook. It distinguishes general JSON Schema from a provider-supported
+subset, an offline counterexample from a hosted root-cause claim, and an owning
+transport's cleanup from borrowed stream helpers. The exact-head
+documentation/governance suite passes **47 tests, zero failures/errors/skips,
+0.10 s**; JUnit SHA-256
+`40d3162ad1d568ad337218c0f389b6ff68b0c5d0ac2c809e53ad5150c0ae6a55`.
+These source checks do not establish a repaired provider/runtime or central
+Noema #1641 GREEN. The PR stays on #1564's
+`codex/agents-pr-lifecycle-knowhow@615be4514add6a21eef743f591a65a5f8fef4dee`,
+open/Draft/unmerged. Earlier 45-test receipts below remain historical.
+
+**Historical AGENTS operating knowledge receipt (2026-09-05):** Draft #1566 head
 `54e79d054f6f13c639f30d89882ed079e0122752` preserves `162c0df8049126944c60041c3374b4e47d8c16b4`
 and adds physical lease ownership, invalidate-before-close cancellation,
 last-completed cursor recovery, real independent-replica checks, and explicit
