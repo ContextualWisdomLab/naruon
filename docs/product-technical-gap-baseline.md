@@ -1,12 +1,94 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.36
+**Baseline version:** 1.37
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-**Shared-send and nested CI isolation refresh (2026-09-06):** Existing Draft
+**SMTP cancellation repair (2026-09-06):** Existing shared-send owner
+[#1417](https://github.com/ContextualWisdomLab/naruon/pull/1417) advances normally
+to `dc8b53d38ddf80b726b5dc6cff1d21f2c25d293e`, tree
+`b66b0bff2cab33c9ff26301dad6005778c804696`, retaining the complete SMTP child
+`56025b17d752b8fbe2c759d9420876a73e26d51c`, its `1666` parent and CI
+prerequisite #1562 at `b2e98a52588db72e501c0843b33816e2e5bc698b`.
+Its base stays the CI owner branch.
+
+PRD/operability gap: cancelling a send during connection left a real socket
+open until later reclamation. The direct sender and registered Connector both
+reproduced this failure. TRD action: the common connection helper now closes
+the socket for cancellation and re-raises that cancellation; no per-consumer
+workaround, success result, destination-policy change, dependency, or model
+timeout was added. Two real-socket behavioral cases were RED before the
+one-line fix, then the three affected suites passed 55 tests with warnings
+treated as errors. A read-only Agent review found no actionable issue within
+this delta; it is not a qualifying GitHub approval.
+
+The full SMTP candidate passed 1889 tests with two explicit live-only skips,
+but its immutable `5602` rerun failed one CI signal-probe startup precondition
+(1888 passed, two skipped). Preserve failed JUnit SHA-256
+`27c1ac50cb7073bdb5299170618e6ee204ad437199658285f68cb44621e593bb`;
+an isolated rerun's success was not accepted as repair. Owner #1562 adds a
+six-second delayed startup case, reproduced RED, then separates the 30-second
+startup observation from the unchanged five-second post-signal assertion.
+All 18 runner/signal probes pass; no runner shell, model timeout, cleanup or
+redaction guarantee changed. #1417 normally inherits the complete owner child.
+Both immutable-head test phases completed: #1417 `dc8b` has **1890 passed /
+2 explicit live-only skips / 1008.98 s**; #1562 `b2e9` has **1875 passed /
+2 explicit live-only skips / 837.94 s**. However, both runners exited **137**
+when Docker teardown exceeded the unchanged 20-second cleanup bound. Neither
+is a successful full-lifecycle receipt. Sanitized JUnit SHA-256 values are
+`3d3a9fec41477cffc8786e7ab4e1006fa9ad09dc73e5afa3e53998e268ebdb6d`
+and `b45206540f4683773f8d8dd7aeee66a3cf1b69c198ee2c99043be0e68aca444d`,
+respectively. Task-label inspection found one empty CI-test network after both
+containers were gone; it was removed by verified exact ID. Both generated
+projects now have no containers, networks or volumes. This recovery does not
+change either failed exit. Investigate daemon teardown timing and rerun the
+complete lifecycle without weakening the cleanup/cancellation boundary; the
+underlying cause of the slow Docker operation remains unproven.
+
+Refreshed local Trivy scans of
+#1417 merge ref `91212236c1a018859f5fe58551397b924d9477b0` and #1562 merge ref
+`6c04a43d3d491fb96e0f9762bbbc53fd2e9d8dec` match the stated current trees.
+Both have zero HIGH/CRITICAL fixable vulnerability/misconfiguration findings,
+including development dependencies, and zero separate secret-scan findings.
+Security report SHA-256 values are respectively
+`41a09c0be4cdd3abf1ef5de5059284f2621ffb2b9b5adc08f898fece4c210d6c`
+and `b7e1c25d089dbe6c420735c956b4125bc0ac0b2602bcc083d9656e1d45bd2c48`;
+separate secret-report digests are recorded in the respective PR receipts.
+Keep this owner Draft while its prerequisite is unmerged. These results do not
+prove actual mail delivery, browser cancellation, deployed behavior, p95, or
+full coverage. Remaining acceptance is exact-head hosted checks and independent
+review, prerequisite-first protected integration, and customer-path evidence.
+[Root cause, alternatives, contradictory generated documentation and APA source](https://github.com/ContextualWisdomLab/naruon/blob/56025b17d752b8fbe2c759d9420876a73e26d51c/docs/doctoring/shared_send_postgres.md#smtp-connection-cancellation-follow-up)
+remain linked to the implemented shared path.
+
+**Visual inspection (2026-09-06):** The actual GitHub-rendered
+[AGENTS.md playbook](https://github.com/ContextualWisdomLab/naruon/blob/8ec73818dc74ffb9f06173b062433162067e7d9e/AGENTS.md#agent-pr-lifecycle-playbook)
+and verification section were inspected in a real browser at the immutable
+head of [#1566](https://github.com/ContextualWisdomLab/naruon/pull/1566).
+Desktop viewport: 1292 × 1040 CSS pixels; narrow viewport: 390 × 844.
+The captured sections have readable headings, lists and links with no observed
+text overlap or clipping. Long inline code wraps over multiple lines on the
+narrow screen. DOM width cross-checks were 1277 and 375 pixels respectively,
+within their viewports. The linked repository repair skill loaded at the same
+head. Temporary viewport overrides were reset after inspection.
+
+Retained task screenshot receipts (SHA-256): `agents_desktop.png` =
+`544c1f7d945525b72b230c17ddf0018814fc4a1a1ffbf1109cbf6f96770b31ac`;
+`agents_mobile_playbook.png` =
+`3a8d3cfc528b93915101d9242353e9da20905c07de05883adadb63a3125b705c`;
+`agents_mobile_verification.png` =
+`500909b5e074ab2804dae4a3f52fe3c17b7eaa54cba086773ad7b72d519ab857`.
+These are bounded documentation-rendering observations, not an accessibility
+conformance audit, all-locale coverage, Storybook validation, product UI state
+coverage, mail delivery or deployment evidence. No UI code or design was
+changed, and no product-wide visual pass is claimed. Product-facing changes
+must still retain actual normal/loading/empty/error/permission, responsive,
+interaction and affected-locale screenshots tied to their own exact heads.
+
+**Historical shared-send receipt and nested CI isolation refresh (2026-09-06;
+#1417's 1666 head is superseded by the cancellation child above):** Existing Draft
 [#1417](https://github.com/ContextualWisdomLab/naruon/pull/1417), head
 `1666f76cf94c31e34c2762c9d75f52ea3040b9a2`, tree
 `2a6aa3759b94e923325df7c6568cc6db3f8f63ca`, now normally inherits complete
