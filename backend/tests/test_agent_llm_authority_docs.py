@@ -125,6 +125,21 @@ def test_agent_guidance_separates_schema_reproduction_and_resource_ownership() -
         assert required_phrase in normalized_agents
 
 
+def test_agent_guidance_requires_safe_negative_probes_and_real_ci_outcomes() -> None:
+    """Text conformance preserves the procedure, not executed CI evidence."""
+    normalized_agents = " ".join(_read("AGENTS.md").lower().split())
+    for required_phrase in (
+        "collection skips and expected failures",
+        "actual process exit status",
+        "task-owned decoy files",
+        "key-only assertions",
+        "inherited provider and replica settings",
+        "sanitize reports before potentially blocking teardown",
+        "task-owned process groups",
+    ):
+        assert required_phrase in normalized_agents
+
+
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     """Repository OpenCode model work must use only the canonical logical pool."""
     raw_config = _read("opencode.jsonc")

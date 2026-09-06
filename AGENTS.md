@@ -684,6 +684,24 @@ subject to U.S. copyright, while attribution remains required.
   fail closed on any remaining warning-class report log output.
 - DB-affecting API slices need both mocked fast tests and a real PostgreSQL
   bootstrap/smoke path before PR merge evidence is considered complete.
+- Required DB evidence must reject collection skips and expected failures as
+  well as fixture skips. Check the actual process exit status: a printed pytest
+  error can still exit zero when expected-failure metadata is retained. Exercise
+  these cases with real pytest reports, not only source-string assertions.
+- Negative configuration probes must use task-owned decoy files or controlled
+  readers and key-only assertions. Never read an operator file to prove that it
+  should not be read, or let assertion introspection print credential mappings.
+  Isolate inherited provider and replica settings as well as the primary DB URL;
+  Compose's env-file selection does not control Python's configuration sources.
+  Preserve normal operator defaults outside the explicitly selected test path.
+- On cancellation, stop task-owned process groups and retain the cancellation
+  exit status. Sanitize reports before potentially blocking teardown, bound
+  cleanup, and test both an interrupted worker and interruption during cleanup.
+  Delete only the generated test project and raw temporary report after safe
+  redaction. These cleanup bounds are not application or model timeouts.
+  The shared database runner remains proposed in
+  [CI owner #1562](https://github.com/ContextualWisdomLab/naruon/pull/1562)
+  until protected integration; its branch-local results do not prove hosted CI.
 - ORM `Base.metadata.create_all()` success is not migration evidence. On an
   isolated empty PostgreSQL database, run `scripts/migrate_db.py` from `backend/`,
   rerun it, and verify the recorded Alembic head. Also exercise upgrades from
