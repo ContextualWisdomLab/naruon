@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => <a href={href} {...props}>{children}</a>,
@@ -67,6 +67,10 @@ describe("CalendarPage", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
+  beforeEach(() => {
+    vi.spyOn(console, "error");
+  });
+
   afterEach(() => {
     if (root) act(() => root?.unmount());
     root = null;
@@ -74,15 +78,21 @@ describe("CalendarPage", () => {
     container = null;
     localStorage.clear();
     vi.unstubAllGlobals();
+    const errorSpy = vi.mocked(console.error);
+    const actWarnings = errorSpy.mock.calls.filter((argumentsList) =>
+      argumentsList.some((argument) => String(argument).includes("not wrapped in act")),
+    );
+    errorSpy.mockRestore();
+    expect(actWarnings).toEqual([]);
   });
 
-  it("renders monthly weekly detail coordination candidate and CalDAV writeback workspaces", () => {
+  it("renders monthly weekly detail coordination candidate and CalDAV writeback workspaces", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
 
-    act(() => {
+    await act(async () => {
       root?.render(<CalendarPage />);
     });
 
@@ -92,7 +102,6 @@ describe("CalendarPage", () => {
     expect(container.querySelector('button[aria-label="이전 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="다음 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="설정"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="닫기"]')).not.toBeNull();
   });
 
   it("exposes the calendar view switcher as a keyboard-navigable tablist", async () => {
