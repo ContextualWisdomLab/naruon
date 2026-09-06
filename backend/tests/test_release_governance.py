@@ -55,18 +55,14 @@ def assert_dockerfile_stage_from(dockerfile: str, image: str, stage_alias: str) 
 
 def first_dockerfile_base_reference(dockerfile: str) -> str:
     """Return the first exact tag-and-digest Dockerfile base reference."""
-    first_from = re.search(
-        r"^FROM (?P<declaration>.+)$", dockerfile, flags=re.MULTILINE
-    )
+    first_from = re.search(r"^FROM (?P<declaration>.+)$", dockerfile, flags=re.MULTILINE)
     assert first_from is not None, "Dockerfile must declare a base image"
     match = re.fullmatch(
         r"(?P<reference>[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+"
         r"@sha256:[0-9a-f]{64})(?: AS [A-Za-z0-9._-]+)?",
         first_from.group("declaration"),
     )
-    assert match is not None, (
-        "Dockerfile first stage must use an exact tag-and-digest pin"
-    )
+    assert match is not None, "Dockerfile first stage must use an exact tag-and-digest pin"
     return match.group("reference")
 
 
@@ -357,9 +353,7 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
     # Ensure that Python object instantiation tags (like !!python/object) are safely
     # rejected rather than executed.
     with pytest.raises(yaml.constructor.ConstructorError):
-        yaml.load(
-            "!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader
-        )  # nosec B506
+        yaml.load("!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader)  # nosec B506
     # Ensure normal valid YAML loading still works
     assert yaml.load("a: 1\nb: 2", Loader=UniqueKeyLoader) == {"a": 1, "b": 2}  # nosec B506
     # Ensure the duplicate key prevention still works
@@ -731,14 +725,8 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "Platform:[[:space:]]+${platform}[[:space:]]*$" in workflow
     assert "Pinned Ollama manifest is missing %s" in workflow
     assert "linux/amd64 linux/arm64" in workflow
-    assert (
-        "sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
-        not in workflow
-    )
-    assert (
-        "sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1"
-        not in workflow
-    )
+    assert "sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061" not in workflow
+    assert "sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1" not in workflow
     assert "sbom: false" in workflow
     assert workflow.count("sbom: true") == 1
     assert "type=semver" in workflow
@@ -1072,6 +1060,7 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "workflow_run:" in workflow
     assert "check_run:" in workflow
     assert "workflow_dispatch:" in workflow
+    assert "Strix Security Scan" in workflow
     assert "- strix" not in workflow
     assert "permissions:\n  contents: read" in workflow
     assert "trusted-governance" in workflow

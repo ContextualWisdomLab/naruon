@@ -135,11 +135,7 @@ describe("ToolsPage", () => {
               name: "테스트 도구",
               description: "설명",
               category: "카테고리",
-              parameters: {
-                thread_id: "string",
-                limit: "number",
-                algorithm: { type: "string", required: false },
-              },
+              parameters: { thread_id: "string", limit: "number" },
             },
           ]);
         }

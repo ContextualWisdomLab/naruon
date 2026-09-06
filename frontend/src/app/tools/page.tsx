@@ -41,14 +41,10 @@ interface ExecuteResponse {
 
 function buildDefaultParameters(tool: ToolInfo) {
   return Object.fromEntries(
-    Object.entries(tool.parameters ?? {})
-      .filter(([, descriptor]) => {
-        if (!descriptor || typeof descriptor !== "object" || !("required" in descriptor)) {
-          return true;
-        }
-        return (descriptor as { required?: unknown }).required !== false;
-      })
-      .map(([key, descriptor]) => [key, defaultParameterValue(descriptor)]),
+    Object.entries(tool.parameters ?? {}).map(([key, descriptor]) => [
+      key,
+      defaultParameterValue(descriptor),
+    ]),
   );
 }
 
