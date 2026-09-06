@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/ui/separator", () => ({
   Separator: () => <hr />,
@@ -111,6 +111,10 @@ describe("EmailDetail", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
+  beforeEach(() => {
+    vi.spyOn(console, "error");
+  });
+
   afterEach(() => {
     if (root) {
       act(() => root?.unmount());
@@ -120,6 +124,12 @@ describe("EmailDetail", () => {
     container = null;
     vi.unstubAllGlobals();
     clearRecordedProductEvents();
+    const errorSpy = vi.mocked(console.error);
+    const actWarnings = errorSpy.mock.calls.filter((argumentsList) =>
+      argumentsList.some((argument) => String(argument).includes("not wrapped in act")),
+    );
+    errorSpy.mockRestore();
+    expect(actWarnings).toEqual([]);
   });
 
   it("translates email content when the Translate button is clicked", async () => {
@@ -1173,8 +1183,10 @@ it("disables calendar coordination while the writeback request is pending", asyn
     const textInput = container.querySelector<HTMLInputElement>('input[placeholder="예: 정중하게 답장해줘"]');
     if (textInput) {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-      setter?.call(textInput, "test");
-      textInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await act(async () => {
+        setter?.call(textInput, "test");
+        textInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
     }
 
     const draftButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
@@ -1371,8 +1383,10 @@ it("disables calendar coordination while the writeback request is pending", asyn
     const textInput = container.querySelector<HTMLTextAreaElement>('#reply-draft');
     if (textInput) {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-      setter?.call(textInput, "test draft");
-      textInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await act(async () => {
+        setter?.call(textInput, "test draft");
+        textInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
     }
 
     const clearButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
@@ -1421,8 +1435,10 @@ it("disables calendar coordination while the writeback request is pending", asyn
     const draftInput = container.querySelector<HTMLTextAreaElement>('#reply-draft');
     if (draftInput) {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-      setter?.call(draftInput, "This is my draft to send.");
-      draftInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await act(async () => {
+        setter?.call(draftInput, "This is my draft to send.");
+        draftInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
     }
 
     const sendButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
@@ -1475,8 +1491,10 @@ it("disables calendar coordination while the writeback request is pending", asyn
     const draftInput = container.querySelector<HTMLTextAreaElement>('#reply-draft');
     if (draftInput) {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-      setter?.call(draftInput, "This is my draft to send and fail.");
-      draftInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await act(async () => {
+        setter?.call(draftInput, "This is my draft to send and fail.");
+        draftInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
     }
 
     const sendButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(

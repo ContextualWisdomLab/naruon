@@ -587,6 +587,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     emailId,
     llmData,
     selectedWritebackSourceId,
+    setSelectedWritebackSourceId,
     sourceLoadStatus,
     writebackSources,
   ]);
