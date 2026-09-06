@@ -36,6 +36,17 @@ signal probes passed; they are not GitHub approval or database tests. Required
 hosted checks and default-branch dependency alerts remain separate. No PR was
 closed, no provider source copied and no release claimed.
 
+The refreshed HIGH/CRITICAL fixable Trivy scan of GitHub merge ref
+`a7d2d409d146a134817df4c258ece4ab8e171508` has exactly the same tree as #1562
+above and exits **1** for `frontend/pnpm-lock.yaml`: `js-yaml@4.3.0`,
+[GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj),
+patched in `4.3.1` / `3.15.1`. No HIGH/CRITICAL misconfiguration was found;
+a separate secret-only scan exited zero. Neither clears this dependency
+finding. Repair the current frontend dependency owner, retain the regression
+and re-scan the new exact merge tree; do not suppress the rule. Current-head
+Application CI `34023224010`, Bandit `34023223992`, and image validation
+`34023224037` are queued, not completed evidence.
+
 **Import physical-lease and signed backend refresh (2026-09-06):** Existing
 Draft [#1317](https://github.com/ContextualWisdomLab/naruon/pull/1317) now has
 exact head `af362d58190c0bf2ed122d718473fe3c2bd503c4`, tree
