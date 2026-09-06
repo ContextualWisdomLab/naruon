@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.43
+**Baseline version:** 1.44
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
@@ -36,18 +36,63 @@ CI parent into `5dea5092`, preserving SMTP throttling. Its own full harness,
 runner exited 0 with 1,892 passed and the same two live-API skips in 138.59s;
 task-labelled containers, volumes and networks were independently absent.
 [SMTP current-head receipt](https://github.com/ContextualWisdomLab/naruon/pull/1417#issuecomment-5559790933).
-Both consumer heads were pushed normally. Older merge-ref security scans
-remain historical until the new merge refs are scanned.
+Both consumer heads were pushed normally. New merge-ref security evidence
+below supersedes the earlier bounded zero-finding receipts for these heads.
 
 The default-branch Dependabot API currently reports six open alerts. The
 inspected CI head already pins `js-yaml` 4.3.1, `cryptography` 50.0.0 and the
 scanner lock's `pyasn1` 0.6.4, but `requirements-strix-ci-hashes.txt` still pins
 `aiohttp` 3.14.1. Alerts #88–90 include GHSA-cq5v-8q36-5273 with first patched
-version 3.14.3. The canonical scanner dependency owner must repair and release
-that dependency before consumer adoption; do not duplicate a scanner workflow
-or claim an old zero-finding scan disproves newer advisory evidence. Existing
+version 3.14.3. Central `.github` at protected commit
+`dd0b96feded94f66ecf59b25a5a9b58cfc8b4f69` already pins `aiohttp` 3.14.3;
+Naruon's existing #1244 at `50351e8cacc65b4124ba2145e00d41aeceef0775`
+contains the corresponding one-file hash-lock repair and remains unmerged.
+Validate and integrate that existing delta rather than opening a competing
+repair or treating the central dependency as still unpatched. Existing
 #1571 owns the `js-yaml` change. Neither an open repair nor a local pin proves
 the protected default branch is patched.
+
+### Manifest discovery failure reproduced on current merge refs
+
+Trivy 0.74.0 scanned tracked archives of CI merge
+`9d7b80413d5b6120302a3f7f677887b271c52c74` and SMTP merge
+`1c4c369ebcf6ee752ab10be8c92a96b14634e6c2`. The initial DB-update invocation
+used an unsupported top-level flag and failed; the help-confirmed
+`trivy image --download-db-only` then exited 0. The default HIGH/CRITICAL
+fixable vulnerability/misconfiguration scans and separate all-severity secret
+scans exited 0, but their language results covered only four manifests and
+omitted `requirements-strix-ci-hashes.txt`.
+
+Adding `--file-patterns 'pip:requirements-.*\.txt'` on the same archives
+preserved default discovery and added the missing requirements variants.
+Both expanded scans exited 1 with `CVE-2026-69244`, HIGH, in the scanner
+hash-lock's `aiohttp` 3.14.1, fixed in 3.14.3. That target contains 102 parsed
+packages. The same DB already detected the advisory once the manifest was
+included; DB freshness alone cannot explain or repair this missed finding.
+[CI failed security receipt](https://github.com/ContextualWisdomLab/naruon/pull/1562#issuecomment-5559826656)
+and [SMTP failed security receipt](https://github.com/ContextualWisdomLab/naruon/pull/1417#issuecomment-5559826830)
+retain exact heads, merge refs and expanded JSON digests. Head/base/merge
+readback was unchanged after scanning. Local test success does not override
+these security failures.
+
+TRD action: the canonical Security Scan owner must make requirements-variant
+discovery explicit and assert that expected manifests appear in scan results;
+a process exit code alone is insufficient coverage evidence. Keep the
+existing #1244 dependency repair distinct from this scanner configuration gap.
+Acceptance requires the manifest to remain present after repair, the vulnerable
+version to fail, the patched version to pass, and new-head hosted evidence.
+Do not remove the target, suppress the advisory or copy a central workflow.
+
+A separate expanded scan of existing #1244 at `50351e8c` retained all 102
+scanner-lock packages and confirmed `aiohttp` 3.14.3 with no HIGH/CRITICAL
+fixable finding in that manifest. The whole scan still exited 1 because its
+frontend lock contains `js-yaml` 4.3.0, GHSA-5p4m-2wfm-xmqj. This establishes
+the aiohttp repair's bounded effect, not an overall security pass. Integrate
+the existing #1571 and #1244 deltas in a valid prerequisite order; do not merge
+a vulnerable foundation first or discard either repair to reduce PR count.
+
+Reference: Aqua Security. (n.d.). *Selecting files*. Trivy documentation.
+https://trivy.dev/docs/dev/guide/configuration/skipping/
 
 Visual Inspection of the newest AGENTS and baseline changes remains incomplete
 while the Mac is locked. Keep this gap explicit and inspect after manual
