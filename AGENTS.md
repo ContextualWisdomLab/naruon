@@ -195,7 +195,8 @@ in this repo.
 - Apply the mutation loop only to implementation, remediation, and landing
   tasks. Review-only agents stop after publishing evidence-backed findings and
   must not edit, execute project code, push, approve, or merge.
-- For every open PR, repeat: fetch the exact remote base and head, inspect
+- For implementation, remediation, or landing tasks, repeat for every open PR:
+  fetch the exact remote base and head, inspect
   current-head reviews and unresolved threads, reproduce failed checks from
   their logs, repair the canonical owner, run focused tests plus the applicable
   contract/security suite, push without force, and re-fetch evidence. A new
@@ -278,6 +279,23 @@ in this repo.
   and base, live rulesets, required checks, unresolved threads, and applicable
   current-head CodeRabbit or structured OpenCode fallback evidence. After the
   merge, verify the merge commit and protected target branch.
+- Ready for review is review admission, not merge authorization. Keep a PR
+  Draft while its delta, ownership, conflict repair or required foundation is
+  incomplete. Once the bounded slice is independently reviewable and its
+  current-head local checks pass, mark it Ready to obtain independent review;
+  do not require that review before leaving Draft. The central OpenCode
+  entrypoint declines dispatch for a live Draft, so that requirement would
+  prevent review from starting. Pending hosted checks remain required; Ready
+  does not waive them, accept a Proposed contract, or authorize a merge.
+  Immediately before the transition, re-fetch the head/base and confirm the
+  local receipts still match. Read back the state and head afterward; a moved
+  head invalidates those receipts and needs revalidation. Record the transition
+  and verify fresh workflow/review evidence. Never toggle Draft repeatedly or
+  add an empty commit to requeue.
+
+  - GitHub. (n.d.). [*Changing the stage of a pull request*](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/changing-the-stage-of-a-pull-request). Retrieved September 6, 2026.
+  - ContextualWisdomLab. (2026). [*Required OpenCode review admission*](https://github.com/ContextualWisdomLab/.github/blob/43024633eba9d96b0456970391360da5a171fbda/.github/workflows/opencode-review.yml#L360-L369) [Workflow source].
+
 - Audit workflow triggers and concurrency as parsed YAML behavior, not by text
   search. PR review and repair groups use
   `<workflow>-<repository>-<PR number>` with `cancel-in-progress: true`, so a
