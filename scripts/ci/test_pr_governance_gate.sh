@@ -140,6 +140,20 @@ fi
 
 if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
   case "${GH_SCENARIO:-pass}" in
+    forged_check|forged_check_pending_notice)
+      printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"github-actions"},"status":"completed","conclusion":"success"}]}'
+      ;;
+    forged_status|forged_status_pending_notice|missing_status_creator|wrong_status_creator_type|github_code_quality_status)
+      printf '{"check_runs":[]}'
+      ;;
+    github_code_quality_check)
+      printf '{"check_runs":[{"name":"GitHub Code Quality","app":{"slug":"github-code-quality"},"status":"completed","conclusion":"success"}]}'
+      ;;
+    coderabbit_success_with_warning|coderabbit_skipped_with_warning)
+      conclusion="${GH_SCENARIO#coderabbit_}"
+      conclusion="${conclusion%_with_warning}"
+      printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"%s","output":{"text":"Pre-merge blocking warning"}}]}' "$conclusion"
+      ;;
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
@@ -170,17 +184,29 @@ fi
 
 if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/status ]]; then
   case "${GH_SCENARIO:-pass}" in
+    missing_status_creator)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"success"}]}'
+      ;;
+    wrong_status_creator_type)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"success","creator":{"login":"coderabbitai[bot]","type":"User"}}]}'
+      ;;
+    github_code_quality_status)
+      printf '{"statuses":[{"context":"GitHub Code Quality","state":"success","creator":{"login":"github-code-quality[bot]","type":"Bot"}}]}'
+      ;;
+    forged_status|forged_status_pending_notice)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"success","creator":{"login":"unrelated-app[bot]","type":"Bot"}}]}'
+      ;;
     coderabbit_status_success|coderabbit_status_success_with_pending_notice)
-      printf '{"statuses":[{"context":"CodeRabbit","state":"success","description":"Review approved","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      printf '{"statuses":[{"context":"CodeRabbit","creator":{"login":"coderabbitai[bot]","type":"Bot"},"state":"success","description":"Review approved","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
       ;;
     coderabbit_status_pending)
-      printf '{"statuses":[{"context":"CodeRabbit","state":"pending","description":"Review in progress","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      printf '{"statuses":[{"context":"CodeRabbit","creator":{"login":"coderabbitai[bot]","type":"Bot"},"state":"pending","description":"Review in progress","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
       ;;
     coderabbit_status_failed)
-      printf '{"statuses":[{"context":"CodeRabbit","state":"failure","description":"Review failed","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      printf '{"statuses":[{"context":"CodeRabbit","creator":{"login":"coderabbitai[bot]","type":"Bot"},"state":"failure","description":"Review failed","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
       ;;
     coderabbit_status_unknown)
-      printf '{"statuses":[{"context":"CodeRabbit","state":"stale","description":"Unrecognized state","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      printf '{"statuses":[{"context":"CodeRabbit","creator":{"login":"coderabbitai[bot]","type":"Bot"},"state":"stale","description":"Unrecognized state","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
       ;;
     *)
       printf '{"statuses":[]}'
@@ -252,7 +278,7 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
       coderabbit_no_actionable_with_blocker)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"No actionable comments were generated in the recent review. Blocking issue remains on 0123456789abcdef0123456789abcdef01234567."}]'
         ;;
-      coderabbit_approval_pending|missing_coderabbit_adversarial_approval_with_pending_notice|coderabbit_check_success_with_pending_notice|coderabbit_status_success_with_pending_notice)
+      coderabbit_approval_pending|missing_coderabbit_adversarial_approval_with_pending_notice|coderabbit_check_success_with_pending_notice|coderabbit_status_success_with_pending_notice|forged_check_pending_notice|forged_status_pending_notice)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit. \\nCodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} -->\\n<!-- approval_notice_end -->"}]'
         ;;
       coderabbit_approval_pending_with_separate_blocking_warning)
@@ -506,6 +532,32 @@ assert_coderabbit_pending_waits_without_hard_comment() {
   assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_robot_evidence_requires_publisher_and_clean_output() {
+  local scenario temp_dir
+  for scenario in forged_check forged_check_pending_notice forged_status forged_status_pending_notice missing_status_creator wrong_status_creator_type; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'status=in_progress' "$temp_dir/gh.log"
+    assert_not_in_file 'conclusion=success' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
+  for scenario in coderabbit_success_with_warning coderabbit_skipped_with_warning; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'conclusion=failure' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
+  for scenario in github_code_quality_check github_code_quality_status; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
 }
 
 assert_coderabbit_success_commit_status_completes_gate() {
@@ -1005,6 +1057,7 @@ assert_draft_pr_waits_without_false_failure
 assert_existing_marker_comment_is_patched
 assert_resolved_marker_comment_is_updated_on_ready_gate
 assert_coderabbit_pending_waits_without_hard_comment
+assert_robot_evidence_requires_publisher_and_clean_output
 assert_coderabbit_success_commit_status_completes_gate
 assert_coderabbit_pending_commit_status_waits
 assert_coderabbit_failed_commit_status_blocks
