@@ -207,8 +207,8 @@ function SenderDagPanel({
 
   if (relationships.length === 0) {
     return (
-      <div role="status" aria-live="polite" className="rounded-lg border border-border bg-background p-4 text-sm font-semibold text-muted-foreground">
-        <p>이 맥락 검색 결과에 연결된 발신자 관계가 아직 없습니다.</p>
+      <div className="rounded-lg border border-border bg-background p-4 text-sm font-semibold text-muted-foreground">
+        <p role="status" aria-live="polite">이 맥락 검색 결과에 연결된 발신자 관계가 아직 없습니다.</p>
         {canCapture ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs">
@@ -229,7 +229,7 @@ function SenderDagPanel({
           </div>
         ) : null}
         {captureStatus === "error" ? (
-          <p className="mt-2 text-xs font-bold text-destructive">
+          <p role="alert" className="mt-2 text-xs font-bold text-destructive">
             발신자 관계 캡처에 실패했습니다.
           </p>
         ) : null}
