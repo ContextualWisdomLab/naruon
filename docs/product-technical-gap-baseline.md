@@ -1,10 +1,44 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.39
+**Baseline version:** 1.40
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+## Current governance repair and stack handoff (2026-09-06)
+
+PRD requirement: a completed review must not leave an otherwise eligible
+change waiting indefinitely because a bot's issue comment has not refreshed.
+At #1531 predecessor `e058f3ead35f9a19d3c3b20c6ab5fc04d2e2cbb2`, the new
+success-check regression failed and the fake publisher emitted `in_progress`.
+[Finding 3939597997 and repair receipt](https://github.com/ContextualWisdomLab/naruon/pull/1531#discussion_r3943940937)
+connect the source and reproduction to owner
+`fac3437c03d928e45632763530a4f130dfe505fd`. Its gate now treats the stale
+notice as a wait only without CodeRabbit check/status evidence or qualifying
+OpenCode approval. Failed/pending authoritative checks and separate substantive
+findings remain effective; this does not authorize merging a failed PR.
+
+The complete owner delta was ordinarily merged into CI #1562 at
+`0648eace4186c9ba813102df4f26571e20cea3c0` and then SMTP #1417 at
+`cc2c4cbc3fe134787b724b79cde98fe3e7c1b6e0`, without conflicts, force rewrites,
+or discarded consumer changes. Each merge adds only the three-file governance
+repair (34 added, 10 removed lines); inherited gate and harness blobs match
+their parent. Each consumer's focused source tests pass (40, zero skips).
+Each committed-head full fake-GitHub governance harness also passed with
+exit 0, as did ShellCheck and the whitespace check.
+The first CI focused command incorrectly named a nonexistent test file and
+exited 4 with no tests; the corrected command uses the actual two collected
+test files. That invocation error is not a source regression or a passing run.
+
+TRD acceptance remains separate: each new head needs its own completed
+governance harness, hosted checks and review evidence; older real-PostgreSQL
+and merge-ref security receipts remain historical, not new-head certification.
+No protected merge, immutable release or live customer outcome is claimed.
+The release-ordering risks below remain open despite this metadata repair.
+The baseline 1.39 desktop visual receipt belongs to `a508e543`; it does not
+verify this newly added section. Inspect this revision in the actual browser
+before marking its visual evidence complete.
 
 ## Release ordering and foundation verification gaps (2026-09-06)
 
