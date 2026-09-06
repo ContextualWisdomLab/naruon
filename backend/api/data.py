@@ -35,6 +35,12 @@ from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_PENDING_STATUS,
 )
 from services.ontology_service import ontology_service
+from services.repository_asset_preview import (
+    ERROR_REPOSITORY_ASSET_NOT_FOUND,
+    RepositoryAssetPreview,
+    build_attachment_preview,
+    build_document_preview,
+)
 from services.webdav_service import webdav_service
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -67,8 +73,7 @@ SEMANTIC_KG_READINESS_EVIDENCE_SOURCE = (
     "knowledge_graph_edges.edge_kind, content_segments.segment_path"
 )
 SEMANTIC_RELATION_SOURCE_BACKING_EVIDENCE_SOURCE = (
-    "sender_relationships.source_message_id, "
-    "sender_relationships.source_thread_id"
+    "sender_relationships.source_message_id, sender_relationships.source_thread_id"
 )
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
@@ -373,6 +378,22 @@ class DataDocumentActionResponse(BaseModel):
     provenance: Literal["server-authoritative"]
     audit_event: str
     message: str
+
+
+class DataRepositoryAssetPreviewResponse(BaseModel):
+    """Read-only preview of recognized or blocked repository-asset text."""
+
+    asset_key: str
+    asset_type: Literal["email_attachment", "workspace_document"]
+    preview_state: Literal["recognized", "pending", "failed", "unavailable"]
+    parser_family: str | None
+    paragraph_texts: list[str]
+    preview_text: str | None
+    next_action: str
+    error_code: str | None
+    provider_write_executed: bool
+    provenance: Literal["server-authoritative"]
+    audit_event: Literal["data.repository_asset.preview.viewed"]
 
 
 class DataDocumentWebdavMaterializationResponse(BaseModel):
@@ -1779,9 +1800,7 @@ def _diligence_close_decision_summary(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> DataDiligenceCloseDecisionSummary:
     proof_plan = snapshot.diligence_close_proof_plan
-    blocked = [
-        item for item in proof_plan if item.close_gate_status == "blocked"
-    ]
+    blocked = [item for item in proof_plan if item.close_gate_status == "blocked"]
     ready = [item for item in proof_plan if item.close_gate_status == "ready"]
     required_artifacts = sorted(
         {item.required_proof_artifact for item in proof_plan}
@@ -1961,9 +1980,7 @@ def _diligence_close_traceability_map(
         risk_key = proof.proof_key.removeprefix("proof_")
         risk = risk_by_key[risk_key]
         manifest = manifest_by_file[proof.required_proof_artifact]
-        artifact_review = artifact_review_by_artifact[
-            proof.required_proof_artifact
-        ]
+        artifact_review = artifact_review_by_artifact[proof.required_proof_artifact]
         owner_handoff = owner_handoff_by_owner[proof.owner_area]
         source_field = manifest.source_field
         data_room_artifact = proof.required_proof_artifact
@@ -2315,8 +2332,6 @@ def _materialized_document_target_path(document: Document) -> str:
     return f"/Naruon/Data/{filename}"
 
 
-# Document statuses whose stored content is not yet materializable parsed text
-# (it may be a base64 binary payload awaiting a recognition/conversion worker).
 _NON_MATERIALIZABLE_DOCUMENT_STATUSES = frozenset(
     {
         PDF_DOM_RECOGNITION_PENDING_STATUS,
@@ -2423,18 +2438,24 @@ def _merge_document_webdav_dispatch_result(
     return result
 
 
-def _opaque_asset_key(email: Email, attachment: Attachment) -> str:
+def _opaque_asset_key_for_filename(email: Email, filename: str) -> str:
+    """Build the opaque attachment key from scoped email fields and a filename."""
+
     digest = hashlib.sha256(
         "|".join(
             [
                 email.user_id,
                 email.organization_id,
                 email.message_id,
-                attachment.filename,
+                filename,
             ]
         ).encode("utf-8")
     ).hexdigest()
     return f"asset_{digest[:24]}"
+
+
+def _opaque_asset_key(email: Email, attachment: Attachment) -> str:
+    return _opaque_asset_key_for_filename(email, attachment.filename)
 
 
 def _opaque_thread_key(email: Email) -> str:
@@ -2474,6 +2495,22 @@ def _email_scope_filter(auth_context: AuthContext) -> EmailScopeFilter:
     return (Email.user_id == auth_context.user_id, organization_filter)
 
 
+def _document_scope_filter(
+    auth_context: AuthContext,
+) -> tuple[ColumnElement[bool], ColumnElement[bool]]:
+    """Return signed workspace and nullable-organization document predicates."""
+
+    organization_filter = (
+        Document.organization_id == auth_context.organization_id
+        if auth_context.organization_id is not None
+        else Document.organization_id.is_(None)
+    )
+    return (
+        Document.workspace_id == auth_context.workspace_id,
+        organization_filter,
+    )
+
+
 async def _scoped_rows(db: AsyncSession, statement):
     result = await db.execute(statement)
     return list(result.scalars().all())
@@ -2492,13 +2529,92 @@ async def _get_workspace_document(
     result = await db.execute(
         select(Document).where(
             Document.document_id == document_id,
-            Document.workspace_id == auth_context.workspace_id,
+            *_document_scope_filter(auth_context),
         )
     )
     document = result.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return document
+
+
+async def _find_workspace_document(
+    db: AsyncSession,
+    auth_context: AuthContext,
+    document_id: str,
+) -> Document | None:
+    """Return a signed-tenant document without leaking other workspace/org rows."""
+
+    result = await db.execute(
+        select(Document).where(
+            Document.document_id == document_id,
+            *_document_scope_filter(auth_context),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+def _email_matches_preview_scope(email: Email, auth_context: AuthContext) -> bool:
+    """Re-check owner/org scope in Python so mock or stale rows cannot leak."""
+
+    if _can_read_org_scope(auth_context):
+        return email.organization_id == auth_context.organization_id
+    if email.user_id != auth_context.user_id:
+        return False
+    if auth_context.organization_id is None:
+        return email.organization_id is None
+    return email.organization_id == auth_context.organization_id
+
+
+def _preview_not_found() -> HTTPException:
+    """Return the same 404 for unknown and cross-workspace preview lookups."""
+
+    return HTTPException(
+        status_code=404,
+        detail={
+            "error_code": ERROR_REPOSITORY_ASSET_NOT_FOUND,
+            "message": (
+                "Repository asset was not found in the signed workspace scope."
+            ),
+        },
+    )
+
+
+async def _load_attachment_preview_segments(
+    db: AsyncSession,
+    attachment: Attachment,
+) -> list[ContentSegmentRecord]:
+    """Load ordered content-graph paragraphs without replacing the relationship."""
+
+    attachment_id = getattr(attachment, "id", None)
+    if attachment_id is None:
+        return []
+    segment_result = await db.execute(
+        select(ContentSegmentRecord)
+        .where(ContentSegmentRecord.attachment_id == attachment_id)
+        .order_by(ContentSegmentRecord.ordinal_index.asc())
+    )
+    return list(segment_result.scalars().all())
+
+
+def _preview_response(
+    preview: RepositoryAssetPreview,
+) -> DataRepositoryAssetPreviewResponse:
+    """Wrap a service preview in the signed read-only API envelope."""
+
+    return DataRepositoryAssetPreviewResponse(
+        asset_key=preview.asset_key,
+        asset_type=preview.asset_type,
+        preview_state=preview.preview_state,
+        parser_family=preview.parser_family,
+        paragraph_texts=list(preview.paragraph_texts),
+        preview_text=preview.preview_text,
+        next_action=preview.next_action,
+        error_code=preview.error_code,
+        provider_write_executed=False,
+        provenance="server-authoritative",
+        audit_event="data.repository_asset.preview.viewed",
+    )
 
 
 def _status_from_ratio(total_count: int, ready_count: int) -> SurfaceStatus:
@@ -3285,14 +3401,12 @@ async def create_document_pdf_dom_recognition_intent(
 )
 async def upload_document_for_pdf_dom_recognition(
     file: UploadFile = File(...),
-    # Declared as multipart form data (not a query parameter) so a client
-    # sending document_name alongside the file is honored.
     document_name: str | None = Form(None),
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> DataDocumentActionResponse:
-    """Binary upload variant: accept a PDF, stash it pending, and defer the
-    heavy NewsDOM recognition to the worker."""
+    """Accept a bounded PDF upload and defer heavy DOM recognition to the worker."""
+
     raw = await file.read(_MAX_PDF_DOM_UPLOAD_BYTES + 1)
     if len(raw) > _MAX_PDF_DOM_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="PDF upload is too large.")
@@ -3325,10 +3439,8 @@ async def upload_document_for_pdf_dom_recognition(
 
 
 def decode_pending_pdf_document_bytes(document: Document) -> bytes:
-    """Decode the base64 PDF payload stashed by the binary upload variant.
+    """Decode the base64 PDF payload stashed by the binary upload variant."""
 
-    Used by the recognition worker before calling the NewsDOM sidecar.
-    """
     try:
         payload = base64.b64decode(
             (document.document_content or "").encode("ascii"), validate=True
@@ -3354,11 +3466,6 @@ async def create_document_webdav_materialization_intent(
 ) -> DataDocumentWebdavMaterializationResponse:
     document = await _get_workspace_document(db, auth_context, document_id)
     if document.document_status in _NON_MATERIALIZABLE_DOCUMENT_STATUSES:
-        # A document whose recognition/conversion is still pending holds a
-        # non-text payload (e.g. the base64 PDF stashed for the NewsDOM worker).
-        # Materializing it as Markdown would write that raw payload to the
-        # customer's WebDAV target. Refuse until recognition has landed real
-        # parsed text.
         raise HTTPException(
             status_code=409,
             detail=(
@@ -3403,9 +3510,6 @@ async def _get_email_stats(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
 ) -> EmailQualityStats:
-    # ⚡ Bolt Optimization: Batching scalar counts using CASE
-    # Impact: Reduces 7 sequential database queries down to 2, drastically cutting
-    # latency from network roundtrips when fetching quality surface metrics.
     email_stats_result = await db.execute(
         select(
             func.count(Email.id),
@@ -3909,6 +4013,49 @@ async def _get_connector_events(
     return await _scoped_rows(db, connector_statement)
 
 
+@router.get(
+    "/repository-assets/{asset_key}/preview",
+    response_model=DataRepositoryAssetPreviewResponse,
+)
+async def get_repository_asset_preview(
+    asset_key: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataRepositoryAssetPreviewResponse:
+    """Return recognized paragraph text for one scoped repository asset."""
+
+    document = await _find_workspace_document(db, auth_context, asset_key)
+    if document is not None:
+        return _preview_response(build_document_preview(asset_key, document))
+
+    email_scope = _email_scope_filter(auth_context)
+    candidate_result = await db.stream(
+        select(Attachment.id, Attachment.filename, Email)
+        .join(Email)
+        .where(*email_scope)
+        .execution_options(yield_per=500)
+    )
+    async for attachment_id, filename, email in candidate_result:
+        if _opaque_asset_key_for_filename(email, filename) != asset_key:
+            continue
+        if not _email_matches_preview_scope(email, auth_context):
+            break
+        if attachment_id is None:
+            break
+        attachment = await db.get(Attachment, attachment_id)
+        if attachment is None:
+            break
+        loaded_segments = await _load_attachment_preview_segments(db, attachment)
+        return _preview_response(
+            build_attachment_preview(
+                asset_key,
+                attachment,
+                content_segments=loaded_segments,
+            )
+        )
+    raise _preview_not_found()
+
+
 @router.get("/quality-surface", response_model=DataQualitySurfaceResponse)
 async def get_data_quality_surface(
     auth_context: AuthContext = Depends(get_auth_context),
@@ -3931,7 +4078,7 @@ async def get_data_quality_surface(
     documents = await _scoped_rows(
         db,
         select(Document)
-        .where(Document.workspace_id == auth_context.workspace_id)
+        .where(*_document_scope_filter(auth_context))
         .order_by(Document.created_at.desc(), Document.document_id.asc())
         .limit(8),
     )
@@ -3977,9 +4124,7 @@ async def get_data_quality_surface(
     edged_email_count = knowledge_graph_stats.edged_email_count
     knowledge_graph_edge_count = knowledge_graph_stats.edge_count
     semantic_relation_count = semantic_relation_stats.total_count
-    semantic_relation_source_backed_count = (
-        semantic_relation_stats.source_backed_count
-    )
+    semantic_relation_source_backed_count = semantic_relation_stats.source_backed_count
     parsed_attachment_count = attachment_parse_stats.parsed_count
     unparsed_attachment_count = attachment_parse_stats.unparsed_count
 

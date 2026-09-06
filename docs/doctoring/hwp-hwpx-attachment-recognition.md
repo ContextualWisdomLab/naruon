@@ -187,6 +187,7 @@ traceability, not a substitute for current-head gates.
 | OPF manifest/spine ordered HWPX paragraph recognition | `backend/services/hwpx_recognition.py` | `test_hwpx_recognition.py` | Active stacked PR #1373 |
 | Deferred HWPX worker selection and local execution | `backend/services/newsdom_worker.py` | `test_hwpx_worker.py` | Active stacked PR #1373 |
 | Parsed attachment text + graph provenance | shared content-graph landing path | HWPX worker + recognizer tests | Active stacked PR #1373 |
+| Buyer-visible recognized HWPX paragraph preview | `backend/services/repository_asset_preview.py`, Data attachment view | `test_repository_asset_preview.py`, `RepositoryAssetPreviewPanel.test.tsx` | Active stacked preview PR |
 | Binary HWP conversion | future sandboxed converter | none yet | Planned / out of this slice |
 | HWPX tables, images, layout fidelity | future bounded recognizers | none yet | Planned / out of this slice |
 | Protected-`develop` shipped HWP/HWPX recognition | protected branch | integrated release gates | Not yet shipped |
@@ -198,6 +199,25 @@ traceability, not a substitute for current-head gates.
 | PDF | `pdf_dom_recognition_pending` | existing NewsDOM parsed/failed states |
 | HWPX | `hwpx_xml_package_pending` | `hwpx_xml_package_parsed` / `hwpx_xml_package_failed` |
 | HWP | `hwp_conversion_pending` | converter not implemented in this slice |
+
+## Buyer-visible preview — stacked on PR #1373
+
+Recognition alone is not buyer-visible. The next read-only slice exposes
+already stored ordered HWPX paragraphs in the existing Data
+attachment/document detail surface. The preview service does not re-parse
+ZIP/XML, reconstruct tables or images, convert binary HWP, or call NewsDOM.
+
+Pending HWPX keeps retained package bytes hidden and tells the buyer to wait
+or choose another file. Failed HWPX does the same without rendering an empty
+body. Unknown and cross-workspace asset keys share one 404
+`repository_asset_not_found` so existence cannot leak. E2E helpers mock
+preview only for known assets such as `roadmap.md` and `blank-notes.md`;
+unmatched preview routes stay 404.
+
+This presentation layer follows the same document-structure authority as the
+recognizer: KS X 6101/OWPML section and paragraph order is already persisted,
+and the UI only reads that order (Korean Agency for Technology and Standards,
+2024; Hancom Tech, 2025b, 2025c).
 
 ## Out of scope
 

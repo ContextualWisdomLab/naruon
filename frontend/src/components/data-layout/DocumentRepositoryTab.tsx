@@ -8,11 +8,13 @@ import {
   DocumentActionStatus,
   EmailFileImportResponse,
   DataDocumentActionResponse,
+  RepositoryAssetPreview,
   WebdavAccountStatus,
   WebdavAccount,
   WebdavAccountLookup,
   DataSurfaceStatus
 } from './types';
+import { RepositoryAssetPreviewPanel } from './RepositoryAssetPreviewPanel';
 import {
   formatCount,
   getWriteBoundaryLabel,
@@ -65,6 +67,8 @@ interface DocumentRepositoryTabProps {
   repositoryAssets: any[];
   selectedWorkspaceDocument: any;
   requestDocumentAction: (action: 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent') => void;
+  selectedAssetPreview: RepositoryAssetPreview | null;
+  onRefreshSelectedAssetPreview: () => void;
 }
 
 export function DocumentRepositoryTab({
@@ -94,6 +98,8 @@ export function DocumentRepositoryTab({
   repositoryAssets,
   selectedWorkspaceDocument,
   requestDocumentAction,
+  selectedAssetPreview,
+  onRefreshSelectedAssetPreview,
   connectorEvents,
 
   writebackStatus,
@@ -434,6 +440,11 @@ return (
                       </dd>
                     </div>
                   </dl>
+                  <RepositoryAssetPreviewPanel
+                    currentDetailText={selectedRepositoryAsset.detail_text}
+                    preview={selectedAssetPreview}
+                    onRefreshPreview={onRefreshSelectedAssetPreview}
+                  />
                 </section>
               )}
 
