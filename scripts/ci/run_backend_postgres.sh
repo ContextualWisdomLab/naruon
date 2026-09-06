@@ -6,6 +6,8 @@ set -euo pipefail
 set -m
 umask 077
 active_command_pid=""
+launch_in_progress=0
+pending_signal_status=""
 
 repository_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python_command="$repository_dir/backend/.venv/bin/python"
@@ -31,8 +33,13 @@ redact_evidence() {
 run_evidence() {
   local log_name="$1" command_status=0 cleanup_timer_pid=""
   shift
+  launch_in_progress=1
   (set +m; "$@" 2>&1 | redact_evidence | tee "$evidence_dir/$log_name") &
   active_command_pid=$!
+  launch_in_progress=0
+  if [[ -n "$pending_signal_status" ]]; then
+    cancel_execution "$pending_signal_status"
+  fi
   if [[ "$log_name" == cleanup.log ]]; then
     # A stalled Docker daemon must not prevent cancellation/report finalization.
     (set +m; sleep 20; kill -KILL -- "-$active_command_pid" 2>/dev/null || true) &
@@ -57,6 +64,12 @@ run_evidence() {
 
 cancel_execution() {
   local signal_status="$1"
+  # Record ownership before cancellation can enter teardown and launch another group.
+  if [[ "$launch_in_progress" == 1 ]]; then
+    pending_signal_status="$signal_status"
+    return
+  fi
+  pending_signal_status=""
   trap '' INT TERM
   if [[ -n "$active_command_pid" ]]; then
     # Cancellation is not clean test evidence; stop the whole owned command tree.
