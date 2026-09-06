@@ -15,6 +15,7 @@ def _hwpx_bytes(
     mimetype: bytes = b"application/hwp+zip",
     extra_entries: tuple[str, ...] = (),
     duplicate_mimetype: bool = False,
+    include_section: bool = True,
 ) -> bytes:
     """Build a small HWPX-shaped package with configurable ZIP metadata."""
     buffer = io.BytesIO()
@@ -24,7 +25,8 @@ def _hwpx_bytes(
             archive.writestr("mimetype", mimetype)
         archive.writestr("version.xml", '<version app="Naruon" />')
         archive.writestr("Contents/content.hpf", "<package />")
-        archive.writestr("Contents/section0.xml", "<section />")
+        if include_section:
+            archive.writestr("Contents/section0.xml", "<section />")
         for entry_name in extra_entries:
             archive.writestr(entry_name, b"")
     return buffer.getvalue()
@@ -101,6 +103,15 @@ def test_hwpx_recognition_bounds_mimetype_member_bytes(
     result = _parse_hwpx(_hwpx_bytes())
 
     assert result.parse_status == "invalid_hwpx_payload"
+
+
+def test_hwpx_recognition_rejects_manifest_only_package_without_sections() -> None:
+    """Reject packages that the HWPX recognition worker cannot materialize."""
+    result = _parse_hwpx(_hwpx_bytes(include_section=False))
+
+    assert result.parse_status == "invalid_hwpx_payload"
+    assert result.parse_error_code == "invalid_hwpx_payload"
+    assert result.content == ""
 
 
 def test_hwpx_recognition_accepts_the_bounded_canonical_package() -> None:
