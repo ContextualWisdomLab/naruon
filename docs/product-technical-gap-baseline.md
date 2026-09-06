@@ -1,10 +1,64 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.38
+**Baseline version:** 1.39
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+## Release ordering and foundation verification gaps (2026-09-06)
+
+PRD requirement: an operator must receive one coherent, authorized release;
+a slower old run must not replace the selected version or leave frontend and
+backend from different releases. At proposed CI head
+`1f538b188bf0c6a8193fbea005d0c537a01095ec`, Docker publication groups use the
+tag ref, while every tag writes the shared `latest` image alias
+(`.github/workflows/docker-publish.yml:13,304-307`). The called
+`.github/workflows/deploy.yml:41-68` selects version tags rather than published
+digests and applies backend/frontend separately to `naruon-dev`, without a
+deployment-target lock. These are source-backed risks, not evidence that a
+production overwrite or partial deployment occurred.
+
+TRD action: separate trusted live-head admission and cancellable PR validation
+from release/deployment serialization at the shared target. Preserve the
+workflow-repository-PR validation identity and independent matrix components.
+Adding `run_id` to every group was rejected: it prevents the required older-run
+cancellation and does not protect shared release targets. A per-tag lock was
+also rejected because different tags still mutate the same target. The
+canonical `.github` owner must provide reusable admission/release contracts;
+Naruon consumes immutable owner contracts through thin callers rather than
+copying a local scheduler. No new release implementation is claimed here.
+
+GitHub's native `queue: max` can retain up to 100 pending entries when
+`cancel-in-progress` is false; overflow is cancelled. It can be part of the
+serialization mechanism, but cannot alone prove durable release intent or
+unlimited non-cancellation. Required evidence covers a delayed older release,
+a duplicate rerun, competing component completion, partial apply recovery,
+source/digest readback, pending intent recovery and explicit overflow handling.
+An approved rollback must remain distinguishable from an accidental downgrade.
+[Review finding and alternatives](https://github.com/ContextualWisdomLab/naruon/pull/1562#discussion_r3943841262)
+and [GA acceptance follow-up](https://github.com/ContextualWisdomLab/naruon/issues/1428#issuecomment-5559018324)
+retain the owner handoff. No image, cluster or protection change was made.
+
+Foundation #1564 at `615be4514add6a21eef743f591a65a5f8fef4dee` has a separate
+hosted failure. Central dispatch run `33968978595`, source
+`f250638827f8252b0d9e5cb2601f4d333f96162f`, failed job `101314001568` at
+`codeql-scan-dispatch.yml:149`: `A sequence was not expected`. An array was
+assigned directly to an environment value; the scan job was skipped. Existing
+central repair [#1926](https://github.com/ContextualWisdomLab/.github/pull/1926)
+merged as `3f88e13af9dcde4b9da6958c02a78ce3b5c85800` serializes it with `toJSON`.
+The inspected current-head statuses still lack a terminal `codeql-dispatch/*`
+receipt. A fresh authorized execution on repaired source and its exact-job
+callback remain required; unrelated CodeQL success or rerunning historical
+source does not establish repair. [Exact failure and lineage inspection](https://github.com/ContextualWisdomLab/naruon/pull/1564#issuecomment-5559002855).
+
+Visual inspection of this ledger revision remains **unverified**: the Mac is
+locked and requires manual unlock. Prior desktop/narrow AGENTS screenshots
+apply only to their recorded unchanged head, not this revision or product UI.
+
+Reference: GitHub. (n.d.). *Control the concurrency of workflows and jobs*.
+Retrieved September 6, 2026, from
+https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
 
 **CI launch ownership repair (2026-09-06):** Existing CI owner
 [#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562) advances normally
