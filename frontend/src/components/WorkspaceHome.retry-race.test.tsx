@@ -84,6 +84,39 @@ describe("WorkspaceHome dashboard retry ordering", () => {
     vi.unstubAllGlobals();
   });
 
+  it("cancels the discarded StrictMode mount without cancelling the active mount", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    const dashboardSignals: AbortSignal[] = [];
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/api/search")) {
+        return Promise.resolve({ ok: true, json: async () => ({ results: [] }) });
+      }
+      expect(init?.signal).toBeDefined();
+      dashboardSignals.push(init!.signal!);
+      return new Promise((_resolve, reject) => {
+        init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), { once: true });
+      });
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<React.StrictMode><WorkspaceHome forcedStartupView="dashboard" /></React.StrictMode>);
+    });
+    expect(dashboardSignals).toHaveLength(10);
+    expect(dashboardSignals.slice(0, 5).every((signal) => signal.aborted)).toBe(true);
+    expect(dashboardSignals.slice(5).every((signal) => !signal.aborted)).toBe(true);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    await act(async () => root?.unmount());
+    root = null;
+    expect(dashboardSignals.every((signal) => signal.aborted)).toBe(true);
+  });
+
   it("keeps a recovered retry result when an older request resolves later", async () => {
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
       matches: false,
@@ -95,9 +128,14 @@ describe("WorkspaceHome dashboard retry ordering", () => {
     const firstEmails = deferred<{ ok: boolean; json: () => Promise<unknown> }>();
     let emailCallCount = 0;
     let calendarCallCount = 0;
+    const dashboardSignals: AbortSignal[] = [];
 
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (!url.endsWith("/api/search")) {
+        expect(init?.signal).toBeDefined();
+        dashboardSignals.push(init!.signal!);
+      }
       if (url.endsWith("/api/emails")) {
         emailCallCount += 1;
         if (emailCallCount === 1) return firstEmails.promise;
@@ -147,6 +185,9 @@ describe("WorkspaceHome dashboard retry ordering", () => {
       container?.querySelector<HTMLButtonElement>('[role="alert"] button')?.click();
     });
     await waitForCondition(() => container?.textContent?.includes("재시도 후 최신 메일") ?? false);
+    expect(dashboardSignals).toHaveLength(10);
+    expect(dashboardSignals.slice(0, 5).every((signal) => signal.aborted)).toBe(true);
+    expect(dashboardSignals.slice(5).every((signal) => !signal.aborted)).toBe(true);
 
     firstEmails.resolve({
       ok: true,
@@ -167,5 +208,8 @@ describe("WorkspaceHome dashboard retry ordering", () => {
     expect(container.textContent).not.toContain("늦게 도착한 이전 메일");
     expect(emailCallCount).toBe(2);
     expect(calendarCallCount).toBe(2);
+    await act(async () => root?.unmount());
+    root = null;
+    expect(dashboardSignals.every((signal) => signal.aborted)).toBe(true);
   });
 });

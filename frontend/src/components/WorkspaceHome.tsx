@@ -181,7 +181,11 @@ function useDashboardData() {
   useEffect(() => {
     let cancelled = false;
     const requestVersion = reloadVersion;
-    const dashboardReadSignal = AbortSignal.timeout(15_000);
+    const requestController = new AbortController();
+    const dashboardReadSignal = AbortSignal.any([
+      requestController.signal,
+      AbortSignal.timeout(15_000),
+    ]);
     const isStaleRequest = () => cancelled || requestVersion !== requestVersionRef.current;
     const setSourceStatus = (source: keyof DashboardDataStatuses, status: DashboardDataStatus) => {
       if (isStaleRequest()) return;
@@ -259,6 +263,7 @@ function useDashboardData() {
 
     return () => {
       cancelled = true;
+      requestController.abort();
     };
   }, [reloadVersion]);
 
