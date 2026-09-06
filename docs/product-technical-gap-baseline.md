@@ -1,12 +1,56 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.37
+**Baseline version:** 1.38
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-**SMTP cancellation repair (2026-09-06):** Existing shared-send owner
+**CI launch ownership repair (2026-09-06):** Existing CI owner
+[#1562](https://github.com/ContextualWisdomLab/naruon/pull/1562) advances normally
+to `1f538b188bf0c6a8193fbea005d0c537a01095ec`, tree
+`c5756d111a71b5eb7d4a1b038a5c29de646f7d03`. A real SIGTERM between background
+launch and PID registration left the original command alive after cleanup.
+A task-owned DEBUG barrier reproduced RED without changing the tested runner
+or reading operator files. The owner now records cancellation during that
+short registration interval and handles it after ownership is known.
+The cancellation status, group reaping, redaction and cleanup bound remain.
+
+On the committed owner, 19 focused cases pass, followed by **1876 passed /
+2 explicit live-only skips / 91.86 s** on a fresh and repeatedly migrated real
+PostgreSQL database, with complete scoped cleanup and exit0. The environment
+was synchronized to both Actions hash files (113 compatible packages), rather
+than substituting the differing local uv lock. JUnit SHA-256:
+`6d58e7387c41577302376ebb158ed4ff561cfb8b864d22b9fad110eba9fcdd5e`.
+The event observer recorded this run's container stop and destruction; those
+events cannot establish what killed an earlier run.
+
+Shared-send owner [#1417](https://github.com/ContextualWisdomLab/naruon/pull/1417)
+normally inherits the complete child at
+`b7011d2cc6a96c9e153a2771a7cac39749fa2969`, tree
+`2d3518f6fe7e3d1cc9f90855ebb35bfc290cd9ac`, retaining its SMTP and migration
+history. Its own committed-head full lifecycle passes **1891 tests /
+2 explicit live-only skips / 141.87 s**, including fresh/repeated migrations
+and completed scoped cleanup, exit0. JUnit SHA-256:
+`6b878f5303d34ebef472b148448ceaaa7d8c7d9e249c2f4ee601b5676a074673`.
+Both generated projects have no remaining containers, networks or volumes.
+
+Current merge refs `0977ebfec612d5fb6aa98caa9af22ea18e0485d9` (#1562)
+and `13488ac848b5573386f42565eec9239ee18f8481` (#1417) have the named
+base/head parents and identical source trees. Refreshed local Trivy scans have
+zero HIGH/CRITICAL fixable vulnerability/misconfiguration findings including
+development dependencies, and zero separate secret findings. Security report
+SHA-256 values are `1deff476ca58270ace7085a7b31f575550b35590c0b8f0918d88c7d6fb239bc4`
+and `0b48cbc2195c8229d0b4a3b8e9c1283fe712a7f2e42b045b9bc013a3966f9f69`;
+the respective secret-report digests remain in the PR receipts.
+Hosted checks remain separate gates; no hosted approval or advisory closure
+is inferred from these local scans.
+Both PRs remain Draft on their unmerged prerequisites. The earlier Docker
+exit137 incident remains unproven and open; this independently reproduced
+registration gap is not its established cause.
+[Decision, exact regression and APA reference](https://github.com/ContextualWisdomLab/naruon/blob/1f538b188bf0c6a8193fbea005d0c537a01095ec/docs/doctoring/application_ci_postgres.md#cancellation-before-process-ownership-is-recorded-2026-09-06).
+
+**Historical SMTP cancellation repair (2026-09-06; heads superseded above):** Existing shared-send owner
 [#1417](https://github.com/ContextualWisdomLab/naruon/pull/1417) advances normally
 to `dc8b53d38ddf80b726b5dc6cff1d21f2c25d293e`, tree
 `b66b0bff2cab33c9ff26301dad6005778c804696`, retaining the complete SMTP child
@@ -36,8 +80,9 @@ redaction guarantee changed. #1417 normally inherits the complete owner child.
 Both immutable-head test phases completed: #1417 `dc8b` has **1890 passed /
 2 explicit live-only skips / 1008.98 s**; #1562 `b2e9` has **1875 passed /
 2 explicit live-only skips / 837.94 s**. However, both runners exited **137**
-when Docker teardown exceeded the unchanged 20-second cleanup bound. Neither
-is a successful full-lifecycle receipt. Sanitized JUnit SHA-256 values are
+during Docker removal. This is consistent with the unchanged 20-second cleanup
+watchdog, but the saved logs do not establish signal attribution or precise
+elapsed timing. Neither is a successful full-lifecycle receipt. Sanitized JUnit SHA-256 values are
 `3d3a9fec41477cffc8786e7ab4e1006fa9ad09dc73e5afa3e53998e268ebdb6d`
 and `b45206540f4683773f8d8dd7aeee66a3cf1b69c198ee2c99043be0e68aca444d`,
 respectively. Task-label inspection found one empty CI-test network after both
