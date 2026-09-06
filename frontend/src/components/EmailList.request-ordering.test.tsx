@@ -85,8 +85,12 @@ describe("EmailList request ordering", () => {
 
     await act(async () => {
       setInputValue(input as HTMLInputElement, "계약");
+    });
+    await act(async () => {
       form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
+
+    expect(resolveSearch).not.toBeNull();
 
     const clearButton = container.querySelector<HTMLButtonElement>('button[aria-label="맥락 검색어 지우기"]');
     expect(clearButton).not.toBeNull();
@@ -94,6 +98,8 @@ describe("EmailList request ordering", () => {
     await act(async () => {
       clearButton?.click();
     });
+
+    expect(resolveInboxRefresh).not.toBeNull();
 
     await act(async () => {
       resolveInboxRefresh?.(jsonResponse({
