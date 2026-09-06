@@ -1,12 +1,29 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.47
+**Baseline version:** 1.48
 **Observed on:** 2026-09-06 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-06)
+
+### Calendar 경고 수리와 운영 지침 전파
+
+기존 #1488의 `f6eb0460efb0d7332762fe3fbdb8aa1702f35506`은 첫 렌더의
+비동기 원본 조회가 끝날 때까지 `await act`로 기다린다. 원래 진단 출력을
+유지하는 검사만 추가했을 때 1개 실패·9개 통과로 재현됐고, 수리 후 관련
+13개 테스트와 strict lint가 Calendar 경고 없이 통과했다. 전체 실행의
+53파일·440테스트는 통과했지만 이 브랜치에 아직 상속되지 않은 EmailDetail
+경고 4개는 남았다. 두 UI 소유자의 수리를 통합한 뒤 다시 검증해야 한다.
+[Calendar 수리 근거](https://github.com/ContextualWisdomLab/naruon/pull/1488#issuecomment-5560051738).
+
+AGENTS #1566의 `a813e6e750e0fe48e350864a01570a118b34e338`에는 실제
+manifest 탐지 목록 확인과 경고를 허용하지 않는 검증 절차를 중복 없이
+추가했다. 인접 문서·소스 계약 56개는 통과했지만 이 수치가 새 지침의 실제
+렌더나 사실 검증을 대신하지 않는다. 최신 Visual Inspection과 보호 병합은
+미완료로 유지한다.
+[운영 지침 보강 근거](https://github.com/ContextualWisdomLab/naruon/pull/1566#issuecomment-5560051818).
 
 ### EmailDetail 테스트 경고 수리와 남은 검증
 
