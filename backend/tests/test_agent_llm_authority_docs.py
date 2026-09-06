@@ -108,6 +108,23 @@ def test_agent_guidance_separates_runtime_evidence_from_authorization() -> None:
         assert required_phrase in normalized_agents
 
 
+def test_agent_guidance_separates_schema_reproduction_and_resource_ownership() -> None:
+    """Keep diagnostic boundaries discoverable; prose checks are not runtime evidence."""
+    normalized_agents = " ".join(_read("AGENTS.md").lower().split())
+    for required_phrase in (
+        "general json schema validation",
+        "provider's supported subset",
+        "original model response",
+        "counterexample, not the proven cause",
+        "resource-owning transport boundary",
+        "borrowed streams",
+        "ownership transfer",
+        "garbage collection",
+        "resourcewarning",
+    ):
+        assert required_phrase in normalized_agents
+
+
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     """Repository OpenCode model work must use only the canonical logical pool."""
     raw_config = _read("opencode.jsonc")

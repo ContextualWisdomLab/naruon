@@ -251,6 +251,28 @@ in this repo.
 - Do not present a heuristic as a security, AI-quality, or completion
   guarantee. State its evidence boundary and replace it at the canonical owner
   when the workflow requires an enforceable contract.
+- General JSON Schema validation does not prove that a model endpoint accepts
+  the schema. Verify the provider's supported subset for the selected endpoint
+  and model before proposing schema changes; retain semantic checks at the
+  canonical owner when the wire format cannot express an invariant. For
+  OpenAI Structured Outputs, check the current guide before using composition
+  keywords: `allOf`, `if`/`then`/`else`, and root-level `anyOf` are unsupported
+  as of 2026-09-06; nested `anyOf` has separate subset constraints.
+
+  - OpenAI. (n.d.). [*Structured model outputs*](https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas). Retrieved September 6, 2026.
+
+- An offline/source reproduction without the original model response is a
+  counterexample, not the proven cause of a hosted failure. Bind a causal claim
+  to the exact source SHA, request schema, sanitized response/error evidence,
+  and run ID/attempt; keep missing evidence explicit. Synthetic counterexamples
+  belong in unit tests and cannot stand in for actual provider execution.
+- Close HTTP error responses at the resource-owning transport boundary on
+  success and failure. Parsers receiving borrowed streams must not close them
+  unless their contract explicitly transfers ownership; test that ownership
+  transfer and exception paths. Do not rely on garbage collection to release
+  sockets. Reproduce `ResourceWarning` with warning-strict tests and deterministic
+  cleanup assertions at the acquiring caller, not by adding cleanup to every
+  helper or hiding the warning.
 - Pending or queued reviews and checks are wait states. Continue safe work on
   another gap. Before calling a PR merge-ready, freshly verify the exact head
   and base, live rulesets, required checks, unresolved threads, and applicable
