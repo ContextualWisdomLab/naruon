@@ -1,12 +1,38 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.50
+**Baseline version:** 1.51
 **Observed on:** 2026-09-07 (Asia/Seoul; earlier dated receipts remain historical snapshots)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 ## Current clean-summary regression repair (2026-09-07)
+
+### AGENTS 렌더 확인과 stacked gate의 실제 적용 범위
+
+#1566의 `d33f1d7da8a74b4ffb8eec25ef2580bfde1cc8ff`는 공개 GitHub exact-SHA
+렌더에서 변경 보존 문단·스킬 지침·검증 절의 desktop/mobile 캡처 6장을
+직접 확인했다. 1280×1024와 390×844에서 해당 문단의 잘림·겹침은 없었고
+focused 캡처의 scrollWidth는 viewport와 같았다. 관찰한 pageerror는 0건이다.
+이 경로는 설치된 Playwright의 새 익명 context를 사용하며 잠긴 Mac 세션이나
+저장된 인증을 사용하지 않는다. 초기 상단 캡처와 networkidle timeout은 실패
+관찰로 남기고, 실제 목표 문단을 viewport에서 확인한 후속 캡처만 근거로 쓴다.
+전체 1,071줄·모든 언어·브라우저 검증으로 확대하지 않는다.
+[Visual Inspection 기록](https://github.com/ContextualWisdomLab/naruon/pull/1566#issuecomment-5560206265).
+
+같은 head의 GitHub Checks API는 check run 0개, required-check CLI는 없음으로
+응답했다. 리뷰 thread 1개는 resolved/outdated이고 pagination도 끝까지 확인했다.
+과거 `27211368`의 CHANGES_REQUESTED가 남아 있으며, 현재 CodeRabbit·Devin
+SUCCESS status를 현재 head의 APPROVED review로 바꾸어 해석하지 않는다.
+
+Naruon의 실제 ruleset API에서 상속 규칙 `18156473`의 ref 조건은
+`~DEFAULT_BRANCH`뿐이었다. 중앙 workflow 7개와 승인 1개·삭제 금지·non-fast-forward
+금지가 한 규칙에 섞여 있다. 로컬 `15586698`, `17214772`도 default branch에만
+적용된다. 특히 `17214772`는 승인 1개와 마지막 push 승인도 요구한다.
+#1566의 base는 foundation branch이므로 필수 검사 없음은 보호 검증 완료가
+아닌 stacked 적용 공백이다. 현행 owner에서 workflow-only 적용 범위와 권한을
+결정해야 하며 이 문서 변경은 규칙을 변경하지 않는다. 혼합 규칙을 모든 ref로
+넓히거나 승인 수를 낮추는 우회는 하지 않는다. 보호 병합은 계속 미완료다.
 
 ### Calendar 브라우저 검사와 고객 표현 Gap
 
