@@ -227,6 +227,14 @@ in this repo.
   for force-pushing. Merge the updated prerequisite into the same stacked
   branch, preserve its complete delta, rerun focused checks, and retarget only
   when the resulting dependency order is verified.
+- An "empty commit" message or acknowledgement is not tree evidence. Inspect
+  the exact parents with `git show -s --format='%H %P %T' <head>` and compare
+  `git diff --name-status <verified-parent> <head>` before carrying checks
+  forward. For merge commits, record which parent is the comparison baseline.
+  If valid inherited changes disappeared, retain both revisions and read the
+  related reviews/comments; do not reverse an unexplained external deletion
+  until its intent is resolved. Continue independent work without consuming
+  the disputed revision, and invalidate old-head success claims immediately.
 - Preserve unrelated dirty or untracked files. If a command changes the wrong
   checkout, stop before editing or pushing. Record before/after SHAs and staged,
   unstaged, and untracked state; preserve displaced commits under a recovery
