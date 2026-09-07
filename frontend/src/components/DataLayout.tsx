@@ -233,6 +233,10 @@ export function DataLayout() {
   }, []);
 
   const requestDocumentUpload = useCallback(async () => {
+    if (documentActionInFlightRef.current) {
+      return;
+    }
+
     const [file] = documentUploadFiles;
     if (!file) {
       setDocumentActionStatus('error');
@@ -248,9 +252,6 @@ export function DataLayout() {
     const documentType = getDocumentTypeForFile(file);
     if (!isTextDocumentUploadType(documentType)) {
       setDocumentActionStatus('error');
-      return;
-    }
-    if (documentActionInFlightRef.current) {
       return;
     }
 
@@ -284,6 +285,10 @@ export function DataLayout() {
   const requestDocumentAction = useCallback(async (
     action: DocumentOperation,
   ) => {
+    if (documentActionInFlightRef.current) {
+      return;
+    }
+
     const asset = dataQualitySurface?.repository_assets.find((candidate) => (
       candidate.asset_key === selectedRepositoryAssetKey
     )) ?? dataQualitySurface?.repository_assets[0] ?? null;
@@ -296,9 +301,6 @@ export function DataLayout() {
     ))?.source_id ?? webdavAccounts.find((account) => account.writeback_enabled)?.source_id;
     if (action === 'webdav-materialization-intent' && (webdavAccountStatus !== 'ready' || !targetSourceId)) {
       setDocumentActionStatus('error');
-      return;
-    }
-    if (documentActionInFlightRef.current) {
       return;
     }
 
