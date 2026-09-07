@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 interface RepositoryProps {
   isDocumentActionLoading: boolean;
   activeDocumentAction: string | null;
-  requestDocumentAction: (action: 'reparse' | 'embedding-regeneration-intent') => Promise<void>;
+  documentActionStatus: string;
+  requestDocumentUpload: () => Promise<void>;
+  requestDocumentAction: (
+    action: 'reparse' | 'embedding-regeneration-intent' | 'webdav-materialization-intent',
+  ) => Promise<void>;
 }
 
 const apiClientMock = vi.hoisted(() => ({
@@ -128,6 +132,7 @@ describe('DataLayout document action lifecycle', () => {
     expect(apiClientMock.post).toHaveBeenCalledTimes(1);
     expect(repositoryProps.current?.isDocumentActionLoading).toBe(true);
     expect(repositoryProps.current?.activeDocumentAction).toBe('reparse');
+    expect(repositoryProps.current?.documentActionStatus).toBe('loading');
 
     await act(async () => {
       void repositoryProps.current?.requestDocumentAction('embedding-regeneration-intent');
@@ -135,6 +140,27 @@ describe('DataLayout document action lifecycle', () => {
     });
     expect(apiClientMock.post).toHaveBeenCalledTimes(1);
     expect(repositoryProps.current?.activeDocumentAction).toBe('reparse');
+    expect(repositoryProps.current?.documentActionStatus).toBe('loading');
+
+    // A rejected re-entry must not overwrite the active action's status while
+    // validating prerequisites for an action that cannot start.
+    await act(async () => {
+      void repositoryProps.current?.requestDocumentAction('webdav-materialization-intent');
+      await Promise.resolve();
+    });
+    expect(apiClientMock.post).toHaveBeenCalledTimes(1);
+    expect(repositoryProps.current?.activeDocumentAction).toBe('reparse');
+    expect(repositoryProps.current?.documentActionStatus).toBe('loading');
+
+    // Upload shares the same lock; even a programmatic call without a selected
+    // file must leave the active operation's status untouched.
+    await act(async () => {
+      void repositoryProps.current?.requestDocumentUpload();
+      await Promise.resolve();
+    });
+    expect(apiClientMock.post).toHaveBeenCalledTimes(1);
+    expect(repositoryProps.current?.activeDocumentAction).toBe('reparse');
+    expect(repositoryProps.current?.documentActionStatus).toBe('loading');
 
     await act(async () => {
       resolveRefresh?.(qualitySurface);
@@ -144,5 +170,6 @@ describe('DataLayout document action lifecycle', () => {
 
     expect(repositoryProps.current?.isDocumentActionLoading).toBe(false);
     expect(repositoryProps.current?.activeDocumentAction).toBeNull();
+    expect(repositoryProps.current?.documentActionStatus).toBe('success');
   });
 });
