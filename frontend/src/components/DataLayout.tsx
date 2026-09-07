@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useMemo, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useCallback, useState, useEffect, useMemo, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
 import { Database } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
@@ -18,6 +18,8 @@ import {
   UniqueThreadStatus,
   EmailImportStatus,
   DocumentActionStatus,
+  ActiveDocumentAction,
+  DocumentOperation,
   DataSurfaceStatus,
   DataEvidenceSnapshotResponse,
   DataQualitySurfaceResponse,
@@ -65,12 +67,14 @@ export function DataLayout() {
   const [emailImportResult, setEmailImportResult] = useState<EmailFileImportResponse | null>(null);
   const [emailImportFiles, setEmailImportFiles] = useState<File[]>([]);
   const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');
+  const [activeDocumentAction, setActiveDocumentAction] = useState<ActiveDocumentAction | null>(null);
   const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);
   const [documentUploadFiles, setDocumentUploadFiles] = useState<File[]>([]);
   const [dataSurfaceStatus, setDataSurfaceStatus] = useState<DataSurfaceStatus>('loading');
   const [dataQualitySurface, setDataQualitySurface] = useState<DataQualitySurfaceResponse | null>(null);
   const [dataEvidenceSnapshot, setDataEvidenceSnapshot] = useState<DataEvidenceSnapshotResponse | null>(null);
   const [selectedRepositoryAssetKey, setSelectedRepositoryAssetKey] = useState<string | null>(null);
+  const documentActionInFlightRef = useRef(false);
 
   const webdavAccountMap = useMemo<WebdavAccountLookup>(
     () => new Map(webdavAccounts.map((account, index) => [
@@ -222,11 +226,17 @@ export function DataLayout() {
 
   const handleDocumentFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setDocumentUploadFiles(Array.from(event.target.files ?? []));
-    setDocumentActionResult(null);
-    setDocumentActionStatus('idle');
+    if (!documentActionInFlightRef.current) {
+      setDocumentActionResult(null);
+      setDocumentActionStatus('idle');
+    }
   }, []);
 
   const requestDocumentUpload = useCallback(async () => {
+    if (documentActionInFlightRef.current) {
+      return;
+    }
+
     const [file] = documentUploadFiles;
     if (!file) {
       setDocumentActionStatus('error');
@@ -239,14 +249,17 @@ export function DataLayout() {
       return;
     }
 
+    const documentType = getDocumentTypeForFile(file);
+    if (!isTextDocumentUploadType(documentType)) {
+      setDocumentActionStatus('error');
+      return;
+    }
+
+    documentActionInFlightRef.current = true;
+    setActiveDocumentAction('upload');
     setDocumentActionStatus('loading');
     setDocumentActionResult(null);
     try {
-      const documentType = getDocumentTypeForFile(file);
-      if (!isTextDocumentUploadType(documentType)) {
-        setDocumentActionStatus('error');
-        return;
-      }
       const documentContent = await file.text();
       const result = await apiClient.post<DataDocumentActionResponse>(
         '/api/data/documents',
@@ -257,18 +270,25 @@ export function DataLayout() {
         },
       );
       setDocumentActionResult(result);
-      setDocumentActionStatus('success');
       setDataSurfaceStatus('loading');
       await loadDataQualitySurface();
+      setDocumentActionStatus('success');
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
+    } finally {
+      documentActionInFlightRef.current = false;
+      setActiveDocumentAction((current) => (current === 'upload' ? null : current));
     }
   }, [documentUploadFiles, loadDataQualitySurface]);
 
   const requestDocumentAction = useCallback(async (
-    action: 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent',
+    action: DocumentOperation,
   ) => {
+    if (documentActionInFlightRef.current) {
+      return;
+    }
+
     const asset = dataQualitySurface?.repository_assets.find((candidate) => (
       candidate.asset_key === selectedRepositoryAssetKey
     )) ?? dataQualitySurface?.repository_assets[0] ?? null;
@@ -284,6 +304,8 @@ export function DataLayout() {
       return;
     }
 
+    documentActionInFlightRef.current = true;
+    setActiveDocumentAction(action);
     setDocumentActionStatus('loading');
     setDocumentActionResult(null);
     try {
@@ -294,12 +316,15 @@ export function DataLayout() {
           : {},
       );
       setDocumentActionResult(result);
-      setDocumentActionStatus('success');
       setDataSurfaceStatus('loading');
       await loadDataQualitySurface();
+      setDocumentActionStatus('success');
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
+    } finally {
+      documentActionInFlightRef.current = false;
+      setActiveDocumentAction((current) => (current === action ? null : current));
     }
   }, [
     dataQualitySurface,
@@ -315,7 +340,7 @@ export function DataLayout() {
   const canRequestWebdavWriteback = webdavAccountStatus === 'ready';
   const isUniqueThreadLoading = uniqueThreadStatus === 'loading';
   const isEmailImportLoading = emailImportStatus === 'loading';
-  const isDocumentActionLoading = documentActionStatus === 'loading';
+  const isDocumentActionLoading = activeDocumentAction !== null || documentActionStatus === 'loading';
   const selectedWebdavAccount = webdavAccounts.find((account) => (
     account.source_id === selectedWebdavSourceId && account.writeback_enabled
   )) ?? webdavAccounts.find((account) => account.writeback_enabled) ?? null;
@@ -441,6 +466,7 @@ export function DataLayout() {
               handleDocumentFileChange={handleDocumentFileChange}
               requestDocumentUpload={requestDocumentUpload}
               isDocumentActionLoading={isDocumentActionLoading}
+              activeDocumentAction={activeDocumentAction}
               documentUploadFiles={documentUploadFiles}
               documentActionStatus={documentActionStatus}
               documentActionResult={documentActionResult}

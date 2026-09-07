@@ -6,6 +6,8 @@ import {
   DataQualitySurfaceResponse,
   EmailImportStatus,
   DocumentActionStatus,
+  ActiveDocumentAction,
+  DocumentOperation,
   EmailFileImportResponse,
   DataDocumentActionResponse,
   WebdavAccountStatus,
@@ -53,6 +55,7 @@ interface DocumentRepositoryTabProps {
   handleDocumentFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   requestDocumentUpload: () => void;
   isDocumentActionLoading: boolean;
+  activeDocumentAction: ActiveDocumentAction | null;
   documentUploadFiles: File[];
   documentActionStatus: DocumentActionStatus;
   documentActionResult: DataDocumentActionResponse | null;
@@ -64,7 +67,7 @@ interface DocumentRepositoryTabProps {
   setSelectedRepositoryAssetKey: (key: string | null) => void;
   repositoryAssets: any[];
   selectedWorkspaceDocument: any;
-  requestDocumentAction: (action: 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent') => void;
+  requestDocumentAction: (action: DocumentOperation) => void;
 }
 
 export function DocumentRepositoryTab({
@@ -82,6 +85,7 @@ export function DocumentRepositoryTab({
   handleDocumentFileChange,
   requestDocumentUpload,
   isDocumentActionLoading,
+  activeDocumentAction,
   documentUploadFiles,
   documentActionStatus,
   documentActionResult,
@@ -190,8 +194,9 @@ return (
                       <button
                         type="button"
                         onClick={() => void requestDocumentUpload()}
+                        data-document-action="upload"
                         disabled={isDocumentActionLoading || documentUploadFiles.length === 0}
-                        aria-busy={isDocumentActionLoading}
+                        aria-busy={activeDocumentAction === 'upload'}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
                       >
                         <Upload className="size-4" />
@@ -374,7 +379,9 @@ return (
                       <button
                         type="button"
                         onClick={() => void requestDocumentAction('reparse')}
+                        data-document-action="reparse"
                         disabled={isDocumentActionLoading}
+                        aria-busy={activeDocumentAction === 'reparse'}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
                         <RefreshCw className="size-4" />
@@ -383,7 +390,9 @@ return (
                       <button
                         type="button"
                         onClick={() => void requestDocumentAction('embedding-regeneration-intent')}
+                        data-document-action="embedding-regeneration-intent"
                         disabled={isDocumentActionLoading}
+                        aria-busy={activeDocumentAction === 'embedding-regeneration-intent'}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
                         <Database className="size-4" />
@@ -392,7 +401,9 @@ return (
                       <button
                         type="button"
                         onClick={() => void requestDocumentAction('hwp-conversion-intent')}
+                        data-document-action="hwp-conversion-intent"
                         disabled={isDocumentActionLoading}
+                        aria-busy={activeDocumentAction === 'hwp-conversion-intent'}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
                         <FileText className="size-4" />
@@ -401,8 +412,9 @@ return (
                       <button
                         type="button"
                         onClick={() => void requestDocumentAction('webdav-materialization-intent')}
+                        data-document-action="webdav-materialization-intent"
                         disabled={isDocumentActionLoading || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}
-                        aria-busy={isDocumentActionLoading}
+                        aria-busy={activeDocumentAction === 'webdav-materialization-intent'}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Server className="size-4" />
@@ -518,6 +530,7 @@ return (
                     type="button"
                     onClick={() => void requestUniqueThreadIntent()}
                     disabled={isUniqueThreadLoading}
+                    aria-busy={isUniqueThreadLoading}
                     className="w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
                   >
                     중복 메일 스레드 의도 점검
