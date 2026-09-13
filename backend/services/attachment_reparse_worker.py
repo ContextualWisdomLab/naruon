@@ -43,6 +43,11 @@ _sysrand = random.SystemRandom()
 
 DEFAULT_ATTACHMENT_REPARSE_INTERVAL_SECONDS = 60
 DEFAULT_ATTACHMENT_REPARSE_BATCH_LIMIT = 10
+# Keep retry metadata and the resulting SQL ``IN`` predicate at a fixed,
+# auditable ceiling. Rows evicted from this fast-retry window are still
+# rediscovered by the periodic full rescan below, so bounding the hot set
+# does not turn a transient processing error into permanent starvation.
+MAX_ATTACHMENT_REPARSE_RETRY_IDS = 64
 ATTACHMENT_REPARSE_SWEEP_LOCK_NAMESPACE = "naruon-attachment-reparse-sweep"
 MAX_STARTUP_JITTER_SECONDS = 30
 # POST .../reparse-intent can re-mark ANY existing attachment reparse_pending,
@@ -74,6 +79,20 @@ _SWEEP_LOCK_PARAMS = {
     "namespace_key": ATTACHMENT_REPARSE_SWEEP_LOCK_NAMESPACE,
     "sweep_key": "sweep",
 }
+
+
+def _bounded_attachment_retry_ids(retry_ids: set[int]) -> set[int]:
+    """Return a deterministic, fixed-size retry window.
+
+    Higher ids are retained when the window overflows because the forward
+    cursor naturally rediscovers lower ids first on the next periodic full
+    rescan. This keeps the immediate retry path focused on rows that would
+    otherwise wait longest after the cursor advances while the full rescan
+    remains the starvation-recovery mechanism for every pending row.
+    """
+    if len(retry_ids) <= MAX_ATTACHMENT_REPARSE_RETRY_IDS:
+        return set(retry_ids)
+    return set(sorted(retry_ids, reverse=True)[:MAX_ATTACHMENT_REPARSE_RETRY_IDS])
 
 
 def apply_reparsed_result(*, attachment: Attachment, result: AttachmentParseResult) -> None:
@@ -353,9 +372,10 @@ class AttachmentReparseWorker:
         self._task: asyncio.Task | None = None
         self._is_running = False
         self._attachment_cursor: int | None = None
-        # Rows a past sweep saw raise. Retried every sweep via an explicit
-        # id filter, independent of the forward cursor -- see
-        # _sweep_attachments.
+        # Rows a past sweep saw raise. Only a fixed-size hot set is retried on
+        # every sweep; overflow is intentionally left to the periodic full
+        # rescan so neither process memory nor the SQL IN predicate can grow
+        # without bound.
         self._attachment_retry_ids: set[int] = set()
         self._attachment_sweep_count = 0
 
@@ -436,18 +456,14 @@ class AttachmentReparseWorker:
 
         ``_attachment_cursor`` is a forward-scan position that only ever
         advances (to the highest id seen in a batch), and
-        ``_attachment_retry_ids`` is the set of ids a past sweep saw raise,
-        retried every sweep via an explicit ``id IN (...)`` filter
-        independent of the cursor -- the same design as
-        ``services.newsdom_worker.NewsdomRecognitionWorker._sweep_attachments``
-        (see its docstring for the full rationale). An earlier version
-        instead capped the cursor itself at the first failure: that kept one
-        failing row selectable, but pinned the whole batch window behind it
-        once more than ``batch_limit`` consecutive rows failed at once
-        (e.g. a systematic classification bug affecting a burst of
-        simultaneous reparse-intent requests) -- nothing past them would
-        ever be reached. Decoupling retry tracking from the forward cursor
-        fixes that.
+        ``_attachment_retry_ids`` is a bounded hot set of ids a past sweep
+        saw raise. Those ids are retried every sweep via an explicit
+        ``id IN (...)`` filter independent of the cursor. Overflow is not
+        forgotten: every ``FULL_RESCAN_EVERY_N_SWEEPS``-th sweep resets the
+        cursor and rediscovers every still-pending row. The fixed retry window
+        therefore bounds memory and query parameters without reintroducing
+        the starvation bug that occurred when the cursor itself was pinned at
+        the first failure.
 
         Neither piece of state can discover a row explicitly re-marked
         ``reparse_pending`` after the cursor already passed it --
@@ -518,21 +534,21 @@ class AttachmentReparseWorker:
                 if self._attachment_cursor is None
                 else max(self._attachment_cursor, highest_seen)
             )
-        self._attachment_retry_ids = (
-            self._attachment_retry_ids - processed_ids
-        ) | unresolved_ids
+        retry_candidates = (self._attachment_retry_ids - processed_ids) | unresolved_ids
+        self._attachment_retry_ids = _bounded_attachment_retry_ids(retry_candidates)
 
     def _reparse_pending_statement(
         self, after_id: int | None, retry_ids: set[int]
     ):
         """Build the next deterministic reparse-pending batch query.
 
-        Selects rows past the forward cursor OR still tracked in
-        ``retry_ids``, forward rows ordered ahead of retry rows when both
-        are present -- identical shape to
-        ``services.newsdom_worker.NewsdomRecognitionWorker._pending_attachment_statement``
-        (see its docstring for why the priority must run that way).
+        Selects rows past the forward cursor OR a bounded subset of rows still
+        tracked in ``retry_ids``, forward rows ordered ahead of retry rows when
+        both are present. The explicit second bound is defensive: even a
+        corrupted or externally-mutated retry set cannot expand the SQL ``IN``
+        predicate beyond ``MAX_ATTACHMENT_REPARSE_RETRY_IDS``.
         """
+        bounded_retry_ids = _bounded_attachment_retry_ids(retry_ids)
         statement = select(Attachment).where(
             Attachment.parse_status == ATTACHMENT_REPARSE_PENDING_STATUS
         )
@@ -543,13 +559,13 @@ class AttachmentReparseWorker:
         # everything else that's pending.
         if after_id is not None:
             conditions = [Attachment.id > after_id]
-            if retry_ids:
-                conditions.append(Attachment.id.in_(retry_ids))
+            if bounded_retry_ids:
+                conditions.append(Attachment.id.in_(bounded_retry_ids))
             statement = statement.where(
                 conditions[0] if len(conditions) == 1 else or_(*conditions)
             )
         order_columns = []
-        if after_id is not None and retry_ids:
+        if after_id is not None and bounded_retry_ids:
             order_columns.append(case((Attachment.id > after_id, 0), else_=1))
         order_columns.append(Attachment.id)
         return statement.order_by(*order_columns).limit(self.batch_limit)
