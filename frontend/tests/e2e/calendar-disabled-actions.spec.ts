@@ -49,6 +49,11 @@ test('explains unavailable calendar actions without hover-only affordances', asy
   await expect(locationButton).toHaveAttribute('aria-describedby', 'calendar-location-summary');
   await expect(locationButton).not.toHaveAttribute('title', /.+/u);
 
+  await expect(page.getByText('2026.05.23 (목)', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('참석자 6명', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Naruon_2.0_런칭계획.pptx', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('출시_체크리스트.xlsx', { exact: true })).toHaveCount(0);
+
   await reason.scrollIntoViewIfNeeded();
   const reasonBox = await reason.boundingBox();
   expect(reasonBox).not.toBeNull();
