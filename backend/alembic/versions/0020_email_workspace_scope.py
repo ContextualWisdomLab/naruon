@@ -71,6 +71,19 @@ def _x_arguments() -> dict[str, str]:
     return {str(key): str(value) for key, value in values.items()}
 
 
+def _is_offline_mode() -> bool:
+    """Return Alembic mode without requiring an EnvironmentContext in direct tests."""
+    try:
+        return context.is_offline_mode()
+    except NameError:
+        # ``Operations.context(MigrationContext(...))`` is an online execution
+        # path but does not install Alembic's module-level EnvironmentContext
+        # proxy. Treat only that direct-test shape as online; normal Alembic
+        # offline generation always has the proxy and still follows fail-closed
+        # offline contracts below.
+        return False
+
+
 def _validated_workspace_id(value: str, *, argument_name: str) -> str:
     normalized = value.strip()
     if not normalized or not normalized.isascii():
@@ -198,7 +211,7 @@ def _emit_offline_upgrade() -> None:
 
 
 def upgrade() -> None:
-    if context.is_offline_mode():
+    if _is_offline_mode():
         _emit_offline_upgrade()
         return
 
@@ -320,7 +333,7 @@ def _emit_offline_downgrade() -> None:
 
 
 def downgrade() -> None:
-    if context.is_offline_mode():
+    if _is_offline_mode():
         _emit_offline_downgrade()
         return
 
