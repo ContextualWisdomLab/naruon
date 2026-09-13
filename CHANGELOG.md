@@ -1,4 +1,37 @@
 ## [Unreleased]
+- 텍스트 본문에서 HTTP 및 HTTPS URL을 추출하여 중복 없이 반환하는 유틸리티 도구인 `url_extractor` (URL 추출기)를 추가했습니다.
+- 분석·유틸리티 도구 2종(`hash_generator`, `email_phone_masker`)을 추가했습니다. 해시 도구는 MD5·SHA-1 호환 fingerprint와 SHA-256을 구분하고, 연락처 도구는 제한된 길이 안에서 이메일 주소와 전화번호를 단순 마스킹합니다.
+### Source-bound 요약·업무·관계·일정 경계
+
+- 입력과 무관한 고정 2023 fixture로 결정 사항과 미해결 질문, 업무와 마감일,
+  발신자 조직 관계와 중요도, 회의 시간·장소 후보를 성공 응답으로 반환하던
+  `thread_summarizer`, `action_item_extractor`, `sender_dag_analytics`,
+  `meeting_candidate_finder`를 내장 도구 레지스트리에서 제거했습니다. 이를
+  대신하는 고정값·템플릿 fallback은 없습니다. source-bound evidence와 선언된
+  provider가 없는 동안 catalog에 노출하지 않으며 상세 조회와 실행은 `404`로
+  fail closed 합니다. 아래의 과거 기능 추가 기록은 당시 변경 이력으로 보존하며
+  현재 지원 계약을 뜻하지 않습니다.
+
+### 이메일 보안 판정 경계 (Email Security Verdict Boundary)
+
+- 고정 키워드와 발신자 도메인 suffix만으로 확정적 spam/phishing boolean과
+  risk score를 반환하던 `spam_phishing_detector`를 내장 도구 레지스트리에서
+  제거했습니다. 이를 대신하는 keyword·suffix fallback은 없으며, source-bound
+  evidence, provider verdict, provenance가 없는 경우에는 보안 판정을 생성하지 않고
+  fail closed/unknown으로 처리해야 합니다. 아래의 과거 기능 추가 기록은 당시 변경
+  이력으로 보존하며 현재 지원 계약을 뜻하지 않습니다.
+
+### 도구 변경 경계 (Tool Mutation Boundary)
+
+- 프로세스 전역·비영속 레지스트리를 모든 인증 사용자가 변경할 수 있었던
+  `POST /api/tools`, `PATCH /api/tools/{code}`, `DELETE /api/tools/{code}`를
+  OpenAPI에서 숨긴 fail-closed tombstone으로 전환했습니다. 세 경로는 인증 후
+  `501 tool_mutation_not_supported`를 반환하며, 요청 body를 검증하거나 레지스트리를
+  변경하거나 webhook DNS/egress를 시작하지 않습니다. webhook이 없는 사용자 정의
+  도구에 실제 작업 없이 성공을 반환하던 mock handler도 제거했습니다. 도구 목록·상세
+  조회와 기존 내장 도구 실행 계약은 변경하지 않았습니다.
+
+- Starlette `TestClient`의 기존 `httpx2==2.5.0` pin을 core 개발·테스트 의존성으로 승격하고, deprecated `httpx` fallback 경고 억제를 제거했습니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
@@ -62,7 +95,6 @@
 - hybrid retrieval의 점수 융합·질의 정규화 프리미티브를 독립 패키지 `rankweave`(PyPI, Apache-2.0)로 분리하고 naruon이 이를 의존성으로 소비하도록 배선했습니다: `backend/services/hybrid_retrieval`의 로컬 `score_fusion.py`·`query_normalization.py`를 삭제하고 해시 고정된 `rankweave==0.1.0`을 `requirements.txt`/`requirements-hashes.txt`에 추가했으며, 패키지 `__init__`은 동일한 8개 심볼을 `rankweave`에서 재수출하는 naruon 측 seam으로 유지됩니다(동작 무변경 — 융합 테스트 26건 통과, `retrieval_channels` 등 기존 소비자는 `services.hybrid_retrieval`에서 계속 import). rankweave는 standalone 제품이자 submodule/의존성으로 재사용 가능한 OSMU("따로, 또 같이") 산출물입니다.
 
 ### 기능 추가 (Features)
-- **URL 추출 도구 추가 (url_extractor)**: 텍스트 본문 내에서 부정 뒤돌아보기 방식의 정규표현식을 통해 중복 없이 안전하게 URL을 추출하는 유틸리티 도구를 `backend/api/tools.py`에 새롭게 추가하고, 단위 및 통합 테스트를 통해 기능과 100% 코드 커버리지를 입증했습니다.
 - **도구 기능 대규모 추가 (naruon#tools)**: 사용자가 직접 사용할 수 있는 새롭고 유용한 5개의 AI/분석 도구를 `backend/api/tools.py`에 구현하고 레지스트리에 등록했습니다.
   - `email_translator`: 이메일 내용을 대상 언어로 번역
   - `spam_phishing_detector`: 이메일의 스팸 및 피싱 위험도를 분석
