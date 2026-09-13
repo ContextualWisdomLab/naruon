@@ -375,7 +375,7 @@ const NetworkGraph = memo(function NetworkGraph() {
       <div role="alert" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center p-6 text-center sm:min-h-[420px]">
         <div className="max-w-xs rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
           <h4 className="font-bold">관계 맥락을 불러오지 못했습니다</h4>
-          <p className="mt-2 text-sm leading-6 text-red-700">{error}</p>
+          <p className="mt-2 text-sm leading-6">{error}</p>
         </div>
       </div>
     );
@@ -443,7 +443,7 @@ const NetworkGraph = memo(function NetworkGraph() {
             onClick={handleFitGraph}
             className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            전체 그래프 맞춤
+            전체 그래프 맞춤 완료
           </button>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
