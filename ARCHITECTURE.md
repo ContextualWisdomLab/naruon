@@ -76,21 +76,28 @@ documented in `docs/threading-contract.md`.
 
 ## Data and tenancy boundary
 
-The `emails` table has non-null `user_id` and `organization_id` owner keys, and
-the current email list, detail, thread, search, and network graph endpoints scope
-their queries to the authenticated user plus organization. Fresh local databases
-get these columns from SQLAlchemy metadata; existing local databases get them
-through `scripts/bootstrap_db.py`, which fails closed when legacy rows lack owner
-scope unless explicit non-default `NARUON_IMPORT_USER_ID` and
-`NARUON_IMPORT_ORGANIZATION_ID` values are provided for the backfill. Production
-multi-user safety still requires an audited migration and backfill that maps
-historical rows to verified mailbox owners and organizations before real tenant
-data is mixed in one database.
+On PR #1486's proposed state, `email_records` has non-null `user_id`,
+`organization_id`, and `workspace_id` owner keys. Mail list/detail/thread,
+search, network-graph, attachment, import, and background-mail paths that read
+or mutate an email must preserve that three-part scope; `Email.owner_filters`
+requires all three values. The signed `workspace_id` is an opaque membership
+claim and is not derived from `organization_id`.
 
-`message_id` is unique only within the `(user_id, organization_id)` owner scope,
-not globally. Fixture import upserts and reply-thread lookup use the same owner
-scope so a reused RFC Message-ID from another organization cannot overwrite an
-email row or attach a reply to another tenant's thread.
+Alembic `0020_email_workspace_scope` moves historical rows onto that contract.
+It accepts operator-validated per-email workspace mappings and, only when
+explicitly supplied, an operator-validated fallback. Online migration refuses
+to set `workspace_id` non-null while any row remains NULL or blank. Offline SQL
+generation fails closed unless the operator supplies either a validated fallback
+or a complete mapping declaration, and downgrade requires explicit confirmation
+that restoring the old owner-only identity is collision-safe. The local
+`bootstrap_db.py` path remains a development compatibility path rather than an
+authority for production historical ownership.
+
+`message_id` is unique only within the `(user_id, organization_id, workspace_id)`
+email scope, not globally. Import duplicate checks, reply/thread lookups, and
+workspace-sensitive reads use the same scope so one workspace cannot suppress,
+overwrite, or attach to another workspace's row merely by reusing an RFC
+Message-ID.
 
 `llm_providers` is also owner-scoped. Provider rows carry non-null `user_id` and
 `organization_id`, provider names are unique only within an organization, and the
@@ -114,6 +121,12 @@ before storage instead of returning stored tags to a future rendering surface.
 Parsed email body/subject, address, and attachment display text strips active
 HTML/script markup at the parser boundary while preserving message/thread
 identifiers and angle-address headers separately.
+
+`TicketTask` does not yet carry a first-class `workspace_id`, so the task
+aggregate cannot independently express the same workspace ownership invariant as
+Email. Issue #1673 is the canonical structural owner for that schema/domain
+change. Until it lands through normal ancestry, source-email checks must not be
+misrepresented as a complete task-level cross-workspace isolation guarantee.
 
 Customer-owned mail, CalDAV/CardDAV, and WebDAV systems remain the durable
 source-of-truth. Naruon can cache/index metadata and generate writeback intents,
