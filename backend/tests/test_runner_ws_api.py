@@ -20,16 +20,20 @@ TEST_SESSION_HMAC_SECRET = os.environ["AUTH_SESSION_HMAC_SECRET"]
 
 
 class _MockResult:
-    def __init__(self, token: str | None):
+    def __init__(self, token: str | None, workspace_id: str = "workspace-org-acme"):
         self.token = token
+        self.workspace_id = workspace_id
 
-    def scalar_one_or_none(self):
-        return self.token
+    def one_or_none(self):
+        if self.token is None:
+            return None
+        return (self.token, self.workspace_id)
 
 
 class _MockRunnerSession:
-    def __init__(self, token: str | None):
+    def __init__(self, token: str | None, workspace_id: str = "workspace-org-acme"):
         self.token = token
+        self.workspace_id = workspace_id
 
     async def __aenter__(self):
         return self
@@ -38,7 +42,7 @@ class _MockRunnerSession:
         return None
 
     async def execute(self, query):
-        return _MockResult(self.token)
+        return _MockResult(self.token, self.workspace_id)
 
 
 class _FailingSendWebSocket:
@@ -145,7 +149,7 @@ async def test_runner_connection_key_validates_registered_token(monkeypatch):
         "nrn_registered-token", _auth_context()
     )
 
-    assert connection_key.startswith("org-acme:")
+    assert connection_key.startswith("org-acme:workspace-org-acme:")
     assert "nrn_registered-token" not in connection_key
 
 
