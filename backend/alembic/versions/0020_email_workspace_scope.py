@@ -7,9 +7,11 @@ Create Date: 2026-08-31 00:00:00.000000
 Historical email workspace ownership is not derivable from organization_id.
 Operators must supply verified workspace assignments through Alembic ``-x``
 arguments when legacy rows exist. Online execution verifies that no unresolved
-rows remain before enforcing NOT NULL. Offline SQL generation cannot inspect
-row completeness, so it fails closed unless the operator supplies either a
-validated fallback or explicitly attests that the per-email mapping is complete.
+rows remain before enforcing NOT NULL. Blank or whitespace-only historical
+workspace values are unresolved just like NULL values. Offline SQL generation
+cannot inspect row completeness, so it fails closed unless the operator supplies
+either a validated fallback or explicitly attests that the per-email mapping is
+complete.
 """
 
 import json
@@ -46,6 +48,14 @@ def _email_table_stub() -> sa.TableClause:
         sa.column("organization_id", sa.String()),
         sa.column("workspace_id", sa.String()),
         sa.column("message_id", sa.String()),
+    )
+
+
+def _workspace_is_unresolved(emails: sa.TableClause):
+    """Return the tenant-scope predicate that must be backfilled before NOT NULL."""
+    return sa.or_(
+        emails.c.workspace_id.is_(None),
+        sa.func.trim(emails.c.workspace_id) == "",
     )
 
 
@@ -119,19 +129,20 @@ def _apply_workspace_backfill(
     fallback: str | None,
 ) -> None:
     emails = _email_table_stub()
+    unresolved_workspace = _workspace_is_unresolved(emails)
     for email_id, workspace_id in sorted(mapping.items()):
         execute_statement(
             sa.update(emails)
             .where(
                 emails.c.id == email_id,
-                emails.c.workspace_id.is_(None),
+                unresolved_workspace,
             )
             .values(workspace_id=workspace_id)
         )
     if fallback is not None:
         execute_statement(
             sa.update(emails)
-            .where(emails.c.workspace_id.is_(None))
+            .where(unresolved_workspace)
             .values(workspace_id=fallback)
         )
 
@@ -177,9 +188,11 @@ def _emit_offline_upgrade() -> None:
         sa.Column("workspace_id", sa.String(), nullable=True),
     )
     _apply_workspace_backfill(op.execute, mapping, fallback)
-    # With an operator-validated fallback every remaining NULL is assigned.
-    # With a complete-map attestation, PostgreSQL itself still rejects the
-    # generated ALTER if the operator's mapping omitted an existing row.
+    # With an operator-validated fallback every remaining unresolved value is
+    # assigned. With a complete-map attestation, PostgreSQL still rejects the
+    # generated ALTER if the operator's mapping omitted a row whose value is
+    # NULL; the contract tests additionally keep blank values in the same
+    # unresolved predicate used by online verification.
     op.alter_column(_EMAIL_TABLE, "workspace_id", nullable=False)
     _emit_workspace_identity_upgrade()
 
@@ -210,7 +223,7 @@ def upgrade() -> None:
     unresolved_count = connection.execute(
         sa.select(sa.func.count())
         .select_from(emails)
-        .where(emails.c.workspace_id.is_(None))
+        .where(_workspace_is_unresolved(emails))
     ).scalar_one()
     if unresolved_count:
         raise RuntimeError(
