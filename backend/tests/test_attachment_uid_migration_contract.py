@@ -93,9 +93,7 @@ def test_attachment_uid_downgrade_offline_emits_linear_operations(monkeypatch):
     monkeypatch.setattr(
         module.op,
         "drop_constraint",
-        lambda *args, **kwargs: pytest.fail(
-            "offline downgrade cannot infer constraint-backed bootstrap shape"
-        ),
+        lambda *args, **kwargs: operations.append(("drop_constraint", args, kwargs)),
     )
     monkeypatch.setattr(
         module.op,
@@ -110,8 +108,14 @@ def test_attachment_uid_downgrade_offline_emits_linear_operations(monkeypatch):
 
     module.downgrade()
 
-    assert [operation[0] for operation in operations] == ["drop_index", "drop_column"]
-    assert operations[0][2]["if_exists"] is True
+    assert [operation[0] for operation in operations] == [
+        "drop_constraint",
+        "drop_index",
+        "drop_column",
+    ]
+    assert operations[0][2] == {"type_": "unique", "if_exists": True}
+    assert operations[1][2]["if_exists"] is True
+    assert operations[2][2]["if_exists"] is True
 
 
 def test_attachment_uid_backfill_has_no_python_row_loop():
