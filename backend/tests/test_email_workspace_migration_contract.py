@@ -16,12 +16,44 @@ def _load_revision_module():
     return module
 
 
+def _compiled_sql(statement) -> str:
+    return " ".join(
+        str(statement.compile(compile_kwargs={"literal_binds": True})).split()
+    ).lower()
+
+
 def test_0020_workspace_backfill_is_operator_authoritative_not_org_derived():
     revision_text = REVISION_PATH.read_text()
 
     assert 'sa.func.concat("workspace-", emails.c.organization_id)' not in revision_text
     assert "email_workspace_mapping_json" in revision_text
     assert "email_workspace_fallback" in revision_text
+
+
+def test_0020_blank_workspace_is_unresolved_for_backfill_and_validation():
+    module = _load_revision_module()
+    emitted = []
+
+    module._apply_workspace_backfill(
+        emitted.append,
+        {17: "workspace-mapped"},
+        "workspace-fallback",
+    )
+
+    assert len(emitted) == 2
+    for statement in emitted:
+        sql = _compiled_sql(statement)
+        assert "workspace_id is null" in sql
+        assert "trim(email_records.workspace_id) = ''" in sql
+
+    emails = module._email_table_stub()
+    unresolved_sql = _compiled_sql(
+        module.sa.select(module.sa.func.count())
+        .select_from(emails)
+        .where(module._workspace_is_unresolved(emails))
+    )
+    assert "workspace_id is null" in unresolved_sql
+    assert "trim(email_records.workspace_id) = ''" in unresolved_sql
 
 
 def test_0020_offline_upgrade_uses_operator_fallback_without_live_inspection(monkeypatch):
