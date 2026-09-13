@@ -443,7 +443,7 @@ const NetworkGraph = memo(function NetworkGraph() {
             onClick={handleFitGraph}
             className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            전체 그래프 맞춤 완료
+            전체 그래프 맞춤
           </button>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
