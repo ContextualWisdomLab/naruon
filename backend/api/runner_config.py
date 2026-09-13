@@ -64,6 +64,21 @@ def _get_target_organization_id(auth_context: AuthContext) -> str:
     return auth_context.organization_id
 
 
+def _get_target_workspace_id(auth_context: AuthContext) -> str:
+    workspace_id = auth_context.workspace_id.strip()
+    if not workspace_id:
+        raise HTTPException(status_code=403, detail="Workspace scope is required")
+    return workspace_id
+
+
+def _ensure_workspace_binding(auth_context: AuthContext, workspace_id: str) -> None:
+    if workspace_id != _get_target_workspace_id(auth_context):
+        raise HTTPException(
+            status_code=409,
+            detail="Runner configuration is bound to a different workspace",
+        )
+
+
 def _fingerprint(token: str | None) -> str | None:
     if not token:
         return None
@@ -76,7 +91,7 @@ async def get_runner_config(
     auth_context: AuthContext = Depends(_check_org_admin),
 ):
     organization_id = _get_target_organization_id(auth_context)
-    workspace_id = f"workspace-{organization_id}"
+    workspace_id = _get_target_workspace_id(auth_context)
     result = await db.execute(
         select(WorkspaceRunnerConfig).where(WorkspaceRunnerConfig.organization_id == organization_id)
     )
@@ -93,6 +108,7 @@ async def get_runner_config(
 
     try:
         ensure_organization_access(auth_context, config.organization_id)
+        _ensure_workspace_binding(auth_context, config.workspace_id)
         return RunnerConfigResponse(
             workspace_id=config.workspace_id,
             configured=bool(config.registration_token),
@@ -115,7 +131,7 @@ async def rotate_runner_token(
     auth_context: AuthContext = Depends(_check_org_admin),
 ):
     organization_id = _get_target_organization_id(auth_context)
-    workspace_id = f"workspace-{organization_id}"
+    workspace_id = _get_target_workspace_id(auth_context)
     result = await db.execute(
         select(WorkspaceRunnerConfig).where(WorkspaceRunnerConfig.organization_id == organization_id)
     )
@@ -131,6 +147,7 @@ async def rotate_runner_token(
         db.add(config)
     else:
         ensure_organization_access(auth_context, config.organization_id)
+        _ensure_workspace_binding(auth_context, config.workspace_id)
         config.registration_token = token
 
     try:
