@@ -14,6 +14,7 @@ govern implementation.
 | [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical measurement separate from agenda generation | Proposed | Target and future capability `PLANNED`; no implementation authorization |
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
 | [ADR-0005](0005-attachment-content-type-quarantine.md) | Quarantine attachments whose sniffed bytes disagree with their declared content type; address them via a new `attachment_uid` | Proposed | PR #1486 candidate; no protected-branch or release adoption evidence |
+| [ADR-0006](0006-legacy-email-read-state-migration-exception.md) | Preserve apply-time guards for the fixed legacy `0011_email_read_state` offline migration without generalizing raw DDL | Proposed | PR #1486 decision boundary; no general raw-SQL authorization |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at

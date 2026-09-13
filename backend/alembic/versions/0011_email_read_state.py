@@ -2,16 +2,14 @@
 
 Existing rows default to read so historical/file imports do not surface as unread.
 
-Deliberate exception to this repo's "Alembic migrations use structured
-operations (``op.create_index``, ...), never raw DDL" rule
-(``AGENTS.md``/``CLAUDE.md``): ``upgrade()``/``downgrade()`` below use
-``op.execute()`` with fixed module-level SQL constants instead of a structured
-``op.*`` call. The reason a structured call isn't used is that this migration's
-behavior must be conditional on whether the legacy ``emails`` table exists,
-evaluated at apply time (see the comment on ``_UPGRADE_SQL`` below for why that
-check cannot live in Python), and no structured Alembic operation expresses
-"run this DDL only if a runtime condition holds". The SQL is entirely static:
-no identifier or value is assembled from external input or runtime state.
+ADR-0006 records the narrow exception proposal for the fixed ``DO $$`` blocks
+below. The repository default remains structured Alembic operations; this
+historical migration is not a precedent for application SQL or ordinary schema
+changes. The exception is needed because one offline-generated SQL artifact must
+defer the legacy-table existence and provenance decision until that artifact is
+applied to its actual target database. Until ADR-0006 is adopted with this
+revision, the exception remains proposal-only rather than protected-branch
+authority.
 """
 
 from alembic import op
@@ -103,8 +101,8 @@ END $$;
 """
 
 
-# This is fixed migration DDL, not application query construction. The raw-query
-# Semgrep rule cannot distinguish this static Alembic boundary from runtime SQL.
+# ADR-0006 scopes this fixed migration DDL exception. The raw-query Semgrep rule
+# cannot distinguish this static Alembic boundary from runtime SQL construction.
 def upgrade() -> None:
     op.execute(_UPGRADE_SQL)  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
 
