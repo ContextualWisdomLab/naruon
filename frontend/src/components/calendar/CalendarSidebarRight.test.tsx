@@ -76,6 +76,11 @@ describe('CalendarSidebarRight disabled reasons', () => {
       );
       expect(button.hasAttribute('title')).toBe(false);
     }
+
+    expect(container!.textContent).not.toContain('2026.05.23 (목)');
+    expect(container!.textContent).not.toContain('참석자 6명');
+    expect(container!.textContent).not.toContain('Naruon_2.0_런칭계획.pptx');
+    expect(container!.textContent).not.toContain('출시_체크리스트.xlsx');
   });
 
   it('associates the visible empty-location message with the disabled location action', () => {
