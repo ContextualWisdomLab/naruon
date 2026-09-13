@@ -278,7 +278,6 @@ export default function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    // ⚡ Bolt Optimization: Replace O(N) chained mapping/filtering with bounded for...of loop
     const labels: string[] = [];
     for (const node of nodes) {
       const label = String(node.label ?? node.id);
@@ -292,7 +291,6 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    // ⚡ Bolt Optimization: Avoid O(N) Array.from allocation by iterating the iterator directly.
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
@@ -308,7 +306,6 @@ export default function NetworkGraph() {
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    // ⚡ Bolt Optimization: Avoid O(N) Array.from allocation by iterating the iterator directly.
     const options = [];
     for (const node of nodeInstanceMap.values()) {
       if (options.length >= 8) break;
@@ -378,7 +375,7 @@ export default function NetworkGraph() {
       <div role="alert" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center p-6 text-center sm:min-h-[420px]">
         <div className="max-w-xs rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
           <h4 className="font-bold">관계 맥락을 불러오지 못했습니다</h4>
-          <p className="mt-2 text-sm leading-6">{error}</p>
+          <p className="mt-2 text-sm leading-6 text-red-700">{error}</p>
         </div>
       </div>
     );
