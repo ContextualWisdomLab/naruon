@@ -38,7 +38,7 @@ async def test_live_seed_email_cleanup_is_workspace_owner_scoped():
     email_delete = session.statements[-1]
     compiled = email_delete.compile()
     query_text = str(compiled)
-    parameter_values = set(compiled.params.values())
+    parameter_values = list(compiled.params.values())
 
     assert "email_records.user_id" in query_text
     assert "email_records.organization_id" in query_text
