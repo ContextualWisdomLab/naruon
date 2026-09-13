@@ -14,7 +14,7 @@ through the same orchestrator. All new config is resolved from the Fernet DB
 at runtime, never from ``os.getenv``.
 """
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 revision = "0022_noema_orchestrator_gateway"
@@ -25,7 +25,16 @@ depends_on = None
 _TENANT_TABLE = "tenant_configs"
 
 
+def _emit_offline_upgrade() -> None:
+    for column in _tenant_noema_gateway_columns():
+        op.add_column(_TENANT_TABLE, column)
+
+
 def upgrade() -> None:
+    if context.is_offline_mode():
+        _emit_offline_upgrade()
+        return
+
     connection = op.get_bind()
     inspector = sa.inspect(connection)
 
@@ -35,7 +44,16 @@ def upgrade() -> None:
                 op.add_column(_TENANT_TABLE, column)
 
 
+def _emit_offline_downgrade() -> None:
+    for column in reversed(_tenant_noema_gateway_columns()):
+        op.drop_column(_TENANT_TABLE, column.name, if_exists=True)
+
+
 def downgrade() -> None:
+    if context.is_offline_mode():
+        _emit_offline_downgrade()
+        return
+
     connection = op.get_bind()
     inspector = sa.inspect(connection)
 
