@@ -1,4 +1,5 @@
 import asyncio
+import urllib.parse
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
@@ -12,6 +13,7 @@ MAX_EXTRACT_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB
 MAX_FILE_COUNT = 100000
 ZIP_UNIX_FILE_TYPE_MASK = 0o170000
 ZIP_UNIX_SYMLINK_TYPE = 0o120000
+MAX_ARCHIVE_FILENAME_DECODE_ROUNDS = 10
 
 
 def _is_zipinfo_symlink(info: ZipInfo) -> bool:
@@ -31,6 +33,25 @@ def _resolve_safe_archive_member(output_dir: Path, info: ZipInfo) -> Path:
     if any(part in ("", ".", "..") for part in parts):
         raise InvalidArchiveError("Unsafe archive path")
     if parts and parts[0].endswith(":"):
+        raise InvalidArchiveError("Unsafe archive path")
+
+    decoded_name = info.filename
+    for _ in range(MAX_ARCHIVE_FILENAME_DECODE_ROUNDS):
+        next_name = urllib.parse.unquote(decoded_name)
+        if next_name == decoded_name:
+            break
+        decoded_name = next_name
+    if urllib.parse.unquote(decoded_name) != decoded_name:
+        raise InvalidArchiveError("Unsafe archive path")
+
+    normalized_decoded = decoded_name.replace("\\", "/")
+    if not normalized_decoded or normalized_decoded.startswith("/"):
+        raise InvalidArchiveError("Unsafe archive path")
+
+    parts_decoded = normalized_decoded.split("/")
+    if any(part in ("", ".", "..") for part in parts_decoded):
+        raise InvalidArchiveError("Unsafe archive path")
+    if parts_decoded and parts_decoded[0].endswith(":"):
         raise InvalidArchiveError("Unsafe archive path")
 
     target_path = output_dir.joinpath(*parts).resolve(strict=False)

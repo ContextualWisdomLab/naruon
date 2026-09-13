@@ -78,6 +78,33 @@ def test_extract_backup_malformed_path(tmp_path):
     assert not (tmp_path / "malformed.eml").exists()
 
 
+def test_extract_backup_url_encoded_traversal(tmp_path):
+    zip_path = tmp_path / "url_encoded.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.writestr("%2e%2e/%2e%2e/escaped.eml", b"Subject: Escaped Email")
+        z.writestr("%252e%252e/%252e%252e/escaped2.eml", b"Subject: Escaped Email")
+        z.writestr("..%5c..%5cescaped3.eml", b"Subject: Escaped Email")
+
+    with pytest.raises(InvalidArchiveError, match="Unsafe archive path"):
+        archive_module.extract_backup(zip_path, tmp_path / "output")
+
+    assert not (tmp_path / "escaped.eml").exists()
+    assert not (tmp_path / "escaped2.eml").exists()
+    assert not (tmp_path / "escaped3.eml").exists()
+
+
+def test_extract_backup_valid_percent_in_name(tmp_path):
+    zip_path = tmp_path / "percent.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.writestr("report%20final.pdf", b"Content")
+
+    out_dir = tmp_path / "output"
+    extracted_files = archive_module.extract_backup(zip_path, out_dir)
+
+    assert len(extracted_files) == 1
+    assert extracted_files[0].name == "report%20final.pdf"
+
+
 def test_extract_backup_rejects_absolute_path(tmp_path):
     zip_path = tmp_path / "absolute.zip"
     escaped_path = tmp_path / "absolute-escape.eml"
@@ -140,7 +167,9 @@ def test_extract_backup_async(tmp_path):
         z.writestr("test.eml", b"Subject: Test Email")
 
     out_dir = tmp_path / "output"
-    extracted_files = asyncio.run(archive_module.extract_backup_async(zip_path, out_dir))
+    extracted_files = asyncio.run(
+        archive_module.extract_backup_async(zip_path, out_dir)
+    )
 
     assert len(extracted_files) == 1
     assert extracted_files[0].name == "test.eml"
