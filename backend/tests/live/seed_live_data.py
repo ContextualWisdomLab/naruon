@@ -59,7 +59,14 @@ async def _cleanup_existing_data(session: AsyncSession) -> None:
             WebdavAccount.source_uid == LIVE_E2E_WEBDAV_SOURCE_UID
         )
     )
-    await session.execute(delete(Email).where(Email.message_id.in_(MESSAGE_IDS)))
+    await session.execute(
+        delete(Email).where(
+            Email.user_id == LIVE_E2E_USER_ID,
+            Email.organization_id == LIVE_E2E_ORGANIZATION_ID,
+            Email.workspace_id == LIVE_E2E_WORKSPACE_ID,
+            Email.message_id.in_(MESSAGE_IDS),
+        )
+    )
 
 
 async def _setup_workspace(session: AsyncSession) -> None:
