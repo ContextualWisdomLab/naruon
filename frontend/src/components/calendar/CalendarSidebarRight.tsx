@@ -39,8 +39,8 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
         </div>
         <div className="flex gap-3 items-center">
           <Video className="size-5 text-muted-foreground shrink-0" />
-          <p className="text-sm font-semibold">{selectedDetailEvent?.location ?? '장소 없음'}</p>
-          <button type="button" disabled={!selectedDetailEvent?.location} aria-label={`${selectedDetailEvent?.location ?? '장소'} 위치 보기`} title={!selectedDetailEvent?.location ? "일정에 등록된 장소가 없습니다" : undefined} className="text-xs text-primary font-semibold ml-auto hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline">위치 보기</button>
+          <p id="calendar-location-summary" className="text-sm font-semibold">{selectedDetailEvent?.location || '장소 없음'}</p>
+          <button type="button" disabled={!selectedDetailEvent?.location} aria-label={`${selectedDetailEvent?.location || '장소'} 위치 보기`} aria-describedby={!selectedDetailEvent?.location ? 'calendar-location-summary' : undefined} className="text-xs text-primary font-semibold ml-auto hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline">위치 보기</button>
         </div>
         <div className="flex gap-3 items-start">
           <Users className="size-5 text-muted-foreground shrink-0" />
@@ -79,10 +79,15 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
         </div>
       </div>
 
-      <div className="mt-8 flex gap-3">
-        <button type="button" disabled={!selectedDetailEvent} aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 삭제` : '일정 삭제'} title={!selectedDetailEvent ? "일정을 먼저 선택해주세요" : undefined} className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed">삭제</button>
-        <button type="button" disabled={!selectedDetailEvent} aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 복사` : '일정 복사'} title={!selectedDetailEvent ? "일정을 먼저 선택해주세요" : undefined} className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed">복사</button>
-        <button type="button" disabled={!selectedDetailEvent} aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 수정` : '일정 수정'} title={!selectedDetailEvent ? "일정을 먼저 선택해주세요" : undefined} className="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed">수정</button>
+      {!selectedDetailEvent && (
+        <p id="calendar-action-disabled-reason" className="mt-8 text-xs text-muted-foreground">
+          일정을 선택하면 삭제·복사·수정할 수 있습니다.
+        </p>
+      )}
+      <div className={`${selectedDetailEvent ? 'mt-8' : 'mt-3'} flex gap-3`}>
+        <button type="button" disabled={!selectedDetailEvent} aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 삭제` : '일정 삭제'} aria-describedby={!selectedDetailEvent ? 'calendar-action-disabled-reason' : undefined} className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed">삭제</button>
+        <button type="button" disabled={!selectedDetailEvent} aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 복사` : '일정 복사'} aria-describedby={!selectedDetailEvent ? 'calendar-action-disabled-reason' : undefined} className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed">복사</button>
+        <button type="button" disabled={!selectedDetailEvent} aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 수정` : '일정 수정'} aria-describedby={!selectedDetailEvent ? 'calendar-action-disabled-reason' : undefined} className="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed">수정</button>
       </div>
     </aside>
   );
