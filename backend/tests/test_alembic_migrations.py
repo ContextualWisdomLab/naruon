@@ -1,4 +1,5 @@
 import importlib.util
+import uuid
 from pathlib import Path
 
 import asyncpg
@@ -6,6 +7,7 @@ import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 from core.config import settings
 
@@ -26,7 +28,6 @@ def _load_revision_module(revision_filename: str):
 def _setup_pre_0020_email_records(
     sync_conn, *, legacy_identity_as_constraint: bool
 ) -> None:
-    sync_conn.execute(text("DROP TABLE IF EXISTS email_records CASCADE"))
     sync_conn.execute(
         text(
             "CREATE TABLE email_records ("
@@ -292,31 +293,40 @@ def test_email_workspace_migration_also_drops_bootstrap_created_owner_only_index
 async def test_email_workspace_migration_real_postgres_smoke(
     legacy_identity_as_constraint,
 ):
-    """inspector.get_indexes() also reports the backing index of a unique
-    constraint under the same name (PostgreSQL implements a unique
-    constraint via a unique index), so a check that only looks at
-    get_indexes() before get_unique_constraints() would try `DROP INDEX` on
-    a constraint's own backing index -- PostgreSQL rejects that outright
-    ("cannot drop index ... because constraint ... requires it"), aborting
-    the whole migration. bootstrap_db.py has only ever produced the legacy
-    identity as a plain index, but this proves the migration itself handles
-    either catalog shape without relying on that assumption."""
+    """Run 0020 inside a disposable schema without touching shared tables.
+
+    PostgreSQL implements a unique constraint with a backing index, so the
+    migration must distinguish the legacy constraint and plain-index catalog
+    shapes. The acceptance path also proves that the test itself never replaces
+    or restores ``public.email_records``: 0020 runs under a unique search_path,
+    the temporary schema is explicitly removed, and the public relation OID is
+    unchanged across the whole test.
+    """
     engine = create_async_engine(settings.DATABASE_URL)
+    schema_name = f"test_0020_{uuid.uuid4().hex}"
+    public_email_records_oid = None
+    index_names: set[str] = set()
+    constraint_names: set[str] = set()
     try:
         async with engine.connect() as probe_conn:
-            original_email_records_oid = (
+            public_email_records_oid = (
                 await probe_conn.execute(
-                    text(
-                        "SELECT oid FROM pg_class "
-                        "WHERE oid = to_regclass('email_records')"
-                    )
+                    text("SELECT to_regclass('public.email_records')::oid")
                 )
             ).scalar_one_or_none()
-        assert original_email_records_oid is not None
+        assert public_email_records_oid is not None
 
         async with engine.connect() as conn:
             transaction = await conn.begin()
             try:
+                await conn.execute(CreateSchema(schema_name))
+                await conn.execute(
+                    text("SELECT set_config('search_path', :search_path, true)"),
+                    {"search_path": f"{schema_name}, public"},
+                )
+                assert (
+                    await conn.execute(text("SELECT current_schema()"))
+                ).scalar_one() == schema_name
 
                 def _setup(sync_conn):
                     _setup_pre_0020_email_records(
@@ -325,15 +335,33 @@ async def test_email_workspace_migration_real_postgres_smoke(
                     )
 
                 await conn.run_sync(_setup)
+                isolated_email_records_oid = (
+                    await conn.execute(text("SELECT to_regclass('email_records')::oid"))
+                ).scalar_one()
+                visible_public_oid = (
+                    await conn.execute(
+                        text("SELECT to_regclass('public.email_records')::oid")
+                    )
+                ).scalar_one()
+                assert isolated_email_records_oid != visible_public_oid
+                assert visible_public_oid == public_email_records_oid
+
                 await conn.run_sync(_run_0020_upgrade)
 
                 def _inspect(sync_conn):
                     insp = inspect(sync_conn)
                     return (
-                        {i["name"] for i in insp.get_indexes("email_records")},
+                        {
+                            i["name"]
+                            for i in insp.get_indexes(
+                                "email_records", schema=schema_name
+                            )
+                        },
                         {
                             c["name"]
-                            for c in insp.get_unique_constraints("email_records")
+                            for c in insp.get_unique_constraints(
+                                "email_records", schema=schema_name
+                            )
                         },
                     )
 
@@ -341,16 +369,25 @@ async def test_email_workspace_migration_real_postgres_smoke(
             finally:
                 await transaction.rollback()
 
+        async with engine.begin() as cleanup_conn:
+            await cleanup_conn.execute(
+                DropSchema(schema_name, cascade=True, if_exists=True)
+            )
+
         async with engine.connect() as probe_conn:
-            restored_email_records_oid = (
+            restored_public_oid = (
                 await probe_conn.execute(
-                    text(
-                        "SELECT oid FROM pg_class "
-                        "WHERE oid = to_regclass('email_records')"
-                    )
+                    text("SELECT to_regclass('public.email_records')::oid")
                 )
             ).scalar_one_or_none()
-        assert restored_email_records_oid == original_email_records_oid
+            disposable_schema_oid = (
+                await probe_conn.execute(
+                    text("SELECT to_regnamespace(:schema_name)::oid"),
+                    {"schema_name": schema_name},
+                )
+            ).scalar_one_or_none()
+        assert restored_public_oid == public_email_records_oid
+        assert disposable_schema_oid is None
     except (
         ConnectionRefusedError,
         OSError,
@@ -366,6 +403,13 @@ async def test_email_workspace_migration_real_postgres_smoke(
         await engine.dispose()
         raise
     finally:
+        try:
+            async with engine.begin() as cleanup_conn:
+                await cleanup_conn.execute(
+                    DropSchema(schema_name, cascade=True, if_exists=True)
+                )
+        except Exception:
+            pass
         await engine.dispose()
 
     assert "uq_email_records_owner_message_id" not in index_names
