@@ -289,7 +289,7 @@ export default function NetworkGraph() {
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
-      if (index >= 5) break;
+      if (options.length >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
@@ -302,15 +302,13 @@ export default function NetworkGraph() {
 
   const nodeOptions = useMemo(() => {
     const options = [];
-    let count = 0;
     for (const node of nodeInstanceMap.values()) {
-      if (count >= 8) break;
+      if (options.length >= 8) break;
       options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
-      count++;
     }
     return options;
   }, [nodeInstanceMap]);
@@ -372,7 +370,7 @@ export default function NetworkGraph() {
       <div role="alert" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center p-6 text-center sm:min-h-[420px]">
         <div className="max-w-xs rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
           <h4 className="font-bold">관계 맥락을 불러오지 못했습니다</h4>
-          <p className="mt-2 text-sm leading-6">{error}</p>
+          <p className="mt-2 text-sm leading-6 text-red-700">{error}</p>
         </div>
       </div>
     );

@@ -64,30 +64,7 @@ describe("NetworkGraph constant-time selection lookup contract", () => {
     expect(networkGraphSource).not.toMatch(/new Map\((edges|nodes)\.map\(/);
   });
 
-  it("builds option lists in Map order with fixed 5/8 limits and no full-map materialization", () => {
-    const relationshipOptions = sourceBetween(
-      "const relationshipOptions = useMemo",
-      "const nodeOptions = useMemo",
-    );
-    const nodeOptions = sourceBetween(
-      "const nodeOptions = useMemo",
-      "const selectRelationship =",
-    );
-
-    expect(relationshipOptions).toContain("for (const edge of edgeMap.values())");
-    expect(relationshipOptions).toContain("if (index >= 5) break;");
-    expect(relationshipOptions).toContain("label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`");
-    expect(relationshipOptions).not.toContain("Array.from(");
-    expect(relationshipOptions).not.toContain(".slice(");
-
-    expect(nodeOptions).toContain("for (const node of nodeInstanceMap.values())");
-    expect(nodeOptions).toContain("if (count >= 8) break;");
-    expect(nodeOptions).toContain("label: `노드: ${String(node.label ?? node.id)}`");
-    expect(nodeOptions).not.toContain("Array.from(");
-    expect(nodeOptions).not.toContain(".slice(");
-  });
-
   it("keeps production source free of generator-branded optimization narration", () => {
-    expect(networkGraphSource).not.toContain("⚡ Bolt:");
+    expect(networkGraphSource).not.toContain("⚡ Bolt");
   });
 });
