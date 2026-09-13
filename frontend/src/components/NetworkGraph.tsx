@@ -286,8 +286,6 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    // ⚡ Bolt: Replace chained .values().slice().map() with a single bounded for...of loop
-    // to avoid O(N) array allocation on large edge maps.
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
@@ -303,8 +301,6 @@ export default function NetworkGraph() {
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    // ⚡ Bolt: Replace chained .values().slice().map() with a single bounded for...of loop
-    // to avoid O(N) array allocation on large node maps.
     const options = [];
     let count = 0;
     for (const node of nodeInstanceMap.values()) {
