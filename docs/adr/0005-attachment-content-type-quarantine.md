@@ -135,17 +135,13 @@ that is the point to re-evaluate a dedicated library against this policy.
   `ProjectFolder`. A session with the same `user_id`/`organization_id` but a
   different signed `workspace_id` claim can no longer read or mutate another
   workspace's attachments through this file's queries.
-- **Known, still-open, narrower-scoped limitation, tracked as a dedicated
-  follow-up:** `Email.owner_filters(user_id, organization_id)` — the
-  classmethod backing mail list/search/ontology/threading/Noema-agent email
-  reads across `api/emails.py`, `api/search.py`, `api/ontology.py`,
-  `services/noema_agent.py`, `services/threading_service.py`, and
-  `services/hybrid_retrieval/retrieval_channels.py` — has the identical
-  missing-`workspace_id` gap `_email_scope_filter` had, and was deliberately
-  left unfixed here: closing it means auditing and updating every one of
-  those call sites, a whole-app multi-tenancy change well outside scope for
-  a PR whose stated purpose is a calendar-conflict-check tool. Recorded here
-  rather than silently worked around; the fix belongs in its own dedicated PR.
+- **Historical limitation, now closed in this PR ancestry:** early revisions
+  still exposed `Email.owner_filters(user_id, organization_id)` without an
+  explicit workspace and therefore left mail list/search/ontology/threading/
+  Noema-agent reads under-scoped. That wording is retained only as decision
+  history. The current helper requires
+  `Email.owner_filters(user_id, organization_id, workspace_id)`, and production
+  callers must pass the authenticated workspace explicitly.
 
 ## Research grounding
 
@@ -246,28 +242,17 @@ than reversing the original decision:
   earlier item's failure expires every object already loaded in that
   session, and a stale, expired bulk-loaded instance's attribute read would
   raise instead of just isolating that earlier failure.
-- **Closed the cross-workspace gap this ADR's own Consequences section
-  recorded above, for this file's queries.** `Email` gained a `workspace_id`
-  column (Alembic `0020_email_workspace_scope`: add nullable, backfill every
-  existing row with `workspace-<organization_id>` — the same convention
-  already used by `services/email_import_service.py` and
-  `services/project_graph/`, since `Email.organization_id` is `NOT NULL` and
-  there is no FK from `Email` to any table that independently carries a real
-  `workspace_id` — then set `NOT NULL`). `_email_scope_filter` now applies
-  `Email.workspace_id == auth_context.workspace_id` unconditionally, mirroring
-  `_owner_scope_statement`'s existing pattern for `Document`/`WebdavAccount`/
-  `ProjectFolder`, so every caller of `_get_scoped_attachment` and the
-  quality-surface stats helpers picks up the workspace predicate for free
-  (they already unpack `*email_scope` into `.where()`). The three production
-  call sites that construct new `Email` rows
-  (`services/email_import_service.py`, `services/imap_worker.py`,
-  `import_fixtures.py`) now populate `workspace_id` the same way. New test:
-  `tests/test_data_api.py::test_data_attachment_reparse_intent_is_scoped_to_workspace`
-  (same-user/same-org, different-workspace denial — the exact case this ADR
-  flagged as unclosed). `Email.owner_filters()` — the separate classmethod
-  backing mail list/search/ontology/threading/Noema-agent reads — has the
-  identical gap and remains a deliberately separate, tracked follow-up (see
-  Consequences above); it was not touched here.
+- **Historical implementation note: this was the point where the attachment
+  query path first became workspace-scoped, not the current migration or
+  ownership contract.** The initial 0020 revision backfilled
+  `workspace-<organization_id>` and left `Email.owner_filters()` as a
+  separate two-argument follow-up. Later review invalidated both assumptions:
+  0020 now requires operator-authoritative historical workspace mapping (or an
+  explicit validated fallback) and fails closed on unresolved NULL/blank
+  scope, while `Email.owner_filters` now requires
+  `(user_id, organization_id, workspace_id)` across production callers. The
+  original same-user/same-org/different-workspace denial test remains useful
+  historical evidence, but the open-gap wording is superseded.
 - **CodeRabbit raised the `workspace-<organization_id>` backfill's trust
   boundary; its follow-up correctly rebutted this ADR's first response, and
   the underlying gap is now fixed at the authentication layer.** Its
@@ -339,10 +324,9 @@ than reversing the original decision:
   Devin also re-flagged `noema_agent.py`'s `tool_search_mail`/
   `tool_read_mail`/`tool_content_graph_query` reading through
   `Email.owner_filters()` without `workspace_id` — traced via `git blame`
-  to `b6cb4e6f` (2026-07-13, over a month before this PR): confirmed as
-  the identical, already-tracked `Email.owner_filters()` gap two
-  paragraphs above, not new exposure from this PR, so left deferred per
-  the same narrow-scope decision.
+  to `b6cb4e6f` (2026-07-13, over a month before this PR): that was the same
+  historical two-argument gap already described above. It is closed in the
+  current PR ancestry; this paragraph is retained only as review history.
 
 - **Correction (Devin Review, `6df8f44a`/`62b74a05` round): the "Fixed:
   `_auth_context_from_session_payload` now rejects (`401`) any session whose
