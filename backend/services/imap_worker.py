@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import aioimaplib
 from sqlalchemy import select
 
-from db.models import Email, TenantConfig
+from db.models import Email, TenantConfig, WorkspaceRunnerConfig
 from db.session import AsyncSessionLocal
 from services.email_client import validate_imap_destination
 from services.email_dedupe_service import strong_email_fingerprint
@@ -115,16 +115,15 @@ MAX_IMAP_FETCH_MESSAGES = 10
 async def resolve_unambiguous_workspace_id(
     session, user_id: str, organization_id: str | None
 ) -> str | None:
-    """Resolve the single workspace an owner's already-imported mail belongs to.
+    """Resolve background mail sync to one persisted or registered workspace.
 
-    Background mail sync (IMAP, POP3) has no signed session and therefore no
-    independently authoritative workspace claim to thread through -- the only
-    evidence available is whatever workspace this owner's mail has already
-    been imported under. Returns ``None`` (fail closed; the caller must skip
-    the sync) when zero or more than one distinct workspace is found, so a
-    first-run or genuinely multi-workspace mailbox is never guessed at.
+    Existing owner-scoped email rows are the first source because they record
+    where this mailbox has already been imported. On a first run, there may be
+    no email row yet; in that case the runner registration is the authoritative
+    persisted organization-to-workspace mapping used by the connector plane.
+    Conflicting evidence fails closed instead of choosing either workspace.
     """
-    workspace_ids = list(
+    email_workspace_ids = list(
         await session.scalars(
             select(Email.workspace_id)
             .where(
@@ -135,9 +134,30 @@ async def resolve_unambiguous_workspace_id(
             .limit(2)
         )
     )
-    if len(workspace_ids) != 1:
+    if len(email_workspace_ids) > 1:
         return None
-    return workspace_ids[0]
+
+    runner_workspace_ids: list[str] = []
+    if organization_id is not None:
+        runner_workspace_ids = list(
+            await session.scalars(
+                select(WorkspaceRunnerConfig.workspace_id)
+                .where(WorkspaceRunnerConfig.organization_id == organization_id)
+                .limit(2)
+            )
+        )
+        if len(runner_workspace_ids) > 1:
+            return None
+
+    email_workspace_id = email_workspace_ids[0] if email_workspace_ids else None
+    runner_workspace_id = runner_workspace_ids[0] if runner_workspace_ids else None
+    if (
+        email_workspace_id is not None
+        and runner_workspace_id is not None
+        and email_workspace_id != runner_workspace_id
+    ):
+        return None
+    return email_workspace_id or runner_workspace_id
 
 
 def flags_indicate_seen(fetch_data) -> bool:
