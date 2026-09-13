@@ -55,6 +55,19 @@ def _derive_workspace_id(user_id: str, organization_id: str | None) -> str:
     return f"workspace-{user_id}"
 
 
+def _resolve_test_workspace_id(
+    *,
+    user_id: str,
+    organization_id: str | None,
+    explicit_workspace_id: str | None,
+) -> str:
+    """Preserve an explicit workspace claim while keeping legacy tests compatible."""
+    workspace_id = _normalize_header_value(explicit_workspace_id)
+    if workspace_id is not None:
+        return workspace_id
+    return _derive_workspace_id(user_id, organization_id)
+
+
 @pytest.fixture
 def dev_auth_dependency_overrides():
     async def test_auth_context(
@@ -62,6 +75,7 @@ def dev_auth_dependency_overrides():
         x_user_role: str | None = Header(None, alias="X-User-Role"),
         x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
         x_group_ids: str | None = Header(None, alias="X-Group-Ids"),
+        x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
     ) -> AuthContext:
         user_id = _normalize_header_value(x_user_id)
         if user_id is None:
@@ -72,7 +86,11 @@ def dev_auth_dependency_overrides():
             role=_derive_test_role(_normalize_header_value(x_user_role)),
             organization_id=organization_id,
             group_ids=_parse_group_ids(_normalize_header_value(x_group_ids)),
-            workspace_id=_derive_workspace_id(user_id, organization_id),
+            workspace_id=_resolve_test_workspace_id(
+                user_id=user_id,
+                organization_id=organization_id,
+                explicit_workspace_id=x_workspace_id,
+            ),
         )
 
     async def test_current_user(
@@ -80,6 +98,7 @@ def dev_auth_dependency_overrides():
         x_user_role: str | None = Header(None, alias="X-User-Role"),
         x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
         x_group_ids: str | None = Header(None, alias="X-Group-Ids"),
+        x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
     ) -> str:
         return (
             await test_auth_context(
@@ -87,6 +106,7 @@ def dev_auth_dependency_overrides():
                 x_user_role=x_user_role,
                 x_organization_id=x_organization_id,
                 x_group_ids=x_group_ids,
+                x_workspace_id=x_workspace_id,
             )
         ).user_id
 
