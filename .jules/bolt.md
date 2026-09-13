@@ -26,7 +26,3 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
-## 2026-09-13 - Replaced Chained Array Lookups in Iterable Mapping
-
-**Learning:** When dealing with maps and iterables in React's `useMemo`, chaining `.values()`, `.slice()`, and `.map()` requires pulling the entire iterable into a new array (via `Array.from` or similar mechanisms) before truncating and mapping it. For large datasets like network graph edges, this causes unnecessary `O(N)` transient array allocations just to slice and map a small subset (e.g., 5 items).
-**Action:** Replace chained higher-order array methods (like `.values()`, `.slice()`, and `.map()`) operating on Map iterables with a single bounded `for...of` loop that includes an early `break` once the desired subset limit is reached.
