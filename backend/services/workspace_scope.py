@@ -13,11 +13,12 @@ async def get_or_create_workspace(
 ) -> Workspace:
     """Return the ``Workspace`` row for ``workspace_id``, creating it first if needed.
 
-    ``workspace_id`` is the signed session's ``workspace`` claim
-    (``workspace-<organization_id>`` or ``workspace-<user_id>`` for
-    personal scope, per ``api/auth.py``/``_derive_workspace_id``), not the
-    model's own opaque default. Rows created here always use that claim as
-    the primary key so ``Document.workspace_id``'s foreign key resolves.
+    ``workspace_id`` is the independently signed, opaque workspace membership
+    claim supplied by the authenticated boundary. This service does not derive
+    workspace identity from ``organization_id`` or ``user_id``. Rows created
+    here use the supplied claim as the primary key so
+    ``Document.workspace_id``'s foreign key resolves to the authenticated
+    workspace.
     """
     # The first two requests for a signed workspace may arrive concurrently.
     # A SELECT-then-INSERT races on the workspace_id primary key, so let
