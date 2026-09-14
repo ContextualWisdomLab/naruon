@@ -1,4 +1,4 @@
-import { Clock, Video, Users, CalendarDays, Paperclip, X } from 'lucide-react';
+import { Clock, Video, Users, CalendarDays, Paperclip, X, CalendarPlus, ChevronRight, Link as LinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { CalendarDetailEvent } from './types';
 
@@ -42,15 +42,35 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
           <p className="text-sm font-semibold">{selectedDetailEvent?.location ?? '장소 없음'}</p>
           <button type="button" disabled={!selectedDetailEvent?.location} aria-label={`${selectedDetailEvent?.location ?? '장소'} 위치 보기`} className="text-xs text-primary font-semibold ml-auto hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline">위치 보기</button>
         </div>
-        <div className="flex gap-3 items-start">
+        <div className="flex gap-3 items-start w-full">
           <Users className="size-5 text-muted-foreground shrink-0" />
-          <div>
-            <p className="text-sm font-semibold mb-2">참석자 6명</p>
-            <div className="flex -space-x-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="size-8 rounded-full border-2 border-card bg-slate-200"></div>
-              ))}
-              <div className="flex size-8 items-center justify-center rounded-full border-2 border-card bg-secondary text-xs font-bold">+2</div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold">참여자 10</p>
+              <button type="button" className="text-xs text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm">모두 보기</button>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="size-6 rounded-full bg-slate-200 shrink-0"></div>
+                  <span className="text-sm font-medium">김나루</span>
+                </div>
+                <span className="text-xs text-muted-foreground">소유자</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="size-6 rounded-full bg-slate-200 shrink-0"></div>
+                  <span className="text-sm font-medium">이준호 <span className="text-muted-foreground text-xs font-normal">마케팅 리드</span></span>
+                </div>
+                <span className="text-xs text-muted-foreground">예</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="size-6 rounded-full bg-slate-200 shrink-0"></div>
+                  <span className="text-sm font-medium">김현진 <span className="text-muted-foreground text-xs font-normal">DevOps 리드</span></span>
+                </div>
+                <span className="text-xs text-muted-foreground">예</span>
+              </div>
             </div>
           </div>
         </div>
@@ -61,20 +81,83 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
             <p className="text-sm text-muted-foreground">{selectedDetailEvent?.description ?? '표시할 일정 설명이 없습니다.'}</p>
           </div>
         </div>
-        <div className="flex gap-3 items-start">
+        <div className="flex gap-3 items-start w-full">
           <Paperclip className="size-5 text-muted-foreground shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold mb-2">첨부파일 <span className="text-muted-foreground font-normal">2개</span></p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold">첨부파일 <span className="text-muted-foreground font-normal">6</span></p>
+            </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between rounded-lg border border-border bg-background p-2">
-                <span className="text-xs font-semibold">Naruon_2.0_런칭계획.pptx</span>
-                <span className="text-xs text-muted-foreground">2.4 MB</span>
+              <div className="flex flex-col justify-center rounded-lg border border-border bg-background p-2 gap-1">
+                <span className="text-xs font-semibold">런칭 마스터 일정 v3.xlsx</span>
+                <span className="text-xs text-muted-foreground">1.2 MB - 2024.05.19</span>
               </div>
-              <div className="flex items-center justify-between rounded-lg border border-border bg-background p-2">
-                <span className="text-xs font-semibold">출시_체크리스트.xlsx</span>
-                <span className="text-xs text-muted-foreground">1.1 MB</span>
+              <div className="flex flex-col justify-center rounded-lg border border-border bg-background p-2 gap-1">
+                <span className="text-xs font-semibold">B2B 계약 협상안 (v2).pdf</span>
+                <span className="text-xs text-muted-foreground">2.1 MB - 2024.05.18</span>
+              </div>
+              <div className="flex flex-col justify-center rounded-lg border border-border bg-background p-2 gap-1">
+                <span className="text-xs font-semibold">B2B 현지화 이슈 정리.docx</span>
+                <span className="text-xs text-muted-foreground">1.1 MB - 2024.05.17</span>
               </div>
             </div>
+            <button type="button" className="mt-2 text-left text-xs text-muted-foreground hover:text-primary transition-colors py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm">
+              + 3개 더보기
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-3 items-start w-full">
+          <CalendarPlus className="size-5 text-muted-foreground shrink-0" />
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold">회의 제안</p>
+              <button type="button" className="text-xs text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm">모두 보기</button>
+            </div>
+            <div className="rounded-lg border border-border bg-background p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">릴리즈 준비 주간 동기화 미팅</span>
+                <ChevronRight className="size-4 text-muted-foreground" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="size-3" />
+                <span>5/22 (수) 오전 10:00 - 11:00</span>
+              </div>
+              <div className="flex items-center gap-1 mt-1">
+                <div className="flex -space-x-1">
+                  <div className="size-5 rounded-full bg-slate-200 border border-background"></div>
+                  <div className="size-5 rounded-full bg-slate-300 border border-background"></div>
+                  <div className="size-5 rounded-full bg-slate-400 border border-background"></div>
+                </div>
+                <span className="text-xs text-muted-foreground ml-1">외 3명</span>
+              </div>
+              <button type="button" className="mt-2 w-full flex items-center justify-center gap-2 rounded-md bg-secondary py-1.5 text-xs font-semibold text-secondary-foreground hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                <CalendarPlus className="size-3" />
+                캘린더에 추가
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 items-start w-full">
+          <LinkIcon className="size-5 text-muted-foreground shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold mb-3">연결된 과거 메일/스레드</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">QA 후보 선정 결과 공유</span>
+                <span className="text-xs text-muted-foreground">2024.05.10</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">런칭 일정 1차 조율</span>
+                <span className="text-xs text-muted-foreground">2024.05.02</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">글로벌 시장 진출 검토</span>
+                <span className="text-xs text-muted-foreground">2024.04.25</span>
+              </div>
+            </div>
+            <button type="button" className="mt-2 text-left text-xs text-muted-foreground hover:text-primary transition-colors py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm">
+              + 3개 더보기
+            </button>
           </div>
         </div>
       </div>

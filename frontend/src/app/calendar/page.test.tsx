@@ -20,6 +20,8 @@ vi.mock("lucide-react", () => ({
   Settings: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
   Paperclip: () => <svg aria-hidden="true" />,
+  CalendarPlus: () => <svg aria-hidden="true" />,
+  Link: () => <svg aria-hidden="true" />,
 }));
 
 import CalendarPage from "./page";
