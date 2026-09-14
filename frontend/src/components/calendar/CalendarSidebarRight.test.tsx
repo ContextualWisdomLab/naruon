@@ -24,7 +24,12 @@ const DETAIL_EVENT: CalendarDetailEvent = {
   location: '',
 };
 
-describe('CalendarSidebarRight disabled reasons', () => {
+const DETAIL_EVENT_WITH_LOCATION: CalendarDetailEvent = {
+  ...DETAIL_EVENT,
+  location: '서울 회의실',
+};
+
+describe('CalendarSidebarRight action honesty', () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
@@ -58,14 +63,14 @@ describe('CalendarSidebarRight disabled reasons', () => {
     return button!;
   }
 
-  it('exposes one visible and associated reason when event actions are unavailable', () => {
+  it('keeps unsupported event actions disabled with a visible associated reason', () => {
     renderComponent(null);
 
     const reason = container!.querySelector<HTMLElement>(
       '#calendar-action-disabled-reason',
     );
     expect(reason?.textContent).toBe(
-      '일정을 선택하면 삭제·복사·수정할 수 있습니다.',
+      '삭제·복사·수정은 이 상세 패널에서 지원하지 않습니다.',
     );
 
     for (const label of ['일정 삭제', '일정 복사', '일정 수정']) {
@@ -83,6 +88,41 @@ describe('CalendarSidebarRight disabled reasons', () => {
     expect(container!.textContent).not.toContain('출시_체크리스트.xlsx');
   });
 
+  it('does not expose enabled controls when no action callback exists', () => {
+    renderComponent(DETAIL_EVENT_WITH_LOCATION);
+
+    const reason = container!.querySelector<HTMLElement>(
+      '#calendar-action-disabled-reason',
+    );
+    expect(reason?.textContent).toBe(
+      '삭제·복사·수정은 이 상세 패널에서 지원하지 않습니다.',
+    );
+
+    for (const label of [
+      '제품 검토 일정 삭제',
+      '제품 검토 일정 복사',
+      '제품 검토 일정 수정',
+    ]) {
+      const button = buttonByLabel(label);
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-describedby')).toBe(
+        'calendar-action-disabled-reason',
+      );
+    }
+
+    const locationButton = buttonByLabel('서울 회의실 위치 보기');
+    expect(locationButton.disabled).toBe(true);
+    expect(locationButton.getAttribute('aria-describedby')).toBe(
+      'calendar-location-action-disabled-reason',
+    );
+    expect(
+      container!.querySelector('#calendar-location-action-disabled-reason')
+        ?.textContent,
+    ).toBe('위치 보기는 이 상세 패널에서 지원하지 않습니다.');
+
+    expect(container!.querySelector('button[aria-label="닫기"]')).toBeNull();
+  });
+
   it('associates the visible empty-location message with the disabled location action', () => {
     renderComponent(DETAIL_EVENT);
 
@@ -97,13 +137,6 @@ describe('CalendarSidebarRight disabled reasons', () => {
       'calendar-location-summary',
     );
     expect(locationButton.hasAttribute('title')).toBe(false);
-
-    expect(
-      container!.querySelector('#calendar-action-disabled-reason'),
-    ).toBeNull();
-    expect(buttonByLabel('제품 검토 일정 삭제').disabled).toBe(false);
-    expect(buttonByLabel('제품 검토 일정 복사').disabled).toBe(false);
-    expect(buttonByLabel('제품 검토 일정 수정').disabled).toBe(false);
   });
 
   it('renders selected-event facts only when they exist in the detail contract', () => {
