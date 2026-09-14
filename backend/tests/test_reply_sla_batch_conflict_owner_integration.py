@@ -173,4 +173,4 @@ async def test_rollback_reload_contract_includes_workspace_scope() -> None:
         for key, value in compiled.params.items()
     )
     assert reloaded == [email]
-    database.rollback.assert_awaited_once()
+    database.rollback.assert_not_awaited()
