@@ -20,6 +20,19 @@ test('explains unavailable calendar actions without hover-only affordances', asy
   await mockDashboardApi(page);
   await page.goto('/calendar');
 
+  await expect(page.getByRole('heading', { name: '출시 회의', exact: true })).toBeVisible();
+  await expect(page.getByText('09:30', { exact: true })).toBeVisible();
+  await expect(page.getByText('1시간 30분', { exact: true })).toBeVisible();
+  await expect(page.getByText('2026.05.23 (목)', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('참석자 6명', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Naruon_2.0_런칭계획.pptx', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('출시_체크리스트.xlsx', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/\(Naruon 2\.0\)/u)).toHaveCount(0);
+  await page.screenshot({
+    path: testInfo.outputPath('calendar-selected-event-integrity-desktop.png'),
+    fullPage: false,
+  });
+
   for (const label of CALENDAR_TOGGLE_LABELS) {
     const toggle = page.getByRole('checkbox', { name: label, exact: true });
     await expect(toggle).toBeVisible();
