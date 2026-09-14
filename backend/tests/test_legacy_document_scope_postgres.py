@@ -1,10 +1,9 @@
 """PostgreSQL regression for legacy workspace documents with no organization id.
 
 Revision 0016 intentionally left pre-existing ``workspace_documents.organization_id``
-values NULL. Organization-scoped sessions still need to reach those rows when the
-signed workspace claim is the canonical ``workspace-<organization_id>`` value,
-without making the same NULL row visible to a different organization that presents
-the same workspace string.
+values NULL. Organization-scoped sessions may reach those rows only when the same
+``workspace_entities`` row persists the authenticated organization binding. The
+workspace identifier is opaque; its spelling is never ownership evidence.
 """
 
 import subprocess
@@ -30,7 +29,7 @@ pytestmark = pytest.mark.postgres
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _ORGANIZATION_ID = "legacy-document-org"
-_WORKSPACE_ID = f"workspace-{_ORGANIZATION_ID}"
+_WORKSPACE_ID = "opaque-legacy-document-workspace-7f3c"
 _DOCUMENT_ID = "document_legacy_org_scope"
 
 
@@ -116,12 +115,19 @@ async def test_legacy_null_org_document_is_visible_only_to_matching_signed_org()
                 text(
                     """
                     INSERT INTO workspace_entities
-                        (workspace_id, workspace_name, workspace_domain, created_at)
-                    VALUES (:workspace_id, :workspace_name, NULL, now())
+                        (workspace_id, workspace_name, workspace_domain,
+                         organization_id, owner_user_id, created_at)
+                    VALUES
+                        (:workspace_id, :workspace_name, NULL,
+                         :organization_id, NULL, now())
                     ON CONFLICT (workspace_id) DO NOTHING
                     """
                 ),
-                {"workspace_id": _WORKSPACE_ID, "workspace_name": _WORKSPACE_ID},
+                {
+                    "workspace_id": _WORKSPACE_ID,
+                    "workspace_name": _WORKSPACE_ID,
+                    "organization_id": _ORGANIZATION_ID,
+                },
             )
             await connection.execute(
                 text(
