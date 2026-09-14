@@ -249,7 +249,7 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
 
 
 def _detect_text_language(text: str) -> str:
-    if any("가" <= char <= "힣" for char in text):
+    if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
     if any(char.isascii() and char.isalpha() for char in text):
         return "en"
@@ -800,6 +800,23 @@ def _reject_nonfinite_json_constant(value: str) -> None:
     raise ValueError(f"Invalid JSON: non-finite numeric constant {value}")
 
 
+def _reject_unpaired_json_surrogates(value: Any) -> None:
+    """Reject parsed JSON strings or keys that cannot be encoded as UTF-8."""
+
+    if isinstance(value, str):
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
+            raise ValueError("Invalid JSON: unpaired UTF-16 surrogate")
+        return
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _reject_unpaired_json_surrogates(key)
+            _reject_unpaired_json_surrogates(child)
+        return
+    if isinstance(value, list):
+        for child in value:
+            _reject_unpaired_json_surrogates(child)
+
+
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     """Generate a deterministic digest with an explicit algorithm selection.
 
@@ -899,6 +916,7 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
             object_pairs_hook=_strict_json_object,
             parse_constant=_reject_nonfinite_json_constant,
         )
+        _reject_unpaired_json_surrogates(parsed)
         formatted = json.dumps(
             parsed,
             indent=2,
