@@ -64,3 +64,8 @@ describe("NetworkGraph constant-time selection lookup contract", () => {
     expect(networkGraphSource).not.toMatch(/new Map\((edges|nodes)\.map\(/);
   });
 });
+
+  it("avoids O(N) array mapping when taking limited items from Map", () => {
+    expect(networkGraphSource).not.toMatch(/Array\.from\(edgeMap\.values\(\)\)\.slice/);
+    expect(networkGraphSource).not.toMatch(/Array\.from\(nodeInstanceMap\.values\(\)\)\.slice/);
+  });
