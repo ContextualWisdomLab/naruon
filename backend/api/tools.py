@@ -770,6 +770,89 @@ registry.register(
 
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    if algorithm == "md5":
+        h = hashlib.md5(text.encode("utf-8"))
+    elif algorithm == "sha1":
+        h = hashlib.sha1(text.encode("utf-8"))
+    elif algorithm == "sha256":
+        h = hashlib.sha256(text.encode("utf-8"))
+    elif algorithm == "sha512":
+        h = hashlib.sha512(text.encode("utf-8"))
+    else:
+        h = hashlib.sha256(text.encode("utf-8"))
+
+    return {"hash": h.hexdigest()}
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트를 지정된 알고리즘(MD5, SHA1, SHA256, SHA512)으로 해싱합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"encoded_url": urllib.parse.quote(text)}
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="일반 텍스트를 URL-safe 문자열로 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    encoded_url = params.get("encoded_url", "")
+    return {"decoded_url": urllib.parse.unquote(encoded_url)}
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="인코딩된 URL 문자열을 일반 텍스트로 복원합니다.",
+        category="유틸리티",
+        parameters={"encoded_url": "string"},
+    ),
+    url_decoder_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    json_string = params.get("json_string", "")
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        return {"formatted_json": f"Invalid JSON: {str(e)}"}
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 예쁘게 정렬(Pretty-print)하여 반환합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """

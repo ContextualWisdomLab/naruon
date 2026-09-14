@@ -1,4 +1,9 @@
 ## [Unreleased]
+- Naruon AI 이메일 워크스페이스에서 사용할 수 있는 새로운 유틸리티 도구 4종(`hash_generator`, `url_encoder`, `url_decoder`, `json_formatter`)을 추가하여 워크플로우 생산성을 개선했습니다.
+  - `hash_generator`: 텍스트를 MD5, SHA1, SHA256, SHA512 알고리즘으로 해싱합니다.
+  - `url_encoder`: 일반 텍스트를 URL-safe 문자열로 인코딩합니다.
+  - `url_decoder`: 인코딩된 URL 문자열을 일반 텍스트로 복원합니다.
+  - `json_formatter`: JSON 문자열을 예쁘게 정렬하여 반환합니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
