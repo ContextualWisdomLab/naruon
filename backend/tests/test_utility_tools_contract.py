@@ -9,6 +9,7 @@ that merely contains an error string.
 
 import inspect
 import json
+from pathlib import Path
 
 import pytest
 
@@ -225,3 +226,23 @@ def test_utility_tool_handlers_have_production_docstrings() -> None:
         json_formatter_handler,
     )
     assert all(inspect.getdoc(handler) for handler in handlers)
+
+
+def test_utility_doctoring_tracks_live_json_and_hash_boundaries() -> None:
+    """Traceability must not silently drop live surrogate or weak-hash safeguards."""
+
+    doctoring_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "doctoring"
+        / "deterministic-utility-contracts.md"
+    )
+    doctoring = doctoring_path.read_text(encoding="utf-8")
+    required_evidence = (
+        "RFC 8259 §8.1",
+        "§8.2",
+        "_reject_unpaired_json_surrogates",
+        "test_json_formatter_rejects_unpaired_utf16_surrogates",
+        "usedforsecurity=False",
+    )
+    assert all(evidence in doctoring for evidence in required_evidence)
