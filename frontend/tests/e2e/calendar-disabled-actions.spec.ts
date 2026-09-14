@@ -11,9 +11,16 @@ const CALENDAR_TOGGLE_LABELS = [
   '공휴일 캘린더 표시 토글',
 ] as const;
 
-const DISABLED_ACTION_LABELS = ['일정 삭제', '일정 복사', '일정 수정'] as const;
+const EMPTY_ACTION_LABELS = ['일정 삭제', '일정 복사', '일정 수정'] as const;
+const SELECTED_ACTION_LABELS = [
+  '출시 회의 일정 삭제',
+  '출시 회의 일정 복사',
+  '출시 회의 일정 수정',
+] as const;
 
-test('explains unavailable calendar actions without hover-only affordances', async ({ page }, testInfo) => {
+const UNSUPPORTED_ACTION_REASON = '삭제·복사·수정은 이 상세 패널에서 지원하지 않습니다.';
+
+test('keeps Calendar detail controls honest and accessible across selected and empty states', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'The event-detail sidebar is an xl desktop surface.');
 
   await page.setViewportSize({ width: 1440, height: 1024 });
@@ -28,6 +35,31 @@ test('explains unavailable calendar actions without hover-only affordances', asy
   await expect(page.getByText('Naruon_2.0_런칭계획.pptx', { exact: true })).toHaveCount(0);
   await expect(page.getByText('출시_체크리스트.xlsx', { exact: true })).toHaveCount(0);
   await expect(page.getByText(/\(Naruon 2\.0\)/u)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '닫기', exact: true })).toHaveCount(0);
+
+  const reason = page.locator('#calendar-action-disabled-reason');
+  await expect(reason).toHaveText(UNSUPPORTED_ACTION_REASON);
+  await expect(reason).toBeVisible();
+
+  for (const label of SELECTED_ACTION_LABELS) {
+    const button = page.getByRole('button', { name: label, exact: true });
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveAttribute('aria-describedby', 'calendar-action-disabled-reason');
+  }
+
+  const selectedLocationButton = page.getByRole('button', {
+    name: '회의실 A (4층) 위치 보기',
+    exact: true,
+  });
+  await expect(selectedLocationButton).toBeDisabled();
+  await expect(selectedLocationButton).toHaveAttribute(
+    'aria-describedby',
+    'calendar-location-action-disabled-reason',
+  );
+  await expect(page.locator('#calendar-location-action-disabled-reason')).toHaveText(
+    '위치 보기는 이 상세 패널에서 지원하지 않습니다.',
+  );
+
   await page.screenshot({
     path: testInfo.outputPath('calendar-selected-event-integrity-desktop.png'),
     fullPage: false,
@@ -39,11 +71,10 @@ test('explains unavailable calendar actions without hover-only affordances', asy
     if (await toggle.isChecked()) await toggle.uncheck();
   }
 
-  const reason = page.locator('#calendar-action-disabled-reason');
-  await expect(reason).toHaveText('일정을 선택하면 삭제·복사·수정할 수 있습니다.');
+  await expect(reason).toHaveText(UNSUPPORTED_ACTION_REASON);
   await expect(reason).toBeVisible();
 
-  for (const label of DISABLED_ACTION_LABELS) {
+  for (const label of EMPTY_ACTION_LABELS) {
     const button = page.getByRole('button', { name: label, exact: true });
     await expect(button).toBeDisabled();
     await expect(button).toHaveAttribute('aria-describedby', 'calendar-action-disabled-reason');
