@@ -21,6 +21,8 @@ vi.mock("lucide-react", () => ({
   CheckCircle2: () => <svg aria-hidden="true" />,
   Clock: () => <svg aria-hidden="true" />,
   CornerDownRight: () => <svg aria-hidden="true" />,
+  ZoomIn: () => <svg aria-hidden="true" />,
+  Maximize: () => <svg aria-hidden="true" />,
   FileText: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
   Mail: () => <svg aria-hidden="true" />,

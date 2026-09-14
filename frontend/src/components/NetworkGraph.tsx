@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network';
+import { ZoomIn, Maximize } from 'lucide-react';
 
 interface Node {
   id: number | string;
@@ -417,16 +418,16 @@ export default function NetworkGraph() {
           <button
             type="button"
             onClick={handleZoomGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            그래프 확대
+            <ZoomIn className="mr-1.5 size-4" aria-hidden="true" /> 그래프 확대
           </button>
           <button
             type="button"
             onClick={handleFitGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            전체 그래프 맞춤
+            <Maximize className="mr-1.5 size-4" aria-hidden="true" /> 전체 그래프 맞춤
           </button>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
