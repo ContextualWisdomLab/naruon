@@ -117,6 +117,33 @@ async def test_json_formatter_rejects_lossy_or_nonportable_json(json_string: str
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "json_string",
+    (
+        '{"value":"\\ud800"}',
+        '{"\\ud800":"value"}',
+        '{"nested":["ok","\\udfff"]}',
+    ),
+)
+async def test_json_formatter_rejects_unpaired_utf16_surrogates(
+    json_string: str,
+) -> None:
+    """Strings that cannot be emitted as UTF-8 JSON must fail before serialization."""
+
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        await json_formatter_handler({"json_string": json_string})
+
+    response = await execute_tool(
+        "json_formatter",
+        ExecuteRequest(parameters={"json_string": json_string}),
+    )
+    assert response.status == "failed"
+    assert response.result is None
+    assert response.message is not None
+    assert "Invalid JSON" in response.message
+
+
+@pytest.mark.asyncio
 async def test_url_decoder_rejects_malformed_percent_escape() -> None:
     """Malformed percent escapes must not be returned unchanged as successful decode."""
 
