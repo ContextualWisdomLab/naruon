@@ -67,8 +67,12 @@ async def test_url_decoder_rejects_malformed_percent_escape() -> None:
 async def test_utility_tools_reject_oversized_text(handler, parameter, value) -> None:
     """Deterministic local tools still need a bounded CPU/memory input contract."""
 
+    parameters = {parameter: value}
+    if handler is hash_generator_handler:
+        parameters["algorithm"] = "sha256"
+
     with pytest.raises(ValueError, match="must not exceed"):
-        await handler({parameter: value, **({"algorithm": "sha256"} if parameter == "text" and handler is hash_generator_handler else {})})
+        await handler(parameters)
 
 
 def test_utility_tool_handlers_have_production_docstrings() -> None:
