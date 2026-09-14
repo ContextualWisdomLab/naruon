@@ -21,12 +21,20 @@ def _opaque_workspace_auth(*, organization_id: str = "org-acme") -> AuthContext:
 def _expected_organization_filter(auth_context: AuthContext):
     """Describe the exact trusted binding required for historical NULL rows."""
 
+    assert hasattr(Workspace, "organization_id"), (
+        "workspace_entities must persist organization_id before opaque workspace "
+        "claims can authorize organization-null documents"
+    )
+    assert hasattr(Workspace, "owner_user_id"), (
+        "organization workspace bindings must prove they are not personal-owner rows"
+    )
     trusted_workspace_binding = exists(
         select(1)
         .select_from(Workspace)
         .where(
             Workspace.workspace_id == auth_context.workspace_id,
             Workspace.organization_id == auth_context.organization_id,
+            Workspace.owner_user_id.is_(None),
         )
     )
     return or_(
@@ -59,6 +67,7 @@ def test_opaque_workspace_legacy_null_requires_correlated_organization_binding()
     assert "workspace_documents.workspace_id" in rendered
     assert "workspace_entities.workspace_id" in rendered
     assert "workspace_entities.organization_id" in rendered
+    assert "workspace_entities.owner_user_id" in rendered
     assert "IS NULL" in rendered.upper()
     assert "EXISTS" in rendered.upper()
     assert auth_context.workspace_id in params.values()
@@ -83,6 +92,7 @@ def test_same_opaque_workspace_different_organization_cannot_share_null_branch()
     for rendered in (owner_rendered, other_rendered):
         assert "workspace_entities.workspace_id" in rendered
         assert "workspace_entities.organization_id" in rendered
+        assert "workspace_entities.owner_user_id" in rendered
         assert "EXISTS" in rendered.upper()
         assert "IS NULL" in rendered.upper()
 
