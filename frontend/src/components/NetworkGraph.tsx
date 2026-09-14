@@ -157,7 +157,7 @@ function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
 
 import { apiClient } from '@/lib/api-client';
 
-export default function NetworkGraph() {
+const NetworkGraph = function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const unavailableRelationshipDescriptionId = useId();
@@ -479,3 +479,6 @@ export default function NetworkGraph() {
     </div>
   );
 }
+
+import React from 'react';
+export default React.memo(NetworkGraph);
