@@ -1,0 +1,83 @@
+"""Regression contracts for bounded, explicit deterministic utility tools.
+
+These unit tests deliberately use synthetic strings: they exercise parser and
+validation boundaries, not buyer-data acceptance. Tool handlers must reject
+ambiguous or malformed requests so the shared execute endpoint can report the
+existing ``status=failed`` contract instead of returning a successful payload
+that merely contains an error string.
+"""
+
+import inspect
+import json
+
+import pytest
+
+from api.tools import (
+    hash_generator_handler,
+    json_formatter_handler,
+    url_decoder_handler,
+    url_encoder_handler,
+)
+
+_UTILITY_TEXT_MAX_CHARS = 100_000
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_rejects_unknown_algorithm() -> None:
+    """A typo must not silently produce a SHA-256 digest under another name."""
+
+    with pytest.raises(ValueError, match="Unsupported hash algorithm"):
+        await hash_generator_handler({"text": "hello", "algorithm": "sha25"})
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_uses_failed_tool_channel_for_invalid_json() -> None:
+    """Malformed JSON must raise so execute_tool returns status=failed."""
+
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        await json_formatter_handler({"json_string": '{"missing": }'})
+
+
+@pytest.mark.asyncio
+async def test_url_decoder_rejects_malformed_percent_escape() -> None:
+    """Malformed percent escapes must not be returned unchanged as successful decode."""
+
+    with pytest.raises(ValueError, match="Invalid URL encoding"):
+        await url_decoder_handler({"encoded_url": "order%2Fready%ZZ"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("handler", "parameter", "value"),
+    (
+        (hash_generator_handler, "text", "x" * (_UTILITY_TEXT_MAX_CHARS + 1)),
+        (url_encoder_handler, "text", "x" * (_UTILITY_TEXT_MAX_CHARS + 1)),
+        (
+            url_decoder_handler,
+            "encoded_url",
+            "x" * (_UTILITY_TEXT_MAX_CHARS + 1),
+        ),
+        (
+            json_formatter_handler,
+            "json_string",
+            json.dumps({"value": "x" * _UTILITY_TEXT_MAX_CHARS}),
+        ),
+    ),
+)
+async def test_utility_tools_reject_oversized_text(handler, parameter, value) -> None:
+    """Deterministic local tools still need a bounded CPU/memory input contract."""
+
+    with pytest.raises(ValueError, match="must not exceed"):
+        await handler({parameter: value, **({"algorithm": "sha256"} if parameter == "text" and handler is hash_generator_handler else {})})
+
+
+def test_utility_tool_handlers_have_production_docstrings() -> None:
+    """Owned production handlers must document their non-obvious contract boundary."""
+
+    handlers = (
+        hash_generator_handler,
+        url_encoder_handler,
+        url_decoder_handler,
+        json_formatter_handler,
+    )
+    assert all(inspect.getdoc(handler) for handler in handlers)
