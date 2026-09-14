@@ -1,15 +1,20 @@
 """add calendar conflict judgments and corrections
 
 Revision ID: 0018_calendar_conflict_judgments
-Revises: 0017_merge_newsdom_carddav_heads
+Revises: 0019_email_read_state_repair
 Create Date: 2026-08-30 00:00:00.000000
+
+The ``0018_`` filename/revision prefix predates the stacked workspace-registry
+repair. Alembic graph authority is ``down_revision``: this revision now follows
+#1503's append-only ``0019_email_read_state_repair`` without rewriting an
+existing revision identifier.
 """
 
 from alembic import context, op
 import sqlalchemy as sa
 
 revision = "0018_calendar_conflict_judgments"
-down_revision = "0017_merge_newsdom_carddav_heads"
+down_revision = "0019_email_read_state_repair"
 
 _JUDGMENT_TABLE = "calendar_conflict_judgments"
 _CORRECTION_TABLE = "calendar_conflict_corrections"
