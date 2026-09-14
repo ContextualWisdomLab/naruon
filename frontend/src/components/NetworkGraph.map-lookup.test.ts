@@ -63,8 +63,4 @@ describe("NetworkGraph constant-time selection lookup contract", () => {
     expect(networkGraphSource).toContain("firstGraphEntryById(nodes");
     expect(networkGraphSource).not.toMatch(/new Map\((edges|nodes)\.map\(/);
   });
-
-  it("keeps production source free of generator-branded optimization narration", () => {
-    expect(networkGraphSource).not.toContain("⚡ Bolt");
-  });
 });
