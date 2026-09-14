@@ -9,7 +9,7 @@ from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -28,6 +28,7 @@ from db.models import (
     ProjectFolder,
     SenderRelationship,
     WebdavAccount,
+    Workspace,
 )
 from db.session import get_db
 from services.attachment_parser import get_attachment_parser_manifest
@@ -36,7 +37,11 @@ from services.newsdom_pdf_recognition import (
 )
 from services.ontology_service import ontology_service
 from services.webdav_service import webdav_service
-from services.workspace_scope import get_or_create_workspace
+from services.workspace_scope import (
+    WorkspaceOrganizationBindingRequired,
+    WorkspaceOrganizationConflict,
+    get_or_create_scoped_workspace,
+)
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -2316,8 +2321,6 @@ def _materialized_document_target_path(document: Document) -> str:
     return f"/Naruon/Data/{filename}"
 
 
-# Document statuses whose stored content is not yet materializable parsed text
-# (it may be a base64 binary payload awaiting a recognition/conversion worker).
 _NON_MATERIALIZABLE_DOCUMENT_STATUSES = frozenset(
     {
         PDF_DOM_RECOGNITION_PENDING_STATUS,
@@ -2485,34 +2488,47 @@ async def _count_scalar(db: AsyncSession, statement) -> int:
     return int(result.scalar_one() or 0)
 
 
-def _auth_context_owns_its_workspace(auth_context: AuthContext) -> bool:
-    """Whether ``auth_context.workspace_id`` is the canonical
-    ``workspace-<organization_id>``/``workspace-<user_id>`` derivation for
-    this session, rather than an internally inconsistent claim pairing."""
-    expected_workspace_id = (
-        f"workspace-{auth_context.organization_id}"
-        if auth_context.organization_id
-        else f"workspace-{auth_context.user_id}"
-    )
-    return auth_context.workspace_id == expected_workspace_id
+async def _require_scoped_workspace(
+    db: AsyncSession,
+    auth_context: AuthContext,
+) -> Workspace:
+    try:
+        return await get_or_create_scoped_workspace(
+            db,
+            auth_context.workspace_id,
+            auth_context.organization_id,
+            owner_user_id=auth_context.user_id,
+            session_verifier=auth_context.session_verifier,
+        )
+    except (
+        WorkspaceOrganizationBindingRequired,
+        WorkspaceOrganizationConflict,
+    ) as exc:
+        raise HTTPException(status_code=403, detail="Workspace access denied") from exc
 
 
 def _document_organization_filter(auth_context: AuthContext) -> ColumnElement:
-    """Scope a ``Document`` query to this session's organization.
-
-    Revision 0016_document_org_scope added ``organization_id`` without
-    backfilling existing rows, so a legacy document can have it unset. Such a
-    row is trusted to belong to whichever single organization the document's
-    (already-filtered) ``workspace_id`` canonically maps to -- but only when
-    this session's own workspace/organization pairing is that canonical
-    derivation, not an internally inconsistent claim.
-    """
-    organization_filter = Document.organization_id == auth_context.organization_id
-    if _auth_context_owns_its_workspace(auth_context):
-        organization_filter = or_(
-            organization_filter, Document.organization_id.is_(None)
+    if auth_context.organization_id is not None:
+        trusted_workspace_binding = exists(
+            select(1).select_from(Workspace).where(
+                Workspace.workspace_id == auth_context.workspace_id,
+                Workspace.organization_id == auth_context.organization_id,
+                Workspace.owner_user_id.is_(None),
+            )
         )
-    return organization_filter
+        return or_(
+            Document.organization_id == auth_context.organization_id,
+            and_(Document.organization_id.is_(None), trusted_workspace_binding),
+        )
+
+    trusted_workspace_binding = exists(
+        select(1).select_from(Workspace).where(
+            Workspace.workspace_id == auth_context.workspace_id,
+            Workspace.organization_id.is_(None),
+            Workspace.owner_user_id == auth_context.user_id,
+        )
+    )
+    return and_(Document.organization_id.is_(None), trusted_workspace_binding)
 
 
 async def _get_workspace_document(
@@ -3198,7 +3214,7 @@ async def upload_data_document(
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> DataDocumentActionResponse:
-    await get_or_create_workspace(db, auth_context.workspace_id)
+    await _require_scoped_workspace(db, auth_context)
     document = Document(
         workspace_id=auth_context.workspace_id,
         organization_id=auth_context.organization_id,
@@ -3318,8 +3334,6 @@ async def create_document_pdf_dom_recognition_intent(
 )
 async def upload_document_for_pdf_dom_recognition(
     file: UploadFile = File(...),
-    # Declared as multipart form data (not a query parameter) so a client
-    # sending document_name alongside the file is honored.
     document_name: str | None = Form(None),
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
@@ -3334,7 +3348,7 @@ async def upload_document_for_pdf_dom_recognition(
             status_code=415,
             detail="Only application/pdf uploads are supported for DOM recognition.",
         )
-    await get_or_create_workspace(db, auth_context.workspace_id)
+    await _require_scoped_workspace(db, auth_context)
     document = Document(
         workspace_id=auth_context.workspace_id,
         organization_id=auth_context.organization_id,
@@ -3388,11 +3402,6 @@ async def create_document_webdav_materialization_intent(
 ) -> DataDocumentWebdavMaterializationResponse:
     document = await _get_workspace_document(db, auth_context, document_id)
     if document.document_status in _NON_MATERIALIZABLE_DOCUMENT_STATUSES:
-        # A document whose recognition/conversion is still pending holds a
-        # non-text payload (e.g. the base64 PDF stashed for the NewsDOM worker).
-        # Materializing it as Markdown would write that raw payload to the
-        # customer's WebDAV target. Refuse until recognition has landed real
-        # parsed text.
         raise HTTPException(
             status_code=409,
             detail=(
@@ -3437,9 +3446,6 @@ async def _get_email_stats(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
 ) -> EmailQualityStats:
-    # ⚡ Bolt Optimization: Batching scalar counts using CASE
-    # Impact: Reduces 7 sequential database queries down to 2, drastically cutting
-    # latency from network roundtrips when fetching quality surface metrics.
     email_stats_result = await db.execute(
         select(
             func.count(Email.id),
