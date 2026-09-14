@@ -39,10 +39,17 @@ async def test_live_seed_email_cleanup_is_workspace_owner_scoped():
     compiled = email_delete.compile()
     query_text = str(compiled)
     parameter_values = list(compiled.params.values())
+    expanding_parameter_values = [
+        value
+        for value in parameter_values
+        if isinstance(value, (list, tuple, set, frozenset))
+    ]
 
     assert "email_records.user_id" in query_text
     assert "email_records.organization_id" in query_text
     assert "email_records.workspace_id" in query_text
+    assert "email_records.message_id" in query_text
     assert module.LIVE_E2E_USER_ID in parameter_values
     assert module.LIVE_E2E_ORGANIZATION_ID in parameter_values
     assert module.LIVE_E2E_WORKSPACE_ID in parameter_values
+    assert any(list(value) == module.MESSAGE_IDS for value in expanding_parameter_values)
