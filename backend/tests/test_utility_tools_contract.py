@@ -13,6 +13,8 @@ import json
 import pytest
 
 from api.tools import (
+    ExecuteRequest,
+    execute_tool,
     hash_generator_handler,
     json_formatter_handler,
     registry,
@@ -24,6 +26,33 @@ _UTILITY_TEXT_MAX_CHARS = 100_000
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("algorithm", "expected_digest"),
+    (
+        ("md5", "5d41402abc4b2a76b9719d911017c592"),
+        ("sha1", "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"),
+        (
+            "sha256",
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        ),
+        (
+            "sha512",
+            "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7"
+            "2323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043",
+        ),
+    ),
+)
+async def test_hash_generator_supports_explicit_algorithms(
+    algorithm: str,
+    expected_digest: str,
+) -> None:
+    """Each documented algorithm must produce its exact digest without fallback."""
+
+    result = await hash_generator_handler({"text": "hello", "algorithm": algorithm})
+    assert result == {"hash": expected_digest}
+
+
+@pytest.mark.asyncio
 async def test_hash_generator_rejects_unknown_algorithm() -> None:
     """A typo must not silently produce a SHA-256 digest under another name."""
 
@@ -32,11 +61,42 @@ async def test_hash_generator_rejects_unknown_algorithm() -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_tool_reports_unknown_hash_algorithm_as_failed() -> None:
+    """The shared execution contract must expose validation failure, not fake success."""
+
+    response = await execute_tool(
+        "hash_generator",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "sha25"}),
+    )
+    assert response.status == "failed"
+    assert response.result is None
+    assert response.message is not None
+    assert "Unsupported hash algorithm" in response.message
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_formats_valid_strict_json() -> None:
+    """Valid portable JSON remains losslessly usable after strict parsing."""
+
+    result = await json_formatter_handler({"json_string": '{"a":1,"b":"테스트"}'})
+    assert result == {"formatted_json": '{\n  "a": 1,\n  "b": "테스트"\n}'}
+
+
+@pytest.mark.asyncio
 async def test_json_formatter_uses_failed_tool_channel_for_invalid_json() -> None:
     """Malformed JSON must raise so execute_tool returns status=failed."""
 
     with pytest.raises(ValueError, match="Invalid JSON"):
         await json_formatter_handler({"json_string": '{"missing": }'})
+
+    response = await execute_tool(
+        "json_formatter",
+        ExecuteRequest(parameters={"json_string": '{"missing": }'}),
+    )
+    assert response.status == "failed"
+    assert response.result is None
+    assert response.message is not None
+    assert "Invalid JSON" in response.message
 
 
 @pytest.mark.asyncio
