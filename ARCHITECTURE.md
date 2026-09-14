@@ -135,6 +135,17 @@ boundaries in the pure access-policy evaluator for platform operations, but it
 does not bypass data-region or consent denies; see
 `docs/operations/auth-key-management.md`.
 
+## Search storage repair boundary (Proposed)
+
+Naruon owns its four normalized PostgreSQL search expressions. The forward
+`0020_search_trigram_storage` candidate replaces whole-document GiST indexes
+with GIN without changing stored content, scope, score, or ranking SQL. GIN
+does not supply distance-only kNN acceleration; representative query latency
+and migration lock/build cost remain release gates, not assumed equivalence.
+RankWeave continues to own fusion and query normalization. See
+[ADR-0020](docs/adr/0020-full-document-trigram-storage.md) and the
+[PostgreSQL reproduction](docs/doctoring/search_trigram_storage.md).
+
 ## Local deployment boundary
 
 `docker-compose.yml` provides the blessed local stack: Postgres with pgvector,
