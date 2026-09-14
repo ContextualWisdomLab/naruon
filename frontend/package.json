@@ -11,7 +11,7 @@
     "test": "vitest run",
     "coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary --coverage.reporter=json --coverage.include='src/**/*.ts' --coverage.include='src/**/*.tsx' --coverage.exclude='src/**/*.test.ts' --coverage.exclude='src/**/*.test.tsx' --coverage.exclude='src/test/**'",
     "typecheck": "tsc --noEmit",
-    "full:smoke": "node scripts/full-product-ui-smoke.mjs",
+    "full:smoke": "node scripts/full-product-ui-smoke.mjs && playwright test tests/e2e/calendar-disabled-actions.spec.ts --project=desktop",
     "pilot:smoke": "node scripts/pilot-ui-smoke.mjs",
     "test:e2e": "playwright test"
   },
