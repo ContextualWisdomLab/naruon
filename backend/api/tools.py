@@ -249,7 +249,7 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
 
 
 def _detect_text_language(text: str) -> str:
-    if any("\uac00" <= char <= "\ud7a3" for char in text):
+    if any("가" <= char <= "힣" for char in text):
         return "ko"
     if any(char.isascii() and char.isalpha() for char in text):
         return "en"
@@ -769,39 +769,70 @@ registry.register(
 )
 
 
+UTILITY_TEXT_MAX_CHARS = 100_000
+_INVALID_PERCENT_ESCAPE_PATTERN = re.compile(r"%(?![0-9A-Fa-f]{2})")
+
+
+def _bounded_utility_text(value: str, *, field_name: str) -> str:
+    """Enforce one shared CPU/memory bound for local text utility handlers."""
+
+    if len(value) > UTILITY_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"{field_name} must not exceed {UTILITY_TEXT_MAX_CHARS:,} characters."
+        )
+    return value
+
+
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build one JSON object while rejecting duplicate member names."""
+
+    parsed: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in parsed:
+            raise ValueError("Invalid JSON: duplicate object key")
+        parsed[key] = value
+    return parsed
+
+
+def _reject_nonfinite_json_constant(value: str) -> None:
+    """Reject Python JSON extensions that are not portable RFC 8259 numbers."""
+
+    raise ValueError(f"Invalid JSON: non-finite numeric constant {value}")
 
 
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Generates a cryptographic hash of the provided text.
+    """Generate a deterministic digest with an explicit algorithm selection.
 
-    Warning: MD5 and SHA1 are cryptographically weak and must only be used for
-    legacy system interoperability or checksumming, not for product security.
+    MD5 and SHA1 are retained only for legacy interoperability and checksums;
+    callers must not treat them as collision-resistant security primitives.
     """
-    text = params.get("text", "")
-    if len(text) > 100_000:
-        raise ValueError("Input text must not exceed 100,000 characters.")
 
+    text = _bounded_utility_text(params.get("text", ""), field_name="Input text")
     algorithm = params.get("algorithm", "sha256").lower()
 
     if algorithm == "md5":
-        h = hashlib.md5(text.encode("utf-8")) # nosec B324
+        digest = hashlib.md5(text.encode("utf-8"))  # nosec B324
     elif algorithm == "sha1":
-        h = hashlib.sha1(text.encode("utf-8")) # nosec B324
+        digest = hashlib.sha1(text.encode("utf-8"))  # nosec B324
     elif algorithm == "sha256":
-        h = hashlib.sha256(text.encode("utf-8"))
+        digest = hashlib.sha256(text.encode("utf-8"))
     elif algorithm == "sha512":
-        h = hashlib.sha512(text.encode("utf-8"))
+        digest = hashlib.sha512(text.encode("utf-8"))
     else:
         raise ValueError(f"Unsupported hash algorithm: {algorithm}")
 
-    return {"hash": h.hexdigest()}
+    return {"hash": digest.hexdigest()}
+
 
 registry.register(
     ToolInfo(
         code="hash_generator",
         name="해시 생성기 (Hash Generator)",
-        description="텍스트를 지정된 알고리즘(MD5, SHA1, SHA256, SHA512)으로 해싱합니다.",
-        category="보안",
+        description=(
+            "텍스트의 MD5, SHA1, SHA256, SHA512 다이제스트를 생성합니다. "
+            "MD5·SHA1은 호환성·체크섬 용도로만 제공하며 보안 용도로 사용하지 않습니다."
+        ),
+        category="유틸리티",
         parameters={"text": "string", "algorithm": "string"},
     ),
     hash_generator_handler,
@@ -809,17 +840,17 @@ registry.register(
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Encodes a string for safe transmission in a URL."""
-    text = params.get("text", "")
-    if len(text) > 100_000:
-        raise ValueError("Input text must not exceed 100,000 characters.")
-    return {"encoded_url": urllib.parse.quote(text)}
+    """Percent-encode arbitrary text as one URL component."""
+
+    text = _bounded_utility_text(params.get("text", ""), field_name="Input text")
+    return {"encoded_url": urllib.parse.quote(text, safe="")}
+
 
 registry.register(
     ToolInfo(
         code="url_encoder",
         name="URL 인코더 (URL Encoder)",
-        description="일반 텍스트를 URL-safe 문자열로 인코딩합니다.",
+        description="일반 텍스트를 하나의 URL 구성요소로 percent-encoding 합니다.",
         category="유틸리티",
         parameters={"text": "string"},
     ),
@@ -828,33 +859,26 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Decodes a percent-encoded URL string.
+    """Decode one percent-encoded URL component and reject malformed input."""
 
-    Rejects malformed percent escapes instead of returning them verbatim.
-    """
-    encoded_url = params.get("encoded_url", "")
-    if len(encoded_url) > 100_000:
-        raise ValueError("Input text must not exceed 100,000 characters.")
-
-    decoded = urllib.parse.unquote(encoded_url, errors="strict")
-    if "%" in decoded and "%" in encoded_url:
-        # strict doesn't fail on incomplete % escapes in python, so we check manually if we need to
-        import re
-        if re.search(r'%[0-9a-fA-F]{2}', encoded_url) is None and '%' in encoded_url:
-            pass # just a percent sign
-
-        # Validate that unquote actually worked correctly for all percent escapes
-        # urllib.parse.unquote leaves malformed % escapes alone. Let's find any % that aren't followed by 2 hex digits
-        if re.search(r'%[^0-9a-fA-F]', encoded_url) or re.search(r'%[0-9a-fA-F][^0-9a-fA-F]', encoded_url) or encoded_url.endswith('%') or (len(encoded_url) >= 2 and encoded_url[-2] == '%'):
-            raise ValueError("Invalid URL encoding: malformed percent escape.")
-
+    encoded_url = _bounded_utility_text(
+        params.get("encoded_url", ""),
+        field_name="Input text",
+    )
+    if _INVALID_PERCENT_ESCAPE_PATTERN.search(encoded_url):
+        raise ValueError("Invalid URL encoding: malformed percent escape.")
+    try:
+        decoded = urllib.parse.unquote(encoded_url, encoding="utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Invalid URL encoding: invalid UTF-8 percent escape.") from exc
     return {"decoded_url": decoded}
+
 
 registry.register(
     ToolInfo(
         code="url_decoder",
         name="URL 디코더 (URL Decoder)",
-        description="인코딩된 URL 문자열을 일반 텍스트로 복원합니다.",
+        description="percent-encoding 된 URL 구성요소를 일반 텍스트로 복원합니다.",
         category="유틸리티",
         parameters={"encoded_url": "string"},
     ),
@@ -863,22 +887,38 @@ registry.register(
 
 
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Formats a JSON string into a pretty-printed, indented format."""
-    json_string = params.get("json_string", "")
-    if len(json_string) > 100_000:
-        raise ValueError("Input text must not exceed 100,000 characters.")
+    """Pretty-print strict JSON without duplicate-key or non-finite-value loss."""
+
+    json_string = _bounded_utility_text(
+        params.get("json_string", ""),
+        field_name="Input text",
+    )
     try:
-        parsed = json.loads(json_string)
-        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
-        return {"formatted_json": formatted}
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON: {str(e)}")
+        parsed = json.loads(
+            json_string,
+            object_pairs_hook=_strict_json_object,
+            parse_constant=_reject_nonfinite_json_constant,
+        )
+        formatted = json.dumps(
+            parsed,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON: {exc.msg}") from exc
+    except ValueError as exc:
+        if str(exc).startswith("Invalid JSON:"):
+            raise
+        raise ValueError(f"Invalid JSON: {exc}") from exc
+    return {"formatted_json": formatted}
+
 
 registry.register(
     ToolInfo(
         code="json_formatter",
         name="JSON 포매터 (JSON Formatter)",
-        description="JSON 문자열을 예쁘게 정렬(Pretty-print)하여 반환합니다.",
+        description="중복 키와 비유한 수를 거부한 strict JSON을 들여쓰기하여 반환합니다.",
         category="유틸리티",
         parameters={"json_string": "string"},
     ),
