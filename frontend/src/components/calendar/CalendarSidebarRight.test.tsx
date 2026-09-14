@@ -105,4 +105,21 @@ describe('CalendarSidebarRight disabled reasons', () => {
     expect(buttonByLabel('제품 검토 일정 복사').disabled).toBe(false);
     expect(buttonByLabel('제품 검토 일정 수정').disabled).toBe(false);
   });
+
+  it('renders selected-event facts only when they exist in the detail contract', () => {
+    renderComponent(DETAIL_EVENT);
+
+    expect(container!.textContent).toContain('제품 검토');
+    expect(container!.textContent).toContain('10:00');
+    expect(container!.textContent).toContain('1시간');
+    expect(container!.textContent).toContain('출시 전 검토');
+
+    expect(container!.textContent).not.toContain('(Naruon 2.0)');
+    expect(container!.textContent).not.toContain('공개');
+    expect(container!.textContent).not.toContain('2026.05.23 (목)');
+    expect(container!.textContent).not.toContain('11:00');
+    expect(container!.textContent).not.toContain('참석자 6명');
+    expect(container!.textContent).not.toContain('Naruon_2.0_런칭계획.pptx');
+    expect(container!.textContent).not.toContain('출시_체크리스트.xlsx');
+  });
 });
