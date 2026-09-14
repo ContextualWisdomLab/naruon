@@ -772,19 +772,27 @@ registry.register(
 
 
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Generates a cryptographic hash of the provided text.
+
+    Warning: MD5 and SHA1 are cryptographically weak and must only be used for
+    legacy system interoperability or checksumming, not for product security.
+    """
     text = params.get("text", "")
+    if len(text) > 100_000:
+        raise ValueError("Input text must not exceed 100,000 characters.")
+
     algorithm = params.get("algorithm", "sha256").lower()
 
     if algorithm == "md5":
-        h = hashlib.md5(text.encode("utf-8"))
+        h = hashlib.md5(text.encode("utf-8")) # nosec B324
     elif algorithm == "sha1":
-        h = hashlib.sha1(text.encode("utf-8"))
+        h = hashlib.sha1(text.encode("utf-8")) # nosec B324
     elif algorithm == "sha256":
         h = hashlib.sha256(text.encode("utf-8"))
     elif algorithm == "sha512":
         h = hashlib.sha512(text.encode("utf-8"))
     else:
-        h = hashlib.sha256(text.encode("utf-8"))
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
 
     return {"hash": h.hexdigest()}
 
@@ -801,7 +809,10 @@ registry.register(
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Encodes a string for safe transmission in a URL."""
     text = params.get("text", "")
+    if len(text) > 100_000:
+        raise ValueError("Input text must not exceed 100,000 characters.")
     return {"encoded_url": urllib.parse.quote(text)}
 
 registry.register(
@@ -817,8 +828,27 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Decodes a percent-encoded URL string.
+
+    Rejects malformed percent escapes instead of returning them verbatim.
+    """
     encoded_url = params.get("encoded_url", "")
-    return {"decoded_url": urllib.parse.unquote(encoded_url)}
+    if len(encoded_url) > 100_000:
+        raise ValueError("Input text must not exceed 100,000 characters.")
+
+    decoded = urllib.parse.unquote(encoded_url, errors="strict")
+    if "%" in decoded and "%" in encoded_url:
+        # strict doesn't fail on incomplete % escapes in python, so we check manually if we need to
+        import re
+        if re.search(r'%[0-9a-fA-F]{2}', encoded_url) is None and '%' in encoded_url:
+            pass # just a percent sign
+
+        # Validate that unquote actually worked correctly for all percent escapes
+        # urllib.parse.unquote leaves malformed % escapes alone. Let's find any % that aren't followed by 2 hex digits
+        if re.search(r'%[^0-9a-fA-F]', encoded_url) or re.search(r'%[0-9a-fA-F][^0-9a-fA-F]', encoded_url) or encoded_url.endswith('%') or (len(encoded_url) >= 2 and encoded_url[-2] == '%'):
+            raise ValueError("Invalid URL encoding: malformed percent escape.")
+
+    return {"decoded_url": decoded}
 
 registry.register(
     ToolInfo(
@@ -833,13 +863,16 @@ registry.register(
 
 
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Formats a JSON string into a pretty-printed, indented format."""
     json_string = params.get("json_string", "")
+    if len(json_string) > 100_000:
+        raise ValueError("Input text must not exceed 100,000 characters.")
     try:
         parsed = json.loads(json_string)
         formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
         return {"formatted_json": formatted}
     except json.JSONDecodeError as e:
-        return {"formatted_json": f"Invalid JSON: {str(e)}"}
+        raise ValueError(f"Invalid JSON: {str(e)}")
 
 registry.register(
     ToolInfo(

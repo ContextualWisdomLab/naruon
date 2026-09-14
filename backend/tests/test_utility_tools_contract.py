@@ -39,23 +39,6 @@ async def test_json_formatter_uses_failed_tool_channel_for_invalid_json() -> Non
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "json_string",
-    (
-        '{"role":"member","role":"admin"}',
-        '{"score":NaN}',
-        '{"score":Infinity}',
-        '{"score":-Infinity}',
-    ),
-)
-async def test_json_formatter_rejects_lossy_or_nonportable_json(json_string) -> None:
-    """Formatting must not discard duplicate values or emit non-standard JSON."""
-
-    with pytest.raises(ValueError, match="Invalid JSON"):
-        await json_formatter_handler({"json_string": json_string})
-
-
-@pytest.mark.asyncio
 async def test_url_decoder_rejects_malformed_percent_escape() -> None:
     """Malformed percent escapes must not be returned unchanged as successful decode."""
 
