@@ -64,6 +64,21 @@ class _AlwaysUniqueConflictSession:
         yield
 
 
+class _CapturedReloadSession:
+    """Capture the rollback-reload query while returning owner-scoped mail."""
+
+    def __init__(self, emails: list[SimpleNamespace]) -> None:
+        self._emails = emails
+        self.statement = None
+        self.rollback = AsyncMock()
+
+    async def execute(self, statement):
+        self.statement = statement
+        return SimpleNamespace(
+            scalars=lambda: SimpleNamespace(all=lambda: list(self._emails))
+        )
+
+
 @pytest.mark.asyncio
 async def test_repeated_unique_conflicts_never_fall_back_to_per_row_savepoints(
     monkeypatch,
@@ -126,8 +141,9 @@ def test_conflict_exposes_machine_readable_error_code() -> None:
     assert str(conflict) == "concurrent winner not visible"
 
 
-def test_rollback_reload_contract_includes_workspace_scope() -> None:
-    """Preserve #1486 workspace ownership when batching expired-mail reloads."""
+@pytest.mark.asyncio
+async def test_rollback_reload_contract_includes_workspace_scope() -> None:
+    """Execute the rollback reload and prove its workspace predicate and bind."""
     reload_overdue_replies = getattr(service, "_reload_overdue_replies")
     parameters = inspect.signature(reload_overdue_replies).parameters
     assert tuple(parameters) == (
@@ -137,3 +153,24 @@ def test_rollback_reload_contract_includes_workspace_scope() -> None:
         "workspace_id",
         "email_ids",
     )
+
+    email = _mail(7)
+    database = _CapturedReloadSession([email])
+    reloaded = await reload_overdue_replies(
+        database,
+        "alice",
+        "org-a",
+        "workspace-a",
+        [email.id],
+    )
+
+    assert database.statement is not None
+    compiled = database.statement.compile()
+    query_text = str(compiled)
+    assert "email_records.workspace_id" in query_text
+    assert any(
+        key.startswith("workspace_id") and value == "workspace-a"
+        for key, value in compiled.params.items()
+    )
+    assert reloaded == [email]
+    database.rollback.assert_not_awaited()
