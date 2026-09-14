@@ -110,7 +110,7 @@ class ConnectionManager:
                 workspace_id=record.workspace_id,
                 signal_key="connector_heartbeat",
                 state_code="disconnected",
-                detail_text="outbound runner socket disconnected",
+                detail_text="outbound runner disconnected",
             )
 
     async def touch(self, connection_key: str):
@@ -380,14 +380,19 @@ def _auth_context_from_websocket(websocket: WebSocket) -> AuthContext:
         raise _policy_violation() from exc
 
 
-async def _registered_runner_token(organization_id: str) -> str | None:
+async def _registered_runner_binding(organization_id: str) -> tuple[str, str] | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(WorkspaceRunnerConfig.registration_token).where(
-                WorkspaceRunnerConfig.organization_id == organization_id
-            )
+            select(
+                WorkspaceRunnerConfig.registration_token,
+                WorkspaceRunnerConfig.workspace_id,
+            ).where(WorkspaceRunnerConfig.organization_id == organization_id)
         )
-        return result.scalar_one_or_none()
+        row = result.one_or_none()
+        if row is None:
+            return None
+        registration_token, workspace_id = row
+        return str(registration_token), str(workspace_id)
 
 
 async def record_connector_signal_event(
@@ -448,15 +453,22 @@ async def _record_connector_command_event_safely(
 
 
 async def _runner_connection_key(token: str, auth_context: AuthContext) -> str:
-    if not token or not auth_context.organization_id:
+    organization_id = auth_context.organization_id
+    workspace_id = auth_context.workspace_id.strip()
+    if not token or not organization_id or not workspace_id:
         raise _policy_violation()
 
-    registered_token = await _registered_runner_token(auth_context.organization_id)
-    if not registered_token or not hmac.compare_digest(registered_token, token):
+    binding = await _registered_runner_binding(organization_id)
+    if binding is None:
+        raise _policy_violation()
+    registered_token, registered_workspace_id = binding
+    if registered_workspace_id != workspace_id or not hmac.compare_digest(
+        registered_token, token
+    ):
         raise _policy_violation()
 
     token_fingerprint = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
-    return f"{auth_context.organization_id}:{token_fingerprint}"
+    return f"{organization_id}:{workspace_id}:{token_fingerprint}"
 
 
 @router.websocket("/ws/runner/{token}")
