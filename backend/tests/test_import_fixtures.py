@@ -35,6 +35,9 @@ async def test_root_importer_persists_canonical_thread_id(tmp_path):
         async def commit(self):
             self.committed = True
 
+        async def rollback(self):
+            pass
+
     eml_file = tmp_path / "reply.eml"
     eml_file.write_text("Message-ID: <reply@example.com>\n\nBody")
     parsed = {
@@ -84,6 +87,9 @@ async def test_root_importer_duplicate_check_is_scoped_to_owner(tmp_path):
             self.added = obj
 
         async def commit(self):
+            pass
+
+        async def rollback(self):
             pass
 
     eml_file = tmp_path / "duplicate-scope.eml"
@@ -143,6 +149,9 @@ async def test_root_importer_uses_local_embedding_without_openai_key(
         async def commit(self):
             pass
 
+        async def rollback(self):
+            pass
+
     eml_file = tmp_path / "root.eml"
     eml_file.write_text("Message-ID: <root@example.com>\n\nBody")
     parsed = {
@@ -187,6 +196,9 @@ async def test_root_importer_handles_empty_embedding_provider_response(
             self.added = obj
 
         async def commit(self):
+            pass
+
+        async def rollback(self):
             pass
 
     eml_file = tmp_path / "empty-embedding.eml"
