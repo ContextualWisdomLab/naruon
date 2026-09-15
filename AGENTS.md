@@ -1,16 +1,5 @@
 # AGENTS.md
 
-<!-- CWL-ENTRY -->
-> **Agents: read the master context FIRST.** Before any work, read:
->
-> - [`docs/architecture/naruon-product-spec.md`](docs/architecture/naruon-product-spec.md) for product vision, architecture, RBAC/ABAC, core features, AI agent ontology, branding/UX, observability, and governance;
-> - the live [GitHub Project #1](https://github.com/orgs/ContextualWisdomLab/projects/1), the work and roadmap source of truth;
-> - [`docs/product-technical-gap-baseline.md`](docs/product-technical-gap-baseline.md), the live gap snapshot but not merge authorization, and canonical completion issue [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428);
-> - `ContextualWisdomLab/.github`'s [`docs/agent-github-project-protocol.md`](https://github.com/ContextualWisdomLab/.github/blob/main/docs/agent-github-project-protocol.md) for Project operation; and
-> - `ContextualWisdomLab/.github`'s [`docs/product-goal-directive.md`](https://github.com/ContextualWisdomLab/.github/blob/main/docs/product-goal-directive.md) before running or configuring the continuous PR review→fix→merge→develop loop. A length-capped `/goal` pointer does not replace the full directive.
->
-> This repository's Figma file ID is not yet canonical on `develop`: ADR-0013 and file ID `68b5XB58w8nwT2LYOOnikK` remain Proposed in open PR [#1436](https://github.com/ContextualWisdomLab/naruon/pull/1436). The repository and Project, not private agent memory, are authoritative.
-
 <!-- BEGIN cwl-agent-guidance -->
 ## Agent guidance (CWL governance)
 
@@ -689,6 +678,10 @@ in this repo.
   backend/tests/test_release_governance.py backend/tests/test_runtime_config_api.py
   -q`, `corepack pnpm@11.5.3 --dir frontend test --runInBand` when frontend
   behavior changes, and a Docker build of the affected image.
+- A pnpm importer entry is only valid when both records it names exist: the
+  base-version key in `packages` and the complete peer-qualified key in
+  `snapshots`. Security-floor tests must reject a lock that retains another
+  compliant version while dropping the importer's own base package record.
 - GHCR publishing evidence for the combined `naruon` image must include the
   exact image name, tag, local image ID, push result, and registry verification
   from GitHub Packages or an equivalent manifest/API query. Publish the package
