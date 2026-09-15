@@ -800,7 +800,7 @@ async def random_multiple_selector_handler(params: Dict[str, Any]) -> Any:
         raise ValueError("Count must be a positive integer")
 
     if count > len(options):
-        raise ValueError(f"Cannot select {count} items from a list of {len(options)} options")
+        raise ValueError(f"Requested item count {count} exceeds available option count {len(options)}")
 
     selected = secrets.SystemRandom().sample(options, count)
     return {"selected": selected}

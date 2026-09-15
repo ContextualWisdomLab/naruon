@@ -1311,7 +1311,7 @@ def test_execute_random_multiple_selector_oversized_count():
     data = response.json()
     assert data["status"] == "failed"
     assert data["result"] is None
-    assert "Cannot select 5 items" in data["message"]
+    assert "Requested item count 5 exceeds available option count 2" in data["message"]
 
 def test_execute_random_multiple_selector_lower_bound():
     with TestClient(app) as client:
