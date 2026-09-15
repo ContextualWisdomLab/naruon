@@ -34,6 +34,17 @@ async def generate_fixture_embedding(text: str) -> list[float]:
     return fit_embedding_vector(embeddings[0], EMBEDDING_DIMENSION)
 
 
+async def _email_already_imported(session, message_id: str) -> bool:
+    existing = await session.execute(
+        select(Email).where(
+            Email.message_id == message_id,
+            Email.user_id == IMPORT_USER_ID,
+            Email.organization_id == IMPORT_ORGANIZATION_ID,
+        )
+    )
+    return existing.scalar_one_or_none() is not None
+
+
 async def import_eml_file(session, eml_file: Path) -> bool:
     try:
         parsed = parse_eml(eml_file)
@@ -41,9 +52,14 @@ async def import_eml_file(session, eml_file: Path) -> bool:
         logger.error(f"Failed to parse {eml_file}: {e}")
         return False
 
-    # Finish remote/derived embedding work before the first database statement.
-    # This fixture path must not keep a transaction open while an external model
-    # call is idle, and attachment persistence must not depend on enrichment.
+    # Reject duplicates before model/provider work, then explicitly end the
+    # read transaction so external enrichment never runs while holding it open.
+    if await _email_already_imported(session, parsed["message_id"]):
+        await session.rollback()
+        logger.info(f"Email {parsed['message_id']} already exists, skipping.")
+        return False
+    await session.rollback()
+
     body_text = parsed["body"] if parsed["body"].strip() else "Empty body"
     try:
         body_emb = await generate_fixture_embedding(body_text)
@@ -69,14 +85,11 @@ async def import_eml_file(session, eml_file: Path) -> bool:
             )
         )
 
-    existing = await session.execute(
-        select(Email).where(
-            Email.message_id == parsed["message_id"],
-            Email.user_id == IMPORT_USER_ID,
-            Email.organization_id == IMPORT_ORGANIZATION_ID,
-        )
-    )
-    if existing.scalar_one_or_none():
+    # Re-check after external work. From here through commit, only database
+    # operations remain, so the transaction is short and the duplicate guard is
+    # refreshed after the enrichment window.
+    if await _email_already_imported(session, parsed["message_id"]):
+        await session.rollback()
         logger.info(f"Email {parsed['message_id']} already exists, skipping.")
         return False
 
