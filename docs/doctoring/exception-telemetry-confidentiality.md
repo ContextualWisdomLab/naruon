@@ -12,9 +12,11 @@ The predecessor helper replaced the exception value but retained the original tr
 
 - a fixed redaction marker;
 - the exception class name;
-- a 16-hex SHA-256 correlation fingerprint derived from the exception's qualified type and deepest traceback module/function identity;
+- a 16-hex SHA-256 correlation fingerprint derived from the exception's qualified type and exact deepest execution site;
 - no original exception value;
 - no original traceback object.
+
+The exact-site key is built in memory from module name, qualified function identity, traceback line, and bytecode offset, then hashed before any logging formatter sees it. These raw location components are not emitted. Including the line and bytecode offset is intentional: module/function-only correlation can collapse two independent failure statements inside the same function into one incident signature. Fingerprints are therefore expected to remain stable for the same failure site within an unchanged build, while source edits or interpreter/compiler changes may legitimately produce a new fingerprint.
 
 The original traceback is inspected in memory only to build the one-way fingerprint. File paths, source lines, locals, exception messages, causes, contexts, provider responses, credentials, tokens, and connection strings are not formatted into the emitted record. The caller's fixed log message remains the operation code/context, so RCA can group failures by operation, exception class, and fingerprint without recording secret-bearing exception text.
 
@@ -22,9 +24,11 @@ The original traceback is inspected in memory only to build the one-way fingerpr
 
 `exc_info=True` is rejected as a confidentiality mechanism because Python logging renders the exception value and traceback. Replacing only the exception value while preserving the original traceback is safer than raw logging but still exposes source locations and is not the default production contract. Suppressing exception diagnostics entirely is also rejected because it removes correlation needed for incident response.
 
+A module/function-only fingerprint was also rejected after review because one function can contain multiple independent failure sites. Treating all of them as one signature weakens incident triage and can hide a new causal path behind an existing noisy one. The exact execution site is therefore part of the hash input but not part of the rendered record.
+
 ## Verification
 
-`backend/tests/test_safe_logging.py` exercises the real `logging.Formatter` path with token-like text, a database connection string, and two distinct secret-bearing messages from the same failure site. The contract requires that the rendered record contains neither the secret text nor the test source path/function name, while retaining the exception class and a stable message-independent fingerprint. A no-traceback exception is covered separately.
+`backend/tests/test_safe_logging.py` exercises the real `logging.Formatter` path with token-like text, a database connection string, and two distinct secret-bearing messages from the same failure site. The contract requires that the rendered record contains neither the secret text nor the test source path/function name, while retaining the exception class and a stable message-independent fingerprint. A separate regression raises the same exception type from two different lines in one function and requires different fingerprints without revealing either location. A no-traceback exception is covered separately.
 
 This PR does not resolve every sink named by #1698. Protected `develop` still contains other `exc_info=True` and raw exception-interpolation sites outside #1612's bounded surface. Those require sink-by-sink data-flow review and ordinary successor work; blanket string replacement is explicitly out of scope.
 
