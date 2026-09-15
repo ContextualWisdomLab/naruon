@@ -34,6 +34,9 @@ from services.email_import_service import (
     EmailImportEmbeddingProvider,
     _generate_import_embeddings,
 )
+import tiktoken
+
+from services.embedding import EMBEDDING_INPUT_TOKEN_LIMIT
 import services.batch_embedding_service as batch_module
 
 
@@ -640,6 +643,50 @@ async def test_generate_import_embeddings_prefers_batch_context(monkeypatch):
     assert result == batched
     routed.assert_awaited_once()
     # Batch path handled it; the per-item embedding path was never touched.
+    per_item.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generate_import_embeddings_bounds_long_semantic_units_for_batch(
+    monkeypatch,
+):
+    context = EmailImportBatchContext(
+        session=FakeAsyncSession(), user_id="user-1", organization_id="org-acme"
+    )
+    routed = AsyncMock(
+        side_effect=lambda _session, texts, **_kwargs: [
+            [float(index)] * 1536 for index, _text in enumerate(texts)
+        ]
+    )
+    monkeypatch.setattr(
+        "services.email_import_service.try_batch_import_embeddings", routed
+    )
+    per_item = AsyncMock()
+    monkeypatch.setattr("services.email_import_service.generate_embeddings", per_item)
+
+    result = await _generate_import_embeddings(
+        ["semantic sentence. " * 100],
+        embedding_provider=PROVIDER,
+        batch_context=context,
+    )
+
+    submitted_texts = routed.await_args.args[1]
+    assert len(submitted_texts) > 1
+    encoding = tiktoken.get_encoding("cl100k_base")
+    assert all(
+        0 < len(encoding.encode(text, disallowed_special=()))
+        <= EMBEDDING_INPUT_TOKEN_LIMIT
+        for text in submitted_texts
+    )
+    token_weights = [
+        len(encoding.encode(text, disallowed_special=()))
+        for text in submitted_texts
+    ]
+    expected_value = sum(
+        float(index) * weight
+        for index, weight in enumerate(token_weights)
+    ) / sum(token_weights)
+    assert result == [[expected_value] * 1536]
     per_item.assert_not_awaited()
 
 

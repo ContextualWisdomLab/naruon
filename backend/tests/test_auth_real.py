@@ -23,6 +23,7 @@ from api.auth import (
     get_current_user,
     is_admin_role,
     is_tenant_admin_role,
+    _safe_ascii_claim,
 )
 from core.config import settings
 from db.session import get_db
@@ -470,6 +471,36 @@ async def test_signed_bearer_session_rejects_non_ascii_token_segment():
 async def test_signed_bearer_session_rejects_non_ascii_claim_values():
     settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
     token = _signed_session_token(_valid_session_payload(sub="álïcé"))
+
+    with pytest.raises(HTTPException) as exc:
+        await get_auth_context(authorization=f"Bearer {token}")
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "claim_value",
+    ("\nalice", "alice\r", "\talice", "alice\t", "\u00a0alice"),
+)
+def test_safe_ascii_claim_rejects_control_or_non_ascii_prefixes(claim_value: str):
+    assert _safe_ascii_claim(claim_value) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("claim_name", "claim_value"),
+    [
+        ("sub", "alice\x00"),
+        ("org", "org\x00acme"),
+        ("workspace", "workspace\x00org-acme"),
+        ("groups", ["group-1", "group\x00two"]),
+    ],
+)
+async def test_signed_bearer_session_rejects_nul_claim_values(
+    claim_name: str, claim_value: object
+):
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+    token = _signed_session_token(_valid_session_payload(**{claim_name: claim_value}))
 
     with pytest.raises(HTTPException) as exc:
         await get_auth_context(authorization=f"Bearer {token}")

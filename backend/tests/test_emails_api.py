@@ -22,6 +22,7 @@ from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
 from services.embedding import STORAGE_EMBEDDING_DIMENSION
+from services.email_import_service import _owner_import_lock_key
 from services.email_service import generate_email_fingerprint
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
@@ -1280,11 +1281,11 @@ async def test_import_email_files_serializes_quota_with_postgres_owner_lock(
     assert advisory_query_params(session) == [
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": _owner_import_lock_key("testuser", "org-acme"),
         },
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": _owner_import_lock_key("testuser", "org-acme"),
         },
     ]
 
@@ -1343,11 +1344,11 @@ async def test_import_email_files_rejects_when_owner_quota_is_exhausted(
     assert advisory_query_params(session) == [
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": _owner_import_lock_key("testuser", "org-acme"),
         },
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": _owner_import_lock_key("testuser", "org-acme"),
         },
     ]
 

@@ -64,6 +64,12 @@ in this repo.
   that unlocks the registry and keep env strictly as bootstrap transport; do not
   add further `os.getenv` secret reads, and migrate toward the KV pattern as it
   is adopted.
+- **Approved test-only exception:** `LIVE_E2E_SESSION_SECRET` may be read from
+  the environment by `backend/scripts/private_mail_http_smoke.py` only for a
+  local/private live-smoke run. It must equal the controlled test
+  `AUTH_SESSION_HMAC_SECRET`, must never be logged or persisted, and is not an
+  application or production credential source. New runtime paths must use the
+  credential registry instead.
 
 ### This repo's role in the ecosystem
 

@@ -1,12 +1,14 @@
 import datetime
 
 import pytest
+from pydantic import SecretStr
 
 from db.models import LLMProvider
 from services.llm_provider_selection import (
     LOCAL_PROVIDER_API_KEY,
     resolve_runtime_llm_provider,
 )
+from core.config import settings
 
 
 class MockScalars:
@@ -87,7 +89,80 @@ async def test_resolve_runtime_llm_provider_prefers_active_local_provider():
 
 
 @pytest.mark.asyncio
-async def test_resolve_runtime_llm_provider_falls_back_to_tenant_config():
+@pytest.mark.parametrize(
+    ("provider_type", "expected_source", "expected_api_key"),
+    [
+        ("openai", None, None),
+        ("ollama", "llm_provider", LOCAL_PROVIDER_API_KEY),
+    ],
+)
+async def test_resolve_runtime_llm_provider_never_sends_tenant_key_to_local_host(
+    monkeypatch, provider_type, expected_source, expected_api_key
+):
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", False)
+    monkeypatch.setattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1")
+    provider = LLMProvider(
+        id=11,
+        user_id="admin",
+        organization_id="org-acme",
+        name="Local host provider",
+        provider_type=provider_type,
+        base_url="http://host.docker.internal:8080/v1",
+        model_identifier="local-chat",
+        embedding_model="embeddinggemma",
+        api_key="sk-tenant-must-not-be-forwarded",
+        is_active=True,
+        updated_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    runtime_provider = await resolve_runtime_llm_provider(
+        MockSession(providers=[provider], tenant_config=None),
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    if expected_source is None:
+        assert runtime_provider is None
+    else:
+        assert runtime_provider is not None
+        assert runtime_provider.provider_source == expected_source
+        assert runtime_provider.api_key == expected_api_key
+
+
+@pytest.mark.asyncio
+async def test_resolve_runtime_llm_provider_falls_back_to_tenant_config(monkeypatch):
+    monkeypatch.setattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setattr(
+        settings,
+        "OPENAI_EMBEDDING_BASE_URL",
+        "http://host.docker.internal:8082/v1",
+    )
+    runtime_provider = await resolve_runtime_llm_provider(
+        MockSession(providers=[], tenant_config=MockTenantConfig("sk-tenant")),
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert runtime_provider is not None
+    assert runtime_provider.provider_source == "tenant_config"
+    assert runtime_provider.api_key == "sk-tenant"
+    assert runtime_provider.embedding_base_url is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_runtime_llm_provider_uses_allowlisted_local_environment(
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", SecretStr("mlx"))
+    monkeypatch.setattr(settings, "OPENAI_BASE_URL", "http://host.docker.internal:8080/v1")
+    monkeypatch.setattr(
+        settings,
+        "OPENAI_EMBEDDING_BASE_URL",
+        "http://host.docker.internal:8082/v1",
+    )
+    monkeypatch.setattr(settings, "OPENAI_MODEL", "local-chat")
+    monkeypatch.setattr(settings, "OPENAI_EMBEDDING_MODEL", "local-embedding")
+
     runtime_provider = await resolve_runtime_llm_provider(
         MockSession(providers=[], tenant_config=MockTenantConfig("sk-tenant")),
         user_id="testuser",
@@ -95,5 +170,7 @@ async def test_resolve_runtime_llm_provider_falls_back_to_tenant_config():
     )
 
     assert runtime_provider is not None
-    assert runtime_provider.provider_source == "tenant_config"
-    assert runtime_provider.api_key == "sk-tenant"
+    assert runtime_provider.provider_source == "local_environment"
+    assert runtime_provider.api_key == "mlx"
+    assert runtime_provider.base_url == "http://host.docker.internal:8080/v1"
+    assert runtime_provider.embedding_base_url == "http://host.docker.internal:8082/v1"

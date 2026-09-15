@@ -176,14 +176,34 @@ jobs:
           }
 
           trusted_ref=""
-          if [[ "${TRUSTED_BASE_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
-            trusted_ref="$TRUSTED_BASE_SHA"
-            echo "Using event-provided trusted governance base SHA ${trusted_ref}."
-          elif [ -n "$TRUSTED_PR_NUMBER" ]; then
-            trusted_ref="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}/pulls/${TRUSTED_PR_NUMBER}" --jq '.base.sha')"
+          if [ -n "$TRUSTED_PR_NUMBER" ]; then
+            if ! [[ "$TRUSTED_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Trusted pull request number must be a positive integer." >&2
+              exit 1
+            fi
+            api_base_sha="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}/pulls/${TRUSTED_PR_NUMBER}" --jq '.base.sha')"
+            if ! [[ "$api_base_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::GitHub API returned an invalid pull request base SHA." >&2
+              exit 1
+            fi
+            if [ -n "${TRUSTED_BASE_SHA:-}" ] && [ "$TRUSTED_BASE_SHA" != "$api_base_sha" ]; then
+              echo "::error::Supplied governance base SHA does not match the live pull request base SHA." >&2
+              exit 1
+            fi
+            trusted_ref="$api_base_sha"
+            echo "Using the live pull request base SHA ${trusted_ref}."
           else
             default_branch="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"
-            trusted_ref="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}/branches/${default_branch}" --jq '.commit.sha')"
+            default_sha="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}/branches/${default_branch}" --jq '.commit.sha')"
+            if ! [[ "$default_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::GitHub API returned an invalid default branch SHA." >&2
+              exit 1
+            fi
+            if [ -n "${TRUSTED_BASE_SHA:-}" ] && [ "$TRUSTED_BASE_SHA" != "$default_sha" ]; then
+              echo "::error::Manual governance base SHA must equal the current default branch SHA when no PR number is supplied." >&2
+              exit 1
+            fi
+            trusted_ref="$default_sha"
           fi
           if [[ ! "$trusted_ref" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Trusted governance ref must be a full commit SHA." >&2
@@ -207,7 +227,52 @@ jobs:
             echo "Trusted governance archive materialization attempt ${attempt} did not produce a valid archive; retrying." >&2
             sleep $((attempt * 3))
           done
-          tar -xzf "$trusted_archive" -C "$trusted_workspace" --strip-components=1
+          python3 - "$trusted_archive" "$trusted_workspace" <<'PY'
+          import copy
+          import os
+          import sys
+          import tarfile
+          from pathlib import Path, PurePosixPath
+
+          archive_path, workspace_path = sys.argv[1:3]
+          workspace = Path(workspace_path).resolve()
+          with tarfile.open(archive_path, "r:gz") as archive:
+              members = archive.getmembers()
+              safe_members = []
+              unsafe = []
+              for member in members:
+                  member_path = PurePosixPath(member.name)
+                  if len(member_path.parts) == 1:
+                      if not member.isdir():
+                          unsafe.append(member.name)
+                      continue
+                  target = (workspace / Path(*member_path.parts[1:])).resolve()
+                  if (
+                      not member.name
+                      or member.name.startswith("/")
+                      or ".." in member_path.parts
+                      or member.issym()
+                      or member.islnk()
+                      or member.isdev()
+                      or os.path.commonpath((workspace, target)) != str(workspace)
+                  ):
+                      unsafe.append(member.name)
+                      continue
+                  safe_member = copy.copy(member)
+                  safe_member.name = PurePosixPath(
+                      *member_path.parts[1:]
+                  ).as_posix()
+                  safe_members.append(safe_member)
+              if unsafe:
+                  raise SystemExit(f"unsafe trusted governance archive member: {unsafe[0]!r}")
+              archive.extractall(workspace, members=safe_members)
+          PY
+          test -d "$trusted_workspace/scripts"
+          governance_script="$trusted_workspace/scripts/ci/pr_governance_gate.sh"
+          if [ ! -f "$governance_script" ] || [ -L "$governance_script" ]; then
+            echo "::error::Trusted governance gate is missing or is a symbolic link." >&2
+            exit 1
+          fi
           test -f "$trusted_workspace/scripts/ci/pr_governance_gate.sh"
           echo "GOVERNANCE_GATE=$trusted_workspace/scripts/ci/pr_governance_gate.sh" >> "$GITHUB_ENV"
 

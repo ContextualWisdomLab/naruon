@@ -1,12 +1,13 @@
 import logging
 import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import services.email_import_service as email_import_module
+from services.circuit_breaker import CircuitOpenError
 from services.exceptions import EmailParseError, EmbeddingGenerationError
 from services.batch_embedding_service import BatchEmbeddingPartial
 from services.email_import_service import (
@@ -15,6 +16,7 @@ from services.email_import_service import (
     EmailImportEmbeddingProvider,
     MAX_EMBEDDING_CHUNKS_PER_WINDOW,
     _generate_import_embeddings,
+    _owner_import_lock_key,
 )
 
 
@@ -56,6 +58,20 @@ def test_safe_upload_filename_fails_closed_beyond_decode_round_limit():
         encoded_name = encoded_name.replace("%", "%25")
 
     assert email_import_module._safe_upload_filename(encoded_name) == "upload"
+
+
+def test_owner_import_lock_key_is_nul_free_and_tuple_stable():
+    first = _owner_import_lock_key("user-1", "org-1")
+    repeat = _owner_import_lock_key("user-1", "org-1")
+    swapped = _owner_import_lock_key("org-1", "user-1")
+
+    assert "\x00" not in first
+    assert first == repeat
+    assert first != swapped
+    with pytest.raises(ValueError, match="NUL"):
+        _owner_import_lock_key("user\x00-1", "org-1")
+    with pytest.raises(ValueError, match="NUL"):
+        _owner_import_lock_key("user-1", "org\x00-1")
 
 
 @pytest.mark.parametrize(
@@ -557,6 +573,55 @@ async def test_generate_import_embeddings_logs_non_secret_provider_fallback(capl
 
 
 @pytest.mark.asyncio
+async def test_extract_embeddings_uses_graph_segments_before_source_pooling():
+    parsed = {
+        "message_id": "<semantic@example.com>",
+        "body": "Launch\n\nHello team",
+        "body_parse_content": "<h1>Launch</h1><p>Hello team</p>",
+        "body_content_type": "text/html",
+        "attachments": [
+            {
+                "filename": "plan.md",
+                "content": "# Plan\n\nShip graph",
+                "content_type": "text/markdown",
+            }
+        ],
+    }
+    provider = EmailImportEmbeddingProvider(
+        api_key="provider-token",
+        base_url="http://ollama:11434/v1",
+        embedding_model="embeddinggemma",
+    )
+
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+        return_value=[
+            [1.0] * EMBEDDING_DIMENSION,
+            [2.0] * EMBEDDING_DIMENSION,
+            [3.0] * EMBEDDING_DIMENSION,
+            [4.0] * EMBEDDING_DIMENSION,
+        ],
+    ) as mock_generate_embeddings:
+        attachment_payloads, source_embeddings = (
+            await email_import_module._extract_and_generate_embeddings(
+                parsed,
+                provider,
+            )
+        )
+
+    assert attachment_payloads == parsed["attachments"]
+    assert mock_generate_embeddings.await_args.args[0] == [
+        "Launch",
+        "Launch\nHello team",
+        "Plan",
+        "Plan\nShip graph",
+    ]
+    assert source_embeddings[0][0] == 1.5
+    assert source_embeddings[1][0] == 3.5
+    assert all(len(embedding) == EMBEDDING_DIMENSION for embedding in source_embeddings)
+
+@pytest.mark.asyncio
 async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",
@@ -577,7 +642,9 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
         return embeddings
 
     parsed = {
-        "body": "body paragraph " * 3000,
+        "body": "\n\n".join(
+            f"body paragraph {index} " * 1000 for index in range(3)
+        ),
         "attachments": [{"content": "short attachment"}, {"content": ""}],
     }
     with patch(
@@ -757,6 +824,63 @@ async def test_extract_embeddings_skips_provider_for_empty_sources():
 
     mock_generate_embeddings.assert_not_awaited()
     assert embeddings == [[0.0] * EMBEDDING_DIMENSION]
+
+
+@pytest.mark.asyncio
+async def test_generate_import_embeddings_falls_back_when_provider_circuit_is_open():
+    provider = EmailImportEmbeddingProvider(
+        api_key="secret-provider-token",
+        base_url="http://ollama:11434/v1",
+        embedding_model="embeddinggemma",
+    )
+
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+    ) as mock_generate_embeddings:
+        mock_generate_embeddings.side_effect = CircuitOpenError("provider", 30)
+        embeddings = await _generate_import_embeddings(
+            ["Provider body"],
+            embedding_provider=provider,
+        )
+
+    assert embeddings == [[0.0] * EMBEDDING_DIMENSION]
+
+
+@pytest.mark.asyncio
+async def test_owner_quota_lock_releases_on_the_same_dedicated_connection():
+    class _PostgresSessionProbe(AsyncSession):
+        def get_bind(self):
+            dialect = type("Dialect", (), {"name": "postgresql"})()
+            return type("Bind", (), {"dialect": dialect})()
+
+    lock_connection = AsyncMock()
+    lock_connection.execute.return_value = Mock(scalar_one=Mock(return_value=True))
+    session = object.__new__(_PostgresSessionProbe)
+    fake_engine = type("Engine", (), {})()
+    fake_engine.connect = AsyncMock(return_value=lock_connection)
+    with patch.object(
+        email_import_module,
+        "engine",
+        fake_engine,
+    ):
+        lock = await email_import_module._acquire_owner_import_quota_lock(
+            session,
+            user_id="user-1",
+            organization_id="org-1",
+        )
+        await email_import_module._release_owner_import_quota_lock(
+            session,
+            user_id="user-1",
+            organization_id="org-1",
+            lock=lock,
+        )
+
+    fake_engine.connect.assert_awaited_once()
+    assert lock is lock_connection
+    assert lock_connection.execute.await_count == 2
+    lock_connection.commit.assert_awaited_once()
+    lock_connection.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -65,6 +65,23 @@ def test_validate_global_address_private_allowed_when_host_allowed(monkeypatch):
     assert _validate_global_address("192.168.1.5", hostname="ollama") == "192.168.1.5"
 
 
+def test_validate_global_address_allows_explicit_docker_host_gateway(monkeypatch):
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+    monkeypatch.setattr(
+        settings,
+        "ALLOWED_LLM_BASE_URL_HOSTS",
+        "host.docker.internal",
+    )
+
+    assert (
+        _validate_global_address(
+            "192.168.5.2",
+            hostname="host.docker.internal",
+        )
+        == "192.168.5.2"
+    )
+
+
 def test_validate_global_address_private_rejected_when_host_not_allowed(monkeypatch):
     """Test that a private IP is rejected even with ALLOW_LOCAL_LLM_PROVIDERS if the hostname is not allowed."""
     monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)

@@ -304,7 +304,8 @@ async def _resolve_query_embedding(
         embeddings = await generate_embeddings(
             [normalized_query],
             runtime_provider.api_key,
-            base_url=runtime_provider.base_url,
+            base_url=runtime_provider.embedding_base_url
+            or runtime_provider.base_url,
             model=runtime_provider.embedding_model,
         )
     except EmbeddingGenerationError:
@@ -500,7 +501,8 @@ async def grounded_answer(
             embeddings = await generate_embeddings(
                 [normalized_query],
                 runtime_provider.api_key,
-                base_url=runtime_provider.base_url,
+                base_url=runtime_provider.embedding_base_url
+                or runtime_provider.base_url,
                 model=runtime_provider.embedding_model,
             )
             query_embedding = (

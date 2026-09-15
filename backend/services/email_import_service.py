@@ -14,10 +14,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from sqlalchemy import bindparam, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import bindparam, event, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from core.config import settings
+from db.session import engine
 from db.models import (
     Attachment,
     ContentNodeRecord,
@@ -30,14 +31,15 @@ from services.batch_embedding_service import (
     BatchEmbeddingPartial,
     try_batch_import_embeddings,
 )
+from services.circuit_breaker import CircuitOpenError
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
-    chunk_text,
     fit_embedding_vector,
     generate_embeddings,
+    split_embedding_inputs,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
 from services.project_graph import (
@@ -86,6 +88,7 @@ class EmailImportEmbeddingProvider:
     api_key: str
     base_url: str | None
     embedding_model: str
+    embedding_base_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,9 @@ class EmailImportBatchContext:
     session: AsyncSession
     user_id: str
     organization_id: str | None
+
+
+EmailContentParseResults = tuple[ParseResult, tuple[ParseResult | None, ...]]
 
 
 @dataclass
@@ -251,15 +257,53 @@ def _session_uses_postgresql(session: AsyncSession) -> bool:
     return getattr(getattr(bind, "dialect", None), "name", None) == "postgresql"
 
 
+def _owner_import_lock_key(user_id: str, organization_id: str) -> str:
+    """Return a PostgreSQL-text-safe, collision-resistant owner lock key."""
+    if "\x00" in user_id or "\x00" in organization_id:
+        raise ValueError("email import owner identity contains NUL")
+    return hashlib.sha256(
+        user_id.encode("utf-8")
+        + b"\x00"
+        + organization_id.encode("utf-8")
+    ).hexdigest()
+
+
 async def _acquire_owner_import_quota_lock(
     session: AsyncSession, *, user_id: str, organization_id: str
-) -> bool:
+) -> AsyncConnection | bool | None:
+    """Hold an owner lease across item commits; discard unconfirmed acquisition."""
     if not _session_uses_postgresql(session):
-        return False
+        return None
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
+    # The import session binds to its caller's held connection so each item can
+    # commit without returning the leased socket or needing a second pool slot.
+    # Standalone helper callers still own a dedicated lease connection.
+    if isinstance(session, AsyncSession):
+        session_bind = getattr(session, "bind", None)
+        lock_connection = (
+            session_bind
+            if isinstance(session_bind, AsyncConnection)
+            else await engine.connect()
+        )
+        try:
+            await lock_connection.execute(
+                select(
+                    func.pg_advisory_lock(
+                        func.hashtext(bindparam("namespace_key")),
+                        func.hashtext(bindparam("owner_key")),
+                    )
+                ),
+                lock_params,
+            )
+        except BaseException:
+            await _close_owner_import_connection(lock_connection, discard_connection=True)
+            raise
+        return lock_connection
+
+    # Lightweight PostgreSQL test doubles retain the old query contract.
     await session.execute(
         select(
             func.pg_advisory_lock(
@@ -272,12 +316,70 @@ async def _acquire_owner_import_quota_lock(
     return True
 
 
-async def _release_owner_import_quota_lock(
-    session: AsyncSession, *, user_id: str, organization_id: str
+async def _close_owner_import_connection(
+    lock_connection: AsyncConnection, *, discard_connection: bool
 ) -> None:
+    """Complete lease cleanup even if the caller is cancelled again while waiting."""
+    async def close_connection() -> None:
+        """Discard an uncertain socket before returning its pool slot."""
+        try:
+            if discard_connection:
+                await lock_connection.invalidate()
+        finally:
+            await lock_connection.close()
+
+    cleanup_task = asyncio.create_task(close_connection())
+    interrupted_cleanup = False
+    while True:
+        try:
+            await asyncio.shield(cleanup_task)
+            break
+        except asyncio.CancelledError:
+            if cleanup_task.cancelled():
+                raise
+            interrupted_cleanup = True
+    if interrupted_cleanup:
+        raise asyncio.CancelledError
+
+
+async def _release_owner_import_quota_lock(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    organization_id: str,
+    lock: AsyncConnection | bool | None,
+) -> None:
+    """Return a lease connection only after PostgreSQL confirms its unlock."""
+    if lock is not None and lock is not True:
+        try:
+            lock_params = {
+                "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
+                "owner_key": _owner_import_lock_key(user_id, organization_id),
+            }
+            lock_result = await lock.execute(
+                select(
+                    func.pg_advisory_unlock(
+                        func.hashtext(bindparam("namespace_key")),
+                        func.hashtext(bindparam("owner_key")),
+                    )
+                ),
+                lock_params,
+            )
+            if lock_result.scalar_one() is not True:
+                raise RuntimeError("email import lease release unconfirmed")
+            await lock.commit()
+        except BaseException:
+            await _close_owner_import_connection(lock, discard_connection=True)
+            raise
+        else:
+            await _close_owner_import_connection(lock, discard_connection=False)
+        return
+    if lock is not True:
+        return
+
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -290,59 +392,177 @@ async def _release_owner_import_quota_lock(
     )
 
 
+def _parse_email_content_results(
+    parsed: EmailData,
+    *,
+    message_id: str,
+    attachment_payloads: list[dict],
+    owner_scope_key: str | None = None,
+) -> EmailContentParseResults:
+    """Scope persisted graph identities; embedding-only previews may omit scope."""
+    source_scope = (owner_scope_key,) if owner_scope_key is not None else ()
+    body_parse_result = parse_content(
+        source_kind="email_body",
+        source_record_uid=_content_graph_source_record_uid(
+            "email", *source_scope, message_id
+        ),
+        content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
+        content_type=str(parsed.get("body_content_type") or "text/plain"),
+        display_name="Email body",
+    )
+    attachment_parse_results: list[ParseResult | None] = []
+    for attachment_index, attachment_payload in enumerate(attachment_payloads, start=1):
+        if attachment_payload.get("parse_status", "parsed") != "parsed":
+            attachment_parse_results.append(None)
+            continue
+        parse_source_content = str(
+            attachment_payload.get("parse_content")
+            if attachment_payload.get("parse_content") is not None
+            else attachment_payload.get("content") or ""
+        )
+        if not parse_source_content.strip():
+            attachment_parse_results.append(None)
+            continue
+        attachment_parse_results.append(
+            parse_content(
+                source_kind="attachment",
+                source_record_uid=_content_graph_source_record_uid(
+                    "attachment",
+                    *source_scope,
+                    message_id,
+                    str(attachment_index),
+                    str(attachment_payload.get("filename") or "attachment.txt"),
+                ),
+                content=parse_source_content,
+                content_type=str(
+                    attachment_payload.get("parse_content_type")
+                    or attachment_payload.get("content_type")
+                    or "text/plain"
+                ),
+                display_name=str(
+                    attachment_payload.get("filename") or "attachment.txt"
+                ),
+            )
+        )
+    return body_parse_result, tuple(attachment_parse_results)
+
+
+def _semantic_embedding_inputs(
+    parsed: EmailData,
+    attachment_payloads: list[dict],
+    parse_results: EmailContentParseResults,
+) -> tuple[list[str], list[tuple[int, int]]]:
+    """Use persisted graph segments as embedding units before provider safety splits.
+
+    ADR: Semantic graph segments are the primary units; the generic embedding
+    boundary splitter remains only a physical context-limit fallback.
+    See: docs/adr/0001-local-llm-and-orchestrator-boundary.md
+    """
+    body_parse_result, attachment_parse_results = parse_results
+    source_results: list[ParseResult | None] = [
+        body_parse_result,
+        *attachment_parse_results,
+    ]
+    source_fallbacks = [
+        str(parsed.get("body") or ""),
+        *(
+            str(attachment.get("content") or "")
+            if (attachment.get("parse_status") or "parsed") == "parsed"
+            else ""
+            for attachment in attachment_payloads
+        ),
+    ]
+
+    embedding_texts: list[str] = []
+    source_ranges: list[tuple[int, int]] = []
+    for parse_result, fallback_text in zip(source_results, source_fallbacks):
+        semantic_texts = []
+        if parse_result is not None:
+            for segment in parse_result.segments:
+                text = segment.safe_text_content.strip()
+                if not text:
+                    continue
+                if segment.heading_path and segment.segment_kind != "heading":
+                    text = f"{segment.heading_path}\n{text}"
+                semantic_texts.append(text)
+        if not semantic_texts and fallback_text:
+            semantic_texts.append(fallback_text)
+        start = len(embedding_texts)
+        embedding_texts.extend(semantic_texts)
+        source_ranges.append((start, len(embedding_texts)))
+    return embedding_texts, source_ranges
+
+
+def _pool_source_embeddings(
+    embeddings: list[list[float]],
+    source_ranges: list[tuple[int, int]],
+    token_weights: list[int] | None = None,
+) -> list[list[float]]:
+    pooled: list[list[float]] = []
+    for start, end in source_ranges:
+        source_embeddings = embeddings[start:end]
+        if not source_embeddings:
+            pooled.append(_zero_embedding())
+            continue
+        weights = (
+            token_weights[start:end]
+            if token_weights is not None
+            else [1] * len(source_embeddings)
+        )
+        total_weight = sum(weights) or len(source_embeddings)
+        width = max(len(embedding) for embedding in source_embeddings)
+        pooled.append(
+            fit_embedding_vector(
+                [
+                    sum(
+                        (
+                            embedding[index] if index < len(embedding) else 0.0
+                        )
+                        * weights[embedding_index]
+                        for embedding_index, embedding in enumerate(source_embeddings)
+                    )
+                    / total_weight
+                    for index in range(width)
+                ],
+                EMBEDDING_DIMENSION,
+            )
+        )
+    return pooled
+
+
 async def _extract_and_generate_embeddings(
     parsed: EmailData,
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
+    *,
+    message_id: str | None = None,
+    parse_results: EmailContentParseResults | None = None,
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
-    body_parse_content = parsed.get("body_parse_content")
-    source_texts = [
-        str(
-            body_parse_content
-            if body_parse_content is not None
-            else parsed.get("body") or ""
-        )
-    ]
-    source_texts.extend(
-        str(
-            ""
-            if (attachment.get("parse_status") or "parsed") != "parsed"
-            else (
-                attachment.get("parse_content")
-                if attachment.get("parse_content") is not None
-                else attachment.get("content") or ""
-            )
-        )
-        for attachment in attachment_payloads
+    parse_results = parse_results or _parse_email_content_results(
+        parsed,
+        message_id=str(parsed.get("message_id") or message_id or "email-import"),
+        attachment_payloads=attachment_payloads,
+        owner_scope_key=(
+            _owner_import_lock_key(batch_context.user_id, batch_context.organization_id)
+            if batch_context is not None and batch_context.organization_id is not None
+            else None
+        ),
     )
-    fitted_embeddings: list[list[float]] = []
-    for source_text in source_texts:
-        source_chunks = chunk_text(source_text)
-        if not source_chunks:
-            fitted_embeddings.append(_zero_embedding())
-            continue
-
-        vector_sum: list[float] | None = None
-        vector_count = 0
-        for start in range(0, len(source_chunks), MAX_EMBEDDING_CHUNKS_PER_WINDOW):
-            chunk_embeddings = await _generate_import_embeddings(
-                source_chunks[start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW],
-                embedding_provider=embedding_provider,
-                batch_context=batch_context,
-            )
-            for embedding in chunk_embeddings:
-                if vector_sum is None:
-                    vector_sum = [0.0] * len(embedding)
-                for index, value in enumerate(embedding):
-                    vector_sum[index] += value
-                vector_count += 1
-        fitted_embeddings.append(
-            [value / vector_count for value in vector_sum]
-            if vector_sum and vector_count
-            else _zero_embedding()
-        )
-    return attachment_payloads, fitted_embeddings
+    embedding_texts, source_ranges = _semantic_embedding_inputs(
+        parsed,
+        attachment_payloads,
+        parse_results,
+    )
+    semantic_embeddings = await _generate_import_embeddings(
+        embedding_texts,
+        embedding_provider=embedding_provider,
+        batch_context=batch_context,
+    )
+    return attachment_payloads, _pool_source_embeddings(
+        semantic_embeddings,
+        source_ranges,
+    )
 
 
 def _build_email_object(
@@ -356,6 +576,7 @@ def _build_email_object(
     persisted_date: datetime.datetime,
     attachment_payloads: list[dict],
     fitted_embeddings: list[list[float]],
+    parse_results: EmailContentParseResults | None = None,
 ) -> tuple[Email, int]:
     email_obj = Email(
         user_id=user_id,
@@ -417,6 +638,7 @@ def _build_email_object(
         parsed=parsed,
         message_id=message_id,
         attachment_payloads=attachment_payloads,
+        parse_results=parse_results,
     )
     _append_knowledge_graph_edges(email_obj)
 
@@ -456,49 +678,29 @@ def _append_email_content_graph(
     parsed: EmailData,
     message_id: str,
     attachment_payloads: list[dict],
+    parse_results: EmailContentParseResults | None = None,
 ) -> None:
-    body_parse_result = parse_content(
-        source_kind="email_body",
-        source_record_uid=_content_graph_source_record_uid("email", message_id),
-        content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
-        content_type=str(parsed.get("body_content_type") or "text/plain"),
-        display_name="Email body",
+    parse_results = parse_results or _parse_email_content_results(
+        parsed,
+        message_id=message_id,
+        attachment_payloads=attachment_payloads,
+        owner_scope_key=_owner_import_lock_key(
+            email_obj.user_id, email_obj.organization_id
+        ),
     )
+    body_parse_result, attachment_parse_results = parse_results
     _append_parse_result_records(
         email_obj=email_obj,
         attachment_obj=None,
         parse_result=body_parse_result,
     )
 
-    for attachment_index, (attachment_obj, attachment_payload) in enumerate(
-        zip(email_obj.attachments, attachment_payloads),
-        start=1,
+    for attachment_obj, attachment_parse_result in zip(
+        email_obj.attachments,
+        attachment_parse_results,
     ):
-        if attachment_payload.get("parse_status", "parsed") != "parsed":
+        if attachment_parse_result is None:
             continue
-        parse_source_content = str(
-            attachment_payload.get("parse_content")
-            if attachment_payload.get("parse_content") is not None
-            else attachment_payload.get("content") or ""
-        )
-        if not parse_source_content.strip():
-            continue
-        attachment_parse_result = parse_content(
-            source_kind="attachment",
-            source_record_uid=_content_graph_source_record_uid(
-                "attachment",
-                message_id,
-                str(attachment_index),
-                attachment_obj.filename,
-            ),
-            content=parse_source_content,
-            content_type=str(
-                attachment_payload.get("parse_content_type")
-                or attachment_payload.get("content_type")
-                or "text/plain"
-            ),
-            display_name=attachment_obj.filename,
-        )
         _append_parse_result_records(
             email_obj=email_obj,
             attachment_obj=attachment_obj,
@@ -776,7 +978,7 @@ async def _extract_project_semantics_for_import(
     OpenAI-compatible provider credentials and enforce segment citations, so
     they cannot introduce uncited claims; a missing credential, an unconfigured
     orchestrator endpoint, or any provider/parse failure degrades down the chain
-    to the deterministic keyword baseline instead of losing the projection.
+    to the deterministic reference extractor instead of losing the projection.
     """
     context = KgExtractorContext(
         api_key=embedding_provider.api_key if embedding_provider else None,
@@ -885,8 +1087,19 @@ async def _import_single_eml(
         organization_id=organization_id,
     )
 
+    attachment_payloads = list(parsed.get("attachments", []))
+    parse_results = _parse_email_content_results(
+        parsed,
+        message_id=message_id,
+        attachment_payloads=attachment_payloads,
+        owner_scope_key=_owner_import_lock_key(user_id, organization_id),
+    )
     attachment_payloads, fitted_embeddings = await _extract_and_generate_embeddings(
-        parsed, embedding_provider, batch_context
+        parsed,
+        embedding_provider,
+        batch_context,
+        message_id=message_id,
+        parse_results=parse_results,
     )
 
     email_obj, attachment_count = _build_email_object(
@@ -899,6 +1112,7 @@ async def _import_single_eml(
         persisted_date=persisted_date,
         attachment_payloads=attachment_payloads,
         fitted_embeddings=fitted_embeddings,
+        parse_results=parse_results,
     )
 
     project_source_segments = (
@@ -956,6 +1170,9 @@ async def _generate_import_embeddings(
         return []
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
+    batch_texts, batch_ranges, batch_token_weights = split_embedding_inputs(
+        texts, embedding_provider.embedding_model
+    )
     if batch_context is not None and texts:
         # Bulk import embeddings are latency-tolerant: route them through
         # contextual-orchestrator first. A None result means batch is
@@ -963,7 +1180,7 @@ async def _generate_import_embeddings(
         # existing per-request path below.
         batched = await try_batch_import_embeddings(
             batch_context.session,
-            texts,
+            batch_texts,
             embedding_provider=embedding_provider,
             user_id=batch_context.user_id,
             organization_id=batch_context.organization_id,
@@ -984,16 +1201,25 @@ async def _generate_import_embeddings(
                             batch_context=None,
                         )
                     )
-                return [*batched.completed_vectors, *remainder]
-            return batched
+                return _pool_source_embeddings(
+                    [*batched.completed_vectors, *remainder],
+                    batch_ranges,
+                    batch_token_weights,
+                )
+            return _pool_source_embeddings(
+                batched,
+                batch_ranges,
+                batch_token_weights,
+            )
     try:
         provider_embeddings = await generate_embeddings(
             texts,
             embedding_provider.api_key,
-            base_url=embedding_provider.base_url,
+            base_url=embedding_provider.embedding_base_url
+            or embedding_provider.base_url,
             model=embedding_provider.embedding_model,
         )
-    except (EmbeddingGenerationError, ValueError) as exc:
+    except (CircuitOpenError, EmbeddingGenerationError, ValueError) as exc:
         logger.warning(
             "Email import embedding generation failed; retrying imported content "
             "item by item before zero-vector fallback: "
@@ -1007,7 +1233,8 @@ async def _generate_import_embeddings(
                 single_embedding = await generate_embeddings(
                     [text],
                     embedding_provider.api_key,
-                    base_url=embedding_provider.base_url,
+                    base_url=embedding_provider.embedding_base_url
+                    or embedding_provider.base_url,
                     model=embedding_provider.embedding_model,
                 )
                 if not single_embedding:
@@ -1017,6 +1244,7 @@ async def _generate_import_embeddings(
                     fit_embedding_vector(single_embedding[0], EMBEDDING_DIMENSION)
                 )
             except (
+                CircuitOpenError,
                 EmbeddingGenerationError,
                 ValueError,
                 TypeError,
@@ -1162,6 +1390,73 @@ async def import_email_uploads(
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
 ) -> EmailImportResult:
+    """Import with one held connection, including an existing provider lookup."""
+    if isinstance(session, AsyncSession) and _session_uses_postgresql(session):
+        if session.new or session.dirty or session.deleted:
+            raise ValueError("email import requires settled caller state")
+        import_connection = await session.connection()
+        import_session = AsyncSession(
+            bind=import_connection,
+            expire_on_commit=False,
+            join_transaction_mode="control_fully",
+        )
+        leased_driver = import_connection.sync_connection.connection.dbapi_connection
+
+        def reject_reconnected_import(
+            database_connection,
+            database_cursor,
+            query_statement,
+            query_parameters,
+            execution_context,
+            execute_many,
+        ):
+            """A replacement socket cannot execute SQL under a lost owner's lease."""
+            if database_connection.connection.dbapi_connection is not leased_driver:
+                raise RuntimeError("email import lease connection lost")
+
+        event.listen(
+            import_connection.sync_connection,
+            "before_cursor_execute",
+            reject_reconnected_import,
+        )
+        try:
+            return await _import_email_uploads_on_session(
+                import_session,
+                uploads=uploads,
+                user_id=user_id,
+                organization_id=organization_id,
+                embedding_provider=embedding_provider,
+            )
+        finally:
+            try:
+                try:
+                    await import_session.close()
+                finally:
+                    await session.close()
+            finally:
+                event.remove(
+                    import_connection.sync_connection,
+                    "before_cursor_execute",
+                    reject_reconnected_import,
+                )
+    return await _import_email_uploads_on_session(
+        session,
+        uploads=uploads,
+        user_id=user_id,
+        organization_id=organization_id,
+        embedding_provider=embedding_provider,
+    )
+
+
+async def _import_email_uploads_on_session(
+    session: AsyncSession,
+    *,
+    uploads: list[EmailImportUpload],
+    user_id: str,
+    organization_id: str,
+    embedding_provider: EmailImportEmbeddingProvider | None,
+) -> EmailImportResult:
+    """Keep quota planning and every item transaction inside the owner lease."""
     lock_acquired = await _acquire_owner_import_quota_lock(
         session, user_id=user_id, organization_id=organization_id
     )
@@ -1229,9 +1524,12 @@ async def import_email_uploads(
                     )
                 )
     finally:
-        if lock_acquired:
+        if lock_acquired is not None:
             await _release_owner_import_quota_lock(
-                session, user_id=user_id, organization_id=organization_id
+                session,
+                user_id=user_id,
+                organization_id=organization_id,
+                lock=lock_acquired,
             )
 
     return result

@@ -601,6 +601,7 @@ async def import_email_files(
         embedding_provider = EmailImportEmbeddingProvider(
             api_key=runtime_provider.api_key,
             base_url=runtime_provider.base_url,
+            embedding_base_url=runtime_provider.embedding_base_url,
             embedding_model=runtime_provider.embedding_model,
         )
 

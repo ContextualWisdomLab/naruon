@@ -304,6 +304,49 @@ async def test_extract_action_items_and_summary_uses_selected_provider_model(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        '```JSON\n{"summary":"Local summary","action_items":[]}\n```',
+        'The structured result is:\n{"summary":"Local summary","action_items":[]}',
+    ],
+)
+async def test_extract_action_items_and_summary_parses_local_json_content(
+    monkeypatch, content
+):
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+    mock_openai = MagicMock()
+    mock_openai.close = AsyncMock()
+    response = MagicMock()
+    response.choices = [
+        MagicMock(
+                message=MagicMock(
+                    content=content
+                )
+        )
+    ]
+    mock_openai.chat.completions.create = AsyncMock(return_value=response)
+    with patch("services.llm_service.AsyncOpenAI", return_value=mock_openai):
+        result = await extract_action_items_and_summary(
+            "Test email", "test-key", base_url="http://127.0.0.1:8080/v1"
+        )
+
+    assert result.summary == "Local summary"
+    assert result.action_items == []
+    mock_openai.chat.completions.create.assert_awaited_once()
+    system_content = mock_openai.chat.completions.create.call_args.kwargs["messages"][0][
+        "content"
+    ]
+    assert "Return only one valid JSON object" in system_content
+    assert mock_openai.chat.completions.create.call_args.kwargs["response_format"] == {
+        "type": "json_object"
+    }
+    assert mock_openai.chat.completions.create.call_args.kwargs["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False}
+    }
+
+
+@pytest.mark.asyncio
 async def test_extract_action_items_and_summary_api_error(mock_openai):
     # Setup mock to raise an exception
     mock_openai.beta.chat.completions.parse = AsyncMock(

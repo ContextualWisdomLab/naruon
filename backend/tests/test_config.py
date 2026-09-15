@@ -52,6 +52,15 @@ def test_global_config():
     assert hasattr(settings, "ENCRYPTION_KEY")
 
 
+def test_project_graph_does_not_default_to_keyword_judgment(monkeypatch):
+    _set_required_runtime_env(monkeypatch)
+    monkeypatch.delenv("PROJECT_GRAPH_EXTRACTOR", raising=False)
+
+    loaded_settings = _settings_without_env_file()
+
+    assert loaded_settings.PROJECT_GRAPH_EXTRACTOR == "orchestrator"
+
+
 def test_production_settings_do_not_expose_dev_header_bypass_controls():
     assert "TRUST_DEV_HEADERS" not in settings.__class__.model_fields
     assert "DEV_AUTH_TOKEN" not in settings.__class__.model_fields

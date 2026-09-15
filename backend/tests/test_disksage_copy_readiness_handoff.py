@@ -40,7 +40,7 @@ def _success_payload() -> dict[str, object]:
 
 
 def _python_verifier(path: Path, source: str) -> Path:
-    path.write_text(f"#!{sys.executable}\n{source}", encoding="utf-8")
+    path.write_text(f"#!/usr/bin/env python3\n{source}", encoding="utf-8")
     path.chmod(0o700)
     return path
 

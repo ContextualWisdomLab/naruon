@@ -437,6 +437,15 @@ def test_fetch_inbox_snapshot_rejects_empty_retry_budget():
         )
 
 
+def test_browser_inbox_visibility_uses_thread_level_api_count():
+    assert smoke._browser_inbox_min_count(3, 1, 3) == 1
+
+
+def test_browser_inbox_visibility_rejects_missing_imports():
+    with pytest.raises(SystemExit, match="did not reflect imported mail"):
+        smoke._browser_inbox_min_count(3, 0, 3)
+
+
 def test_fetch_search_snapshot_retries_until_results(monkeypatch):
     calls: list[dict[str, object]] = []
 

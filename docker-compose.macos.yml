@@ -1,0 +1,24 @@
+services:
+  # Host LLM selection is used when mlx-lm or llama.cpp is available. Ollama
+  # remains in the base Compose file as the final fallback.
+  ollama:
+    profiles:
+      - ollama
+
+  backend:
+    depends_on: !override
+      db:
+        condition: service_healthy
+      newsdom:
+        condition: service_started
+        required: false
+    environment:
+      ALLOW_LOCAL_LLM_PROVIDERS: "true"
+      ALLOWED_LLM_BASE_URL_HOSTS: ${NARUON_HOST_LLM_ALLOWED_HOSTS:-host.docker.internal}
+      OPENAI_API_KEY: ${NARUON_HOST_LLM_API_KEY-}
+      OPENAI_BASE_URL: ${NARUON_HOST_LLM_BASE_URL:-http://host.docker.internal:8080/v1}
+      OPENAI_EMBEDDING_BASE_URL: ${NARUON_HOST_LLM_EMBEDDING_BASE_URL-}
+      OPENAI_EMBEDDING_MODEL: ${NARUON_HOST_LLM_EMBEDDING_MODEL:-embeddinggemma}
+      OPENAI_MODEL: ${NARUON_HOST_LLM_MODEL:-gemma4:e2b-it-qat}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
