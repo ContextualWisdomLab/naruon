@@ -54,12 +54,13 @@ describe("NetworkGraph bounded option materialization", () => {
     vi.clearAllMocks();
   });
 
-  it("instrumented iterable/Map fixture proves iteration stops early", async () => {
-    const nodes = Array.from({ length: 50 }, (_, index) => ({
+  it("instrumented iterable/Map fixture proves iteration stops early and preserves insertion order", async () => {
+    // Generate items beyond the limits to ensure it truncates correctly
+    const nodes = Array.from({ length: 15 }, (_, index) => ({
       id: `node-${index}`,
       label: `노드 ${index}`,
     }));
-    const edges = Array.from({ length: 50 }, (_, index) => ({
+    const edges = Array.from({ length: 10 }, (_, index) => ({
       id: `edge-${index}`,
       from: `node-${index}`,
       to: `node-${index + 1}`,
@@ -106,13 +107,22 @@ describe("NetworkGraph bounded option materialization", () => {
         'select[aria-label="노드 선택"]',
       ) as HTMLSelectElement | null;
 
-      // Verify option caps still apply
-      expect(relationshipSelect?.options.length).toBe(6); // 1 default + 5 options
-      expect(nodeSelect?.options.length).toBe(9); // 1 default + 8 options
+      // Verify option caps still apply (1 default + limit)
+      expect(relationshipSelect?.options.length).toBe(6);
+      expect(nodeSelect?.options.length).toBe(9);
 
-      // Verify the iteration count was strictly bounded and did not iterate all 50 items
-      expect(edgeIterationCount).toBeLessThanOrEqual(15);
-      expect(nodeIterationCount).toBeLessThanOrEqual(25);
+      // Verify exact insertion order preservation
+      const actualEdgeOptions = Array.from(relationshipSelect?.options ?? []).map(o => o.value).slice(1);
+      expect(actualEdgeOptions).toEqual(['edge-0', 'edge-1', 'edge-2', 'edge-3', 'edge-4']);
+
+      const actualNodeOptions = Array.from(nodeSelect?.options ?? []).map(o => o.value).slice(1);
+      expect(actualNodeOptions).toEqual(['node-0', 'node-1', 'node-2', 'node-3', 'node-4', 'node-5', 'node-6', 'node-7']);
+
+      // A 'break' after adding the Nth item means it evaluated `next()` N times for the values,
+      // plus potentially one more depending on React's render lifecycle / strict mode.
+      // We strictly assert <= 6 for edges (limit 5) and <= 9 for nodes (limit 8).
+      expect(edgeIterationCount).toBeLessThanOrEqual(6);
+      expect(nodeIterationCount).toBeLessThanOrEqual(9);
     } finally {
       Map.prototype.values = originalMapValues;
       expect(Map.prototype.values).toBe(originalMapValues);
