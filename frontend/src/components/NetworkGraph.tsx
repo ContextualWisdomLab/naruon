@@ -286,6 +286,8 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
+    // ⚡ Bolt Optimization: Replace O(N) Array.from(map).slice() with bounded for...of loop
+    // to avoid intermediate array allocations and achieve O(min(N, limit)) performance for large maps.
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
@@ -301,6 +303,8 @@ export default function NetworkGraph() {
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
+    // ⚡ Bolt Optimization: Replace O(N) Array.from(map).slice() with bounded for...of loop
+    // to avoid full Map iteration and intermediate allocations on every render pass.
     const options = [];
     for (const node of nodeInstanceMap.values()) {
       if (options.length >= 8) break;
