@@ -18,6 +18,7 @@ from core.url_validation import (
     _resolve_global_addresses,
 )
 from services.llm_provider_urls import build_pinned_https_async_client
+from services.text_structure_statistics import measure_text_structure
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -387,23 +388,36 @@ registry.register(
     tone_analyzer_handler,
 )
 
-async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
-    text = params.get("text", "")
-    char_count = len(text)
-    char_count_no_spaces = len(
-        text.replace(" ", "").replace("\n", "").replace("\r", "").replace("\t", "")
-    )
+async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Return descriptive text counts while preserving documented legacy aliases."""
+    statistics = measure_text_structure(params.get("text", ""))
+    legacy_aliases = {
+        "char_count": "character_count",
+        "char_count_no_spaces": "non_whitespace_character_count",
+        "word_count": "whitespace_token_count",
+    }
     return {
-        "char_count": char_count,
-        "char_count_no_spaces": char_count_no_spaces,
-        "word_count": len(text.split()),
+        "character_count": statistics.character_count,
+        "non_whitespace_character_count": statistics.non_whitespace_character_count,
+        "whitespace_token_count": statistics.whitespace_token_count,
+        "terminal_punctuation_run_count": statistics.terminal_punctuation_run_count,
+        "segmentation_contract": statistics.segmentation_contract,
+        "legacy_aliases": legacy_aliases,
+        "char_count": statistics.character_count,
+        "char_count_no_spaces": statistics.non_whitespace_character_count,
+        "word_count": statistics.whitespace_token_count,
     }
 
 registry.register(
     ToolInfo(
         code="text_analyzer",
         name="텍스트 분석기 (Text Analyzer)",
-        description="텍스트의 글자 수, 단어 수, 공백 제외 글자 수를 분석합니다.",
+        description=(
+            "텍스트의 문자 수, Unicode 공백 제외 문자 수, 공백 구분 토큰 수, "
+            "종결 문장부호 연속 구간 수를 계산합니다. 기존 char_count, "
+            "char_count_no_spaces, word_count는 호환 별칭이며 단어·문장 수를 "
+            "뜻하지 않습니다."
+        ),
         category="유틸리티",
         parameters={"text": "string"},
     ),
