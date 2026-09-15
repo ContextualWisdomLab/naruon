@@ -849,7 +849,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed" in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:

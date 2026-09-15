@@ -286,7 +286,7 @@ async def test_pinned_implicit_tls_smtp_connect_oserror(monkeypatch, smtp_socket
     monkeypatch.setattr(client, "_get_tls_context", lambda: None)
     monkeypatch.setattr(email_client.asyncio.get_running_loop(), "create_connection", lambda *args, **kwargs: mock_wait_for(None, None))
 
-    with pytest.raises(email_client.SMTPConnectError, match="Error connecting to smtp.example.com"):
+    with pytest.raises(email_client.SMTPConnectError, match="Error connecting to smtp.example.com: network down"):
         await client._create_connection(timeout=10.0)
 
 @pytest.mark.asyncio
@@ -321,7 +321,7 @@ async def test_pinned_implicit_tls_smtp_read_response_disconnected(monkeypatch, 
         return InnerMockProtocol()
     monkeypatch.setattr(email_client, "SMTPProtocol", MockProtocol)
 
-    with pytest.raises(email_client.SMTPConnectError, match="Error connecting to smtp.example.com"):
+    with pytest.raises(email_client.SMTPConnectError, match="Error connecting to smtp.example.com: disconnected"):
         await client._create_connection(timeout=10.0)
 
 @pytest.mark.asyncio
@@ -462,7 +462,7 @@ async def test_send_email_general_exception(monkeypatch):
         smtp_server="smtp.example.com",
         smtp_port=587,
     )
-    with pytest.raises(Exception, match="Failed to send email"):
+    with pytest.raises(Exception, match="Failed to send email: Something went wrong"):
         await email_client.send_email(params, smtp_config)
 
 @pytest.mark.asyncio

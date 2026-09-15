@@ -106,7 +106,7 @@ class SelfHostedConnector:
             if websockets and isinstance(e, websockets.exceptions.ConnectionClosed):
                 logger.warning("Connection closed by remote gateway.")
             else:
-                logger.warning("Connection loop ended", exc_info=True)
+                logger.warning(f"Connection loop ended: {e}")
             self.is_connected = False
             
     async def handle_message(self, message: str | bytes):

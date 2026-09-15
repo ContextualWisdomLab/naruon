@@ -474,7 +474,7 @@ class _PinnedImplicitTlsSMTP(aiosmtplib.SMTP):
             ) from exc
         except OSError as exc:
             raise SMTPConnectError(
-                f"Error connecting to {self._tls_server_hostname}"
+                f"Error connecting to {self._tls_server_hostname}: {exc}"
             ) from exc
 
         self.protocol = protocol
@@ -484,7 +484,7 @@ class _PinnedImplicitTlsSMTP(aiosmtplib.SMTP):
             response = await protocol.read_response(timeout=timeout)
         except SMTPServerDisconnected as exc:
             raise SMTPConnectError(
-                f"Error connecting to {self._tls_server_hostname}"
+                f"Error connecting to {self._tls_server_hostname}: {exc}"
             ) from exc
         except SMTPTimeoutError as exc:
             raise SMTPConnectTimeoutError(
@@ -619,4 +619,4 @@ async def send_email(
     except ValueError:
         raise
     except Exception as e:
-        raise Exception("Failed to send email")
+        raise Exception(f"Failed to send email: {e}")

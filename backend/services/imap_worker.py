@@ -163,7 +163,7 @@ class ImapSyncWorker:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("Error in ImapSyncWorker loop", exc_info=True)
+                logger.error(f"Error in ImapSyncWorker loop: {e}", exc_info=True)
 
             # Sleep for 1 minute before the next sync
             if self._is_running:

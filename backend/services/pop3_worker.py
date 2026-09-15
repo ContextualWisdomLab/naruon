@@ -47,7 +47,7 @@ class Pop3SyncWorker:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("Error in Pop3SyncWorker loop", exc_info=True)
+                logger.error(f"Error in Pop3SyncWorker loop: {e}", exc_info=True)
 
             if self._is_running:
                 try:

@@ -99,7 +99,7 @@ def extract_backup(zip_path: str | Path, output_dir: str | Path) -> list[Path]:
                 extracted_paths.append(target_path)
 
     except (BadZipFile, FileNotFoundError) as e:
-        raise InvalidArchiveError("Failed to extract archive") from e
+        raise InvalidArchiveError(f"Failed to extract archive: {e}") from e
 
     return extracted_paths
 

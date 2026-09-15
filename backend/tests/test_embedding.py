@@ -139,7 +139,7 @@ async def test_generate_embeddings_api_error():
             mock_settings.OPENAI_EMBEDDING_MODEL = "test-model"
             mock_settings.OPENAI_BASE_URL = None
             
-            with pytest.raises(EmbeddingGenerationError, match="Failed to generate embeddings"):
+            with pytest.raises(EmbeddingGenerationError, match="Failed to generate embeddings: API error"):
 
                 await generate_embeddings(["test"], "test-key")
             mock_client.close.assert_awaited_once()
