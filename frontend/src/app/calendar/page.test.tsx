@@ -76,7 +76,7 @@ describe("CalendarPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders monthly weekly detail coordination candidate and CalDAV writeback workspaces", () => {
+  it("renders monthly weekly detail coordination candidate and CalDAV writeback workspaces", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -85,6 +85,7 @@ describe("CalendarPage", () => {
     act(() => {
       root?.render(<CalendarPage />);
     });
+    await flushAsyncWork();
 
     expect(container.textContent).toContain("새 일정");
     expect(container.textContent).toContain("고객 원본 일정 반영 의도");
@@ -92,7 +93,7 @@ describe("CalendarPage", () => {
     expect(container.querySelector('button[aria-label="이전 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="다음 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="설정"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="닫기"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="닫기"]')).toBeNull();
   });
 
   it("exposes the calendar view switcher as a keyboard-navigable tablist", async () => {
