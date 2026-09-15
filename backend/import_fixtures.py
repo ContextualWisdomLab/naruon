@@ -41,6 +41,34 @@ async def import_eml_file(session, eml_file: Path) -> bool:
         logger.error(f"Failed to parse {eml_file}: {e}")
         return False
 
+    # Finish remote/derived embedding work before the first database statement.
+    # This fixture path must not keep a transaction open while an external model
+    # call is idle, and attachment persistence must not depend on enrichment.
+    body_text = parsed["body"] if parsed["body"].strip() else "Empty body"
+    try:
+        body_emb = await generate_fixture_embedding(body_text)
+    except Exception as e:
+        logger.error(f"Failed to generate embedding for {eml_file}: {e}")
+        return False
+
+    prepared_attachments: list[Attachment] = []
+    for att in parsed.get("attachments", []):
+        att_text = att["content"] if att["content"].strip() else "Empty attachment"
+        try:
+            att_emb = await generate_fixture_embedding(att_text)
+        except Exception as e:
+            logger.error(
+                f"Failed to generate embedding for attachment {att['filename']}: {e}"
+            )
+            att_emb = None
+        prepared_attachments.append(
+            Attachment(
+                filename=att["filename"],
+                content=att["content"],
+                embedding=att_emb,
+            )
+        )
+
     existing = await session.execute(
         select(Email).where(
             Email.message_id == parsed["message_id"],
@@ -50,13 +78,6 @@ async def import_eml_file(session, eml_file: Path) -> bool:
     )
     if existing.scalar_one_or_none():
         logger.info(f"Email {parsed['message_id']} already exists, skipping.")
-        return False
-
-    body_text = parsed["body"] if parsed["body"].strip() else "Empty body"
-    try:
-        body_emb = await generate_fixture_embedding(body_text)
-    except Exception as e:
-        logger.error(f"Failed to generate embedding for {eml_file}: {e}")
         return False
 
     thread_id = await assign_thread_id(
@@ -81,20 +102,7 @@ async def import_eml_file(session, eml_file: Path) -> bool:
         embedding=body_emb,
         thread_id=thread_id,
     )
-
-    for att in parsed.get("attachments", []):
-        att_text = att["content"] if att["content"].strip() else "Empty attachment"
-        try:
-            att_emb = await generate_fixture_embedding(att_text)
-            email_obj.attachments.append(
-                Attachment(
-                    filename=att["filename"],
-                    content=att["content"],
-                    embedding=att_emb,
-                )
-            )
-        except Exception as e:
-            logger.error(f"Failed to generate embedding for attachment {att['filename']}: {e}")
+    email_obj.attachments.extend(prepared_attachments)
 
     session.add(email_obj)
     try:
