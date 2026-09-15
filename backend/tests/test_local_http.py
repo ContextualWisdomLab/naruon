@@ -150,3 +150,7 @@ def test_local_request_target_rejects_invalid_percent_encoding(path: str) -> Non
 def test_local_request_target_normalizes_malformed_parser_errors() -> None:
     with pytest.raises(LocalHTTPValidationError, match="local API path"):
         validate_local_request_target("//[::1")
+
+def test_local_request_target_rejects_doubly_url_encoded_traversal() -> None:
+    with pytest.raises(LocalHTTPValidationError, match="traversal is not allowed"):
+        validate_local_request_target("/api/%252e%252e/admin")
