@@ -1308,6 +1308,74 @@ def test_execute_analysis_tool_rejects_oversized_text():
     }
 
 
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_success():
+    params = {"text": "Hello world. This is a test. How are you?"}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "Hello world. How are you?"}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_cjk_punctuation():
+    params = {"text": "첫 번째 문장입니다． 두 번째 문장입니다！ 세 번째 문장입니다？"}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "첫 번째 문장입니다． 세 번째 문장입니다？"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "excerpt"),
+    [
+        (
+            "Dr. Smith approved it. Please proceed.",
+            "Dr. Smith approved it. Please proceed.",
+        ),
+        ("Version 1.2 works. Please deploy.", "Version 1.2 works. Please deploy."),
+        (
+            "Contact alice@example.com for help. Thanks.",
+            "Contact alice@example.com for help. Thanks.",
+        ),
+        (
+            "Read https://example.com/docs.html first. Done.",
+            "Read https://example.com/docs.html first. Done.",
+        ),
+        ('He said "First." She said "Last."', 'He said "First." She said "Last."'),
+    ],
+)
+async def test_first_last_sentence_handler_internal_periods_and_closers(text, excerpt):
+    result = await registry.invoke_tool("first_last_sentence", {"text": text})
+    assert result == {"excerpt": excerpt}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_empty_text():
+    params = {"text": ""}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": ""}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_no_sentences():
+    params = {"text": "..."}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "..."}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_one_sentence():
+    params = {"text": "Just one sentence."}
+    result = await registry.invoke_tool("first_last_sentence", params)
+    assert result == {"excerpt": "Just one sentence."}
+
+
+@pytest.mark.asyncio
+async def test_first_last_sentence_handler_oversized():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    params = {"text": "a" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
+    with pytest.raises(ValueError, match="must not exceed"):
+        await registry.invoke_tool("first_last_sentence", params)
+
 
 @pytest.mark.asyncio
 async def test_hash_generator_handler():
@@ -1320,8 +1388,6 @@ async def test_hash_generator_handler():
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
         await hash_generator_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
-
-
 
 @pytest.mark.asyncio
 async def test_email_phone_masker_handler():
@@ -1345,7 +1411,11 @@ def test_execute_hash_generator():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["md5"] == "5d41402abc4b2a76b9719d911017c592"
-    assert data["result"]["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    assert (
+        data["result"]["sha256"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
 
 def test_execute_email_phone_masker():
     with TestClient(app) as client:

@@ -750,6 +750,57 @@ registry.register(
 )
 
 
+async def first_last_sentence_handler(params: Dict[str, Any]) -> Any:
+    """Return the first and last non-empty sentences without claiming synthesis."""
+    text = params.get("text", "")
+    _normalize_analysis_text(text)
+    if not text:
+        return {"excerpt": ""}
+
+    protected_text = list(text)
+    for match in re.finditer(
+        r"(?<=\d)\.(?=\d)|\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr)\.", text, re.IGNORECASE
+    ):
+        protected_text[match.end() - 1] = "\0"
+    for match in _EMAIL_PATTERN.finditer(text):
+        for character_index in range(match.start(), match.end()):
+            if text[character_index] == ".":
+                protected_text[character_index] = "\0"
+    for match in _URL_PATTERN.finditer(text):
+        token_end = match.end() - (len(match.group()) - len(match.group().rstrip(".")))
+        for character_index in range(match.start(), token_end):
+            if text[character_index] == ".":
+                protected_text[character_index] = "\0"
+
+    sentences = [
+        text[match.start() : match.end()].strip()
+        for match in re.finditer(
+            r"[^.!?。！？．]+(?:[.!?。！？．]+[\"'”’\)\]\}]*)?",
+            "".join(protected_text),
+        )
+        if text[match.start() : match.end()].strip()
+    ]
+    if not sentences:
+        return {"excerpt": text}
+
+    excerpt = sentences[0]
+    if len(sentences) > 1:
+        excerpt += " " + sentences[-1]
+
+    return {"excerpt": excerpt}
+
+
+registry.register(
+    ToolInfo(
+        code="first_last_sentence",
+        name="첫 문장·끝 문장 추출기 (First and Last Sentence Extractor)",
+        description="텍스트의 첫 문장과 끝 문장을 원문 그대로 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    first_last_sentence_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
