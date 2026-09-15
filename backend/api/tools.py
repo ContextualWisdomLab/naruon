@@ -828,9 +828,9 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     algorithm = params.get("algorithm", "sha256").lower()
 
     if algorithm == "md5":
-        digest = hashlib.md5(text.encode("utf-8"), usedforsecurity=False)  # nosec B324 # semgrep: ignore
+        digest = hashlib.md5(text.encode("utf-8"), usedforsecurity=False)  # nosec B324 nosem
     elif algorithm == "sha1":
-        digest = hashlib.sha1(text.encode("utf-8"), usedforsecurity=False)  # nosec B324 # semgrep: ignore
+        digest = hashlib.sha1(text.encode("utf-8"), usedforsecurity=False)  # nosec B324 nosem
     elif algorithm == "sha256":
         digest = hashlib.sha256(text.encode("utf-8"))
     elif algorithm == "sha512":
