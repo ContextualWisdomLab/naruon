@@ -7,6 +7,7 @@ import re
 import unicodedata
 import urllib.parse
 import uuid
+import random
 from collections import Counter
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
@@ -769,6 +770,46 @@ registry.register(
 )
 
 
+
+
+async def random_selector_1_handler(params: Dict[str, Any]) -> Any:
+    options = params.get("options", [])
+    if not isinstance(options, list) or not options:
+        return {"selected": None, "error": "Options list cannot be empty"}
+    return {"selected": random.choice(options)}
+
+registry.register(
+    ToolInfo(
+        code="random_selector_1",
+        name="항목 무작위 선택기 (Random Item Selector)",
+        description="주어진 항목 목록 중 하나를 무작위로 선택합니다.",
+        category="유틸리티",
+        parameters={"options": "array"},
+    ),
+    random_selector_1_handler,
+)
+
+async def random_selector_2_handler(params: Dict[str, Any]) -> Any:
+    options = params.get("options", [])
+    count = params.get("count", 1)
+    if not isinstance(options, list) or not options:
+        return {"selected": [], "error": "Options list cannot be empty"}
+    if not isinstance(count, int) or count < 1:
+        return {"selected": [], "error": "Count must be a positive integer"}
+
+    selected = random.sample(options, min(count, len(options)))
+    return {"selected": selected}
+
+registry.register(
+    ToolInfo(
+        code="random_selector_2",
+        name="다중 항목 무작위 선택기 (Random Multiple Selector)",
+        description="주어진 항목 목록 중 여러 개를 무작위로 선택합니다.",
+        category="유틸리티",
+        parameters={"options": "array", "count": "integer"},
+    ),
+    random_selector_2_handler,
+)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:

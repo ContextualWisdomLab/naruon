@@ -1211,3 +1211,78 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+def test_execute_random_selector_1():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_selector_1/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "options": ["apple", "banana", "cherry"]
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["selected"] in ["apple", "banana", "cherry"]
+
+def test_execute_random_selector_2():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_selector_2/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "options": ["A", "B", "C", "D"],
+                    "count": 2
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["result"]["selected"]) == 2
+    for item in data["result"]["selected"]:
+        assert item in ["A", "B", "C", "D"]
+
+
+def test_execute_random_selector_1_empty_options():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_selector_1/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": []}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["selected"] is None
+    assert "error" in data["result"]
+
+def test_execute_random_selector_2_empty_options():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_selector_2/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": [], "count": 2}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["selected"] == []
+    assert "error" in data["result"]
+
+def test_execute_random_selector_2_invalid_count():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_selector_2/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B"], "count": -1}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["selected"] == []
+    assert "error" in data["result"]
