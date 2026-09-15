@@ -773,9 +773,10 @@ registry.register(
 
 
 async def random_item_selector_handler(params: Dict[str, Any]) -> Any:
+    """Return a randomly selected item from the provided options array."""
     options = params.get("options", [])
     if not isinstance(options, list) or not options:
-        return {"selected": None, "error": "Options list cannot be empty"}
+        raise ValueError("Options list cannot be empty")
     return {"selected": random.choice(options)}
 
 registry.register(
@@ -790,15 +791,16 @@ registry.register(
 )
 
 async def random_multiple_selector_handler(params: Dict[str, Any]) -> Any:
+    """Return a requested number of randomly selected items from the options array."""
     options = params.get("options", [])
-    count = params.get("count", 1)
+    count = params["count"]
     if not isinstance(options, list) or not options:
-        return {"selected": [], "error": "Options list cannot be empty"}
+        raise ValueError("Options list cannot be empty")
     if not isinstance(count, int) or count < 1:
-        return {"selected": [], "error": "Count must be a positive integer"}
+        raise ValueError("Count must be a positive integer")
 
     if count > len(options):
-        return {"selected": [], "error": f"Cannot select {count} items from a list of {len(options)} options"}
+        raise ValueError(f"Cannot select {count} items from a list of {len(options)} options")
 
     selected = random.sample(options, count)
     return {"selected": selected}

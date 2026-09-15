@@ -1257,9 +1257,9 @@ def test_execute_random_item_selector_empty_options():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["selected"] is None
-    assert "error" in data["result"]
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Options list cannot be empty" in data["message"]
 
 def test_execute_random_multiple_selector_empty_options():
     with TestClient(app) as client:
@@ -1270,23 +1270,35 @@ def test_execute_random_multiple_selector_empty_options():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["selected"] == []
-    assert "error" in data["result"]
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Options list cannot be empty" in data["message"]
 
 def test_execute_random_multiple_selector_invalid_count():
     with TestClient(app) as client:
-        response = client.post(
+        # Negative count
+        response_neg = client.post(
             "/api/tools/random_multiple_selector/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={"parameters": {"options": ["A", "B"], "count": -1}},
         )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["selected"] == []
-    assert "error" in data["result"]
+        assert response_neg.status_code == 200
+        data_neg = response_neg.json()
+        assert data_neg["status"] == "failed"
+        assert data_neg["result"] is None
+        assert "Count must be a positive integer" in data_neg["message"]
 
+        # Zero count
+        response_zero = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B"], "count": 0}},
+        )
+        assert response_zero.status_code == 200
+        data_zero = response_zero.json()
+        assert data_zero["status"] == "failed"
+        assert data_zero["result"] is None
+        assert "Count must be a positive integer" in data_zero["message"]
 
 def test_execute_random_multiple_selector_oversized_count():
     with TestClient(app) as client:
@@ -1297,10 +1309,9 @@ def test_execute_random_multiple_selector_oversized_count():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["selected"] == []
-    assert "error" in data["result"]
-    assert "Cannot select 5 items" in data["result"]["error"]
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Cannot select 5 items" in data["message"]
 
 def test_execute_random_multiple_selector_lower_bound():
     with TestClient(app) as client:
