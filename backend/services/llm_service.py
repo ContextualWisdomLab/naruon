@@ -81,8 +81,8 @@ async def extract_action_items_and_summary(
             ),
         )
     except Exception as e:
-        logger.error(f"Error calling LLM API for extraction: {e}")
-        raise LLMServiceError(f"LLM API error during extraction: {e}") from e
+        logger.error("Error calling LLM API for extraction", exc_info=True)
+        raise LLMServiceError("LLM API error during extraction") from e
     finally:
         await client.close()
 
@@ -147,8 +147,8 @@ async def translate_email_body(
             ),
         )
     except Exception as e:
-        logger.error(f"Error calling LLM API for translation: {e}")
-        raise LLMServiceError(f"LLM API error during translation: {e}") from e
+        logger.error("Error calling LLM API for translation", exc_info=True)
+        raise LLMServiceError("LLM API error during translation") from e
     finally:
         await client.close()
 
@@ -189,8 +189,8 @@ async def draft_reply(
                 messages,
             )
         except Exception as e:
-            logger.error(f"Error calling LLM API for drafting: {e}")
-            raise LLMServiceError(f"LLM API error during drafting: {e}") from e
+            logger.error("Error calling LLM API for drafting", exc_info=True)
+            raise LLMServiceError("LLM API error during drafting") from e
         finally:
             await http_client.aclose()
 
@@ -211,8 +211,8 @@ async def draft_reply(
             ),
         )
     except Exception as e:
-        logger.error(f"Error calling LLM API for drafting: {e}")
-        raise LLMServiceError(f"LLM API error during drafting: {e}") from e
+        logger.error("Error calling LLM API for drafting", exc_info=True)
+        raise LLMServiceError("LLM API error during drafting") from e
     finally:
         await client.close()
 

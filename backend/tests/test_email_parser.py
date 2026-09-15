@@ -608,7 +608,7 @@ def test_parse_eml_mocked_oserror():
     with patch("builtins.open", side_effect=OSError("Mocked OS Error")):
         with pytest.raises(
             EmailParseError,
-            match=r"Failed to read file dummy\.eml: Mocked OS Error",
+            match=r"Failed to read file dummy\.eml",
         ):
             parse_eml("dummy.eml")
 

@@ -44,7 +44,7 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession):
             try:
                 email_data = parse_eml(file_path)
             except Exception as e:
-                logger.error(f"Failed to parse {file_path}: {e}")
+                logger.error(f"Failed to parse {file_path}", exc_info=True)
                 continue
 
             chunks = chunk_text(email_data["body"])

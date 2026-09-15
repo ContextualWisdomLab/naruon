@@ -234,7 +234,7 @@ def parse_eml(file_path: str | Path) -> EmailData:
         with open(file_path, "rb") as f:
             msg = message_from_binary_file(f, policy=policy.default)
     except OSError as e:
-        raise EmailParseError(f"Failed to read file {file_path}: {e}") from e
+        raise EmailParseError(f"Failed to read file {file_path}") from e
 
     return _message_to_email_data(msg)
 

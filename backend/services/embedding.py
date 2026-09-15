@@ -76,6 +76,6 @@ async def generate_embeddings(
         )
         return [data.embedding for data in response.data]
     except openai.OpenAIError as e:
-        raise EmbeddingGenerationError(f"Failed to generate embeddings: {str(e)}")
+        raise EmbeddingGenerationError("Failed to generate embeddings")
     finally:
         await client.close()
