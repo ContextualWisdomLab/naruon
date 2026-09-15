@@ -1,4 +1,5 @@
 ## [Unreleased]
+- 분석·유틸리티 도구 2종(`hash_generator`, `email_phone_masker`)을 추가했습니다. 해시 도구는 MD5·SHA-1 호환 fingerprint와 SHA-256을 구분하고, 연락처 도구는 제한된 길이 안에서 이메일 주소와 전화번호를 단순 마스킹합니다.
 ### Source-bound 요약·업무·관계·일정 경계
 
 - 입력과 무관한 고정 2023 fixture로 결정 사항과 미해결 질문, 업무와 마감일,
