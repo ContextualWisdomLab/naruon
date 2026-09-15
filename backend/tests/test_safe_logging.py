@@ -11,16 +11,26 @@ _SECRET_TWO = "super-secret-value-two"
 _CONNECTION_STRING = "postgresql://user:password@internal.example/db"
 
 
-def _raise_secret_bearing_exception(secret_value: str) -> None:
-    """Raise from one stable source site with attacker-like secret text."""
+def _raise_secret_bearing_exception(
+    secret_value: str,
+    *,
+    alternate_site: bool = False,
+) -> None:
+    """Raise from one function with two distinct execution sites."""
     message = "provider " + _TOKEN_PREFIX + secret_value + " " + _CONNECTION_STRING
+    if alternate_site:
+        raise RuntimeError(message)
     raise RuntimeError(message)
 
 
-def _capture_redacted_exception_info(secret_value: str):
+def _capture_redacted_exception_info(
+    secret_value: str,
+    *,
+    alternate_site: bool = False,
+):
     """Capture the sanitized logging tuple for a secret-bearing exception."""
     try:
-        _raise_secret_bearing_exception(secret_value)
+        _raise_secret_bearing_exception(secret_value, alternate_site=alternate_site)
     except RuntimeError as exc:
         return redacted_exception_info(exc)
     raise AssertionError("expected RuntimeError")
@@ -68,6 +78,20 @@ def test_redacted_exception_info_fingerprint_is_message_independent() -> None:
 
     assert _SECRET_TWO not in second
     assert _fingerprint(first) == _fingerprint(second)
+
+
+def test_redacted_exception_info_distinguishes_sites_in_same_function() -> None:
+    """Do not collapse distinct failure lines inside one function into one incident."""
+    first = _render_exception_info(_capture_redacted_exception_info(_SECRET_ONE))
+    second = _render_exception_info(
+        _capture_redacted_exception_info(_SECRET_ONE, alternate_site=True)
+    )
+
+    assert _SECRET_ONE not in first
+    assert _SECRET_ONE not in second
+    assert "_raise_secret_bearing_exception" not in first
+    assert "_raise_secret_bearing_exception" not in second
+    assert _fingerprint(first) != _fingerprint(second)
 
 
 def test_redacted_exception_info_handles_unraised_exception() -> None:
