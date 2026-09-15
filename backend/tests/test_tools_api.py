@@ -1111,6 +1111,83 @@ def test_execute_sentiment_analyzer():
     assert "불만" in data["result"]["key_emotions"]
 
 
+def test_execute_data_anonymizer():
+    with TestClient(app) as client:
+        # 정상적인 케이스
+        response = client.post(
+            "/api/tools/data_anonymizer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "제 이메일은 test.user-1@gmail.com 이고, 폰 번호는 010-1234-5678, 주민번호는 900101-1234567 입니다. 011-123-4567도 됩니다."
+                }
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        anonymized = data["result"]["anonymized_text"]
+        assert "***@***" in anonymized
+        assert "***-****-****" in anonymized
+        assert "******-*******" in anonymized
+        assert "test.user-1@gmail.com" not in anonymized
+        assert "010-1234-5678" not in anonymized
+        assert "900101-1234567" not in anonymized
+
+        # 빈 텍스트 케이스
+        response_empty = client.post(
+            "/api/tools/data_anonymizer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": ""}},
+        )
+        assert response_empty.status_code == 200
+        data_empty = response_empty.json()
+        assert data_empty["status"] == "success"
+        assert data_empty["result"]["anonymized_text"] == ""
+
+        # null 텍스트 케이스를 막는 동작은 _validate_parameters가 하지만,
+        # fallback 커버리지를 위해 직접 handler를 호출하는 비동기 테스트를 아래에 추가합니다.
+
+
+def test_execute_data_anonymizer_masks_separator_free_and_international_formats():
+    source_values = (
+        "01012345678",
+        "9001011234567",
+        "01 42 68 53 00",
+        "사용자@예시.한국",
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/data_anonymizer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": " / ".join(source_values) + "."}},
+        )
+
+    assert response.status_code == 200
+    anonymized = response.json()["result"]["anonymized_text"]
+    assert all(source_value not in anonymized for source_value in source_values)
+    assert anonymized.endswith(".")
+    assert anonymized.count("***-****-****") == 2
+    assert "******-*******" in anonymized
+    assert "***@***" in anonymized
+
+
+@pytest.mark.asyncio
+async def test_data_anonymizer_handler_none():
+    from api.tools import data_anonymizer_handler
+
+    result = await data_anonymizer_handler({"text": None})
+    assert result["anonymized_text"] == ""
+
+    result_missing = await data_anonymizer_handler({})
+    assert result_missing["anonymized_text"] == ""
+
+    with pytest.raises(ValueError, match="Analysis text must not exceed"):
+        await data_anonymizer_handler(
+            {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}
+        )
+
+
 def test_execute_grammar_checker():
     with TestClient(app) as client:
         response = client.post(

@@ -529,6 +529,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -674,6 +676,49 @@ async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     """Generate one RFC 9562 UUID version 4 for the retained built-in utility."""
     return {"uuid": str(uuid.uuid4())}
 
+
+_INTERNATIONAL_EMAIL_PATTERN = re.compile(
+    rf"(?<![\w{_EMAIL_ATOM}.-])"
+    rf"[\w{_EMAIL_ATOM}-]+(?:\.[\w{_EMAIL_ATOM}-]+)*@"
+    r"(?:[^\W_](?:(?:[^\W_]|-){0,61}[^\W_])?\.)+"
+    r"[^\W_]{2,63}(?![\w-])"
+)
+_INTERNATIONAL_PHONE_PATTERN = re.compile(
+    r"(?<!\d)(?:01[016789][ .-]?\d{3,4}[ .-]?\d{4}"
+    r"|0[1-9](?:[ .-]?\d{2}){4})(?!\d)"
+)
+_KOREAN_RESIDENT_REGISTRATION_PATTERN = re.compile(
+    r"(?<!\d)\d{6}[ -]?[1-4]\d{6}(?!\d)"
+)
+
+
+async def data_anonymizer_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Mask bounded contact and Korean resident-registration identifiers."""
+    text = params.get("text", "")
+    if text is None:
+        text = ""
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    text = _EMAIL_PATTERN.sub("***@***", text)
+    text = _INTERNATIONAL_EMAIL_PATTERN.sub("***@***", text)
+    text = _PHONE_PATTERN.sub("***-****-****", text)
+    text = _INTERNATIONAL_PHONE_PATTERN.sub("***-****-****", text)
+    text = _KOREAN_RESIDENT_REGISTRATION_PATTERN.sub("******-*******", text)
+    return {"anonymized_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="data_anonymizer",
+        name="데이터 비식별화 (Data Anonymizer)",
+        description="텍스트에서 이메일 주소, 일부 한국·북미·프랑스 전화번호, 한국 주민등록번호 형식을 단순 마스킹합니다. 완전한 개인정보 비식별화를 보장하지 않습니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    data_anonymizer_handler,
+)
 
 registry.register(
     ToolInfo(
