@@ -4,10 +4,10 @@ import inspect
 import json
 import logging
 import re
+import secrets
 import unicodedata
 import urllib.parse
 import uuid
-import random
 from collections import Counter
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
@@ -777,7 +777,7 @@ async def random_item_selector_handler(params: Dict[str, Any]) -> Any:
     options = params.get("options", [])
     if not isinstance(options, list) or not options:
         raise ValueError("Options list cannot be empty")
-    return {"selected": random.choice(options)}
+    return {"selected": secrets.choice(options)}
 
 registry.register(
     ToolInfo(
@@ -802,7 +802,7 @@ async def random_multiple_selector_handler(params: Dict[str, Any]) -> Any:
     if count > len(options):
         raise ValueError(f"Cannot select {count} items from a list of {len(options)} options")
 
-    selected = random.sample(options, count)
+    selected = secrets.SystemRandom().sample(options, count)
     return {"selected": selected}
 
 registry.register(
