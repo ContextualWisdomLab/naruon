@@ -54,6 +54,23 @@ def test_agent_guidance_names_canonical_llm_owner_and_fail_closed_boundary() -> 
     assert "fails closed" in architecture
 
 
+def test_agent_guidance_preserves_pnpm_importer_provenance_contract() -> None:
+    """Governance rewrites must retain the dependency owner's lock provenance rule."""
+    agents = _read("AGENTS.md")
+    claude = _read("CLAUDE.md")
+
+    assert "A pnpm importer entry is only valid when both records it names exist" in agents
+    assert "base-version key in `packages`" in agents
+    assert "complete peer-qualified key in `snapshots`" in agents
+    assert "dropping the importer's own base package record" in agents
+
+    assert "For pnpm security-floor checks, bind each root importer" in claude
+    assert "base-version" in claude
+    assert "`packages` entry" in claude
+    assert "complete peer-qualified `snapshots` entry" in claude
+    assert "declared resolution" in claude
+
+
 def test_opencode_config_uses_only_contextual_orchestrator_free() -> None:
     """Repository OpenCode model work must use only the canonical logical pool."""
     raw_config = _read("opencode.jsonc")
