@@ -28,23 +28,24 @@ TEST_SCOPED_ROLES = {
     "member",
 }
 
-_HMAC_DOCUMENT_UPLOAD_COMPATIBILITY_TESTS = frozenset(
+_HMAC_DOCUMENT_COMPATIBILITY_TESTS = frozenset(
     {
         "test_data_document_upload_creates_workspace_scoped_document",
+        "test_data_document_actions_are_workspace_scoped_and_intent_only",
         "test_data_pdf_dom_upload_persists_signed_organization_scope",
     }
 )
 
 
 @pytest.fixture(autouse=True)
-def persisted_hmac_workspace_for_document_uploads(request):
-    """Model HMAC document writes as consumption of existing owner evidence.
+def persisted_hmac_workspace_for_document_compatibility(request):
+    """Model HMAC document access as consumption of existing owner evidence.
 
-    The signed HMAC fixture proves token integrity only. These two legacy success
+    The signed HMAC fixture proves token integrity only. These legacy success
     cases exercise compatibility consumption, so their mock registry must already
-    contain the organization binding that production requires before any write.
+    contain the organization binding that production requires before access.
     """
-    if request.node.name not in _HMAC_DOCUMENT_UPLOAD_COMPATIBILITY_TESTS:
+    if request.node.name not in _HMAC_DOCUMENT_COMPATIBILITY_TESTS:
         yield
         return
 
