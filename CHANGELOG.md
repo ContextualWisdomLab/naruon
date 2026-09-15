@@ -1,4 +1,5 @@
 ## [Unreleased]
+- 텍스트 본문에서 유효한 ASCII 이메일 주소를 찾아 최초 출현 순서로 중복을 제거하는 "이메일 주소 추출기 (Email Address Extractor)" 도구를 추가했습니다.
 - 텍스트 본문에서 HTTP 및 HTTPS URL을 추출하여 중복 없이 반환하는 유틸리티 도구인 `url_extractor` (URL 추출기)를 추가했습니다.
 - 분석·유틸리티 도구 2종(`hash_generator`, `email_phone_masker`)을 추가했습니다. 해시 도구는 MD5·SHA-1 호환 fingerprint와 SHA-256을 구분하고, 연락처 도구는 제한된 길이 안에서 이메일 주소와 전화번호를 단순 마스킹합니다.
 ### Source-bound 요약·업무·관계·일정 경계
