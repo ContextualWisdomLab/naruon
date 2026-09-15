@@ -16,6 +16,7 @@ from fastapi import Header, HTTPException
 from typing import cast
 
 from api.auth import AuthContext, RoleName, get_auth_context, get_current_user
+from db.models import Workspace
 from main import app
 
 TEST_SCOPED_ROLES = {
@@ -26,6 +27,37 @@ TEST_SCOPED_ROLES = {
     "group_admin",
     "member",
 }
+
+_HMAC_DOCUMENT_UPLOAD_COMPATIBILITY_TESTS = frozenset(
+    {
+        "test_data_document_upload_creates_workspace_scoped_document",
+        "test_data_pdf_dom_upload_persists_signed_organization_scope",
+    }
+)
+
+
+@pytest.fixture(autouse=True)
+def persisted_hmac_workspace_for_document_uploads(request):
+    """Model HMAC document writes as consumption of existing owner evidence.
+
+    The signed HMAC fixture proves token integrity only. These two legacy success
+    cases exercise compatibility consumption, so their mock registry must already
+    contain the organization binding that production requires before any write.
+    """
+    if request.node.name not in _HMAC_DOCUMENT_UPLOAD_COMPATIBILITY_TESTS:
+        yield
+        return
+
+    mock_db = request.getfixturevalue("mock_db")
+    mock_db.workspaces.append(
+        Workspace(
+            workspace_id="workspace-org-acme",
+            workspace_name="workspace-org-acme",
+            organization_id="org-acme",
+            owner_user_id=None,
+        )
+    )
+    yield
 
 
 def _normalize_header_value(value: str | None) -> str | None:
