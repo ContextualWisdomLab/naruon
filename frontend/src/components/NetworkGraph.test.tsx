@@ -260,8 +260,8 @@ describe("NetworkGraph", () => {
     const mountedContainer = getMountedContainer();
     const buttons = Array.from(mountedContainer.querySelectorAll("button"));
     const relationshipButton = buttons.find((button) => button.textContent === "첫 관계 보기");
-    const zoomButton = buttons.find((button) => button.textContent === "그래프 확대");
-    const fitButton = buttons.find((button) => button.textContent === "전체 그래프 맞춤");
+    const zoomButton = buttons.find((button) => button.textContent?.includes("그래프 확대"));
+    const fitButton = buttons.find((button) => button.textContent?.includes("전체 그래프 맞춤"));
 
     expect(relationshipButton).toBeInstanceOf(HTMLButtonElement);
     expect(zoomButton).toBeInstanceOf(HTMLButtonElement);
