@@ -466,7 +466,7 @@ def make_webhook_handler(webhook_url: str) -> ToolHandler:
                 )
                 response.raise_for_status()
                 return response.json()
-            except httpx.HTTPError as e:
+            except httpx.HTTPError:
                 raise ValueError("Webhook execution failed")
 
     return handler
@@ -602,7 +602,7 @@ async def base64_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
                 "utf-8"
             )
         }
-    except Exception as e:
+    except Exception:
         raise ValueError("Invalid Base64 string")
 
 

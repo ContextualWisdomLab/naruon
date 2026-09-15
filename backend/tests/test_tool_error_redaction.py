@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 import httpx
 
 from main import app
-from api.tools import _resolve_global_addresses
 from tests.test_tools_api import _signed_session_token
 
 @pytest.mark.asyncio
