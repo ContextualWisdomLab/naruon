@@ -13,7 +13,8 @@ _CONNECTION_STRING = "postgresql://user:password@internal.example/db"
 
 def _raise_secret_bearing_exception(secret_value: str) -> None:
     """Raise from one stable source site with attacker-like secret text."""
-    raise RuntimeError("provider " + _TOKEN_PREFIX + secret_value + " " + _CONNECTION_STRING)
+    message = "provider " + _TOKEN_PREFIX + secret_value + " " + _CONNECTION_STRING
+    raise RuntimeError(message)
 
 
 def _capture_redacted_exception_info(secret_value: str):
@@ -69,7 +70,7 @@ def test_redacted_exception_info_fingerprint_is_message_independent() -> None:
     assert _fingerprint(first) == _fingerprint(second)
 
 
-def test_redacted_exception_info_handles_unraised_exception_without_value_leak() -> None:
+def test_redacted_exception_info_handles_unraised_exception() -> None:
     """Produce bounded telemetry even when an exception has no traceback object."""
     exc_info = redacted_exception_info(ValueError(_CONNECTION_STRING))
     rendered = _render_exception_info(exc_info)
