@@ -34,6 +34,17 @@ async def generate_fixture_embedding(text: str) -> list[float]:
     return fit_embedding_vector(embeddings[0], EMBEDDING_DIMENSION)
 
 
+async def _email_already_imported(session, message_id: str) -> bool:
+    existing = await session.execute(
+        select(Email).where(
+            Email.message_id == message_id,
+            Email.user_id == IMPORT_USER_ID,
+            Email.organization_id == IMPORT_ORGANIZATION_ID,
+        )
+    )
+    return existing.scalar_one_or_none() is not None
+
+
 async def import_eml_file(session, eml_file: Path) -> bool:
     try:
         parsed = parse_eml(eml_file)
@@ -41,22 +52,45 @@ async def import_eml_file(session, eml_file: Path) -> bool:
         logger.error(f"Failed to parse {eml_file}: {e}")
         return False
 
-    existing = await session.execute(
-        select(Email).where(
-            Email.message_id == parsed["message_id"],
-            Email.user_id == IMPORT_USER_ID,
-            Email.organization_id == IMPORT_ORGANIZATION_ID,
-        )
-    )
-    if existing.scalar_one_or_none():
+    # Reject duplicates before model/provider work, then explicitly end the
+    # read transaction so external enrichment never runs while holding it open.
+    if await _email_already_imported(session, parsed["message_id"]):
+        await session.rollback()
         logger.info(f"Email {parsed['message_id']} already exists, skipping.")
         return False
+    await session.rollback()
 
     body_text = parsed["body"] if parsed["body"].strip() else "Empty body"
     try:
         body_emb = await generate_fixture_embedding(body_text)
     except Exception as e:
         logger.error(f"Failed to generate embedding for {eml_file}: {e}")
+        return False
+
+    prepared_attachments: list[Attachment] = []
+    for att in parsed.get("attachments", []):
+        att_text = att["content"] if att["content"].strip() else "Empty attachment"
+        try:
+            att_emb = await generate_fixture_embedding(att_text)
+        except Exception as e:
+            logger.error(
+                f"Failed to generate embedding for attachment {att['filename']}: {e}"
+            )
+            att_emb = None
+        prepared_attachments.append(
+            Attachment(
+                filename=att["filename"],
+                content=att["content"],
+                embedding=att_emb,
+            )
+        )
+
+    # Re-check after external work. From here through commit, only database
+    # operations remain, so the transaction is short and the duplicate guard is
+    # refreshed after the enrichment window.
+    if await _email_already_imported(session, parsed["message_id"]):
+        await session.rollback()
+        logger.info(f"Email {parsed['message_id']} already exists, skipping.")
         return False
 
     thread_id = await assign_thread_id(
@@ -81,20 +115,7 @@ async def import_eml_file(session, eml_file: Path) -> bool:
         embedding=body_emb,
         thread_id=thread_id,
     )
-
-    for att in parsed.get("attachments", []):
-        att_text = att["content"] if att["content"].strip() else "Empty attachment"
-        try:
-            att_emb = await generate_fixture_embedding(att_text)
-            email_obj.attachments.append(
-                Attachment(
-                    filename=att["filename"],
-                    content=att["content"],
-                    embedding=att_emb,
-                )
-            )
-        except Exception as e:
-            logger.error(f"Failed to generate embedding for attachment {att['filename']}: {e}")
+    email_obj.attachments.extend(prepared_attachments)
 
     session.add(email_obj)
     try:
