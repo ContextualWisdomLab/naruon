@@ -1250,8 +1250,8 @@ async def test_hash_generator_handler():
     from api.tools import hash_generator_handler, ANALYSIS_TEXT_MAX_CHARS
 
     res = await hash_generator_handler({"text": "hello"})
-
-    assert res["sha512"] == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+    assert res["md5"] == "5d41402abc4b2a76b9719d911017c592"
+    assert res["sha1"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
     assert res["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
@@ -1280,7 +1280,7 @@ def test_execute_hash_generator():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-
+    assert data["result"]["md5"] == "5d41402abc4b2a76b9719d911017c592"
     assert data["result"]["sha256"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
 def test_execute_email_phone_masker():
