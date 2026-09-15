@@ -285,11 +285,12 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+  // ⚡ Bolt: Replace O(N) Array.from(edgeMap).slice with O(1) bounded for...of loop
   const relationshipOptions = useMemo(() => {
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
-      if (options.length >= 5) break;
+      if (index >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
@@ -300,15 +301,18 @@ export default function NetworkGraph() {
     return options;
   }, [edgeMap, nodeMap]);
 
+  // ⚡ Bolt: Replace O(N) Array.from(nodeInstanceMap).slice with O(1) bounded for...of loop
   const nodeOptions = useMemo(() => {
     const options = [];
+    let index = 0;
     for (const node of nodeInstanceMap.values()) {
-      if (options.length >= 8) break;
+      if (index >= 8) break;
       options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
+      index++;
     }
     return options;
   }, [nodeInstanceMap]);
