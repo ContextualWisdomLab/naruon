@@ -1211,3 +1211,117 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+def test_execute_random_item_selector():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_item_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "options": ["apple", "banana", "cherry"]
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["selected"] in ["apple", "banana", "cherry"]
+
+def test_execute_random_multiple_selector():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "options": ["A", "B", "C", "D"],
+                    "count": 2
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["result"]["selected"]) == 2
+    for item in data["result"]["selected"]:
+        assert item in ["A", "B", "C", "D"]
+
+
+def test_execute_random_item_selector_empty_options():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_item_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": []}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Options list cannot be empty" in data["message"]
+
+def test_execute_random_multiple_selector_empty_options():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": [], "count": 2}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Options list cannot be empty" in data["message"]
+
+def test_execute_random_multiple_selector_invalid_count():
+    with TestClient(app) as client:
+        # Negative count
+        response_neg = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B"], "count": -1}},
+        )
+        assert response_neg.status_code == 200
+        data_neg = response_neg.json()
+        assert data_neg["status"] == "failed"
+        assert data_neg["result"] is None
+        assert "Count must be a positive integer" in data_neg["message"]
+
+        # Zero count
+        response_zero = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B"], "count": 0}},
+        )
+        assert response_zero.status_code == 200
+        data_zero = response_zero.json()
+        assert data_zero["status"] == "failed"
+        assert data_zero["result"] is None
+        assert "Count must be a positive integer" in data_zero["message"]
+
+def test_execute_random_multiple_selector_oversized_count():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B"], "count": 5}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Cannot select 5 items" in data["message"]
+
+def test_execute_random_multiple_selector_lower_bound():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B", "C"], "count": 1}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["result"]["selected"]) == 1
+    assert data["result"]["selected"][0] in ["A", "B", "C"]

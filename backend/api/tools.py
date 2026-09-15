@@ -4,6 +4,7 @@ import inspect
 import json
 import logging
 import re
+import secrets
 import unicodedata
 import urllib.parse
 import uuid
@@ -769,6 +770,51 @@ registry.register(
 )
 
 
+
+
+async def random_item_selector_handler(params: Dict[str, Any]) -> Any:
+    """Return a randomly selected item from the provided options array."""
+    options = params.get("options", [])
+    if not isinstance(options, list) or not options:
+        raise ValueError("Options list cannot be empty")
+    return {"selected": secrets.choice(options)}
+
+registry.register(
+    ToolInfo(
+        code="random_item_selector",
+        name="항목 무작위 선택기 (Random Item Selector)",
+        description="주어진 항목 목록 중 하나를 무작위로 선택합니다.",
+        category="유틸리티",
+        parameters={"options": "array"},
+    ),
+    random_item_selector_handler,
+)
+
+async def random_multiple_selector_handler(params: Dict[str, Any]) -> Any:
+    """Return a requested number of randomly selected items from the options array."""
+    options = params.get("options", [])
+    count = params["count"]
+    if not isinstance(options, list) or not options:
+        raise ValueError("Options list cannot be empty")
+    if not isinstance(count, int) or count < 1:
+        raise ValueError("Count must be a positive integer")
+
+    if count > len(options):
+        raise ValueError(f"Cannot select {count} items from a list of {len(options)} options")
+
+    selected = secrets.SystemRandom().sample(options, count)
+    return {"selected": selected}
+
+registry.register(
+    ToolInfo(
+        code="random_multiple_selector",
+        name="다중 항목 무작위 선택기 (Random Multiple Selector)",
+        description="주어진 항목 목록 중 여러 개를 무작위로 선택합니다.",
+        category="유틸리티",
+        parameters={"options": "array", "count": "integer"},
+    ),
+    random_multiple_selector_handler,
+)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
