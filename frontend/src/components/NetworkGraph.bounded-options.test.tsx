@@ -54,8 +54,7 @@ describe("NetworkGraph bounded option materialization", () => {
     vi.clearAllMocks();
   });
 
-  it("instrumented iterable/Map fixture proves iteration stops early and preserves insertion order", async () => {
-    // Generate items beyond the limits to ensure it truncates correctly
+  it("stops each option iterator at its limit and preserves insertion order", async () => {
     const nodes = Array.from({ length: 15 }, (_, index) => ({
       id: `node-${index}`,
       label: `노드 ${index}`,
@@ -70,23 +69,31 @@ describe("NetworkGraph bounded option materialization", () => {
     apiGetMock.mockResolvedValue({ nodes, edges });
 
     const originalMapValues = Map.prototype.values;
-    let edgeIterationCount = 0;
-    let nodeIterationCount = 0;
+    const edgeIteratorReadCounts: number[] = [];
+    const nodeIteratorReadCounts: number[] = [];
 
-    // Instrument Map.prototype.values to count iterations for our specific edges and nodes
+    // Track each iterator independently so repeated renders cannot hide an
+    // unbounded iterator behind an aggregate read-count assertion.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Map.prototype.values = function(this: Map<any, any>) {
       const iterator = originalMapValues.call(this);
-      const isEdgeMap = this.has('edge-0');
-      const isNodeMap = this.has('node-0');
+      const readCounts = this.has("edge-0")
+        ? edgeIteratorReadCounts
+        : this.has("node-0")
+          ? nodeIteratorReadCounts
+          : null;
+      const readCountIndex = readCounts?.push(0);
 
       return {
         next: () => {
-          if (isEdgeMap) edgeIterationCount++;
-          if (isNodeMap) nodeIterationCount++;
+          if (readCounts && readCountIndex !== undefined) {
+            readCounts[readCountIndex - 1] += 1;
+          }
           return iterator.next();
         },
-        [Symbol.iterator]() { return this; }
+        [Symbol.iterator]() {
+          return this;
+        },
       };
     } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -107,22 +114,42 @@ describe("NetworkGraph bounded option materialization", () => {
         'select[aria-label="노드 선택"]',
       ) as HTMLSelectElement | null;
 
-      // Verify option caps still apply (1 default + limit)
       expect(relationshipSelect?.options.length).toBe(6);
       expect(nodeSelect?.options.length).toBe(9);
 
-      // Verify exact insertion order preservation
-      const actualEdgeOptions = Array.from(relationshipSelect?.options ?? []).map(o => o.value).slice(1);
-      expect(actualEdgeOptions).toEqual(['edge-0', 'edge-1', 'edge-2', 'edge-3', 'edge-4']);
+      const actualEdgeOptions = Array.from(relationshipSelect?.options ?? [])
+        .map((option) => option.value)
+        .slice(1);
+      expect(actualEdgeOptions).toEqual([
+        "edge-0",
+        "edge-1",
+        "edge-2",
+        "edge-3",
+        "edge-4",
+      ]);
 
-      const actualNodeOptions = Array.from(nodeSelect?.options ?? []).map(o => o.value).slice(1);
-      expect(actualNodeOptions).toEqual(['node-0', 'node-1', 'node-2', 'node-3', 'node-4', 'node-5', 'node-6', 'node-7']);
+      const actualNodeOptions = Array.from(nodeSelect?.options ?? [])
+        .map((option) => option.value)
+        .slice(1);
+      expect(actualNodeOptions).toEqual([
+        "node-0",
+        "node-1",
+        "node-2",
+        "node-3",
+        "node-4",
+        "node-5",
+        "node-6",
+        "node-7",
+      ]);
 
-      // A 'break' after adding the Nth item means it evaluated `next()` N times for the values,
-      // plus potentially one more depending on React's render lifecycle / strict mode.
-      // We strictly assert <= 6 for edges (limit 5) and <= 9 for nodes (limit 8).
-      expect(edgeIterationCount).toBeLessThanOrEqual(6);
-      expect(nodeIterationCount).toBeLessThanOrEqual(9);
+      expect(edgeIteratorReadCounts.length).toBeGreaterThan(0);
+      expect(nodeIteratorReadCounts.length).toBeGreaterThan(0);
+      for (const readCount of edgeIteratorReadCounts) {
+        expect(readCount).toBeLessThanOrEqual(6);
+      }
+      for (const readCount of nodeIteratorReadCounts) {
+        expect(readCount).toBeLessThanOrEqual(9);
+      }
     } finally {
       Map.prototype.values = originalMapValues;
       expect(Map.prototype.values).toBe(originalMapValues);
