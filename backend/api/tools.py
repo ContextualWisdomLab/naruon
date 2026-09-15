@@ -772,7 +772,7 @@ registry.register(
 
 
 
-async def random_selector_1_handler(params: Dict[str, Any]) -> Any:
+async def random_item_selector_handler(params: Dict[str, Any]) -> Any:
     options = params.get("options", [])
     if not isinstance(options, list) or not options:
         return {"selected": None, "error": "Options list cannot be empty"}
@@ -780,16 +780,16 @@ async def random_selector_1_handler(params: Dict[str, Any]) -> Any:
 
 registry.register(
     ToolInfo(
-        code="random_selector_1",
+        code="random_item_selector",
         name="항목 무작위 선택기 (Random Item Selector)",
         description="주어진 항목 목록 중 하나를 무작위로 선택합니다.",
         category="유틸리티",
         parameters={"options": "array"},
     ),
-    random_selector_1_handler,
+    random_item_selector_handler,
 )
 
-async def random_selector_2_handler(params: Dict[str, Any]) -> Any:
+async def random_multiple_selector_handler(params: Dict[str, Any]) -> Any:
     options = params.get("options", [])
     count = params.get("count", 1)
     if not isinstance(options, list) or not options:
@@ -797,18 +797,21 @@ async def random_selector_2_handler(params: Dict[str, Any]) -> Any:
     if not isinstance(count, int) or count < 1:
         return {"selected": [], "error": "Count must be a positive integer"}
 
-    selected = random.sample(options, min(count, len(options)))
+    if count > len(options):
+        return {"selected": [], "error": f"Cannot select {count} items from a list of {len(options)} options"}
+
+    selected = random.sample(options, count)
     return {"selected": selected}
 
 registry.register(
     ToolInfo(
-        code="random_selector_2",
+        code="random_multiple_selector",
         name="다중 항목 무작위 선택기 (Random Multiple Selector)",
         description="주어진 항목 목록 중 여러 개를 무작위로 선택합니다.",
         category="유틸리티",
         parameters={"options": "array", "count": "integer"},
     ),
-    random_selector_2_handler,
+    random_multiple_selector_handler,
 )
 
 @router.get("/tools", response_model=list[ToolInfo])

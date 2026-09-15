@@ -1212,10 +1212,10 @@ def test_execute_analysis_tool_rejects_oversized_text():
         ),
     }
 
-def test_execute_random_selector_1():
+def test_execute_random_item_selector():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/random_selector_1/execute",
+            "/api/tools/random_item_selector/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
@@ -1228,10 +1228,10 @@ def test_execute_random_selector_1():
     assert data["status"] == "success"
     assert data["result"]["selected"] in ["apple", "banana", "cherry"]
 
-def test_execute_random_selector_2():
+def test_execute_random_multiple_selector():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/random_selector_2/execute",
+            "/api/tools/random_multiple_selector/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
@@ -1248,10 +1248,10 @@ def test_execute_random_selector_2():
         assert item in ["A", "B", "C", "D"]
 
 
-def test_execute_random_selector_1_empty_options():
+def test_execute_random_item_selector_empty_options():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/random_selector_1/execute",
+            "/api/tools/random_item_selector/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={"parameters": {"options": []}},
         )
@@ -1261,10 +1261,10 @@ def test_execute_random_selector_1_empty_options():
     assert data["result"]["selected"] is None
     assert "error" in data["result"]
 
-def test_execute_random_selector_2_empty_options():
+def test_execute_random_multiple_selector_empty_options():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/random_selector_2/execute",
+            "/api/tools/random_multiple_selector/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={"parameters": {"options": [], "count": 2}},
         )
@@ -1274,10 +1274,10 @@ def test_execute_random_selector_2_empty_options():
     assert data["result"]["selected"] == []
     assert "error" in data["result"]
 
-def test_execute_random_selector_2_invalid_count():
+def test_execute_random_multiple_selector_invalid_count():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/random_selector_2/execute",
+            "/api/tools/random_multiple_selector/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={"parameters": {"options": ["A", "B"], "count": -1}},
         )
@@ -1286,3 +1286,31 @@ def test_execute_random_selector_2_invalid_count():
     assert data["status"] == "success"
     assert data["result"]["selected"] == []
     assert "error" in data["result"]
+
+
+def test_execute_random_multiple_selector_oversized_count():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B"], "count": 5}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["selected"] == []
+    assert "error" in data["result"]
+    assert "Cannot select 5 items" in data["result"]["error"]
+
+def test_execute_random_multiple_selector_lower_bound():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/random_multiple_selector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"options": ["A", "B", "C"], "count": 1}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["result"]["selected"]) == 1
+    assert data["result"]["selected"][0] in ["A", "B", "C"]
