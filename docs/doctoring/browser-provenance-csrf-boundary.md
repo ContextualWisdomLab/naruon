@@ -8,7 +8,9 @@ Proposed. This change is not merge-ready until the exact protected-base PR head 
 
 Protected `develop@042b0c70531b229af3acbd0421a2f23098d848b3` applies the backend CSRF middleware to every state-changing `/api/*` request, but `_is_trusted_browser_origin(None)` treats missing Origin/Referer as trusted. A request that carries browser-controlled Fetch Metadata such as `Sec-Fetch-Site: same-origin` while omitting both Origin and Referer therefore reaches the authenticated API boundary instead of failing closed.
 
-At the same time, Naruon has legitimate non-browser API clients that may carry no browser provenance headers. Treating every provenance-free request as a browser request would conflate browser CSRF defenses with service/client authentication and would break that boundary without evidence.
+The backend authentication dependency is bearer-only at this protected head: `get_auth_context()` consumes the `Authorization` header and does not authenticate from a browser cookie. The primary cookie-bearing browser boundary is the Next.js API proxy. The backend middleware is therefore defense-in-depth for browser-derived direct traffic, not the primary session-CSRF control. That distinction is material to severity and to the decision not to reject every provenance-free API request.
+
+Naruon also supports legitimate non-browser API clients that may carry no browser provenance headers. Treating every provenance-free request as a browser request would conflate browser provenance enforcement with service/client authentication and would change that contract without evidence.
 
 ## RED and causal repair
 
@@ -24,12 +26,13 @@ The change does not weaken the existing `Sec-Fetch-Site: cross-site` rejection o
 
 ## Boundary and rejected alternatives
 
-Naruon's Next.js API proxy already owns a stricter browser-only boundary: merged #653 rejects state-changing proxy requests when neither Origin nor Referer is present. The backend serves both browser-derived traffic and non-browser authenticated clients, so this PR does not copy the proxy's unconditional missing-header rejection into the backend.
+Naruon's Next.js API proxy already owns a stricter browser-only boundary: merged #653 rejects state-changing proxy requests when neither Origin nor Referer is present. The backend serves bearer-authenticated API traffic directly as well as browser-derived traffic, so this PR does not copy the proxy's unconditional missing-header rejection into the backend.
 
 Rejected alternatives:
 
 - **Trust `Sec-Fetch-Site: same-origin` without Origin/Referer.** Rejected because the backend already has an explicit allowlisted-origin contract and Fetch Metadata is a contextual signal, not a replacement for target-origin verification.
-- **Reject every state-changing request with no Origin/Referer.** Rejected because it would silently redefine non-browser API authentication as browser traffic.
+- **Reject every state-changing request with no Origin/Referer.** Rejected because it would silently redefine provenance-free bearer/API traffic as browser traffic.
+- **Describe this as a high-severity cookie-CSRF bypass.** Rejected because protected backend auth is `Authorization`-header based; the cookie-bearing Next.js proxy already has its own stricter control. The backend finding is a defense-in-depth provenance inconsistency unless a separate credential-attachment path is demonstrated.
 - **Treat this as a complete CSRF solution.** Rejected. Legacy user agents may omit Fetch Metadata. Existing Origin/Referer and frontend-proxy protections remain necessary, and session/cookie policy is a separate control.
 
 ## Standards and research traceability
@@ -50,6 +53,6 @@ Before Ready/merge:
 2. existing cross-site Fetch Metadata, untrusted Origin, trusted Origin, and Referer canonicalization regressions must remain GREEN;
 3. all then-live required CI/security checks must be terminal-success on the unchanged head;
 4. no valid current-head review thread may remain unresolved and a qualifying independent approval is required;
-5. #1361 must no longer carry this CSRF delta once this owner lane exists, so the checksum PR returns to a pure checksum-owned diff.
+5. #1361 must no longer carry this CSRF delta once this owner lane exists, so the checksum PR remains a pure checksum-owned diff.
 
 Refs #1705, #1361, #653. Historical #563 text mentioned backend CSRF hardening, but its merged diff contains only frontend AI Hub files; it is therefore narrative history rather than source authority for this backend change.
