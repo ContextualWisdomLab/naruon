@@ -138,8 +138,3 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
-
-## 2026-06-28 - Prevent Double Encoding Issue
-**Vulnerability:** Found an issue with validation logic in `backend/core/local_http.py` when decoding paths.
-**Learning:** Single pass decoding can miss edge cases.
-**Prevention:** Implement a bounded multi-round decoding loop.
