@@ -4,6 +4,7 @@ import random
 
 from sqlalchemy import bindparam, func, or_, select
 
+from core.safe_logging import redacted_exception_info
 from db.models import TenantConfig
 from db.session import AsyncSessionLocal
 from services.reply_sla_escalation_service import create_reply_sla_escalation_tasks
@@ -122,8 +123,11 @@ class ReplySlaScheduler:
                 await self._sync()
             except asyncio.CancelledError:
                 break
-            except Exception:
-                logger.error("Error in ReplySlaScheduler loop.", exc_info=True)
+            except Exception as exc:
+                logger.error(
+                    "Error in ReplySlaScheduler loop.",
+                    exc_info=redacted_exception_info(exc),
+                )
 
             if self._is_running:
                 try:
@@ -166,9 +170,8 @@ class ReplySlaScheduler:
                     limit=self.limit,
                     tenant_config=config,
                 )
-            except Exception:
+            except Exception as exc:
                 logger.error(
-                    "Overdue reply follow-up failed for configured owner %s.",
-                    config.user_id,
-                    exc_info=True,
+                    "Overdue reply follow-up failed for configured owner.",
+                    exc_info=redacted_exception_info(exc),
                 )
