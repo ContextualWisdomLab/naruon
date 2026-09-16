@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.auth import AuthContext, build_auth_context
+from core.safe_logging import redacted_exception_info
 from db.models import ConnectorSignalEvent, WorkspaceRunnerConfig
 from db.session import AsyncSessionLocal
 from runner.utils.dispatch import dispatch_error
@@ -194,8 +195,11 @@ class ConnectionManager:
                 runner_request_id=request_id,
                 schedule_retry=schedule_retry,
             )
-        except Exception:
-            logger.exception("Runner command dispatch failed.")
+        except Exception as exc:
+            logger.error(
+                "Runner command dispatch failed.",
+                exc_info=redacted_exception_info(exc),
+            )
             await _record_connector_command_event_safely(
                 organization_id=organization_id,
                 workspace_id=workspace_id,
@@ -427,8 +431,11 @@ async def _record_connector_signal_event_safely(
             state_code=state_code,
             detail_text=detail_text,
         )
-    except SQLAlchemyError:
-        logger.debug("Runner signal event persistence skipped", exc_info=True)
+    except SQLAlchemyError as exc:
+        logger.debug(
+            "Runner signal event persistence skipped",
+            exc_info=redacted_exception_info(exc),
+        )
 
 
 async def _record_connector_command_event_safely(
