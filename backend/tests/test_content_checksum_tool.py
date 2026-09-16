@@ -86,7 +86,10 @@ async def test_content_checksum_generator_hashes_empty_sha256_input() -> None:
 
     assert result == {
         "algorithm_code": "sha256",
-        "digest_hex": hashlib.sha256(b"").hexdigest(),
+        "digest_hex": (
+            "e3b0c44298fc1c149afbf4c8996fb924"
+            "27ae41e4649b934ca495991b7852b855"
+        ),
         "byte_length": 0,
         "encoding_code": "utf-8",
         "security_note": SECURITY_NOTE,
@@ -98,15 +101,22 @@ async def test_content_checksum_generator_hashes_empty_sha256_input() -> None:
 async def test_content_checksum_generator_matches_incremental_utf8_chunk_reference(
     algorithm: str,
 ) -> None:
-    """One-shot tool output must equal incremental hashing of the same UTF-8 bytes."""
-    chunks = ["Naruon ", "이메일 증거", "🙂\n", "second chunk"]
-    text = "".join(chunks)
+    """One-shot tool output must match byte chunks split inside UTF-8 code points."""
+    payload = "Naruon 이메일 증거🙂\nsecond chunk".encode("utf-8")
+    multibyte_start = payload.index("이".encode("utf-8"))
+    emoji_start = payload.index("🙂".encode("utf-8"))
+    chunks = [
+        payload[: multibyte_start + 1],
+        payload[multibyte_start + 1 : emoji_start + 2],
+        payload[emoji_start + 2 :],
+    ]
+    text = b"".join(chunks).decode("utf-8")
     if algorithm == "blake2b_256":
         reference = hashlib.blake2b(digest_size=32)
     else:
         reference = hashlib.new(algorithm)
     for chunk in chunks:
-        reference.update(chunk.encode("utf-8"))
+        reference.update(chunk)
 
     result = await registry.invoke_tool(
         "content_checksum_generator",
@@ -114,7 +124,7 @@ async def test_content_checksum_generator_matches_incremental_utf8_chunk_referen
     )
 
     assert result["digest_hex"] == reference.hexdigest()
-    assert result["byte_length"] == len(text.encode("utf-8"))
+    assert result["byte_length"] == len(payload)
 
 
 @pytest.mark.asyncio
