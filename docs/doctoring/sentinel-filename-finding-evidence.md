@@ -24,9 +24,9 @@ Source-order RED `f2124eb7e688bda40b448d627fd3e8f9a99e92cf` adds `backend/tests/
 
 Minimal repair `4192b4ee29b219deb646d553d10e3eb766fb64de` changes only the stale Sentinel lesson. Exact `4192b4ee...` completed the repository backend Python 3.14 Application CI job successfully. Its direct-develop Security Scan failure was unrelated to the Sentinel delta: Trivy reported the already-owned frontend lockfile findings later adopted from canonical dependency/security owner #1623.
 
-Ordinary ancestry PR #1668 then merged exact #1623 `17a7618eda2b212b691f08fa936e042b34258fc9` into the branch. PR #1667 is stacked on that owner; dependency source is not copied into this lane.
+Historical ancestry PR #1668 adopted #1623 at `17a7618eda2b212b691f08fa936e042b34258fc9` and #1667 was retargeted onto `autoresearch/frontend-sec-bump`; dependency source was not duplicated into this lane. The parent later advanced through two PostCSS lock-integrity repairs to #1623 exact `509be4c1d9b6c7ba239a108656e2382681a85341`. On 2026-09-16, ordinary non-force two-parent commit `9055c0c4831b0d589ba79958d54f4edda6028bd6` adopted that current parent while preserving exactly the three Sentinel-owned files. The resulting merge base is `509be4c1...`, `behind_by=0`, and the effective diff remains only `.jules/sentinel.md`, `backend/tests/test_sentinel_security_guidance.py`, and this doctoring note.
 
-The first exact-range review after retarget found that the filename-evidence test used disconnected keywords and could pass despite contradictory guidance. `7d0bdf0a04ac5d889f0c396799fed3faa04b4e8b` repaired that by asserting the complete causal consumer/sink rule and its preserved upload boundaries.
+The first exact-range review after the historical retarget found that the filename-evidence test used disconnected keywords and could pass despite contradictory guidance. `7d0bdf0a04ac5d889f0c396799fed3faa04b4e8b` repaired this by asserting the complete causal consumer/sink rule and its preserved upload boundaries.
 
 A second exact-range review found the remaining SMTP regression was still vacuous: it separately searched for `chr(10)`, `chr(13)`, and `mode="before"`, so the lesson could drop `@field_validator`, omit one of the required fields, or negate rejection while retaining those tokens. RED `11e5bdc0dcecd0bd56b8247a93bae913ef1ba8a3` requires one complete normalized policy clause. Causal guidance repair `ca9ef9a624af344e9bb19654b8f68a4315246f15` explicitly requires `@field_validator`, `mode="before"`, rejection of both CR/LF code points, and all four user-controlled fields (`to`, `subject`, `in_reply_to`, `references`). Test-harness child `934caabb1dc3399935479660716359d41c7c7380` strips Markdown code-span backticks during normalization so the regression tests policy semantics rather than Markdown punctuation.
 
@@ -53,7 +53,7 @@ If no such sink is reproduced, Sentinel must not manufacture a HIGH/CRITICAL fin
 
 ## Acceptance boundary
 
-#1666 is not complete merely because the guidance text changed. Acceptance requires the focused governance regression to be GREEN on the unchanged final head, no valid current-head review finding, qualifying independent review, correct stacking on #1623 while that owner remains unintegrated, and eventual protected integration. Hosted receipts whose displayed base was mutated after workflow admission must not be treated as immutable event-time stacked evidence.
+#1666 is not complete merely because the guidance text changed. Acceptance requires the focused governance regression to be GREEN on the unchanged final head, no valid current-head review finding, qualifying independent review, correct stacking on current #1623 while that owner remains unintegrated, and eventual protected integration. Hosted receipts whose displayed base was mutated after workflow admission must not be treated as immutable event-time stacked evidence. Parent #1623 executable evidence is also non-transferable to this child.
 
 ## Traceability
 
@@ -67,8 +67,9 @@ If no such sink is reproduced, Sentinel must not manufacture a HIGH/CRITICAL fin
 - SMTP complete-clause RED: `11e5bdc0dcecd0bd56b8247a93bae913ef1ba8a3`
 - SMTP guidance repair: `ca9ef9a624af344e9bb19654b8f68a4315246f15`
 - Markdown-normalization harness repair: `934caabb1dc3399935479660716359d41c7c7380`
-- Canonical frontend dependency/security owner: `ContextualWisdomLab/naruon#1623@17a7618eda2b212b691f08fa936e042b34258fc9`
-- Parent-adoption merge: `61aec6b70cc310cb6d59d763190b68d3795fb7d9`
+- Historical parent adoption: `61aec6b70cc310cb6d59d763190b68d3795fb7d9` onto #1623 `17a7618eda2b212b691f08fa936e042b34258fc9`
+- Current canonical dependency/security parent: `ContextualWisdomLab/naruon#1623@509be4c1d9b6c7ba239a108656e2382681a85341`
+- Current ordinary parent adoption: `9055c0c4831b0d589ba79958d54f4edda6028bd6`
 
 ## References
 
