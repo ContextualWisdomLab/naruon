@@ -19,6 +19,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _HASH_PATTERN = re.compile(r"--hash=sha256:([0-9a-f]{64})")
 _EXACT_PIN_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\\\s]+)")
+_EXACT_SEMVER_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+POSTCSS_SECURITY_FLOOR = (8, 5, 24)
 
 
 def read_repo_text(relative_path: str) -> str:
@@ -83,6 +85,13 @@ def importer_resolution(importer_section: dict[str, object], group: str, name: s
     return resolution
 
 
+def exact_semver(value: str) -> tuple[int, int, int]:
+    """Return one exact three-part semantic version for security-floor comparison."""
+    match = _EXACT_SEMVER_PATTERN.fullmatch(value)
+    assert match is not None, f"expected exact semantic version, got {value!r}"
+    return tuple(int(part) for part in match.groups())
+
+
 def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None:
     """Keep backend, Strix, and frontend dependency floors reviewable together."""
     backend_pins = exact_requirement_pins(read_repo_text("backend/requirements.txt"))
@@ -94,6 +103,7 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         read_repo_text("requirements-strix-ci-hashes.txt")
     )
     frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
     frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
 
     assert backend_pins["cryptography"] == "50.0.0"
@@ -116,29 +126,36 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         for digest in strix_records[pin]
     )
 
+    reviewed_postcss = frontend_package["devDependencies"]["postcss"]
+    assert isinstance(reviewed_postcss, str)
+    assert exact_semver(reviewed_postcss) >= POSTCSS_SECURITY_FLOOR
+    assert frontend_package["overrides"]["postcss"] == reviewed_postcss
+    assert frontend_workspace["overrides"]["postcss"] == reviewed_postcss
+
     root_importer = frontend_lock["importers"]["."]
     postcss_resolution = importer_resolution(
         root_importer, "devDependencies", "postcss"
     )
     jsdom_resolution = importer_resolution(root_importer, "devDependencies", "jsdom")
-    assert postcss_resolution == {"specifier": "8.5.24", "version": "8.5.24"}
+    assert postcss_resolution == {
+        "specifier": reviewed_postcss,
+        "version": reviewed_postcss,
+    }
     assert jsdom_resolution == {"specifier": "^30.0.1", "version": "30.0.1"}
 
-    assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
-    assert frontend_package["overrides"]["postcss"] == "8.5.24"
     assert frontend_package["overrides"]["brace-expansion"] == "5.0.9"
     assert frontend_package["overrides"]["undici"] == "8.9.0"
 
     assert frontend_lock["overrides"] == {
         **frontend_lock["overrides"],
-        "postcss": "8.5.24",
+        "postcss": reviewed_postcss,
         "brace-expansion": "5.0.9",
         "undici": "8.9.0",
     }
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
-        "postcss@8.5.24",
+        f"postcss@{reviewed_postcss}",
         "jsdom@30.0.1",
         "brace-expansion@5.0.9",
         "undici@8.9.0",
