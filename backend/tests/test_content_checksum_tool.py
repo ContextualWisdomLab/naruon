@@ -77,6 +77,23 @@ async def test_content_checksum_generator_matches_published_vectors(
 
 
 @pytest.mark.asyncio
+async def test_content_checksum_generator_hashes_empty_sha256_input() -> None:
+    """Empty UTF-8 content is valid input and must produce the published SHA-256 digest."""
+    result = await registry.invoke_tool(
+        "content_checksum_generator",
+        {"text": "", "algorithm": "sha256"},
+    )
+
+    assert result == {
+        "algorithm_code": "sha256",
+        "digest_hex": hashlib.sha256(b"").hexdigest(),
+        "byte_length": 0,
+        "encoding_code": "utf-8",
+        "security_note": SECURITY_NOTE,
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("algorithm", ["sha256", "sha3_256", "blake2b_256"])
 async def test_content_checksum_generator_matches_incremental_utf8_chunk_reference(
     algorithm: str,
