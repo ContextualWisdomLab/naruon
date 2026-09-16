@@ -8,7 +8,6 @@ const { apiGetMock } = vi.hoisted(() => ({
 }));
 
 const destroyMock = vi.fn();
-const originalMapValues = Map.prototype.values;
 
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
@@ -46,8 +45,6 @@ describe("NetworkGraph bounded option materialization", () => {
   let container: HTMLDivElement | null = null;
 
   afterEach(() => {
-    // Keep the process-global Map prototype clean even if setup or an assertion fails before the local finally block.
-    Map.prototype.values = originalMapValues;
     if (root) {
       act(() => root?.unmount());
     }
@@ -57,12 +54,12 @@ describe("NetworkGraph bounded option materialization", () => {
     vi.clearAllMocks();
   });
 
-  it("stops each option iterator at the configured limit without changing insertion order", async () => {
-    const nodes = Array.from({ length: 50 }, (_, index) => ({
+  it("stops each option iterator at its limit and preserves insertion order", async () => {
+    const nodes = Array.from({ length: 15 }, (_, index) => ({
       id: `node-${index}`,
       label: `노드 ${index}`,
     }));
-    const edges = Array.from({ length: 50 }, (_, index) => ({
+    const edges = Array.from({ length: 10 }, (_, index) => ({
       id: `edge-${index}`,
       from: `node-${index}`,
       to: `node-${index + 1}`,
@@ -71,30 +68,34 @@ describe("NetworkGraph bounded option materialization", () => {
 
     apiGetMock.mockResolvedValue({ nodes, edges });
 
+    const originalMapValues = Map.prototype.values;
     const edgeIteratorReadCounts: number[] = [];
     const nodeIteratorReadCounts: number[] = [];
 
-    // Count each populated graph-map iterator independently so rerenders cannot hide one unbounded iterator inside an aggregate total.
+    // Track each iterator independently so repeated renders cannot hide an
+    // unbounded iterator behind an aggregate read-count assertion.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Map.prototype.values = function (this: Map<any, any>) {
+    Map.prototype.values = function(this: Map<any, any>) {
       const iterator = originalMapValues.call(this);
       const readCounts = this.has("edge-0")
         ? edgeIteratorReadCounts
         : this.has("node-0")
           ? nodeIteratorReadCounts
           : null;
-      const iteratorIndex = readCounts ? readCounts.push(0) - 1 : -1;
+      const readCountIndex = readCounts?.push(0);
 
       return {
         next: () => {
-          if (readCounts) readCounts[iteratorIndex] += 1;
+          if (readCounts && readCountIndex !== undefined) {
+            readCounts[readCountIndex - 1] += 1;
+          }
           return iterator.next();
         },
         [Symbol.iterator]() {
           return this;
         },
       };
-    } as typeof Map.prototype.values;
+    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -113,18 +114,24 @@ describe("NetworkGraph bounded option materialization", () => {
         'select[aria-label="노드 선택"]',
       ) as HTMLSelectElement | null;
 
-      expect(relationshipSelect).toBeInstanceOf(HTMLSelectElement);
-      expect(nodeSelect).toBeInstanceOf(HTMLSelectElement);
-      expect(Array.from(relationshipSelect?.options ?? []).map((option) => option.value)).toEqual([
-        "",
+      expect(relationshipSelect?.options.length).toBe(6);
+      expect(nodeSelect?.options.length).toBe(9);
+
+      const actualEdgeOptions = Array.from(relationshipSelect?.options ?? [])
+        .map((option) => option.value)
+        .slice(1);
+      expect(actualEdgeOptions).toEqual([
         "edge-0",
         "edge-1",
         "edge-2",
         "edge-3",
         "edge-4",
       ]);
-      expect(Array.from(nodeSelect?.options ?? []).map((option) => option.value)).toEqual([
-        "",
+
+      const actualNodeOptions = Array.from(nodeSelect?.options ?? [])
+        .map((option) => option.value)
+        .slice(1);
+      expect(actualNodeOptions).toEqual([
         "node-0",
         "node-1",
         "node-2",
@@ -135,11 +142,14 @@ describe("NetworkGraph bounded option materialization", () => {
         "node-7",
       ]);
 
-      // for...of may read once beyond the accepted item before the body breaks: 5 relationships => at most 6 reads, 8 nodes => at most 9.
       expect(edgeIteratorReadCounts.length).toBeGreaterThan(0);
       expect(nodeIteratorReadCounts.length).toBeGreaterThan(0);
-      expect(edgeIteratorReadCounts.every((count) => count <= 6)).toBe(true);
-      expect(nodeIteratorReadCounts.every((count) => count <= 9)).toBe(true);
+      for (const readCount of edgeIteratorReadCounts) {
+        expect(readCount).toBeLessThanOrEqual(6);
+      }
+      for (const readCount of nodeIteratorReadCounts) {
+        expect(readCount).toBeLessThanOrEqual(9);
+      }
     } finally {
       Map.prototype.values = originalMapValues;
       expect(Map.prototype.values).toBe(originalMapValues);
