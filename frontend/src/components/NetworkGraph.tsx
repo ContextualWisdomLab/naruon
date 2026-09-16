@@ -285,20 +285,40 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+  // ⚡ Bolt: Replace O(N) Array.from(map.values()) with O(1) bounded for...of loop
+  // 🎯 Why: Array.from on large maps allocates memory for all elements even if we only need a few, causing main thread blocking and memory spikes.
+  // 📊 Impact: O(1) space/time relative to map size instead of O(N)
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
-      edge,
-      id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
+    const options = [];
+    let index = 0;
+    for (const edge of edgeMap.values()) {
+      if (index >= 5) break;
+      options.push({
+        edge,
+        id: String(edge.id),
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+      });
+      index++;
+    }
+    return options;
   }, [edgeMap, nodeMap]);
 
+  // ⚡ Bolt: Prevent O(N) transient array allocation during map iteration
+  // 🎯 Why: Bounded loop early exits save significant processing time on large graphs.
+  // 📊 Impact: Eliminates full map traversal and reduces transient garbage collection load
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
-      id: String(node.id),
-      label: `노드: ${String(node.label ?? node.id)}`,
-      node,
-    }));
+    const options = [];
+    let index = 0;
+    for (const node of nodeInstanceMap.values()) {
+      if (index >= 8) break;
+      options.push({
+        id: String(node.id),
+        label: `노드: ${String(node.label ?? node.id)}`,
+        node,
+      });
+      index++;
+    }
+    return options;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
