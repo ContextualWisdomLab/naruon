@@ -4,6 +4,8 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 
+from core.safe_logging import redacted_exception_info
+
 logger = logging.getLogger(__name__)
 _TELEMETRY_STATE_KEY = "naruon_telemetry_configured"
 
@@ -78,5 +80,8 @@ def setup_telemetry(app: FastAPI):
         FastAPIInstrumentor.instrument_app(app)
         setattr(app.state, _TELEMETRY_STATE_KEY, True)
         logger.info("OpenTelemetry instrumentation completed successfully.")
-    except Exception:
-        logger.exception("OpenTelemetry setup failed; continuing without tracing.")
+    except Exception as error:
+        logger.error(
+            "OpenTelemetry setup failed; continuing without tracing.",
+            exc_info=redacted_exception_info(error),
+        )
