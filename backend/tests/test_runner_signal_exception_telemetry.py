@@ -14,6 +14,13 @@ class _SecretFailingRunnerConnection:
         raise RuntimeError(self.secret_detail)
 
 
+@pytest.fixture(autouse=True)
+def reset_runner_manager():
+    runner_ws.manager.reset()
+    yield
+    runner_ws.manager.reset()
+
+
 @pytest.mark.asyncio
 async def test_runner_signal_persistence_failure_redacts_database_exception_details(
     monkeypatch,
