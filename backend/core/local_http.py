@@ -9,7 +9,7 @@ from urllib.parse import unquote, urlsplit, urlunsplit
 
 ALLOWED_LOOPBACK_HTTP_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
-MAX_URL_DECODE_ROUNDS = 4
+_INVALID_DECODED_PERCENT_ESCAPE = re.compile(r"%(?=.)(?![0-9A-Fa-f]{2})")
 
 
 class LocalHTTPValidationError(ValueError):
@@ -112,27 +112,25 @@ def validate_local_request_target(
         )
     for raw_segment in parsed.path.split("/"):
         decoded_segment = raw_segment
-        for _ in range(MAX_URL_DECODE_ROUNDS):
-            try:
+        try:
+            for _ in range(10):
                 next_segment = unquote(decoded_segment, errors="strict")
-            except UnicodeDecodeError as exc:
-                raise LocalHTTPValidationError(
-                    "local request path contains invalid percent encoding"
-                ) from exc
-            if next_segment == decoded_segment:
-                break
-            decoded_segment = next_segment
-        else:
-            try:
+                if _INVALID_DECODED_PERCENT_ESCAPE.search(next_segment):
+                    raise LocalHTTPValidationError(
+                        "local request path contains invalid percent encoding"
+                    )
+                if next_segment == decoded_segment:
+                    break
+                decoded_segment = next_segment
+            else:
                 if unquote(decoded_segment, errors="strict") != decoded_segment:
                     raise LocalHTTPValidationError(
-                        "local request path decoding limit exceeded"
+                        "local request path contains excessive percent encoding"
                     )
-            except UnicodeDecodeError as exc:
-                raise LocalHTTPValidationError(
-                    "local request path contains invalid percent encoding"
-                ) from exc
-
+        except UnicodeDecodeError as exc:
+            raise LocalHTTPValidationError(
+                "local request path contains invalid percent encoding"
+            ) from exc
         if (
             decoded_segment in {".", ".."}
             or "/" in decoded_segment
