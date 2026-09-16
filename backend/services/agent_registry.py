@@ -20,6 +20,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from core.safe_logging import redacted_exception_info
+
 logger = logging.getLogger(__name__)
 
 # backend/services/agent_registry.py -> parents[2] is the repository root.
@@ -89,14 +91,20 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     except FileNotFoundError:
         logger.debug("Registration file not found: %s", path)
         return {}
-    except OSError:
-        logger.debug("Could not read registration file: %s", path, exc_info=True)
+    except OSError as exc:
+        logger.debug(
+            "Could not read registration file",
+            exc_info=redacted_exception_info(exc),
+        )
         return {}
 
     try:
         parsed = json.loads(text or "{}")
-    except json.JSONDecodeError:
-        logger.debug("Malformed registration file: %s", path, exc_info=True)
+    except json.JSONDecodeError as exc:
+        logger.debug(
+            "Malformed registration file",
+            exc_info=redacted_exception_info(exc),
+        )
         return {}
 
     return parsed if isinstance(parsed, dict) else {}
