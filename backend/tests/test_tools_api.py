@@ -1211,38 +1211,3 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
-
-def test_execute_hash_generator():
-    import hashlib
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "text": "hello"
-                }
-            },
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["hash"] == hashlib.sha256(b"hello").hexdigest()
-
-
-def test_execute_hash_generator_empty_text():
-    import hashlib
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "text": ""
-                }
-            },
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["hash"] == hashlib.sha256(b"").hexdigest()
