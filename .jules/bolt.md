@@ -26,7 +26,3 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
-
-## 2026-09-14 - Replaced O(N) Array transient allocations with O(1) bounded for...of loops
-**Learning:** When generating dropdown options from large Maps by slicing (e.g. `Array.from(map.values()).slice(0, N).map(...)`), the `Array.from` method creates a transient array containing all items before slicing. This introduces O(N) time and space complexity even if `N` is extremely small compared to the map size, which can degrade performance in large networks or graphs.
-**Action:** When a UI component needs to take a small, bounded number of items from a large Map or Set, use a bounded `for...of` loop with an early break condition instead of `Array.from`. This ensures that the iteration has true O(1) time and space complexity relative to the total size of the Map.
