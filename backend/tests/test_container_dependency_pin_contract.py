@@ -196,3 +196,24 @@ def test_postcss_security_floor_rejects_below_floor_lock_entry(
     monkeypatch.setitem(globals(), "read_repo_text", read_mutated_repo_text)
     with pytest.raises(AssertionError, match=f"{section_name} contains postcss below"):
         test_container_provenance_dependency_pins_match_reviewed_manifests()
+
+
+def test_postcss_root_importer_requires_exact_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject a lockfile whose root PostCSS resolution has no matching snapshot."""
+    original_read_repo_text = read_repo_text
+    lock = yaml.safe_load(original_read_repo_text("frontend/pnpm-lock.yaml"))
+    postcss_version = lock["importers"]["."]["devDependencies"]["postcss"]["version"]
+    lock["snapshots"].pop(f"postcss@{postcss_version}")
+    lock["snapshots"].setdefault("postcss@8.5.25", {})
+    mutated_lock_text = yaml.safe_dump(lock, sort_keys=False)
+
+    def read_mutated_repo_text(relative_path: str) -> str:
+        if relative_path == "frontend/pnpm-lock.yaml":
+            return mutated_lock_text
+        return original_read_repo_text(relative_path)
+
+    monkeypatch.setitem(globals(), "read_repo_text", read_mutated_repo_text)
+    with pytest.raises(AssertionError, match="root importer postcss snapshot"):
+        test_container_provenance_dependency_pins_match_reviewed_manifests()
