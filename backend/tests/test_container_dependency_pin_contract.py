@@ -154,6 +154,19 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "brace-expansion": "5.0.9",
         "undici": "8.9.0",
     }
+    for section_name in ("packages", "snapshots"):
+        section_records = frontend_lock[section_name]
+        assert isinstance(section_records, dict)
+        postcss_entries = [
+            key for key in section_records if key.startswith("postcss@")
+        ]
+        assert postcss_entries, f"{section_name} must contain postcss"
+        for package_key in postcss_entries:
+            resolved_postcss = package_key.removeprefix("postcss@")
+            assert (
+                exact_semver(resolved_postcss) >= POSTCSS_SECURITY_FLOOR
+            ), f"{section_name} contains postcss below the reviewed security floor"
+
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
         f"postcss@{reviewed_postcss}",
