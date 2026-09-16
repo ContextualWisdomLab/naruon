@@ -13,6 +13,7 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -153,6 +154,19 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "brace-expansion": "5.0.9",
         "undici": "8.9.0",
     }
+    for section_name in ("packages", "snapshots"):
+        section_records = frontend_lock[section_name]
+        assert isinstance(section_records, dict)
+        postcss_entries = [
+            key for key in section_records if key.startswith("postcss@")
+        ]
+        assert postcss_entries, f"{section_name} must contain postcss"
+        for package_key in postcss_entries:
+            resolved_postcss = package_key.removeprefix("postcss@")
+            assert (
+                exact_semver(resolved_postcss) >= POSTCSS_SECURITY_FLOOR
+            ), f"{section_name} contains postcss below the reviewed security floor"
+
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
         f"postcss@{reviewed_postcss}",
@@ -161,3 +175,24 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "undici@8.9.0",
     ):
         assert exact_lock_entry in package_records
+
+
+@pytest.mark.parametrize("section_name", ("packages", "snapshots"))
+def test_postcss_security_floor_rejects_below_floor_lock_entry(
+    monkeypatch: pytest.MonkeyPatch,
+    section_name: str,
+) -> None:
+    """Reject a stale transitive PostCSS resolution even when the direct pin is valid."""
+    original_read_repo_text = read_repo_text
+    lock = yaml.safe_load(original_read_repo_text("frontend/pnpm-lock.yaml"))
+    lock[section_name]["postcss@8.5.23"] = {}
+    mutated_lock_text = yaml.safe_dump(lock, sort_keys=False)
+
+    def read_mutated_repo_text(relative_path: str) -> str:
+        if relative_path == "frontend/pnpm-lock.yaml":
+            return mutated_lock_text
+        return original_read_repo_text(relative_path)
+
+    monkeypatch.setitem(globals(), "read_repo_text", read_mutated_repo_text)
+    with pytest.raises(AssertionError, match=f"{section_name} contains postcss below"):
+        test_container_provenance_dependency_pins_match_reviewed_manifests()
