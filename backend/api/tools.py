@@ -770,6 +770,24 @@ registry.register(
 
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"hash": hashlib.sha256(text.encode("utf-8")).hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="주어진 텍스트의 SHA-256 해시값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
