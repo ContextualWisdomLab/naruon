@@ -167,6 +167,11 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
                 exact_semver(resolved_postcss) >= POSTCSS_SECURITY_FLOOR
             ), f"{section_name} contains postcss below the reviewed security floor"
 
+    postcss_snapshot_key = f"postcss@{postcss_resolution['version']}"
+    assert (
+        postcss_snapshot_key in frontend_lock["snapshots"]
+    ), "root importer postcss snapshot must exist"
+
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
         f"postcss@{reviewed_postcss}",
