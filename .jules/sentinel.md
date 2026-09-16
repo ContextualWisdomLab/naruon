@@ -138,3 +138,8 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
+
+## 2024-03-24 - Double URL-Encoded Path Traversal Bypass in Local HTTP
+**Vulnerability:** The `validate_local_request_target` function in `backend/core/local_http.py` used a single pass of `unquote()` for URL decoding, allowing attackers to bypass path traversal restrictions using double URL-encoded sequences like `%252e%252e` and `%255c`.
+**Learning:** A single pass of `unquote()` is insufficient when defending against URL-encoded path traversal attacks, as applications might decode the payload multiple times before passing it to an underlying system.
+**Prevention:** Always implement a bounded multi-round URL decoding loop to fully decode segments before validating for path traversal to prevent double-encoding bypasses.
