@@ -43,7 +43,6 @@ class Pop3SyncWorker:
         if self._is_running:
             logger.warning("Pop3SyncWorker is already running.")
             return
-
         self._is_running = True
         self._task = asyncio.create_task(self._run_loop())
         logger.info("Pop3SyncWorker started.")
@@ -51,7 +50,6 @@ class Pop3SyncWorker:
     async def stop(self):
         if not self._is_running:
             return
-
         self._is_running = False
         if self._task:
             self._task.cancel()
@@ -69,7 +67,6 @@ class Pop3SyncWorker:
                 break
             except Exception as e:
                 logger.error(f"Error in Pop3SyncWorker loop: {e}", exc_info=True)
-
             if self._is_running:
                 try:
                     await asyncio.sleep(60)
@@ -89,7 +86,6 @@ class Pop3SyncWorker:
             if not config.pop3_server or not config.pop3_port:
                 continue
             tasks.append(self._sync_tenant(config, semaphore))
-
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -129,14 +125,9 @@ class Pop3SyncWorker:
                 )
 
     async def _load_observed_uidls(self, config: TenantConfig) -> set[str]:
-        """Load durable UIDL progress before network I/O begins.
-
-        Unsaved configs used by focused tests have no stable account key and
-        therefore cannot own durable provider progress.
-        """
+        """Load durable UIDL progress before network I/O begins."""
         if config.id is None:
             return set()
-
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(Pop3ObservedMessage.provider_uidl).where(
@@ -247,15 +238,7 @@ class Pop3SyncWorker:
                     candidates,
                     key=lambda identity: identity.message_number,
                 )[-MAX_POP3_FETCH_MESSAGES:]
-                return [
-                    Pop3RetrievedMessage(
-                        source_content=self._retrieve_message(
-                            pop3_client, identity.message_number
-                        ),
-                        provider_uidl=identity.provider_uidl,
-                    )
-                    for identity in selected
-                ]
+                return self._retrieve_uidl_messages(pop3_client, config, selected)
 
             _response, listings, _octets = pop3_client.list()
             message_numbers = [
@@ -268,13 +251,11 @@ class Pop3SyncWorker:
                 "POP3 UIDL unavailable for user %s; bounded fallback cannot prove durable backlog progress.",
                 config.user_id,
             )
-            return [
-                Pop3RetrievedMessage(
-                    source_content=self._retrieve_message(pop3_client, message_number),
-                    provider_uidl=None,
-                )
-                for message_number in sorted(message_numbers)[-MAX_POP3_FETCH_MESSAGES:]
-            ]
+            return self._retrieve_fallback_messages(
+                pop3_client,
+                config,
+                sorted(message_numbers)[-MAX_POP3_FETCH_MESSAGES:],
+            )
         finally:
             self._close_pop3_client(pop3_client, config)
 
@@ -320,6 +301,58 @@ class Pop3SyncWorker:
             provider_uidl=provider_uidl,
         )
 
+    def _retrieve_uidl_messages(
+        self,
+        pop3_client: poplib.POP3_SSL,
+        config: TenantConfig,
+        identities: list[Pop3MessageIdentity],
+    ) -> list[Pop3RetrievedMessage]:
+        messages: list[Pop3RetrievedMessage] = []
+        for identity in identities:
+            try:
+                source_content = self._retrieve_message(
+                    pop3_client, identity.message_number
+                )
+            except (OSError, poplib.error_proto) as exc:
+                logger.warning(
+                    "POP3 RETR stopped after partial progress for user %s: %s",
+                    config.user_id,
+                    type(exc).__name__,
+                )
+                break
+            messages.append(
+                Pop3RetrievedMessage(
+                    source_content=source_content,
+                    provider_uidl=identity.provider_uidl,
+                )
+            )
+        return messages
+
+    def _retrieve_fallback_messages(
+        self,
+        pop3_client: poplib.POP3_SSL,
+        config: TenantConfig,
+        message_numbers: list[int],
+    ) -> list[Pop3RetrievedMessage]:
+        messages: list[Pop3RetrievedMessage] = []
+        for message_number in message_numbers:
+            try:
+                source_content = self._retrieve_message(pop3_client, message_number)
+            except (OSError, poplib.error_proto) as exc:
+                logger.warning(
+                    "POP3 fallback RETR stopped after partial progress for user %s: %s",
+                    config.user_id,
+                    type(exc).__name__,
+                )
+                break
+            messages.append(
+                Pop3RetrievedMessage(
+                    source_content=source_content,
+                    provider_uidl=None,
+                )
+            )
+        return messages
+
     def _retrieve_message(self, pop3_client: poplib.POP3_SSL, message_number: int) -> bytes:
         _retr_response, lines, _retr_octets = pop3_client.retr(message_number)
         return self._message_bytes(lines)
@@ -332,10 +365,6 @@ class Pop3SyncWorker:
         try:
             pop3_client.quit()
         except (OSError, poplib.error_proto) as exc:
-            # `poplib.quit()` only closes its file/socket after a successful
-            # QUIT response. Preserve already-retrieved bytes, but explicitly
-            # close the transport when QUIT itself fails so the maildrop lock
-            # and local socket are not left to garbage collection.
             logger.warning(
                 "POP3 QUIT cleanup failed for user %s: %s",
                 config.user_id,
@@ -351,11 +380,7 @@ class Pop3SyncWorker:
                 )
 
     def _message_bytes(self, lines: list[bytes | str]) -> bytes:
-        """Reconstruct one POP3 RETR message with protocol CRLF terminators.
-
-        ``poplib`` removes line terminators from the multiline response while
-        RFC 1939 defines each transferred message line as CRLF-terminated.
-        """
+        """Reconstruct one POP3 RETR message with protocol CRLF terminators."""
         return b"\r\n".join(self._bytes_line(line) for line in lines) + b"\r\n"
 
     def _message_number_from_listing(self, listing: bytes | str) -> int | None:
