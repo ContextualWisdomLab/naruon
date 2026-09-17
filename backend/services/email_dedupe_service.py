@@ -133,6 +133,30 @@ def source_email_fingerprint(
     return digest.hexdigest()
 
 
+def _has_nonempty_text(value: object) -> bool:
+    """Return whether a metadata field supplies usable non-empty text."""
+    return isinstance(value, str) and bool(value.strip())
+
+
+def has_complete_strong_email_metadata(
+    *,
+    sender: object,
+    recipients: object,
+    subject: object,
+    body: object,
+) -> bool:
+    """Require the full sender/recipient/subject/body evidence set for auto-linking.
+
+    Strong metadata evidence is intentionally stricter than source-bound identity:
+    incomplete messages keep their deterministic raw/canonical source fingerprint
+    but cannot enter the automatic metadata-link path merely because Date parsed.
+    """
+    return all(
+        _has_nonempty_text(value)
+        for value in (sender, recipients, subject, body)
+    )
+
+
 def strong_email_fingerprint(
     *,
     sender: str | None,
@@ -142,15 +166,17 @@ def strong_email_fingerprint(
 ) -> str | None:
     """Return the strong (sender+subject+Date+body) auto-dedupe fingerprint.
 
-    Requires a body; ``None`` for an empty body so bodyless rows cannot collapse
-    to a shared hash. Callers gate this on genuine Date provenance.
+    The fingerprint itself preserves the established four-field contract. It is
+    withheld when sender, subject, or body is missing; callers that possess
+    recipient evidence additionally apply ``has_complete_strong_email_metadata``
+    before treating this hash as automatic-link evidence.
     """
-    if not body:
+    if not all(_has_nonempty_text(value) for value in (sender, subject, body)):
         return None
     return generate_email_fingerprint(
         {
-            "sender": sender or "",
-            "subject": subject or "",
+            "sender": sender,
+            "subject": subject,
             "date": _date_to_fingerprint_value(date),
             "body": body,
         }
@@ -166,7 +192,14 @@ def candidate_message_lookup_values(candidate: EmailDedupeCandidate) -> set[str]
 
 
 def candidate_strong_fingerprint(candidate: EmailDedupeCandidate) -> str | None:
-    """Return the candidate's strong fingerprint (see strong_email_fingerprint)."""
+    """Return strong evidence only when the candidate metadata set is complete."""
+    if not has_complete_strong_email_metadata(
+        sender=candidate.sender,
+        recipients=candidate.recipients,
+        subject=candidate.subject,
+        body=candidate.body,
+    ):
+        return None
     return strong_email_fingerprint(
         sender=candidate.sender,
         subject=candidate.subject,
@@ -176,14 +209,21 @@ def candidate_strong_fingerprint(candidate: EmailDedupeCandidate) -> str | None:
 
 
 def email_strong_fingerprint(email_row: Email) -> str | None:
-    """Return a stored row's strong fingerprint, gated on genuine Date provenance.
+    """Return a stored row's strong fingerprint, gated on trustworthy metadata.
 
     A stored row may seed a strong (auto-dedupe) fingerprint only when its date
-    is genuinely parsed sender metadata; rows with a synthetic or
-    unknown-provenance date are excluded so they cannot manufacture a strong
-    duplicate match (naruon#1086).
+    is genuinely parsed sender metadata and sender/recipient/subject/body evidence
+    is complete. Rows that fail either condition remain eligible for weaker
+    review/source-bound identity paths but cannot manufacture an automatic link.
     """
     if getattr(email_row, "date_provenance", None) != "parsed":
+        return None
+    if not has_complete_strong_email_metadata(
+        sender=getattr(email_row, "sender", None),
+        recipients=getattr(email_row, "recipients", None),
+        subject=getattr(email_row, "subject", None),
+        body=getattr(email_row, "body", None),
+    ):
         return None
     return strong_email_fingerprint(
         sender=email_row.sender,
@@ -244,13 +284,14 @@ def classify_dedupe_decision(
     - ``auto_link`` (A1, positive link): the pair shares a reliable identity
       link -- the same normalized Message-ID, or a genuine strong match
       (identical sender/subject/Date/body with a trusted, parsed Date on *both*
-      sides). These are safe to merge automatically.
+      sides and complete sender/recipient/subject/body metadata). These are safe
+      to merge automatically.
     - ``review_required`` (A2, possible match): the pair shares a
       provenance-independent content signal (same sender/subject/body) but has
       no reliable identity link -- typically because at least one side's Date
-      provenance is synthetic or unknown, so the strong fingerprint was withheld
-      (naruon#1086). This is the clerical-review band: a probable duplicate that
-      must not be silently merged or silently kept.
+      provenance is synthetic/unknown or strong metadata is incomplete, so the
+      strong fingerprint was withheld (naruon#1086). This is the clerical-review
+      band: a probable duplicate that must not be silently merged or silently kept.
     - ``distinct`` (A3, non-link): no shared identity or content signal.
     """
     candidate_message = normalize_message_id(candidate.message_id)
