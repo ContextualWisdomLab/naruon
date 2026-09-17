@@ -191,15 +191,23 @@ class Pop3SyncWorker:
             try:
                 pop3_client.quit()
             except (OSError, poplib.error_proto) as exc:
-                # RETR has already produced immutable message bytes at this point.
-                # A transport/protocol failure during QUIT is cleanup failure, not
-                # evidence that those bytes disappeared; keep them available for
-                # the persistence/dedupe boundary instead of masking the result.
+                # `poplib.quit()` only closes its file/socket after a successful
+                # QUIT response. Preserve already-retrieved bytes, but explicitly
+                # close the transport when QUIT itself fails so the maildrop lock
+                # and local socket are not left to garbage collection.
                 logger.warning(
                     "POP3 QUIT cleanup failed for user %s: %s",
                     config.user_id,
                     type(exc).__name__,
                 )
+                try:
+                    pop3_client.close()
+                except OSError as close_exc:
+                    logger.warning(
+                        "POP3 transport close failed for user %s: %s",
+                        config.user_id,
+                        type(close_exc).__name__,
+                    )
 
     def _message_bytes(self, lines: list[bytes | str]) -> bytes:
         """Reconstruct one POP3 RETR message with protocol CRLF terminators.
