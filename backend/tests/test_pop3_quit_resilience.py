@@ -33,3 +33,4 @@ def test_pop3_quit_failure_does_not_discard_retrieved_messages(monkeypatch):
 
     assert messages == [b"Message-ID: <pop3-1@example.com>\r\n\r\nBody\r\n"]
     pop3_client.quit.assert_called_once()
+    pop3_client.close.assert_called_once()
