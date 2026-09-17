@@ -16,7 +16,7 @@ def test_pop3_quit_failure_does_not_discard_retrieved_messages(monkeypatch):
     )
     raw_lines = [b"Message-ID: <pop3-1@example.com>", b"", b"Body"]
     pop3_client = MagicMock()
-    pop3_client.list.return_value = (b"+OK", [b"1 128"], 128)
+    pop3_client.uidl.return_value = (b"+OK", [b"1 uid-1"], 16)
     pop3_client.retr.return_value = (b"+OK", raw_lines, 128)
     pop3_client.quit.side_effect = poplib.error_proto("-ERR connection already closed")
 
@@ -31,6 +31,7 @@ def test_pop3_quit_failure_does_not_discard_retrieved_messages(monkeypatch):
 
     messages = worker._do_pop3_sync(config)
 
-    assert messages == [b"Message-ID: <pop3-1@example.com>\r\n\r\nBody\r\n"]
+    assert messages[0].source_content == b"Message-ID: <pop3-1@example.com>\r\n\r\nBody\r\n"
+    assert messages[0].provider_uidl == "uid-1"
     pop3_client.quit.assert_called_once()
     pop3_client.close.assert_called_once()

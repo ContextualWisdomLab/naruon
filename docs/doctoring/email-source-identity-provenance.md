@@ -66,14 +66,14 @@ The source-order sequence for this repair is:
   repair, including deterministic `dedupe_review_required` result semantics;
 - `fd4cd4e405b3af30b4458993a4673063350b49d9` →
   `d8a08deb1ad009b2d90de2eafbab5da61ac0cc79`: IMAP RED then causal repair.
-  POP3 reaches the same `process_fetched_email` boundary and therefore consumes
-  the repaired IMAP/POP3 persistence path rather than duplicating the rule.
+  POP3 consumes the same fetched-email persistence boundary rather than
+  duplicating dedupe rules.
 
 The canonical migration contract is separately pinned by
 `540f6e4ec57ed355263d56e7da78de7ff5310360`: `0018_email_date_provenance`
-remains the single provenance revision, with non-null `date_provenance` and an
-`unknown` server default. The parallel #1656 `date_evidence` /
-`message_id_evidence` migration is not adopted.
+remains the single message-provenance revision, with non-null
+`date_provenance` and an `unknown` server default. The parallel #1656
+`date_evidence` / `message_id_evidence` migration is not adopted.
 
 ## Message-ID provenance decision
 
@@ -87,9 +87,8 @@ existing Message-ID plus source-fingerprint semantics.
 
 Accordingly, #1656's proposed `message_id_evidence` persistence is rejected for
 this lineage unless a concrete future consumer proves a storage requirement.
-This avoids a second provenance vocabulary and a sibling migration merely to
-record evidence that is already available at ingestion and encoded by the
-source-bound identity contract.
+Provider UIDL state is a separate collection-progress concern and must not be
+promoted to Naruon's Message-ID or source-fingerprint truth.
 
 ## POP3 reconstruction contract
 
@@ -107,53 +106,84 @@ streams. Duplicate classification remains deterministic because the source kind
 is domain separated and because collection time is excluded from fallback
 identity.
 
-## POP3 bounded collection window
+## POP3 durable bounded progress
 
 RFC 1939 assigns message number `1` to the first message in the opened maildrop
-and number `n` to the nth message. Naruon's POP3 worker intentionally does not
-issue `DELE`; source retention is therefore independent from synchronization.
-The predecessor implementation took the first ten `LIST` entries, so a maildrop
-larger than the cap could repeatedly revisit its oldest window while newer mail
-was never retrieved.
+and number `n` to the nth message, but those positions are not durable client
+identity. The predecessor implementation first selected the oldest bounded
+`LIST` window; repair `72c64b46d120ee8c2f3f12ad04114e6a896cb15b` switched to the
+highest current message numbers and removed that particular newest-mail
+starvation mode. It still could not guarantee full-maildrop progress because a
+static maildrop larger than the cap would repeat the same tail window.
 
-Source-order regression `517ba20f2409012eb28b9c84085103a7c1b04eaa`
-requires that predecessor failure mode to be removed. Causal repair
-`72c64b46d120ee8c2f3f12ad04114e6a896cb15b` parses all `LIST` message numbers,
-sorts them numerically, and retrieves the highest bounded window. Invalid list
-entries remain ignored. This changes collection priority only; it does not alter
-duplicate identity, retention, or server-side deletion semantics.
+Issue #1717 therefore requires RFC 1939 UIDL-based progress. RFC 1939 defines a
+UIDL value as a one-to-70-character server-determined identifier in the range
+0x21–0x7E that identifies a message within a maildrop and persists across
+sessions. Naruon now keeps this provider progress identity separate from email
+identity:
 
-That repair is deliberately classified as **partial progress**, not an eventual
-backlog guarantee. A static maildrop larger than the cap can still expose the
-same highest-numbered window on every poll, leaving older unobserved messages
-behind indefinitely. POP3 message numbers are session/maildrop positions, not a
-sound durable cross-session cursor. Issue #1717 owns the remaining contract: use
-RFC 1939 `UIDL` where supported, persist owner-scoped provider progress, and
-prove bounded multi-poll/restart progress without turning provider identity into
-Naruon's Message-ID or source-fingerprint truth.
+- RED `77d7f23ff603821d3247ac48b88247aaa1c70e8e` defines bounded unseen-UIDL
+  selection, current-session renumbering, an explicit UIDL-unavailable fallback,
+  and durable observation after successful persistence;
+- model `b5344c498ccacaa0b8900be222c6a61bda6e13fe` introduces owner-scoped
+  `Pop3ObservedMessage`; migration `970c6d3a124cc26dd50a84b0eee58fb951abeef3`
+  adds `0019_pop3_observed_uidl` after the canonical `0018` provenance revision;
+- worker repair `5fe993c1363579e439ee4d74ea0190e964315877` asks the server for UIDL,
+  filters already observed provider identities, retrieves at most the newest ten
+  unseen identities for the current poll, and records the UIDL in the same
+  database transaction as successful email persistence using an idempotent
+  `(tenant_config_id, provider_uidl)` conflict boundary;
+- migration/model contract tests are pinned by
+  `c5a997615ab8c4ad3e23463199b2ca98a7a5795d`, and model/index parity is repaired
+  by `99e2e7ea6a3f5d79c546afa11f115b253407319a`;
+- legacy worker tests were adapted at `3776e5474ec4ae3b5d3d3cadc6513fedfdd0eadf`
+  without converting UIDL into message identity.
 
-## POP3 session teardown
+With UIDL support, a first poll can process the newest bounded unseen set and a
+later poll filters those durable observations, exposing the next unseen set even
+if current-session message numbers were renumbered. The database session used to
+load progress is closed before POP3 network retrieval starts; `_import_messages`
+opens a separate short persistence transaction only after RETR/session cleanup.
+No explicit DB lock is held across provider I/O.
+
+UIDL is optional in POP3. If the server rejects UIDL or returns a malformed UIDL
+listing, Naruon falls back to the bounded highest-number `LIST` window and logs
+that durable backlog progress is not proven for that poll. The fallback is a
+resource-bounded compatibility policy, not a correctness claim. Naruon still
+does not issue `DELE`.
+
+`pop3_observed_messages` intentionally scopes UIDL by `tenant_config_id` and
+keeps historical observations because RFC 1939 requires persistence across
+sessions. This makes per-account progress reads proportional to stored provider
+history; it is a measurable operability/performance surface and must be profiled
+before any claim about very large long-lived POP3 mailboxes.
+
+## POP3 partial retrieval and session teardown
 
 A successful `RETR` has already returned protocol-visible message bytes before
-`QUIT` is attempted. A later transport/protocol error during `QUIT` is cleanup
-failure; it must not retroactively discard those bytes and make the sync report a
-retrieval failure. Naruon does not issue `DELE`, so preserving the retrieved
-bytes does not authorize or imply server-side deletion.
+later message or session cleanup can fail. A later `RETR`/`QUIT` error must not
+retroactively discard earlier successful bytes.
 
-The source-order repair is:
+The teardown source-order repair is:
 
-- RED `64baa1e2b71e192d14743bd11da017b4fa33279f` requires a successful `RETR`
-  result to survive a `poplib.error_proto` raised by `QUIT`;
+- RED `64baa1e2b71e192d14743bd11da017b4fa33279f` requires successful RETR bytes
+  to survive a `poplib.error_proto` raised by `QUIT`;
 - strengthened RED `a74e02b76e236482f2c634a0c54f38450a63b769` also requires an explicit
-  transport close when the graceful `QUIT` path fails;
-- repair `fa06c566dc29f350ac1e7ff2888ac59bbf5c7ef4` stops a `QUIT` cleanup
-  exception from masking already retrieved bytes;
-- lifecycle repair `e809575329ff9b9643d7ce93a28556951cdc797a` closes the `poplib`
-  transport explicitly after failed `QUIT`, with a bounded warning if close
-  itself fails.
+  transport close when graceful `QUIT` fails;
+- repairs `fa06c566dc29f350ac1e7ff2888ac59bbf5c7ef4` and
+  `e809575329ff9b9643d7ce93a28556951cdc797a` preserve retrieved bytes and close
+  the transport explicitly after failed `QUIT`.
 
-This keeps the network lifecycle outside the persistence transaction: RETR and
-session cleanup complete before `_import_messages()` opens its database session.
+A separate RED `c762b10d12e55d6666a772d99be49172bc35230a` proves that failure on a
+later `RETR` must not discard earlier messages in the same bounded batch. Repair
+`37a390c59c915016fa2e412c6e77e85e69042510` changes UIDL and fallback retrieval
+to accumulate successful messages and stop the batch at the first transport or
+protocol retrieval failure. Only returned messages can be persisted and only
+their UIDLs can become observed, so the failed identity remains eligible for a
+later retry.
+
+Naruon does not issue `DELE`; preserving already retrieved bytes does not
+authorize or imply server-side deletion.
 
 ## Verification contract
 
@@ -165,34 +195,41 @@ session cleanup complete before `_import_messages()` opens its database session.
   explicit `-0000` Date remains parsed and UTC-comparable.
 - Incomplete metadata cannot produce a strong metadata auto-link; import reports
   `dedupe_review_required` while retaining source-bound identity.
-- Direct import, IMAP, and the POP3 path through `process_fetched_email` apply
-  the same complete-metadata gate.
-- Two different raw messages collected at the same instant remain distinct.
-- The same raw message collected at different instants has the same fallback
+- Direct import, IMAP, and POP3 apply the same source-bound persistence rule.
+- Two different raw messages collected at the same instant remain distinct; the
+  same raw message collected at different instants has the same fallback
   identity.
-- Canonical fallback identity excludes effective collection timestamps and
-  provenance flags.
-- Canonical fallback serialization accepts only deterministic JSON-native parsed
-  values and rejects bytes, unordered collections, custom objects, non-string
-  mapping keys, and non-finite numbers instead of coercing them with `str()`.
-- IMAP and POP3 pass source bytes through the persistence boundary.
-- POP3 source reconstruction restores CRLF after every `RETR` message line.
-- A POP3 `QUIT` failure after successful `RETR` cannot discard the retrieved
-  bytes, and the transport is explicitly closed when graceful teardown fails.
-- Highest-number bounded POP3 selection removes the predecessor oldest-window
-  failure mode but is **not** accepted as eventual-backlog progress; #1717 owns
-  the durable UIDL-backed completion contract.
-- Existing rows remain conservatively classified when provenance is unknown.
-- `0018_email_date_provenance` remains the sole canonical provenance migration;
-  no parallel `date_evidence` or `message_id_evidence` schema is accepted.
+- Canonical fallback identity excludes collection timestamps/provenance flags and
+  rejects unsupported serialization types instead of coercing them with
+  `str()`.
+- IMAP and POP3 pass source bytes through the persistence boundary; POP3 source
+  reconstruction restores CRLF after every `RETR` message line.
+- With UIDL support, a bounded poll retrieves only unseen provider identities;
+  persisted observations survive reconnects and current-session renumbering.
+- UIDL is transport progress identity only. It cannot replace Message-ID,
+  source-fingerprint, or dedupe evidence.
+- UIDL-unavailable/malformed fallback is explicitly compatibility-only and does
+  not claim eventual backlog completion.
+- A later RETR failure preserves earlier successful messages; a QUIT failure
+  preserves retrieved bytes and explicitly closes the transport.
+- `0018_email_date_provenance` remains the sole message-provenance migration;
+  `0019_pop3_observed_uidl` succeeds it for provider collection state rather than
+  introducing parallel message provenance.
+
+The source-order tests and implementation above are not themselves hosted GREEN
+evidence. PostgreSQL migration execution, repository tests/security/coverage,
+current-head independent review, restart acceptance, and large-mailbox
+performance still require exact-head receipts before #1717 or #1195 can be
+accepted complete.
 
 ## Claim boundary
 
 Hash equality is evidence that the selected source representation is identical;
 it is not proof that two independently authored real-world communications are
 the same event. Automatic linkage, clerical review, and distinct-message
-outcomes remain separate decisions. No automatic deletion or irreversible
-provider action is introduced.
+outcomes remain separate decisions. Provider UIDL proves only the server's
+maildrop identity contract. No automatic deletion or irreversible provider
+action is introduced.
 
 ## References
 
