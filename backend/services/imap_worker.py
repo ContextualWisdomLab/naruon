@@ -25,7 +25,15 @@ from services.knowledge_extractor import (
 from services.threading_service import assign_thread_id
 
 
-async def process_fetched_email(
+@dataclass(frozen=True, slots=True)
+class FetchedEmailPersistenceResult:
+    """Report the persisted email and whether this sync created it."""
+
+    email_record: Email
+    created_record: bool
+
+
+async def persist_fetched_email(
     session,
     email_data: EmailData,
     user_id: str,
@@ -33,8 +41,8 @@ async def process_fetched_email(
     owner_addresses: Iterable[str] | None = None,
     is_read: bool = True,
     source_content: bytes | None = None,
-) -> Email:
-    """Persist one fetched email with provenance-safe identity."""
+) -> FetchedEmailPersistenceResult:
+    """Persist one fetched email and retain duplicate disposition for sync counts."""
     subject = email_data.get("subject", "")
     date_obj = email_data.get("date")
     if isinstance(date_obj, datetime.datetime):
@@ -83,7 +91,6 @@ async def process_fetched_email(
         source_kind="raw" if source_content is not None else "canonical",
     )
 
-    # Check if duplicate
     stmt = select(Email).where(
         Email.user_id == user_id,
         Email.organization_id == (organization_id if organization_id else None),
@@ -97,7 +104,10 @@ async def process_fetched_email(
             "Email with fingerprint %s already exists. Skipping duplicate insertion.",
             fingerprint,
         )
-        return existing_email
+        return FetchedEmailPersistenceResult(
+            email_record=existing_email,
+            created_record=False,
+        )
 
     thread_id = await assign_thread_id(
         session, email_data, user_id=user_id, organization_id=organization_id
@@ -123,7 +133,32 @@ async def process_fetched_email(
     if is_self_sent_email(new_email, owner_addresses):
         await session.flush()
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)
-    return new_email
+    return FetchedEmailPersistenceResult(
+        email_record=new_email,
+        created_record=True,
+    )
+
+
+async def process_fetched_email(
+    session,
+    email_data: EmailData,
+    user_id: str,
+    organization_id: str | None,
+    owner_addresses: Iterable[str] | None = None,
+    is_read: bool = True,
+    source_content: bytes | None = None,
+) -> Email:
+    """Persist one fetched email while preserving the legacy Email return contract."""
+    persistence_result = await persist_fetched_email(
+        session,
+        email_data,
+        user_id,
+        organization_id,
+        owner_addresses=owner_addresses,
+        is_read=is_read,
+        source_content=source_content,
+    )
+    return persistence_result.email_record
 
 
 logger = logging.getLogger(__name__)
@@ -360,7 +395,7 @@ class ImapSyncWorker:
                             config.user_id,
                         )
                         continue
-                    await process_fetched_email(
+                    persistence_result = await persist_fetched_email(
                         session,
                         email_data,
                         config.user_id,
@@ -369,7 +404,8 @@ class ImapSyncWorker:
                         is_read=is_read,
                         source_content=raw_message,
                     )
-                    imported_count += 1
+                    if persistence_result.created_record:
+                        imported_count += 1
                 await session.commit()
             except Exception:
                 await session.rollback()
