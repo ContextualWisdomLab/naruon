@@ -11,7 +11,6 @@ import os
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from services.archive import extract_backup_async
-from services.exceptions import ArchiveError
 from services.email_parser import parse_eml
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
@@ -31,21 +30,11 @@ IMPORT_USER_ID = os.environ.get("NARUON_IMPORT_USER_ID", "default")
 IMPORT_ORGANIZATION_ID = os.environ.get("NARUON_IMPORT_ORGANIZATION_ID", "default")
 
 
-async def process_zip_file(zip_path: str | Path, session: AsyncSession) -> bool:
-    """Import one fixture archive and report whether extraction was accepted."""
+async def process_zip_file(zip_path: str | Path, session: AsyncSession):
     with tempfile.TemporaryDirectory() as temp_dir:
-        logger.info("Extracting fixture archive")
-        extracted_files: list[Path] | None
-        try:
-            extracted_files = await extract_backup_async(zip_path, temp_dir)
-        except ArchiveError:
-            logger.error("Fixture archive extraction failed")
-            return False
-        except Exception:
-            extracted_files = None
+        logger.info(f"Extracting {zip_path}...")
+        extracted_files = await extract_backup_async(zip_path, temp_dir)
 
-        if extracted_files is None:
-            raise ArchiveError("Fixture archive extraction failed")
 
         batch_values = []
         for file_path in extracted_files:
@@ -54,8 +43,8 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession) -> bool:
 
             try:
                 email_data = parse_eml(file_path)
-            except Exception:
-                logger.error("Fixture archive email parsing failed")
+            except Exception as e:
+                logger.error(f"Failed to parse {file_path}: {e}")
                 continue
 
             chunks = chunk_text(email_data["body"])
@@ -81,9 +70,12 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession) -> bool:
                             embeddings[0],
                             STORAGE_EMBEDDING_DIMENSION,
                         )
-                except Exception:
-                    logger.error("Fixture archive email embedding failed")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to generate embedding for {email_data['message_id']}: {e}"
+                    )
 
+            # Upsert into database
             thread_id = await assign_thread_id(
                 session,
                 email_data,
@@ -91,23 +83,21 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession) -> bool:
                 organization_id=IMPORT_ORGANIZATION_ID,
             )
 
-            batch_values.append(
-                dict(
-                    user_id=IMPORT_USER_ID,
-                    organization_id=IMPORT_ORGANIZATION_ID,
-                    message_id=email_data["message_id"],
-                    sender=email_data["sender"],
-                    reply_to=email_data.get("reply_to"),
-                    recipients=email_data["recipients"],
-                    subject=email_data["subject"],
-                    in_reply_to=email_data.get("in_reply_to"),
-                    references=email_data.get("references"),
-                    thread_id=thread_id,
-                    date=email_data["date"],
-                    body=email_data["body"],
-                    embedding=embedding,
-                )
-            )
+            batch_values.append(dict(
+                user_id=IMPORT_USER_ID,
+                organization_id=IMPORT_ORGANIZATION_ID,
+                message_id=email_data["message_id"],
+                sender=email_data["sender"],
+                reply_to=email_data.get("reply_to"),
+                recipients=email_data["recipients"],
+                subject=email_data["subject"],
+                in_reply_to=email_data.get("in_reply_to"),
+                references=email_data.get("references"),
+                thread_id=thread_id,
+                date=email_data["date"],
+                body=email_data["body"],
+                embedding=embedding,
+            ))
 
         if batch_values:
             stmt = insert(Email)
@@ -130,8 +120,7 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession) -> bool:
             )
             await session.execute(stmt, batch_values)
         await session.commit()
-        logger.info("Finished processing fixture archive")
-        return True
+        logger.info(f"Finished processing {zip_path}")
 
 
 async def main():
@@ -139,13 +128,12 @@ async def main():
     fixtures_dir = root_dir / "secret_fixtures"
 
     if not fixtures_dir.exists():
-        logger.error("Fixture directory is unavailable")
+        logger.error(f"Fixtures directory {fixtures_dir} does not exist.")
         return
 
     async with AsyncSessionLocal() as session:
         for zip_file in fixtures_dir.glob("*.zip"):
-            if not await process_zip_file(zip_file, session):
-                raise ArchiveError("Fixture archive extraction failed")
+            await process_zip_file(zip_file, session)
 
 
 if __name__ == "__main__":
