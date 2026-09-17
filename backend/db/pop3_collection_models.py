@@ -33,7 +33,6 @@ class Pop3ObservedMessage(Base):
     tenant_config_id: Mapped[int] = mapped_column(
         ForeignKey("tenant_configs.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     provider_uidl: Mapped[str] = mapped_column(String(70), nullable=False)
     observed_at: Mapped[datetime.datetime] = mapped_column(
