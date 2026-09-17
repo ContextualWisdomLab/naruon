@@ -770,6 +770,52 @@ registry.register(
 
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+    if algorithm not in hashlib.algorithms_available:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+    hasher = hashlib.new(algorithm)
+    hasher.update(text.encode("utf-8"))
+
+    return {"hash": hasher.hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="입력된 텍스트를 지정된 해시 알고리즘(예: sha256)으로 암호화하여 반환합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    raw_json = params.get("raw_json", "")
+    try:
+        parsed = json.loads(raw_json)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="유효하지 않은 형태나 압축된 JSON 문자열을 보기 좋게 정렬(Formatting)하여 반환합니다.",
+        category="유틸리티",
+        parameters={"raw_json": "string"},
+    ),
+    json_formatter_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
