@@ -313,9 +313,23 @@ class Pop3SyncWorker:
                 source_content = self._retrieve_message(
                     pop3_client, identity.message_number
                 )
-            except (OSError, poplib.error_proto) as exc:
+            except poplib.error_proto as exc:
+                if not self._is_negative_pop3_response(exc):
+                    logger.warning(
+                        "POP3 RETR stopped after malformed protocol response for user %s: %s",
+                        config.user_id,
+                        type(exc).__name__,
+                    )
+                    break
                 logger.warning(
-                    "POP3 RETR stopped after partial progress for user %s: %s",
+                    "POP3 RETR rejected one message for user %s; continuing bounded batch: %s",
+                    config.user_id,
+                    type(exc).__name__,
+                )
+                continue
+            except OSError as exc:
+                logger.warning(
+                    "POP3 RETR stopped after transport failure for user %s: %s",
                     config.user_id,
                     type(exc).__name__,
                 )
@@ -338,9 +352,23 @@ class Pop3SyncWorker:
         for message_number in message_numbers:
             try:
                 source_content = self._retrieve_message(pop3_client, message_number)
-            except (OSError, poplib.error_proto) as exc:
+            except poplib.error_proto as exc:
+                if not self._is_negative_pop3_response(exc):
+                    logger.warning(
+                        "POP3 fallback RETR stopped after malformed protocol response for user %s: %s",
+                        config.user_id,
+                        type(exc).__name__,
+                    )
+                    break
                 logger.warning(
-                    "POP3 fallback RETR stopped after partial progress for user %s: %s",
+                    "POP3 fallback RETR rejected one message for user %s; continuing bounded batch: %s",
+                    config.user_id,
+                    type(exc).__name__,
+                )
+                continue
+            except OSError as exc:
+                logger.warning(
+                    "POP3 fallback RETR stopped after transport failure for user %s: %s",
                     config.user_id,
                     type(exc).__name__,
                 )
@@ -356,6 +384,15 @@ class Pop3SyncWorker:
     def _retrieve_message(self, pop3_client: poplib.POP3_SSL, message_number: int) -> bytes:
         _retr_response, lines, _retr_octets = pop3_client.retr(message_number)
         return self._message_bytes(lines)
+
+    def _is_negative_pop3_response(self, error: poplib.error_proto) -> bool:
+        """Return whether a protocol exception carries an RFC 1939 -ERR reply."""
+        if not error.args:
+            return False
+        response = error.args[0]
+        if isinstance(response, bytes):
+            return response.startswith(b"-ERR")
+        return str(response).startswith("-ERR")
 
     def _close_pop3_client(
         self,
