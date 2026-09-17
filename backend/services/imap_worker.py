@@ -12,6 +12,7 @@ from db.session import AsyncSessionLocal
 from services.email_client import validate_imap_destination
 from services.email_dedupe_service import (
     canonical_email_source_content,
+    has_complete_strong_email_metadata,
     source_email_fingerprint,
     strong_email_fingerprint,
 )
@@ -51,15 +52,26 @@ async def process_fetched_email(
         if isinstance(recipients_list, list)
         else str(recipients_list or "")
     )
+    body = email_data.get("body", "")
 
-    # Seed strong duplicate evidence only from a genuinely parsed Date.
+    # Metadata-based auto-linking needs both genuine Date provenance and the full
+    # sender/recipient/subject/body evidence set. Incomplete messages keep their
+    # raw/canonical source identity instead of manufacturing a strong match.
     strong_fingerprint = None
-    if email_data.get("date_provenance") == "parsed":
+    if (
+        email_data.get("date_provenance") == "parsed"
+        and has_complete_strong_email_metadata(
+            sender=sender,
+            recipients=recipients,
+            subject=subject,
+            body=body,
+        )
+    ):
         strong_fingerprint = strong_email_fingerprint(
             sender=sender,
             subject=subject,
             date=persisted_date,
-            body=email_data.get("body", ""),
+            body=body,
         )
     source_identity = (
         source_content
@@ -102,7 +114,7 @@ async def process_fetched_email(
         subject=subject,
         date=persisted_date,
         date_provenance=email_data.get("date_provenance", "unknown"),
-        body=email_data.get("body", ""),
+        body=body,
         is_read=is_read,
         embedding=[0.0] * 1536,
     )
