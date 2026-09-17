@@ -313,9 +313,16 @@ class Pop3SyncWorker:
                 source_content = self._retrieve_message(
                     pop3_client, identity.message_number
                 )
-            except (OSError, poplib.error_proto) as exc:
+            except poplib.error_proto as exc:
                 logger.warning(
-                    "POP3 RETR stopped after partial progress for user %s: %s",
+                    "POP3 RETR rejected one message for user %s; continuing bounded batch: %s",
+                    config.user_id,
+                    type(exc).__name__,
+                )
+                continue
+            except OSError as exc:
+                logger.warning(
+                    "POP3 RETR stopped after transport failure for user %s: %s",
                     config.user_id,
                     type(exc).__name__,
                 )
@@ -338,9 +345,16 @@ class Pop3SyncWorker:
         for message_number in message_numbers:
             try:
                 source_content = self._retrieve_message(pop3_client, message_number)
-            except (OSError, poplib.error_proto) as exc:
+            except poplib.error_proto as exc:
                 logger.warning(
-                    "POP3 fallback RETR stopped after partial progress for user %s: %s",
+                    "POP3 fallback RETR rejected one message for user %s; continuing bounded batch: %s",
+                    config.user_id,
+                    type(exc).__name__,
+                )
+                continue
+            except OSError as exc:
+                logger.warning(
+                    "POP3 fallback RETR stopped after transport failure for user %s: %s",
                     config.user_id,
                     type(exc).__name__,
                 )
