@@ -127,6 +127,23 @@ describe('CalendarWritebackSection accessibility contract', () => {
     expect(requestWritebackIntent).toHaveBeenNthCalledWith(2, 'update', true);
   });
 
+  it('keeps a visible keyboard focus affordance on every writeback action', () => {
+    renderSection();
+    const buttons = Array.from(container?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+    const actionButtons = [
+      buttons.find((button) => button.textContent?.includes('새 일정 intent 점검')),
+      buttons.find((button) => button.textContent?.includes('ETag 업데이트 점검')),
+      buttons.find((button) => button.textContent?.includes('ETag 실행 요청')),
+    ];
+
+    for (const button of actionButtons) {
+      expect(button).toBeDefined();
+      expect(button?.className).toContain('focus-visible:outline-none');
+      expect(button?.className).toContain('focus-visible:ring-2');
+      expect(button?.className).toContain('focus-visible:ring-ring/40');
+    }
+  });
+
   it('keeps read-only sources non-interactive and names the write restriction in visible content', () => {
     const { setSelectedSourceId } = renderSection({
       writebackSources: [readOnlySource],
