@@ -38,8 +38,58 @@ parser regression. Causal fix `37429ccb805385621844e7625d5da9e5b11eb6ef`
 checks for a trailing RFC 5322/obsolete zone before normalizing a naive parsed
 value. This inherits the valid #1656 finding into the broad #1195 lineage
 without introducing its competing `date_evidence` column or parallel Alembic
-revision. The remaining #1656 findings must be reconciled the same way before
-that child can become zero-delta provenance.
+revision.
+
+## Complete metadata evidence reconciliation
+
+A parsed Date is necessary but not sufficient for metadata-based automatic
+linking. A strong metadata decision also requires non-empty sender, recipients,
+subject, and body evidence. Missing any one of those fields makes the metadata
+comparison incomplete; the message keeps its raw/canonical source-bound
+identity and may enter the review band, but that incomplete tuple cannot create
+an automatic metadata link.
+
+The rule is intentionally a gate rather than a new fingerprint format. The
+existing strong fingerprint payload remains sender/subject/Date/body so stored
+fingerprint compatibility is not silently broken; recipient evidence determines
+whether that fingerprint is authoritative enough to use. Message-ID equality
+remains an independent identity signal.
+
+The source-order sequence for this repair is:
+
+- `9fdb1207447fe1e47565f92ef57ccd53f02b15f2`: candidate/stored-row RED for
+  missing sender/recipients/subject/body evidence;
+- `d2ae9d6df3906f1018030ff299e0665a96b5127b`: shared complete-metadata gate in
+  the domain classifier;
+- `5d68f08b0de6838a818d59636edf2c2f599138ee` →
+  `c39f51743598d817edc2f1dfb585a240e0dcc2d7`: direct-import RED then causal
+  repair, including deterministic `dedupe_review_required` result semantics;
+- `fd4cd4e405b3af30b4458993a4673063350b49d9` →
+  `d8a08deb1ad009b2d90de2eafbab5da61ac0cc79`: IMAP RED then causal repair.
+  POP3 reaches the same `process_fetched_email` boundary and therefore consumes
+  the repaired IMAP/POP3 persistence path rather than duplicating the rule.
+
+The canonical migration contract is separately pinned by
+`540f6e4ec57ed355263d56e7da78de7ff5310360`: `0018_email_date_provenance`
+remains the single provenance revision, with non-null `date_provenance` and an
+`unknown` server default. The parallel #1656 `date_evidence` /
+`message_id_evidence` migration is not adopted.
+
+## Message-ID provenance decision
+
+The parser already carries transient `message_id_provenance` (`embedded` or
+`missing`) at the ingestion boundary. A missing direct-import Message-ID is
+replaced with a deterministic `import-<sha256(raw source)>@local.naruon`
+identifier, so equality of two such fallback identifiers is already equality of
+the same raw-source digest. Persisting a second `message_id_evidence` column has
+no current decision consumer or invariant that cannot be represented by the
+existing Message-ID plus source-fingerprint semantics.
+
+Accordingly, #1656's proposed `message_id_evidence` persistence is rejected for
+this lineage unless a concrete future consumer proves a storage requirement.
+This avoids a second provenance vocabulary and a sibling migration merely to
+record evidence that is already available at ingestion and encoded by the
+source-bound identity contract.
 
 ## POP3 reconstruction contract
 
@@ -59,11 +109,16 @@ identity.
 
 ## Verification contract
 
-- A valid sender `Date` may seed the reviewed strong fingerprint.
+- A valid sender `Date` may seed the reviewed strong fingerprint only when
+  sender/recipients/subject/body evidence is complete.
 - Missing and invalid sender dates cannot promote collection time to strong
   evidence.
 - A parseable but zone-less Date remains invalid source evidence, while an
   explicit `-0000` Date remains parsed and UTC-comparable.
+- Incomplete metadata cannot produce a strong metadata auto-link; import reports
+  `dedupe_review_required` while retaining source-bound identity.
+- Direct import, IMAP, and the POP3 path through `process_fetched_email` apply
+  the same complete-metadata gate.
 - Two different raw messages collected at the same instant remain distinct.
 - The same raw message collected at different instants has the same fallback
   identity.
@@ -75,6 +130,8 @@ identity.
 - IMAP and POP3 pass source bytes through the persistence boundary.
 - POP3 source reconstruction restores CRLF after every `RETR` message line.
 - Existing rows remain conservatively classified when provenance is unknown.
+- `0018_email_date_provenance` remains the sole canonical provenance migration;
+  no parallel `date_evidence` or `message_id_evidence` schema is accepted.
 
 ## Claim boundary
 
