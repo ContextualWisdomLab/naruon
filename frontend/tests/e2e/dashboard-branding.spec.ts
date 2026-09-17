@@ -1136,6 +1136,43 @@ test('renders calendar writeback intent status without direct provider writes', 
   await page.screenshot({ path: testInfo.outputPath('calendar-writeback-intent-mobile-scroll.png'), fullPage: false });
 });
 
+test('keeps stale read-only calendar selection unavailable', async ({ page }, testInfo) => {
+  const writebackRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/calendar/writeback-intent') {
+      writebackRequests.push(request.method());
+    }
+  });
+  await mockDashboardApi(page);
+  await page.route('**/api/calendar/writeback-sources', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        source_id: 'caldav-read-only',
+        provider: 'Customer CalDAV',
+        protocol: 'caldav',
+        owner_id: 'default',
+        organization_id: 'org-acme',
+        capabilities: ['read'],
+        writeback_enabled: false,
+        etag: null,
+      }]),
+    });
+  });
+
+  await page.goto('/calendar');
+
+  await expect(page.getByRole('button', { name: '새 일정 intent 점검' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'ETag 업데이트 점검' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'ETag 실행 요청' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '일정 원본 1 읽기 전용 선택' })).toBeDisabled();
+  await expect(page.getByText('반영 가능한 일정 원본이 없어 반영 의도 점검을 시작할 수 없습니다.')).toBeVisible();
+  await expect(page.getByText('선택됨')).toHaveCount(0);
+  expect(writebackRequests).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('calendar-writeback-read-only.png'), fullPage: false });
+});
+
 test('renders data WebDAV writeback intent and document materialization status', async ({ page }, testInfo) => {
   const expectedNaruonToken = 'signed-webdav.e2e.token';
   const publicIdentityHeaders = [
