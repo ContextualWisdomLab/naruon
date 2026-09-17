@@ -1,6 +1,8 @@
 import asyncio
-import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from db.models import TenantConfig
 from services.pop3_worker import Pop3SyncWorker
@@ -131,7 +133,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
 
     session = FakeSession()
 
-    async def fake_process_fetched_email(
+    async def fake_persist_fetched_email(
         db_session,
         email_data,
         user_id,
@@ -149,6 +151,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
                 "source_content": source_content,
             }
         )
+        return SimpleNamespace(created_record=True)
 
     monkeypatch.setattr(
         "services.pop3_worker.validate_pop3_destination",
@@ -159,9 +162,8 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
         lambda: session,
     )
     monkeypatch.setattr(
-        "services.pop3_worker.process_fetched_email",
-        fake_process_fetched_email,
-        raising=False,
+        "services.pop3_worker.persist_fetched_email",
+        fake_persist_fetched_email,
     )
     monkeypatch.setattr(
         "services.pop3_worker.poplib.POP3_SSL",
@@ -183,5 +185,63 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
     assert imported[0]["source_content"] == raw_message
     assert imported[0]["email_data"]["message_id"] == "<pop3-1@example.com>"
     assert imported[0]["email_data"]["subject"] == "POP3 import"
+    assert session.committed is True
+    assert session.rolled_back is False
+
+
+@pytest.mark.asyncio
+async def test_pop3_duplicate_does_not_inflate_imported_count(monkeypatch):
+    from db.models import Email
+
+    worker = Pop3SyncWorker()
+    config = TenantConfig(
+        user_id="pop3-user",
+        organization_id="org-pop3",
+        pop3_server="pop3.example.com",
+        pop3_port=995,
+        pop3_username="pop3-user@example.com",
+        pop3_password="pop3-secret",
+    )
+    raw_message = (
+        b"Message-ID: <pop3-duplicate@example.com>\r\n"
+        b"From: Sender <sender@example.com>\r\n"
+        b"To: pop3-user@example.com\r\n"
+        b"Subject: Existing message\r\n"
+        b"Date: Mon, 15 Jun 2026 10:00:00 +0000\r\n"
+        b"\r\n"
+        b"Already imported.\r\n"
+    )
+    existing_email = Email(id=1)
+
+    class ExistingResult:
+        def scalar_one_or_none(self):
+            return existing_email
+
+    class FakeSession:
+        def __init__(self):
+            self.committed = False
+            self.rolled_back = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, _statement):
+            return ExistingResult()
+
+        async def commit(self):
+            self.committed = True
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    session = FakeSession()
+    monkeypatch.setattr("services.pop3_worker.AsyncSessionLocal", lambda: session)
+
+    imported_count = await worker._import_messages(config, [raw_message])
+
+    assert imported_count == 0
     assert session.committed is True
     assert session.rolled_back is False

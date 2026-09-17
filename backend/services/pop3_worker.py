@@ -7,7 +7,7 @@ from db.models import TenantConfig
 from services.email_client import validate_pop3_destination
 from services.email_parser import parse_eml_bytes
 from services.exceptions import EmailParseError
-from services.imap_worker import process_fetched_email
+from services.imap_worker import persist_fetched_email
 
 logger = logging.getLogger(__name__)
 MAX_POP3_FETCH_MESSAGES = 10
@@ -122,7 +122,7 @@ class Pop3SyncWorker:
                             config.user_id,
                         )
                         continue
-                    await process_fetched_email(
+                    persistence_result = await persist_fetched_email(
                         session,
                         email_data,
                         config.user_id,
@@ -130,7 +130,8 @@ class Pop3SyncWorker:
                         owner_addresses=owner_addresses,
                         source_content=raw_message,
                     )
-                    imported_count += 1
+                    if persistence_result.created_record:
+                        imported_count += 1
                 await session.commit()
             except Exception:
                 await session.rollback()
