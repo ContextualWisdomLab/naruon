@@ -173,11 +173,17 @@ class Pop3SyncWorker:
             pop3_client.user(config.pop3_username)
             pop3_client.pass_(config.pop3_password)
             _response, listings, _octets = pop3_client.list()
+            message_numbers = [
+                message_number
+                for listing in listings
+                if (message_number := self._message_number_from_listing(listing))
+                is not None
+            ]
             messages: list[bytes] = []
-            for listing in listings[:MAX_POP3_FETCH_MESSAGES]:
-                message_number = self._message_number_from_listing(listing)
-                if message_number is None:
-                    continue
+            # RFC 1939 numbers the first maildrop message as 1 and the nth as n.
+            # This worker does not DELE after RETR, so repeatedly taking the first
+            # bounded window would starve later arrivals in maildrops over the cap.
+            for message_number in sorted(message_numbers)[-MAX_POP3_FETCH_MESSAGES:]:
                 _retr_response, lines, _retr_octets = pop3_client.retr(message_number)
                 messages.append(self._message_bytes(lines))
             return messages
