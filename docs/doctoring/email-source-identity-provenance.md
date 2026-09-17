@@ -107,6 +107,28 @@ streams. Duplicate classification remains deterministic because the source kind
 is domain separated and because collection time is excluded from fallback
 identity.
 
+## POP3 bounded collection window
+
+RFC 1939 assigns message number `1` to the first message in the opened maildrop
+and number `n` to the nth message. Naruon's POP3 worker intentionally does not
+issue `DELE`; source retention is therefore independent from synchronization.
+With a bounded fetch cap, repeatedly taking the first ten `LIST` entries would
+re-read the same oldest window on every poll and could permanently starve later
+mail in a maildrop larger than the cap.
+
+Source-order regression `517ba20f2409012eb28b9c84085103a7c1b04eaa`
+requires the bounded POP3 fetch to select the ten highest valid message numbers
+from a twelve-message maildrop. Causal repair
+`72c64b46d120ee8c2f3f12ad04114e6a896cb15b` parses all `LIST` message numbers,
+sorts them numerically, and retrieves only the highest bounded window. Invalid
+list entries remain ignored. This changes collection progress only; it does not
+alter duplicate identity, retention, or server-side deletion semantics.
+
+The selection is deliberately based on the POP3 session's message-number
+ordering rather than pretending message numbers are durable identifiers. They
+are used only to choose which messages to retrieve in the current locked
+maildrop; persistent identity continues to come from source/provenance evidence.
+
 ## Verification contract
 
 - A valid sender `Date` may seed the reviewed strong fingerprint only when
@@ -129,6 +151,8 @@ identity.
   mapping keys, and non-finite numbers instead of coercing them with `str()`.
 - IMAP and POP3 pass source bytes through the persistence boundary.
 - POP3 source reconstruction restores CRLF after every `RETR` message line.
+- A POP3 maildrop larger than the bounded fetch cap selects the highest current
+  message numbers so repeated polling cannot be trapped on the oldest window.
 - Existing rows remain conservatively classified when provenance is unknown.
 - `0018_email_date_provenance` remains the sole canonical provenance migration;
   no parallel `date_evidence` or `message_id_evidence` schema is accepted.

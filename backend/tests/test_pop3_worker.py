@@ -74,6 +74,45 @@ def test_pop3_do_sync_validates_destination_before_connect():
     pop3_ssl.assert_not_called()
 
 
+def test_pop3_sync_fetches_newest_bounded_message_numbers(monkeypatch):
+    worker = Pop3SyncWorker()
+    config = TenantConfig(
+        user_id="pop3-user",
+        pop3_server="pop3.example.com",
+        pop3_port=995,
+        pop3_username="pop3-user@example.com",
+        pop3_password="pop3-secret",
+    )
+    pop3_client = MagicMock()
+    pop3_client.list.return_value = (
+        b"+OK",
+        [f"{message_number} 128".encode() for message_number in range(1, 13)],
+        1536,
+    )
+    pop3_client.retr.side_effect = lambda message_number: (
+        b"+OK",
+        [f"Message-ID: <pop3-{message_number}@example.com>".encode(), b"", b"Body"],
+        128,
+    )
+
+    monkeypatch.setattr(
+        "services.pop3_worker.validate_pop3_destination",
+        lambda host, port: (host, port),
+    )
+    monkeypatch.setattr(
+        "services.pop3_worker.poplib.POP3_SSL",
+        lambda host, port: pop3_client,
+    )
+
+    messages = worker._do_pop3_sync(config)
+
+    assert [entry.args[0] for entry in pop3_client.retr.call_args_list] == list(
+        range(3, 13)
+    )
+    assert len(messages) == 10
+    pop3_client.quit.assert_called_once()
+
+
 @pytest.mark.asyncio
 async def test_pop3_worker_skips_disallowed_destination():
     worker = Pop3SyncWorker()
