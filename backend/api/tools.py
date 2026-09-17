@@ -781,7 +781,7 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
             f"Hash input must not exceed {UTILITY_TEXT_MAX_CHARS} characters"
         )
 
-    algorithm = params.get("algorithm", "sha256").lower()
+    algorithm = params["algorithm"].lower()
     if algorithm not in HASH_GENERATOR_ALGORITHMS:
         raise ValueError(
             f"Unsupported hash algorithm: {algorithm}. Unsupported algorithm names are rejected."
@@ -818,9 +818,7 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON string: {exc}") from exc
 
-    return {
-        "formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False)
-    }
+    return {"formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False)}
 
 
 registry.register(
