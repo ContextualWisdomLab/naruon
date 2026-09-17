@@ -26,6 +26,3 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
-## 2025-05-18 - Heavy DOM library wrapper memoization
-**Learning:** Heavy visualization components that instantiate complex third-party DOM-manipulating libraries (e.g., NetworkGraph using vis-network) cause costly re-instantiation and layout thrashing performance bottlenecks when parent components (like layout wrappers or dashboards) frequently re-render.
-**Action:** Ensure these components are wrapped in React.memo to prevent unnecessary re-renders.
