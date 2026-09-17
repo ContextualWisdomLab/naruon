@@ -5,6 +5,7 @@ from api.tools import (
     UTILITY_TEXT_MAX_CHARS,
     hash_generator_handler,
     json_formatter_handler,
+    registry,
 )
 
 
@@ -17,6 +18,12 @@ async def test_hash_generator_exposes_only_portable_cryptographic_algorithms():
 
     with pytest.raises(ValueError, match="Unsupported hash algorithm"):
         await hash_generator_handler({"text": "hello", "algorithm": "shake_128"})
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_requires_explicit_algorithm():
+    with pytest.raises(ValueError, match="Missing required tool parameter"):
+        await registry.invoke_tool("hash_generator", {"text": "hello"})
 
 
 @pytest.mark.asyncio
