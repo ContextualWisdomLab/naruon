@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -90,7 +91,9 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     session.__aenter__.return_value = session
     session.__aexit__.return_value = False
 
-    process_fetched_email_mock = AsyncMock()
+    persist_fetched_email_mock = AsyncMock(
+        return_value=SimpleNamespace(created_record=True)
+    )
 
     monkeypatch.setattr(
         "services.imap_worker.validate_imap_destination",
@@ -102,8 +105,8 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     )
     monkeypatch.setattr("services.imap_worker.AsyncSessionLocal", lambda: session)
     monkeypatch.setattr(
-        "services.imap_worker.process_fetched_email",
-        process_fetched_email_mock,
+        "services.imap_worker.persist_fetched_email",
+        persist_fetched_email_mock,
     )
 
     imported_count = await worker._sync_tenant(config)
@@ -116,8 +119,8 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     imap_client.fetch.assert_awaited_once_with("1", "(RFC822 FLAGS)")
     imap_client.logout.assert_awaited_once()
 
-    process_fetched_email_mock.assert_awaited_once()
-    args, kwargs = process_fetched_email_mock.await_args
+    persist_fetched_email_mock.assert_awaited_once()
+    args, kwargs = persist_fetched_email_mock.await_args
     assert args[0] is session
     assert args[1]["message_id"] == "<imap-1@example.com>"
     assert args[1]["subject"] == "IMAP import"
@@ -126,9 +129,68 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     assert kwargs["is_read"] is False
     assert args[3] == "org-imap"
     assert kwargs["owner_addresses"] == ["imap-user@example.com"]
+    assert kwargs["source_content"] == raw_message
 
     session.commit.assert_awaited_once()
     session.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_imap_duplicate_does_not_inflate_imported_count(monkeypatch):
+    from db.models import Email
+
+    worker = ImapSyncWorker()
+    config = TenantConfig(
+        user_id="imap-user",
+        organization_id="org-imap",
+        imap_server="imap.example.com",
+        imap_port=993,
+        imap_username="imap-user@example.com",
+        imap_password="imap-secret",
+    )
+    raw_message = (
+        b"Message-ID: <imap-duplicate@example.com>\r\n"
+        b"From: Sender <sender@example.com>\r\n"
+        b"To: imap-user@example.com\r\n"
+        b"Subject: Existing message\r\n"
+        b"Date: Mon, 15 Jun 2026 10:00:00 +0000\r\n"
+        b"\r\n"
+        b"Already imported.\r\n"
+    )
+    existing_email = Email(id=1)
+
+    class ExistingResult:
+        def scalar_one_or_none(self):
+            return existing_email
+
+    class FakeSession:
+        def __init__(self):
+            self.committed = False
+            self.rolled_back = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, _statement):
+            return ExistingResult()
+
+        async def commit(self):
+            self.committed = True
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    session = FakeSession()
+    monkeypatch.setattr("services.imap_worker.AsyncSessionLocal", lambda: session)
+
+    imported_count = await worker._import_messages(config, [(raw_message, False)])
+
+    assert imported_count == 0
+    assert session.committed is True
+    assert session.rolled_back is False
 
 
 @pytest.mark.asyncio
@@ -173,7 +235,7 @@ def test_flags_indicate_seen_parses_seen_flag():
     no_flags = ("OK", [(b"1 (RFC822 {%d}" % len(raw), raw)])
 
     assert flags_indicate_seen(seen[1]) is True
-    assert flags_indicate_seen(unseen[1]) is False   # other flags, but not \Seen
+    assert flags_indicate_seen(unseen[1]) is False  # other flags, but not \Seen
     assert flags_indicate_seen(no_flags[1]) is False  # no FLAGS section -> unread
     assert flags_indicate_seen([]) is False
     assert flags_indicate_seen(None) is False

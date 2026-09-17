@@ -1,6 +1,9 @@
 import asyncio
-import pytest
+import poplib
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from db.models import TenantConfig
 from services.pop3_worker import Pop3SyncWorker
@@ -72,6 +75,47 @@ def test_pop3_do_sync_validates_destination_before_connect():
     pop3_ssl.assert_not_called()
 
 
+def test_pop3_sync_fetches_newest_bounded_message_numbers(monkeypatch):
+    worker = Pop3SyncWorker()
+    config = TenantConfig(
+        user_id="pop3-user",
+        pop3_server="pop3.example.com",
+        pop3_port=995,
+        pop3_username="pop3-user@example.com",
+        pop3_password="pop3-secret",
+    )
+    pop3_client = MagicMock()
+    pop3_client.uidl.side_effect = poplib.error_proto("-ERR UIDL unsupported")
+    pop3_client.list.return_value = (
+        b"+OK",
+        [f"{message_number} 128".encode() for message_number in range(1, 13)],
+        1536,
+    )
+    pop3_client.retr.side_effect = lambda message_number: (
+        b"+OK",
+        [f"Message-ID: <pop3-{message_number}@example.com>".encode(), b"", b"Body"],
+        128,
+    )
+
+    monkeypatch.setattr(
+        "services.pop3_worker.validate_pop3_destination",
+        lambda host, port: (host, port),
+    )
+    monkeypatch.setattr(
+        "services.pop3_worker.poplib.POP3_SSL",
+        lambda host, port: pop3_client,
+    )
+
+    messages = worker._do_pop3_sync(config)
+
+    assert [entry.args[0] for entry in pop3_client.retr.call_args_list] == list(
+        range(3, 13)
+    )
+    assert len(messages) == 10
+    assert all(message.provider_uidl is None for message in messages)
+    pop3_client.quit.assert_called_once()
+
+
 @pytest.mark.asyncio
 async def test_pop3_worker_skips_disallowed_destination():
     worker = Pop3SyncWorker()
@@ -108,7 +152,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
         b"Imported from POP3.\r\n"
     )
     pop3_client = MagicMock()
-    pop3_client.list.return_value = (b"+OK", [b"1 128"], 128)
+    pop3_client.uidl.return_value = (b"+OK", [b"1 uid-1"], 16)
     pop3_client.retr.return_value = (b"+OK", raw_message.splitlines(), len(raw_message))
     imported: list[dict[str, object]] = []
 
@@ -131,8 +175,13 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
 
     session = FakeSession()
 
-    async def fake_process_fetched_email(
-        db_session, email_data, user_id, organization_id, owner_addresses=None
+    async def fake_persist_fetched_email(
+        db_session,
+        email_data,
+        user_id,
+        organization_id,
+        owner_addresses=None,
+        source_content=None,
     ):
         imported.append(
             {
@@ -141,8 +190,10 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
                 "user_id": user_id,
                 "organization_id": organization_id,
                 "owner_addresses": owner_addresses,
+                "source_content": source_content,
             }
         )
+        return SimpleNamespace(created_record=True)
 
     monkeypatch.setattr(
         "services.pop3_worker.validate_pop3_destination",
@@ -153,9 +204,8 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
         lambda: session,
     )
     monkeypatch.setattr(
-        "services.pop3_worker.process_fetched_email",
-        fake_process_fetched_email,
-        raising=False,
+        "services.pop3_worker.persist_fetched_email",
+        fake_persist_fetched_email,
     )
     monkeypatch.setattr(
         "services.pop3_worker.poplib.POP3_SSL",
@@ -166,7 +216,8 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
 
     pop3_client.user.assert_called_once_with("pop3-user@example.com")
     pop3_client.pass_.assert_called_once_with("pop3-secret")
-    pop3_client.list.assert_called_once()
+    pop3_client.uidl.assert_called_once()
+    pop3_client.list.assert_not_called()
     pop3_client.retr.assert_called_once_with(1)
     pop3_client.quit.assert_called_once()
     assert len(imported) == 1
@@ -174,7 +225,66 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
     assert imported[0]["user_id"] == "pop3-user"
     assert imported[0]["organization_id"] == "org-pop3"
     assert imported[0]["owner_addresses"] == ["pop3-user@example.com"]
+    assert imported[0]["source_content"] == raw_message
     assert imported[0]["email_data"]["message_id"] == "<pop3-1@example.com>"
     assert imported[0]["email_data"]["subject"] == "POP3 import"
+    assert session.committed is True
+    assert session.rolled_back is False
+
+
+@pytest.mark.asyncio
+async def test_pop3_duplicate_does_not_inflate_imported_count(monkeypatch):
+    from db.models import Email
+
+    worker = Pop3SyncWorker()
+    config = TenantConfig(
+        user_id="pop3-user",
+        organization_id="org-pop3",
+        pop3_server="pop3.example.com",
+        pop3_port=995,
+        pop3_username="pop3-user@example.com",
+        pop3_password="pop3-secret",
+    )
+    raw_message = (
+        b"Message-ID: <pop3-duplicate@example.com>\r\n"
+        b"From: Sender <sender@example.com>\r\n"
+        b"To: pop3-user@example.com\r\n"
+        b"Subject: Existing message\r\n"
+        b"Date: Mon, 15 Jun 2026 10:00:00 +0000\r\n"
+        b"\r\n"
+        b"Already imported.\r\n"
+    )
+    existing_email = Email(id=1)
+
+    class ExistingResult:
+        def scalar_one_or_none(self):
+            return existing_email
+
+    class FakeSession:
+        def __init__(self):
+            self.committed = False
+            self.rolled_back = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, _statement):
+            return ExistingResult()
+
+        async def commit(self):
+            self.committed = True
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    session = FakeSession()
+    monkeypatch.setattr("services.pop3_worker.AsyncSessionLocal", lambda: session)
+
+    imported_count = await worker._import_messages(config, [raw_message])
+
+    assert imported_count == 0
     assert session.committed is True
     assert session.rolled_back is False

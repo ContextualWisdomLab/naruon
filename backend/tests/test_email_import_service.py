@@ -792,3 +792,42 @@ async def test_generate_import_embeddings_recovers_valid_items_after_batch_failu
     assert embeddings[2] == [0.75] * (EMBEDDING_DIMENSION // 2) + [0.0] * (
         EMBEDDING_DIMENSION // 2
     )
+
+
+def test_email_fingerprint_uses_strong_key_only_for_parsed_date():
+    """A strong (auto-dedupe) fingerprint is seeded only from a genuine Date.
+
+    naruon#1086: when the RFC822 Date was missing or invalid the persisted date
+    is a synthetic collection-time fallback, which must not seed the strong
+    duplicate key. Only ``date_provenance == "parsed"`` yields the strong
+    fingerprint; missing/invalid provenance falls through to the weak fallback.
+    """
+    from services.email_dedupe_service import strong_email_fingerprint
+    from services.email_import_service import _email_fingerprint
+
+    persisted_date = datetime.datetime(
+        2026, 4, 27, 10, 0, 0, tzinfo=datetime.timezone.utc
+    )
+    parsed_fields = {
+        "sender": "sender@test.com",
+        "subject": "Quarterly report",
+        "body": "The full report body.",
+        "recipients": "recipient@test.com",
+    }
+    strong = strong_email_fingerprint(
+        sender=parsed_fields["sender"],
+        subject=parsed_fields["subject"],
+        date=persisted_date,
+        body=parsed_fields["body"],
+    )
+    assert strong is not None
+
+    assert (
+        _email_fingerprint({**parsed_fields, "date_provenance": "parsed"}, persisted_date)
+        == strong
+    )
+    for provenance in ("missing", "invalid"):
+        weak = _email_fingerprint(
+            {**parsed_fields, "date_provenance": provenance}, persisted_date
+        )
+        assert weak != strong
