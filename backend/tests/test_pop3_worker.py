@@ -1,4 +1,5 @@
 import asyncio
+import poplib
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -84,6 +85,7 @@ def test_pop3_sync_fetches_newest_bounded_message_numbers(monkeypatch):
         pop3_password="pop3-secret",
     )
     pop3_client = MagicMock()
+    pop3_client.uidl.side_effect = poplib.error_proto("-ERR UIDL unsupported")
     pop3_client.list.return_value = (
         b"+OK",
         [f"{message_number} 128".encode() for message_number in range(1, 13)],
@@ -110,6 +112,7 @@ def test_pop3_sync_fetches_newest_bounded_message_numbers(monkeypatch):
         range(3, 13)
     )
     assert len(messages) == 10
+    assert all(message.provider_uidl is None for message in messages)
     pop3_client.quit.assert_called_once()
 
 
@@ -149,7 +152,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
         b"Imported from POP3.\r\n"
     )
     pop3_client = MagicMock()
-    pop3_client.list.return_value = (b"+OK", [b"1 128"], 128)
+    pop3_client.uidl.return_value = (b"+OK", [b"1 uid-1"], 16)
     pop3_client.retr.return_value = (b"+OK", raw_message.splitlines(), len(raw_message))
     imported: list[dict[str, object]] = []
 
@@ -213,7 +216,8 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
 
     pop3_client.user.assert_called_once_with("pop3-user@example.com")
     pop3_client.pass_.assert_called_once_with("pop3-secret")
-    pop3_client.list.assert_called_once()
+    pop3_client.uidl.assert_called_once()
+    pop3_client.list.assert_not_called()
     pop3_client.retr.assert_called_once_with(1)
     pop3_client.quit.assert_called_once()
     assert len(imported) == 1
