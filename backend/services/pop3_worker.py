@@ -188,7 +188,26 @@ class Pop3SyncWorker:
                 messages.append(self._message_bytes(lines))
             return messages
         finally:
-            pop3_client.quit()
+            try:
+                pop3_client.quit()
+            except (OSError, poplib.error_proto) as exc:
+                # `poplib.quit()` only closes its file/socket after a successful
+                # QUIT response. Preserve already-retrieved bytes, but explicitly
+                # close the transport when QUIT itself fails so the maildrop lock
+                # and local socket are not left to garbage collection.
+                logger.warning(
+                    "POP3 QUIT cleanup failed for user %s: %s",
+                    config.user_id,
+                    type(exc).__name__,
+                )
+                try:
+                    pop3_client.close()
+                except OSError as close_exc:
+                    logger.warning(
+                        "POP3 transport close failed for user %s: %s",
+                        config.user_id,
+                        type(close_exc).__name__,
+                    )
 
     def _message_bytes(self, lines: list[bytes | str]) -> bytes:
         """Reconstruct one POP3 RETR message with protocol CRLF terminators.
