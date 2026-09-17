@@ -1,13 +1,17 @@
-"""add durable POP3 UIDL observation state
+"""add durable POP3 UIDL collection progress
 
 Revision ID: 0019_pop3_observed_uidl
 Revises: 0018_email_date_provenance
 Create Date: 2026-09-17 00:00:00.000000
 
-Persists RFC 1939 UIDL provider identity per mailbox configuration so bounded
-POP3 polling can make progress across reconnects and message-number renumbering.
-The UIDL is collection-state identity only; Naruon email Message-ID and source
-fingerprints remain the canonical message/deduplication evidence.
+Persists RFC 1939 UIDL provider identity and bounded retry disposition per
+mailbox configuration. Provider state remains collection progress only; Naruon
+email Message-ID and source fingerprints remain canonical message/deduplication
+evidence.
+
+This revision identifier and parent are branch-local until the canonical
+workspace/Alembic owner is integrated; #1195 must rechain this schema after the
+then-protected migration head before merge.
 """
 
 from alembic import op
@@ -20,7 +24,7 @@ _TABLE = "pop3_observed_messages"
 
 
 def upgrade() -> None:
-    """Create owner-scoped durable POP3 UIDL observation state if absent."""
+    """Create owner-scoped durable POP3 UIDL collection progress if absent."""
     connection = op.get_bind()
     inspector = sa.inspect(connection)
     if _TABLE in inspector.get_table_names():
@@ -37,11 +41,13 @@ def upgrade() -> None:
         ),
         sa.Column("provider_uidl", sa.String(length=70), nullable=False),
         sa.Column(
-            "observed_at",
-            sa.DateTime(timezone=True),
+            "collection_disposition",
+            sa.String(length=16),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default="observed",
         ),
+        sa.Column("retry_after", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True),
         sa.UniqueConstraint(
             "tenant_config_id",
             "provider_uidl",
@@ -54,10 +60,16 @@ def upgrade() -> None:
         ["tenant_config_id", "observed_at"],
         unique=False,
     )
+    op.create_index(
+        "ix_pop3_observed_messages_account_retry",
+        _TABLE,
+        ["tenant_config_id", "collection_disposition", "retry_after"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
-    """Drop durable POP3 UIDL observation state if present."""
+    """Drop durable POP3 UIDL collection progress if present."""
     connection = op.get_bind()
     inspector = sa.inspect(connection)
     if _TABLE in inspector.get_table_names():

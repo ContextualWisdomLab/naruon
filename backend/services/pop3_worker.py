@@ -1,7 +1,9 @@
 import asyncio
 from dataclasses import dataclass
+import datetime
 import logging
 import poplib
+from typing import Literal, Mapping
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -16,6 +18,8 @@ from services.imap_worker import persist_fetched_email
 
 logger = logging.getLogger(__name__)
 MAX_POP3_FETCH_MESSAGES = 10
+POP3_RETRY_DELAY = datetime.timedelta(seconds=60)
+Pop3CollectionDisposition = Literal["observed", "retryable"]
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,22 @@ class Pop3RetrievedMessage:
 
     source_content: bytes
     provider_uidl: str | None = None
+
+
+@dataclass(frozen=True)
+class Pop3CollectionProgressState:
+    """Durable collection disposition for one owner-scoped provider UIDL."""
+
+    disposition: Pop3CollectionDisposition
+    retry_after: datetime.datetime | None
+
+
+@dataclass(frozen=True)
+class Pop3SyncBatch:
+    """Network retrieval result plus retryable UIDLs awaiting durable disposition."""
+
+    messages: list[Pop3RetrievedMessage]
+    retryable_uidls: frozenset[str]
 
 
 class Pop3SyncWorker:
@@ -103,15 +123,19 @@ class Pop3SyncWorker:
                 f"Connecting to POP3 server {pop3_server}:{pop3_port} for user {config.user_id}"
             )
             try:
-                observed_uidls = await self._load_observed_uidls(config)
-                messages = await asyncio.to_thread(
-                    self._do_pop3_sync,
+                collection_progress = await self._load_collection_progress(config)
+                batch = await asyncio.to_thread(
+                    self._do_pop3_sync_batch,
                     config,
                     pop3_server,
                     pop3_port,
-                    observed_uidls,
+                    collection_progress,
                 )
-                imported_count = await self._import_messages(config, messages)
+                imported_count = await self._import_messages(
+                    config,
+                    batch.messages,
+                    retryable_uidls=batch.retryable_uidls,
+                )
                 logger.info(
                     "Successfully synced POP3 server for user %s with %s imported messages.",
                     config.user_id,
@@ -124,30 +148,62 @@ class Pop3SyncWorker:
                     type(e).__name__,
                 )
 
-    async def _load_observed_uidls(self, config: TenantConfig) -> set[str]:
-        """Load durable UIDL progress before network I/O begins."""
+    async def _load_collection_progress(
+        self, config: TenantConfig
+    ) -> dict[str, Pop3CollectionProgressState]:
+        """Load durable UIDL collection state before provider network I/O begins."""
         if config.id is None:
-            return set()
+            return {}
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(Pop3ObservedMessage.provider_uidl).where(
-                    Pop3ObservedMessage.tenant_config_id == config.id
-                )
+                select(
+                    Pop3ObservedMessage.provider_uidl,
+                    Pop3ObservedMessage.collection_disposition,
+                    Pop3ObservedMessage.retry_after,
+                ).where(Pop3ObservedMessage.tenant_config_id == config.id)
             )
-            return set(result.scalars().all())
+            return {
+                provider_uidl: Pop3CollectionProgressState(
+                    disposition=disposition,
+                    retry_after=retry_after,
+                )
+                for provider_uidl, disposition, retry_after in result.all()
+            }
+
+    async def _load_observed_uidls(self, config: TenantConfig) -> set[str]:
+        """Compatibility view over durable collection state for observed UIDLs."""
+        progress = await self._load_collection_progress(config)
+        return {
+            provider_uidl
+            for provider_uidl, state in progress.items()
+            if state.disposition == "observed"
+        }
 
     async def _import_messages(
         self,
         config: TenantConfig,
         messages: list[Pop3RetrievedMessage | bytes],
+        *,
+        retryable_uidls: frozenset[str] | set[str] | None = None,
     ) -> int:
-        if not messages:
+        retryable_uidls = retryable_uidls or frozenset()
+        if not messages and not retryable_uidls:
             return 0
 
         imported_count = 0
         owner_addresses = [config.pop3_username] if config.pop3_username else None
+        state_time = datetime.datetime.now(datetime.timezone.utc)
         async with AsyncSessionLocal() as session:
             try:
+                if config.id is not None:
+                    for provider_uidl in retryable_uidls:
+                        await self._upsert_collection_progress(
+                            session,
+                            config.id,
+                            provider_uidl,
+                            disposition="retryable",
+                            state_time=state_time,
+                        )
                 for message in messages:
                     if isinstance(message, bytes):
                         raw_message = message
@@ -162,6 +218,14 @@ class Pop3SyncWorker:
                             "Skipping unparsable POP3 message for user %s.",
                             config.user_id,
                         )
+                        if provider_uidl is not None and config.id is not None:
+                            await self._upsert_collection_progress(
+                                session,
+                                config.id,
+                                provider_uidl,
+                                disposition="retryable",
+                                state_time=state_time,
+                            )
                         continue
                     persistence_result = await persist_fetched_email(
                         session,
@@ -174,21 +238,51 @@ class Pop3SyncWorker:
                     if persistence_result.created_record:
                         imported_count += 1
                     if provider_uidl is not None and config.id is not None:
-                        await session.execute(
-                            pg_insert(Pop3ObservedMessage)
-                            .values(
-                                tenant_config_id=config.id,
-                                provider_uidl=provider_uidl,
-                            )
-                            .on_conflict_do_nothing(
-                                index_elements=["tenant_config_id", "provider_uidl"]
-                            )
+                        await self._upsert_collection_progress(
+                            session,
+                            config.id,
+                            provider_uidl,
+                            disposition="observed",
+                            state_time=state_time,
                         )
                 await session.commit()
             except Exception:
                 await session.rollback()
                 raise
         return imported_count
+
+    async def _upsert_collection_progress(
+        self,
+        session,
+        tenant_config_id: int,
+        provider_uidl: str,
+        *,
+        disposition: Pop3CollectionDisposition,
+        state_time: datetime.datetime,
+    ) -> None:
+        retry_after = (
+            state_time + POP3_RETRY_DELAY if disposition == "retryable" else None
+        )
+        observed_at = state_time if disposition == "observed" else None
+        statement = (
+            pg_insert(Pop3ObservedMessage)
+            .values(
+                tenant_config_id=tenant_config_id,
+                provider_uidl=provider_uidl,
+                collection_disposition=disposition,
+                retry_after=retry_after,
+                observed_at=observed_at,
+            )
+            .on_conflict_do_update(
+                index_elements=["tenant_config_id", "provider_uidl"],
+                set_={
+                    "collection_disposition": disposition,
+                    "retry_after": retry_after,
+                    "observed_at": observed_at,
+                },
+            )
+        )
+        await session.execute(statement)
 
     def _validated_destination(self, config: TenantConfig) -> tuple[str, int]:
         return validate_pop3_destination(
@@ -203,10 +297,31 @@ class Pop3SyncWorker:
         pop3_port: int | None = None,
         observed_uidls: set[str] | None = None,
     ) -> list[Pop3RetrievedMessage]:
+        collection_progress = {
+            provider_uidl: Pop3CollectionProgressState(
+                disposition="observed",
+                retry_after=None,
+            )
+            for provider_uidl in (observed_uidls or set())
+        }
+        return self._do_pop3_sync_batch(
+            config,
+            pop3_server,
+            pop3_port,
+            collection_progress,
+        ).messages
+
+    def _do_pop3_sync_batch(
+        self,
+        config: TenantConfig,
+        pop3_server: str | None = None,
+        pop3_port: int | None = None,
+        collection_progress: Mapping[str, Pop3CollectionProgressState] | None = None,
+    ) -> Pop3SyncBatch:
         if pop3_server is None or pop3_port is None:
             pop3_server, pop3_port = self._validated_destination(config)
         pop3_client = poplib.POP3_SSL(pop3_server, pop3_port)
-        observed_uidls = observed_uidls or set()
+        collection_progress = collection_progress or {}
         try:
             if not config.pop3_username:
                 logger.error(
@@ -229,16 +344,12 @@ class Pop3SyncWorker:
 
             uidl_identities = self._current_uidl_identities(pop3_client, config)
             if uidl_identities is not None:
-                candidates = [
-                    identity
-                    for identity in uidl_identities
-                    if identity.provider_uidl not in observed_uidls
-                ]
-                selected = sorted(
-                    candidates,
-                    key=lambda identity: identity.message_number,
-                )[-MAX_POP3_FETCH_MESSAGES:]
-                return self._retrieve_uidl_messages(pop3_client, config, selected)
+                selected = self._select_uidl_candidates(
+                    uidl_identities,
+                    collection_progress,
+                    datetime.datetime.now(datetime.timezone.utc),
+                )
+                return self._retrieve_uidl_batch(pop3_client, config, selected)
 
             _response, listings, _octets = pop3_client.list()
             message_numbers = [
@@ -251,13 +362,40 @@ class Pop3SyncWorker:
                 "POP3 UIDL unavailable for user %s; bounded fallback cannot prove durable backlog progress.",
                 config.user_id,
             )
-            return self._retrieve_fallback_messages(
-                pop3_client,
-                config,
-                sorted(message_numbers)[-MAX_POP3_FETCH_MESSAGES:],
+            return Pop3SyncBatch(
+                messages=self._retrieve_fallback_messages(
+                    pop3_client,
+                    config,
+                    sorted(message_numbers)[-MAX_POP3_FETCH_MESSAGES:],
+                ),
+                retryable_uidls=frozenset(),
             )
         finally:
             self._close_pop3_client(pop3_client, config)
+
+    def _select_uidl_candidates(
+        self,
+        identities: list[Pop3MessageIdentity],
+        collection_progress: Mapping[str, Pop3CollectionProgressState],
+        now: datetime.datetime,
+    ) -> list[Pop3MessageIdentity]:
+        """Prefer never-attempted UIDLs, then retries whose retry window is due."""
+        fresh: list[Pop3MessageIdentity] = []
+        due_retries: list[Pop3MessageIdentity] = []
+        for identity in sorted(
+            identities,
+            key=lambda candidate: candidate.message_number,
+            reverse=True,
+        ):
+            state = collection_progress.get(identity.provider_uidl)
+            if state is None:
+                fresh.append(identity)
+                continue
+            if state.disposition == "observed":
+                continue
+            if state.retry_after is None or state.retry_after <= now:
+                due_retries.append(identity)
+        return (fresh + due_retries)[:MAX_POP3_FETCH_MESSAGES]
 
     def _current_uidl_identities(
         self,
@@ -301,13 +439,14 @@ class Pop3SyncWorker:
             provider_uidl=provider_uidl,
         )
 
-    def _retrieve_uidl_messages(
+    def _retrieve_uidl_batch(
         self,
         pop3_client: poplib.POP3_SSL,
         config: TenantConfig,
         identities: list[Pop3MessageIdentity],
-    ) -> list[Pop3RetrievedMessage]:
+    ) -> Pop3SyncBatch:
         messages: list[Pop3RetrievedMessage] = []
+        retryable_uidls: set[str] = set()
         for identity in identities:
             try:
                 source_content = self._retrieve_message(
@@ -326,6 +465,7 @@ class Pop3SyncWorker:
                     config.user_id,
                     type(exc).__name__,
                 )
+                retryable_uidls.add(identity.provider_uidl)
                 continue
             except OSError as exc:
                 logger.warning(
@@ -340,7 +480,19 @@ class Pop3SyncWorker:
                     provider_uidl=identity.provider_uidl,
                 )
             )
-        return messages
+        return Pop3SyncBatch(
+            messages=messages,
+            retryable_uidls=frozenset(retryable_uidls),
+        )
+
+    def _retrieve_uidl_messages(
+        self,
+        pop3_client: poplib.POP3_SSL,
+        config: TenantConfig,
+        identities: list[Pop3MessageIdentity],
+    ) -> list[Pop3RetrievedMessage]:
+        """Compatibility wrapper retaining the historical direct-return contract."""
+        return self._retrieve_uidl_batch(pop3_client, config, identities).messages
 
     def _retrieve_fallback_messages(
         self,
