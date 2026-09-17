@@ -1,6 +1,8 @@
 import asyncio
-import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from db.models import TenantConfig
 from services.pop3_worker import Pop3SyncWorker
@@ -131,7 +133,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
 
     session = FakeSession()
 
-    async def fake_process_fetched_email(
+    async def fake_persist_fetched_email(
         db_session,
         email_data,
         user_id,
@@ -149,6 +151,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
                 "source_content": source_content,
             }
         )
+        return SimpleNamespace(created_record=True)
 
     monkeypatch.setattr(
         "services.pop3_worker.validate_pop3_destination",
@@ -159,9 +162,8 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
         lambda: session,
     )
     monkeypatch.setattr(
-        "services.pop3_worker.process_fetched_email",
-        fake_process_fetched_email,
-        raising=False,
+        "services.pop3_worker.persist_fetched_email",
+        fake_persist_fetched_email,
     )
     monkeypatch.setattr(
         "services.pop3_worker.poplib.POP3_SSL",
