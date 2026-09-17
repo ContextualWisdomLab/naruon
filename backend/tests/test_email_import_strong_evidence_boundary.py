@@ -67,6 +67,11 @@ async def test_import_result_marks_incomplete_metadata_for_dedupe_review(
     session.rollback = AsyncMock()
 
     monkeypatch.setattr(
+        email_import_module.settings,
+        "PROJECT_GRAPH_EXTRACTION_ENABLED",
+        False,
+    )
+    monkeypatch.setattr(
         email_import_module,
         "_read_and_parse_eml",
         lambda _: (_SOURCE, parsed),
