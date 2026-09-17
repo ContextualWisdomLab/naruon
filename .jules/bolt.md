@@ -26,3 +26,8 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+
+## 2026-09-16 - Acknowledge CodeQL wait states
+
+**Learning:** When a GitHub Actions workflow like `CodeQL compatibility analysis` fails with `CodeQL shard has no authenticated current-head verdict or dispatch receipt`, and logs indicate `Pull request head moved on the live open PR; a fresh dispatch will fire for the current head`, this is an expected architectural behavior. The CI pipeline correctly cancels outdated background scans when new commits arrive.
+**Action:** Do not attempt to fix or modify files locally for this failure. Conclude the task directly using the `done` tool, as the system will automatically reconcile the status on the next pipeline run.
