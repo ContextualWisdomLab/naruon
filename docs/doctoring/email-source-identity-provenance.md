@@ -112,22 +112,48 @@ identity.
 RFC 1939 assigns message number `1` to the first message in the opened maildrop
 and number `n` to the nth message. Naruon's POP3 worker intentionally does not
 issue `DELE`; source retention is therefore independent from synchronization.
-With a bounded fetch cap, repeatedly taking the first ten `LIST` entries would
-re-read the same oldest window on every poll and could permanently starve later
-mail in a maildrop larger than the cap.
+The predecessor implementation took the first ten `LIST` entries, so a maildrop
+larger than the cap could repeatedly revisit its oldest window while newer mail
+was never retrieved.
 
 Source-order regression `517ba20f2409012eb28b9c84085103a7c1b04eaa`
-requires the bounded POP3 fetch to select the ten highest valid message numbers
-from a twelve-message maildrop. Causal repair
+requires that predecessor failure mode to be removed. Causal repair
 `72c64b46d120ee8c2f3f12ad04114e6a896cb15b` parses all `LIST` message numbers,
-sorts them numerically, and retrieves only the highest bounded window. Invalid
-list entries remain ignored. This changes collection progress only; it does not
-alter duplicate identity, retention, or server-side deletion semantics.
+sorts them numerically, and retrieves the highest bounded window. Invalid list
+entries remain ignored. This changes collection priority only; it does not alter
+duplicate identity, retention, or server-side deletion semantics.
 
-The selection is deliberately based on the POP3 session's message-number
-ordering rather than pretending message numbers are durable identifiers. They
-are used only to choose which messages to retrieve in the current locked
-maildrop; persistent identity continues to come from source/provenance evidence.
+That repair is deliberately classified as **partial progress**, not an eventual
+backlog guarantee. A static maildrop larger than the cap can still expose the
+same highest-numbered window on every poll, leaving older unobserved messages
+behind indefinitely. POP3 message numbers are session/maildrop positions, not a
+sound durable cross-session cursor. Issue #1717 owns the remaining contract: use
+RFC 1939 `UIDL` where supported, persist owner-scoped provider progress, and
+prove bounded multi-poll/restart progress without turning provider identity into
+Naruon's Message-ID or source-fingerprint truth.
+
+## POP3 session teardown
+
+A successful `RETR` has already returned protocol-visible message bytes before
+`QUIT` is attempted. A later transport/protocol error during `QUIT` is cleanup
+failure; it must not retroactively discard those bytes and make the sync report a
+retrieval failure. Naruon does not issue `DELE`, so preserving the retrieved
+bytes does not authorize or imply server-side deletion.
+
+The source-order repair is:
+
+- RED `64baa1e2b71e192d14743bd11da017b4fa33279f` requires a successful `RETR`
+  result to survive a `poplib.error_proto` raised by `QUIT`;
+- strengthened RED `a74e02b76e236482f2c634a0c54f38450a63b769` also requires an explicit
+  transport close when the graceful `QUIT` path fails;
+- repair `fa06c566dc29f350ac1e7ff2888ac59bbf5c7ef4` stops a `QUIT` cleanup
+  exception from masking already retrieved bytes;
+- lifecycle repair `e809575329ff9b9643d7ce93a28556951cdc797a` closes the `poplib`
+  transport explicitly after failed `QUIT`, with a bounded warning if close
+  itself fails.
+
+This keeps the network lifecycle outside the persistence transaction: RETR and
+session cleanup complete before `_import_messages()` opens its database session.
 
 ## Verification contract
 
@@ -151,8 +177,11 @@ maildrop; persistent identity continues to come from source/provenance evidence.
   mapping keys, and non-finite numbers instead of coercing them with `str()`.
 - IMAP and POP3 pass source bytes through the persistence boundary.
 - POP3 source reconstruction restores CRLF after every `RETR` message line.
-- A POP3 maildrop larger than the bounded fetch cap selects the highest current
-  message numbers so repeated polling cannot be trapped on the oldest window.
+- A POP3 `QUIT` failure after successful `RETR` cannot discard the retrieved
+  bytes, and the transport is explicitly closed when graceful teardown fails.
+- Highest-number bounded POP3 selection removes the predecessor oldest-window
+  failure mode but is **not** accepted as eventual-backlog progress; #1717 owns
+  the durable UIDL-backed completion contract.
 - Existing rows remain conservatively classified when provenance is unknown.
 - `0018_email_date_provenance` remains the sole canonical provenance migration;
   no parallel `date_evidence` or `message_id_evidence` schema is accepted.
