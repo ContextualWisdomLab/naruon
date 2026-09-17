@@ -57,16 +57,18 @@ class Pop3SyncWorker:
 
     async def _sync(self):
         async with AsyncSessionLocal() as session:
-            result = await session.execute(select(TenantConfig).where(TenantConfig.pop3_server.isnot(None)))
+            result = await session.execute(
+                select(TenantConfig).where(TenantConfig.pop3_server.isnot(None))
+            )
             configs = result.scalars().all()
-            
+
         semaphore = asyncio.Semaphore(10)
         tasks = []
         for config in configs:
             if not config.pop3_server or not config.pop3_port:
                 continue
             tasks.append(self._sync_tenant(config, semaphore))
-            
+
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -126,6 +128,7 @@ class Pop3SyncWorker:
                         config.user_id,
                         config.organization_id,
                         owner_addresses=owner_addresses,
+                        source_content=raw_message,
                     )
                     imported_count += 1
                 await session.commit()
@@ -175,10 +178,18 @@ class Pop3SyncWorker:
                 if message_number is None:
                     continue
                 _retr_response, lines, _retr_octets = pop3_client.retr(message_number)
-                messages.append(b"\r\n".join(self._bytes_line(line) for line in lines))
+                messages.append(self._message_bytes(lines))
             return messages
         finally:
             pop3_client.quit()
+
+    def _message_bytes(self, lines: list[bytes | str]) -> bytes:
+        """Reconstruct one POP3 RETR message with protocol CRLF terminators.
+
+        ``poplib`` removes line terminators from the multiline response while
+        RFC 1939 defines each transferred message line as CRLF-terminated.
+        """
+        return b"\r\n".join(self._bytes_line(line) for line in lines) + b"\r\n"
 
     def _message_number_from_listing(self, listing: bytes | str) -> int | None:
         raw_listing = (
@@ -195,7 +206,5 @@ class Pop3SyncWorker:
 
     def _bytes_line(self, line: bytes | str) -> bytes:
         return (
-            line
-            if isinstance(line, bytes)
-            else line.encode("utf-8", errors="replace")
+            line if isinstance(line, bytes) else line.encode("utf-8", errors="replace")
         )

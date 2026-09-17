@@ -132,7 +132,12 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
     session = FakeSession()
 
     async def fake_process_fetched_email(
-        db_session, email_data, user_id, organization_id, owner_addresses=None
+        db_session,
+        email_data,
+        user_id,
+        organization_id,
+        owner_addresses=None,
+        source_content=None,
     ):
         imported.append(
             {
@@ -141,6 +146,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
                 "user_id": user_id,
                 "organization_id": organization_id,
                 "owner_addresses": owner_addresses,
+                "source_content": source_content,
             }
         )
 
@@ -174,6 +180,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
     assert imported[0]["user_id"] == "pop3-user"
     assert imported[0]["organization_id"] == "org-pop3"
     assert imported[0]["owner_addresses"] == ["pop3-user@example.com"]
+    assert imported[0]["source_content"] == raw_message
     assert imported[0]["email_data"]["message_id"] == "<pop3-1@example.com>"
     assert imported[0]["email_data"]["subject"] == "POP3 import"
     assert session.committed is True

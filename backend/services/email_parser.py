@@ -5,10 +5,18 @@ import datetime
 import re
 from email.utils import getaddresses
 from email.utils import parsedate_to_datetime
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 from .attachment_parser import parse_email_attachment
 from .exceptions import EmailParseError
 from .text_safety import strip_html_markup
+
+
+# Provenance of the RFC822 ``Date`` header, kept explicit so a synthetic
+# collection-time fallback is never mistaken for original sender metadata.
+DateProvenance = Literal["parsed", "missing", "invalid"]
+
+# Provenance of the RFC822 ``Message-ID`` header.
+MessageIdProvenance = Literal["embedded", "missing"]
 
 
 class EmailData(TypedDict):
@@ -23,8 +31,9 @@ class EmailData(TypedDict):
     in_reply_to: str | None
     references: str | None
     date: datetime.datetime
-    date_evidence: NotRequired[str]
-    message_id_evidence: NotRequired[str]
+    header_date: NotRequired[datetime.datetime | None]
+    date_provenance: NotRequired[DateProvenance]
+    message_id_provenance: NotRequired[MessageIdProvenance]
     body: str
     body_content_type: NotRequired[str]
     body_parse_content: NotRequired[str]
@@ -46,8 +55,9 @@ def _sanitize_display_text(text: str) -> str:
 # that force a quoted-string, and the characters escaped inside one.
 _ADDRESS_SPECIALS_RE = re.compile(r'[()<>@,;:\\".\[\]]')
 _ADDRESS_QUOTED_ESCAPE_RE = re.compile(r'["\\]')
-# RFC 5322 date-time always carries a zone. The obsolete grammar also admits
-# alphabetic zones; unknown ones have the same comparison semantics as -0000.
+# ``parsedate_to_datetime`` also accepts some zone-less values and returns a
+# naive datetime. Only a Date that actually carries an RFC 5322 zone may be
+# promoted to sender-supplied provenance when the parser result is naive.
 _RFC5322_TRAILING_ZONE_RE = re.compile(
     r"(?:[+-]\d{4}|[A-Za-z]{1,5})(?:\s*\([^)]*\))?\s*$"
 )
@@ -159,30 +169,43 @@ def _extract_body_and_attachments(msg: Message) -> tuple[str, str, list[dict]]:
     return html_body, "text/html" if html_body else "text/plain", attachments
 
 
-def _extract_date(msg: Message) -> tuple[datetime.datetime, str]:
-    date_header = msg.get("Date")
-    parsed_date = None
-    evidence = "missing"
-    if date_header:
-        try:
-            parsed_date = parsedate_to_datetime(date_header)
-            evidence = "parsed" if parsed_date is not None else "invalid"
-        except (TypeError, ValueError):
-            parsed_date = None
-            evidence = "invalid"
+def _extract_date_with_provenance(
+    msg: Message,
+) -> tuple[datetime.datetime, datetime.datetime | None, DateProvenance]:
+    """Return effective date, genuine header date, and header provenance.
 
-    if not parsed_date:
-        parsed_date = datetime.datetime.now(datetime.timezone.utc)
-    elif parsed_date.tzinfo is None:
-        # parsedate_to_datetime returns naive values both for RFC 5322 -0000 /
-        # unknown obsolete zones and for non-conforming Date values that omit a
-        # zone entirely. Only the former carries a standards-defined instant.
-        if _RFC5322_TRAILING_ZONE_RE.search(str(date_header)):
-            parsed_date = parsed_date.replace(tzinfo=datetime.timezone.utc)
-        else:
-            evidence = "invalid"
-            parsed_date = datetime.datetime.now(datetime.timezone.utc)
-    return parsed_date, evidence
+    The effective value is always timezone-aware and safe for storage. A
+    missing or invalid header receives a UTC collection-time fallback, while
+    ``header_date`` remains ``None`` so deduplication cannot treat that fallback
+    as sender-supplied evidence.
+    """
+    date_header = msg.get("Date")
+    header_text = str(date_header).strip() if date_header is not None else ""
+    fallback = datetime.datetime.now(datetime.timezone.utc)
+
+    if not header_text:
+        return fallback, None, "missing"
+
+    try:
+        header_date = parsedate_to_datetime(date_header)
+    except (TypeError, ValueError):
+        header_date = None
+
+    if header_date is None:
+        return fallback, None, "invalid"
+    if header_date.tzinfo is None:
+        # ``-0000`` and obsolete alphabetic zones can yield a naive datetime,
+        # but a parseable value with no zone is not complete RFC 5322 Date
+        # evidence and must never seed a strong duplicate identity.
+        if not _RFC5322_TRAILING_ZONE_RE.search(header_text):
+            return fallback, None, "invalid"
+        header_date = header_date.replace(tzinfo=datetime.timezone.utc)
+    return header_date, header_date, "parsed"
+
+
+def _message_id_provenance(raw_message_id: str) -> MessageIdProvenance:
+    """Classify whether a genuine ``Message-ID`` header was embedded."""
+    return "embedded" if raw_message_id.strip() else "missing"
 
 
 def _extract_thread_id(msg: Message, message_id: str) -> str | None:
@@ -204,8 +227,9 @@ def _extract_thread_id(msg: Message, message_id: str) -> str | None:
 
 def _message_to_email_data(msg: Message) -> EmailData:
     body, body_content_type, attachments = _extract_body_and_attachments(msg)
-    parsed_date, date_evidence = _extract_date(msg)
+    effective_date, header_date, date_provenance = _extract_date_with_provenance(msg)
     message_id = _sanitize_nul(msg.get("Message-ID", ""))
+    message_id_provenance = _message_id_provenance(message_id)
     thread_id = _extract_thread_id(msg, message_id)
 
     return {
@@ -227,9 +251,10 @@ def _message_to_email_data(msg: Message) -> EmailData:
         "references": (
             _sanitize_nul(msg.get("References", "")) if msg.get("References") else None
         ),
-        "date": parsed_date,
-        "date_evidence": date_evidence,
-        "message_id_evidence": "embedded" if message_id else "missing",
+        "date": effective_date,
+        "header_date": header_date,
+        "date_provenance": date_provenance,
+        "message_id_provenance": message_id_provenance,
         "body": _sanitize_display_text(body),
         "body_content_type": body_content_type,
         "body_parse_content": _sanitize_nul(body),

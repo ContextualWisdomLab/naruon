@@ -1,7 +1,7 @@
 import logging
 import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,137 +14,12 @@ from services.email_import_service import (
     EMBEDDING_DIMENSION,
     EmailImportEmbeddingProvider,
     MAX_EMBEDDING_CHUNKS_PER_WINDOW,
-    _fallback_message_id,
-    _email_fingerprint,
     _generate_import_embeddings,
-    _message_id_for,
 )
 
 
 def test_import_transport_ceiling_accepts_sources_over_20_mib():
     assert email_import_module.MAX_IMPORT_UPLOAD_BYTES > 20 * 1024 * 1024
-
-
-def test_synthetic_date_is_not_dedupe_evidence():
-    parsed = {
-        "sender": "sender@example.com",
-        "subject": "same subject",
-        "recipients": "owner@example.com",
-        "body": "same body",
-        "date_evidence": "missing",
-    }
-
-    assert _email_fingerprint(
-        parsed,
-        datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-    ) is None
-
-
-def test_complete_parsed_date_fields_produce_strong_fingerprint():
-    parsed = {
-        "sender": "sender@example.com",
-        "subject": "same subject",
-        "recipients": "owner@example.com",
-        "body": "same body",
-        "date_evidence": "parsed",
-    }
-
-    assert _email_fingerprint(
-        parsed,
-        datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-    )
-
-
-def test_build_email_object_persists_metadata_provenance():
-    parsed = {
-        "sender": "sender@example.com",
-        "subject": "subject",
-        "recipients": "owner@example.com",
-        "body": "body",
-        "date_evidence": "invalid",
-        "message_id_evidence": "missing",
-        "attachments": [],
-    }
-    email_object, _ = email_import_module._build_email_object(
-        parsed=parsed,
-        user_id="user-1",
-        organization_id="org-1",
-        message_id="imported@example.com",
-        thread_id=None,
-        fingerprint=None,
-        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-        attachment_payloads=[],
-        fitted_embeddings=[[0.0] * EMBEDDING_DIMENSION],
-    )
-
-    assert email_object.date_evidence == "invalid"
-    assert email_object.message_id_evidence == "missing"
-
-
-@pytest.mark.asyncio
-async def test_import_single_eml_marks_synthetic_date_for_dedupe_review(
-    monkeypatch, tmp_path
-):
-    eml_path = tmp_path / "message.eml"
-    eml_path.write_bytes(b"raw message")
-    parsed = {
-        "message_id": "",
-        "date": datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-        "date_evidence": "missing",
-        "sender": "sender@example.com",
-        "subject": "subject",
-        "recipients": "owner@example.com",
-        "body": "body",
-        "attachments": [],
-    }
-    email_object = MagicMock()
-    monkeypatch.setattr(
-        email_import_module, "_read_and_parse_eml", lambda _: (b"raw message", parsed)
-    )
-    monkeypatch.setattr(
-        email_import_module,
-        "_find_existing_email",
-        AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        email_import_module,
-        "assign_thread_id",
-        AsyncMock(return_value="thread-1"),
-    )
-    monkeypatch.setattr(
-        email_import_module,
-        "_extract_and_generate_embeddings",
-        AsyncMock(return_value=([], [[0.0] * EMBEDDING_DIMENSION])),
-    )
-    monkeypatch.setattr(
-        email_import_module,
-        "_build_email_object",
-        lambda **_: (email_object, 0),
-    )
-    monkeypatch.setattr(
-        email_import_module,
-        "_persist_project_graph_projection",
-        AsyncMock(),
-    )
-
-    result = await email_import_module._import_single_eml(
-        AsyncMock(spec=AsyncSession),
-        eml_path=eml_path,
-        display_filename="message.eml",
-        user_id="user-1",
-        organization_id="org-1",
-    )
-
-    assert result.status == "imported"
-    assert result.reason_code == "dedupe_review_required"
-
-
-def test_missing_message_id_uses_exact_raw_content_identity():
-    content = b"From: sender@example.com\r\n\r\nBody"
-    parsed = {"message_id": ""}
-
-    assert _message_id_for(parsed, content) == _fallback_message_id(content)
-    assert _message_id_for(parsed, content) != _fallback_message_id(content + b"\n")
 
 
 @pytest.mark.parametrize(
@@ -917,3 +792,42 @@ async def test_generate_import_embeddings_recovers_valid_items_after_batch_failu
     assert embeddings[2] == [0.75] * (EMBEDDING_DIMENSION // 2) + [0.0] * (
         EMBEDDING_DIMENSION // 2
     )
+
+
+def test_email_fingerprint_uses_strong_key_only_for_parsed_date():
+    """A strong (auto-dedupe) fingerprint is seeded only from a genuine Date.
+
+    naruon#1086: when the RFC822 Date was missing or invalid the persisted date
+    is a synthetic collection-time fallback, which must not seed the strong
+    duplicate key. Only ``date_provenance == "parsed"`` yields the strong
+    fingerprint; missing/invalid provenance falls through to the weak fallback.
+    """
+    from services.email_dedupe_service import strong_email_fingerprint
+    from services.email_import_service import _email_fingerprint
+
+    persisted_date = datetime.datetime(
+        2026, 4, 27, 10, 0, 0, tzinfo=datetime.timezone.utc
+    )
+    parsed_fields = {
+        "sender": "sender@test.com",
+        "subject": "Quarterly report",
+        "body": "The full report body.",
+        "recipients": "recipient@test.com",
+    }
+    strong = strong_email_fingerprint(
+        sender=parsed_fields["sender"],
+        subject=parsed_fields["subject"],
+        date=persisted_date,
+        body=parsed_fields["body"],
+    )
+    assert strong is not None
+
+    assert (
+        _email_fingerprint({**parsed_fields, "date_provenance": "parsed"}, persisted_date)
+        == strong
+    )
+    for provenance in ("missing", "invalid"):
+        weak = _email_fingerprint(
+            {**parsed_fields, "date_provenance": provenance}, persisted_date
+        )
+        assert weak != strong
