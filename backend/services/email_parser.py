@@ -55,6 +55,12 @@ def _sanitize_display_text(text: str) -> str:
 # that force a quoted-string, and the characters escaped inside one.
 _ADDRESS_SPECIALS_RE = re.compile(r'[()<>@,;:\\".\[\]]')
 _ADDRESS_QUOTED_ESCAPE_RE = re.compile(r'["\\]')
+# ``parsedate_to_datetime`` also accepts some zone-less values and returns a
+# naive datetime. Only a Date that actually carries an RFC 5322 zone may be
+# promoted to sender-supplied provenance when the parser result is naive.
+_RFC5322_TRAILING_ZONE_RE = re.compile(
+    r"(?:[+-]\d{4}|[A-Za-z]{1,5})(?:\s*\([^)]*\))?\s*$"
+)
 
 
 def _format_display_address(display_name: str, address: str) -> str:
@@ -188,9 +194,11 @@ def _extract_date_with_provenance(
     if header_date is None:
         return fallback, None, "invalid"
     if header_date.tzinfo is None:
-        # RFC 5322 section 3.3: a ``-0000`` zone means the time zone is
-        # unknown. Normalize the naive parser result to UTC so every parsed
-        # value still satisfies the timezone-aware storage contract.
+        # ``-0000`` and obsolete alphabetic zones can yield a naive datetime,
+        # but a parseable value with no zone is not complete RFC 5322 Date
+        # evidence and must never seed a strong duplicate identity.
+        if not _RFC5322_TRAILING_ZONE_RE.search(header_text):
+            return fallback, None, "invalid"
         header_date = header_date.replace(tzinfo=datetime.timezone.utc)
     return header_date, header_date, "parsed"
 
