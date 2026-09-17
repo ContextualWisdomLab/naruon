@@ -97,6 +97,23 @@ Date: Sun, 01 Jan 2023 12:00:00 -0000"""
     assert parsed["date"].tzinfo is not None
 
 
+def test_parse_eml_marks_zone_less_date_as_invalid_source_evidence() -> None:
+    """A parseable but zone-less Date cannot become strong sender evidence."""
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <zone-less-date@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Missing timezone
+Date: Sun, 01 Jan 2023 12:00:00"""
+        )
+    )
+
+    assert parsed["date_provenance"] == "invalid"
+    assert parsed["header_date"] is None
+    assert parsed["date"].tzinfo is not None
+
+
 def test_parse_eml_marks_embedded_message_id_provenance() -> None:
     """A non-empty embedded Message-ID is identified as sender evidence."""
     parsed = parse_eml_bytes(
