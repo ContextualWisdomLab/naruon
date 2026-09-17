@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -90,7 +91,9 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     session.__aenter__.return_value = session
     session.__aexit__.return_value = False
 
-    process_fetched_email_mock = AsyncMock()
+    persist_fetched_email_mock = AsyncMock(
+        return_value=SimpleNamespace(created_record=True)
+    )
 
     monkeypatch.setattr(
         "services.imap_worker.validate_imap_destination",
@@ -102,8 +105,8 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     )
     monkeypatch.setattr("services.imap_worker.AsyncSessionLocal", lambda: session)
     monkeypatch.setattr(
-        "services.imap_worker.process_fetched_email",
-        process_fetched_email_mock,
+        "services.imap_worker.persist_fetched_email",
+        persist_fetched_email_mock,
     )
 
     imported_count = await worker._sync_tenant(config)
@@ -116,8 +119,8 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     imap_client.fetch.assert_awaited_once_with("1", "(RFC822 FLAGS)")
     imap_client.logout.assert_awaited_once()
 
-    process_fetched_email_mock.assert_awaited_once()
-    args, kwargs = process_fetched_email_mock.await_args
+    persist_fetched_email_mock.assert_awaited_once()
+    args, kwargs = persist_fetched_email_mock.await_args
     assert args[0] is session
     assert args[1]["message_id"] == "<imap-1@example.com>"
     assert args[1]["subject"] == "IMAP import"
