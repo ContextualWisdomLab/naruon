@@ -277,19 +277,19 @@ export default function NetworkGraph() {
     }
   }, [nodes, edges, nodeMap, edgeMap]);
 
-  // ⚡ Bolt: Replace map().filter().slice() with a bounded for...of loop to prevent O(N) transient array allocations
   const nodeLabels = useMemo(() => {
     const labels: string[] = [];
     for (const node of nodes) {
-      if (labels.length >= 5) break;
       const label = String(node.label ?? node.id);
-      if (label) labels.push(label);
+      if (label) {
+        labels.push(label);
+        if (labels.length >= 5) break;
+      }
     }
     return labels;
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
-  // ⚡ Bolt: Replace Array.from().slice().map() with a bounded loop to avoid O(N) operations on large Maps
   const relationshipOptions = useMemo(() => {
     const options = [];
     let index = 0;
@@ -305,7 +305,6 @@ export default function NetworkGraph() {
     return options;
   }, [edgeMap, nodeMap]);
 
-  // ⚡ Bolt: Replace Array.from().slice().map() with a bounded loop to avoid O(N) operations on large Maps
   const nodeOptions = useMemo(() => {
     const options = [];
     for (const node of nodeInstanceMap.values()) {
