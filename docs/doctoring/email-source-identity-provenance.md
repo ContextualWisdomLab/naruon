@@ -161,7 +161,7 @@ before any claim about very large long-lived POP3 mailboxes.
 ## POP3 partial retrieval and session teardown
 
 A successful `RETR` has already returned protocol-visible message bytes before
-later message or session cleanup can fail. A later `RETR`/`QUIT` error must not
+later message or session cleanup can fail. A later `RETR`/`QUIT` failure must not
 retroactively discard earlier successful bytes.
 
 The teardown source-order repair is:
@@ -174,16 +174,34 @@ The teardown source-order repair is:
   `e809575329ff9b9643d7ce93a28556951cdc797a` preserve retrieved bytes and close
   the transport explicitly after failed `QUIT`.
 
-A separate RED `c762b10d12e55d6666a772d99be49172bc35230a` proves that failure on a
-later `RETR` must not discard earlier messages in the same bounded batch. Repair
-`37a390c59c915016fa2e412c6e77e85e69042510` changes UIDL and fallback retrieval
-to accumulate successful messages and stop the batch at the first transport or
-protocol retrieval failure. Only returned messages can be persisted and only
-their UIDLs can become observed, so the failed identity remains eligible for a
-later retry.
+Earlier partial-RETR repair `37a390c59c915016fa2e412c6e77e85e69042510`
+correctly preserved messages retrieved before a later failure, but treated every
+`poplib.error_proto` from `RETR` as a reason to stop the remaining bounded batch.
+RFC 1939 permits repeated commands in TRANSACTION state and defines `-ERR no
+such message` as a valid negative `RETR` response. A single permanently rejected
+message therefore must not starve later selected UIDLs when the session remains
+usable.
 
-Naruon does not issue `DELE`; preserving already retrieved bytes does not
-authorize or imply server-side deletion.
+The refined source-order repair is:
+
+- RED `d9c87082355fd133a5f4ed9715c560eaee28b211` requires a standards-conforming
+  per-message `-ERR` to leave that message unobserved while continuing to later
+  messages in both UIDL and bounded `LIST` fallback paths; an `OSError` remains a
+  transport-stop condition;
+- initial repair `38803cc59be9cee2f72be5f48a9c3c9f1aca402e` separates POP3 protocol
+  exceptions from transport exceptions;
+- hardening RED `7606387c829e27845633d180642369547d23336b` proves that an unexpected
+  non-`-ERR` protocol exception must not be treated as a safe per-message
+  rejection;
+- final repair `a5d7d21011cf96548cce18b8119a553123a25ab5` continues only when the
+  protocol exception carries an RFC-style `-ERR` response and stops the
+  remaining batch on transport loss or malformed/unexpected protocol response.
+
+Only successfully returned messages can be persisted and only their UIDLs can
+become observed. A rejected UIDL therefore remains eligible for retry, while one
+persistent message-level rejection no longer blocks later selected messages in
+that poll. Naruon still does not issue `DELE`; preserving or continuing retrieval
+does not authorize or imply server-side deletion.
 
 ## Verification contract
 
@@ -210,8 +228,10 @@ authorize or imply server-side deletion.
   source-fingerprint, or dedupe evidence.
 - UIDL-unavailable/malformed fallback is explicitly compatibility-only and does
   not claim eventual backlog completion.
-- A later RETR failure preserves earlier successful messages; a QUIT failure
-  preserves retrieved bytes and explicitly closes the transport.
+- A per-message RFC-style RETR `-ERR` leaves that identity retryable and does not
+  starve later selected messages; transport loss or malformed protocol stops the
+  remaining batch.
+- A QUIT failure preserves retrieved bytes and explicitly closes the transport.
 - `0018_email_date_provenance` remains the sole message-provenance migration;
   `0019_pop3_observed_uidl` succeeds it for provider collection state rather than
   introducing parallel message provenance.
