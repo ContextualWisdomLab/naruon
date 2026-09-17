@@ -41,10 +41,13 @@ async function flushAsyncWork() {
 }
 
 describe("NetworkGraph bounded option materialization", () => {
+  const originalMapValues = Map.prototype.values;
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
   afterEach(() => {
+    Map.prototype.values = originalMapValues;
+    expect(Map.prototype.values).toBe(originalMapValues);
     if (root) {
       act(() => root?.unmount());
     }
@@ -68,40 +71,39 @@ describe("NetworkGraph bounded option materialization", () => {
 
     apiGetMock.mockResolvedValue({ nodes, edges });
 
-    const originalMapValues = Map.prototype.values;
     const edgeIteratorReadCounts: number[] = [];
     const nodeIteratorReadCounts: number[] = [];
 
-    // Track each iterator independently so repeated renders cannot hide an
-    // unbounded iterator behind an aggregate read-count assertion.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Map.prototype.values = function(this: Map<any, any>) {
-      const iterator = originalMapValues.call(this);
-      const readCounts = this.has("edge-0")
-        ? edgeIteratorReadCounts
-        : this.has("node-0")
-          ? nodeIteratorReadCounts
-          : null;
-      const readCountIndex = readCounts?.push(0);
-
-      return {
-        next: () => {
-          if (readCounts && readCountIndex !== undefined) {
-            readCounts[readCountIndex - 1] += 1;
-          }
-          return iterator.next();
-        },
-        [Symbol.iterator]() {
-          return this;
-        },
-      };
-    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
     try {
+      // Track each iterator independently so repeated renders cannot hide an
+      // unbounded iterator behind an aggregate read-count assertion.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      Map.prototype.values = function(this: Map<any, any>) {
+        const iterator = originalMapValues.call(this);
+        const readCounts = this.has("edge-0")
+          ? edgeIteratorReadCounts
+          : this.has("node-0")
+            ? nodeIteratorReadCounts
+            : null;
+        const readCountIndex = readCounts?.push(0);
+
+        return {
+          next: () => {
+            if (readCounts && readCountIndex !== undefined) {
+              readCounts[readCountIndex - 1] += 1;
+            }
+            return iterator.next();
+          },
+          [Symbol.iterator]() {
+            return this;
+          },
+        };
+      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+      container = document.createElement("div");
+      document.body.appendChild(container);
+      root = createRoot(container);
+
       await act(async () => {
         root?.render(<NetworkGraph />);
       });
