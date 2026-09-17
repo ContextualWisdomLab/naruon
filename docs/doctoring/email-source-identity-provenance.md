@@ -14,6 +14,33 @@ This boundary prevents two distinct messages collected at the same instant from
 being linked merely because their observation metadata is similar. It also keeps
 a repeated import of the same source stable across collection times.
 
+## Date zone evidence reconciliation
+
+RFC 5322 requires a zone in `date-time`. Python's
+`email.utils.parsedate_to_datetime()` can nevertheless return a naive
+`datetime` both for a valid `-0000` Date and for a parseable but non-conforming
+Date with no zone. Those cases cannot share provenance semantics: `-0000`
+retains sender-supplied Date evidence while an omitted zone does not satisfy the
+source grammar and must not seed a strong duplicate identity.
+
+The broad #1086 lineage therefore keeps one `date_provenance` vocabulary and
+separates those cases before binding a naive value to UTC:
+
+- `-0000` and parser-supported obsolete alphabetic zones with an explicit
+  trailing zone remain `parsed` and are normalized to timezone-aware UTC for
+  storage/comparison;
+- a parseable Date with no trailing zone is `invalid`; `header_date` remains
+  absent and the effective stored date is a collection-time UTC fallback;
+- the fallback instant is operational data only and never sender metadata.
+
+Source-order RED `66273d51f142fc46f42bfbe64b330f347f80c8fc` adds the zone-less
+parser regression. Causal fix `37429ccb805385621844e7625d5da9e5b11eb6ef`
+checks for a trailing RFC 5322/obsolete zone before normalizing a naive parsed
+value. This inherits the valid #1656 finding into the broad #1195 lineage
+without introducing its competing `date_evidence` column or parallel Alembic
+revision. The remaining #1656 findings must be reconciled the same way before
+that child can become zero-delta provenance.
+
 ## POP3 reconstruction contract
 
 POP3 `RETR` is a multiline response. RFC 1939 requires every transmitted line to
@@ -35,6 +62,8 @@ identity.
 - A valid sender `Date` may seed the reviewed strong fingerprint.
 - Missing and invalid sender dates cannot promote collection time to strong
   evidence.
+- A parseable but zone-less Date remains invalid source evidence, while an
+  explicit `-0000` Date remains parsed and UTC-comparable.
 - Two different raw messages collected at the same instant remain distinct.
 - The same raw message collected at different instants has the same fallback
   identity.
