@@ -88,3 +88,30 @@ def test_pop3_fallback_negative_retr_continues_bounded_window(monkeypatch):
 
     assert [message.provider_uidl for message in messages] == [None, None]
     assert [entry.args[0] for entry in client.retr.call_args_list] == [1, 2, 3]
+
+
+def test_pop3_malformed_protocol_response_stops_remaining_retrievals(monkeypatch):
+    worker = Pop3SyncWorker()
+    config = _config()
+    client = MagicMock()
+    client.uidl.return_value = (
+        b"+OK",
+        [b"1 uid-1", b"2 uid-2", b"3 uid-3"],
+        48,
+    )
+    client.retr.side_effect = [
+        (b"+OK", [b"Message-ID: <one@example.com>", b"", b"Body one"], 128),
+        poplib.error_proto("unexpected response"),
+        (b"+OK", [b"Message-ID: <three@example.com>", b"", b"Body three"], 128),
+    ]
+    monkeypatch.setattr("services.pop3_worker.poplib.POP3_SSL", lambda host, port: client)
+
+    messages = worker._do_pop3_sync(
+        config,
+        "pop3.example.com",
+        995,
+        observed_uidls=set(),
+    )
+
+    assert [message.provider_uidl for message in messages] == ["uid-1"]
+    assert [entry.args[0] for entry in client.retr.call_args_list] == [1, 2]
