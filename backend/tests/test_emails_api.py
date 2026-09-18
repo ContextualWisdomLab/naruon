@@ -945,8 +945,6 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
         "%0amessage.eml",
         "secret.eml%00.zip",
         "payload.exe",
-        "malicious.exe.eml",
-        "test.sh.zip",
     ],
 )
 async def test_import_email_files_rejects_invalid_canonical_filename(

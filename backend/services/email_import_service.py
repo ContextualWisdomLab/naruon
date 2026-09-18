@@ -158,11 +158,6 @@ def canonical_email_import_upload_filename(filename: str | None) -> str | None:
         or Path(canonical_name).suffix.lower() not in SUPPORTED_EMAIL_IMPORT_SUFFIXES
     ):
         return None
-
-    parts = canonical_name.lower().split(".")
-    if any(ext in {"exe", "sh"} for ext in parts):
-        return None
-
     return canonical_name
 
 

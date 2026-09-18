@@ -91,10 +91,10 @@
 **Learning:** Error messages should never reveal internal implementation details or server-side paths, as they can assist attackers in further exploitation.
 **Prevention:** Avoid interpolating absolute paths or system details into exceptions that might be logged or surfaced; use generic error messages instead.
 
-## 2024-06-25 - [Fix Email SMTP CRLF Injection & Double Extension Upload]
-**Vulnerability:** Attackers could inject arbitrary SMTP commands (e.g. MAIL FROM) using CRLF (\r\n) sequences in email subjects or recipients because `^[^\r\n]*$` validation in Pydantic wasn't catching all edge cases correctly. Attackers could also bypass file upload validations by providing double extensions (e.g., `malicious.exe.eml`).
-**Learning:** Pydantic regex patterns might fall short for strict network protocol inputs like SMTP headers if improperly formulated or bypassed. Simple `.endswith()` checks for file uploads fail to prevent embedded dangerous extensions.
-**Prevention:** Always use `@field_validator` with explicit `mode="before"` string matching for `chr(10)` and `chr(13)` across all user-controlled email header fields (to, subject, in_reply_to, references). Always tokenize uploaded filenames via `.split(".")` and reject if any segment matches a known dangerous extension (e.g., `.exe`, `.sh`).
+## 2024-06-25 - Email SMTP CRLF Injection and Filename-Finding Evidence
+**Vulnerability:** User-controlled SMTP header fields require explicit CRLF rejection. A prior Sentinel lesson also treated an embedded filename segment such as `malicious.exe.eml` as an executable-upload bypass, but current email-import verification did not reproduce any consumer that strips the terminal `.eml`, executes or interprets the intermediate segment, changes MIME handling because of it, or hands the filename to an unsafe shell/process boundary.
+**Learning:** An embedded extension alone is not evidence of executable upload. Before classifying a filename finding as HIGH/CRITICAL, reproduce a causal consumer or sink path such as execution, interpreter handoff, MIME/content-type confusion, suffix stripping or reinterpretation, unsafe shell/process use, or an equivalent boundary that gives the filename pattern security impact. Keep filename-pattern observations separate from exploit evidence.
+**Prevention:** For SMTP headers, use `@field_validator` with explicit `mode="before"` checks that reject `chr(10)` and `chr(13)` across user-controlled fields to, subject, in_reply_to, and references. For uploads, preserve canonical path handling, bounded decoding, control-character rejection, terminal suffix validation, and parser-only handling. Do not introduce an embedded-extension denylist unless a sink-backed RED reproduces execution or reinterpretation through the actual consumer path.
 
 ## 2026-06-30 - JWT Algorithm Confusion
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
@@ -138,7 +138,3 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
-## 2026-08-10 - Fix Double Extension Upload Vulnerability
-**Vulnerability:** The application allowed file uploads with multiple extensions (e.g., `malicious.exe.eml`) by only checking the final `.suffix`, missing embedded dangerous extensions like `.exe` or `.sh`.
-**Learning:** Checking the `.suffix` using standard `pathlib` functions is insufficient for validating upload security against bypass attempts using double extensions.
-**Prevention:** Always tokenize uploaded filenames via `.split(".")` and explicitly reject uploads if any embedded segment matches a known dangerous extension list (e.g., `.exe`, `.sh`).
