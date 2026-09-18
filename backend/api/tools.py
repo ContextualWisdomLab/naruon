@@ -26,8 +26,6 @@ router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
-UTILITY_TEXT_MAX_CHARS = 100_000
-HASH_GENERATOR_ALGORITHMS = frozenset({"sha256", "sha384", "sha512"})
 
 
 def _tool_code_fingerprint(code: str) -> str:
@@ -708,8 +706,6 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
-
-
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -773,32 +769,26 @@ registry.register(
 )
 
 
+
+
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Return a bounded SHA-2 digest for workspace utility input."""
     text = params.get("text", "")
-    if len(text) > UTILITY_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"Hash input must not exceed {UTILITY_TEXT_MAX_CHARS} characters"
-        )
+    algorithm = params.get("algorithm", "sha256").lower()
+    if algorithm not in hashlib.algorithms_available:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
 
-    algorithm = params["algorithm"].lower()
-    if algorithm not in HASH_GENERATOR_ALGORITHMS:
-        raise ValueError(
-            f"Unsupported hash algorithm: {algorithm}. Unsupported algorithm names are rejected."
-        )
+    hasher = hashlib.new(algorithm)
+    hasher.update(text.encode("utf-8"))
 
-    return {"hash": hashlib.new(algorithm, text.encode("utf-8")).hexdigest()}
+    return {"hash": hasher.hexdigest()}
 
 
 registry.register(
     ToolInfo(
         code="hash_generator",
         name="해시 생성기 (Hash Generator)",
-        description=(
-            "입력 텍스트의 SHA-256, SHA-384 또는 SHA-512 해시 값을 계산합니다. "
-            "해시는 암호화나 비밀번호 저장 기능이 아닙니다."
-        ),
-        category="유틸리티",
+        description="입력된 텍스트를 지정된 해시 알고리즘(예: sha256)으로 암호화하여 반환합니다.",
+        category="보안",
         parameters={"text": "string", "algorithm": "string"},
     ),
     hash_generator_handler,
@@ -806,35 +796,25 @@ registry.register(
 
 
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Pretty-print bounded, syntactically valid JSON text."""
     raw_json = params.get("raw_json", "")
-    if len(raw_json) > UTILITY_TEXT_MAX_CHARS:
-        raise ValueError(
-            f"JSON input must not exceed {UTILITY_TEXT_MAX_CHARS} characters"
-        )
-
     try:
         parsed = json.loads(raw_json)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON string: {exc}") from exc
-
-    return {"formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False)}
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
 
 
 registry.register(
     ToolInfo(
         code="json_formatter",
         name="JSON 포매터 (JSON Formatter)",
-        description=(
-            "유효한 JSON 문자열을 들여쓰기해 읽기 쉬운 형식으로 정렬합니다. "
-            "문법 오류가 있는 JSON은 거부합니다."
-        ),
+        description="압축되거나 보기 힘든 형태의 유효한 JSON 문자열을 보기 좋게 정렬(Formatting)하여 반환합니다.",
         category="유틸리티",
         parameters={"raw_json": "string"},
     ),
     json_formatter_handler,
 )
-
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
