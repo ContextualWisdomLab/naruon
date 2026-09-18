@@ -1211,3 +1211,61 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha256"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert result["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_invalid_algorithm():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "invalid_algo"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Unsupported algorithm" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"raw_json": "{\"key\": \"value\"}"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert result["formatted_json"] == "{\n  \"key\": \"value\"\n}"
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_invalid_input():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"raw_json": "invalid_json"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Invalid JSON string" in data["message"]
