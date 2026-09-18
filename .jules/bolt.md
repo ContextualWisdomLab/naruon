@@ -1,7 +1,3 @@
-## 2026-07-25 - Avoid Array.from().slice() on Maps in React
-**Learning:** When generating limited-length arrays from `Map.values()` in React `useMemo` hooks, using `Array.from(map.values()).slice(0, N).map(...)` allocates an intermediate array equal to the total size of the map, resulting in unnecessary transient O(M) memory allocations.
-**Action:** Replace `Array.from(map.values()).slice().map()` with a bounded `for...of` loop over `map.values()` that breaks early to achieve O(1) space relative to total map size.
-
 ## 2025-02-12 - Eliminated O(N log N) Final Sort in Backend Email Fetching
 
 **Learning:** The database query inside `get_emails` (`backend/api/emails.py`) already returns rows sorted chronologically descending (`order_by(Email.date.desc())`). Previously, this array was manually reversed, grouped by thread with a dictionary, and then the dictionary values were sorted again into descending order. Because Python 3.7+ preserves dictionary insertion order, iterating the descending query results and inserting elements into a group dictionary inherently guarantees that the dict's values are strictly ordered by the *newest message in each thread*. This eliminates the need for both the `O(N)` list reversal and the costly `O(N log N)` `sorted()` final step when assembling threads.

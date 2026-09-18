@@ -289,7 +289,7 @@ export default function NetworkGraph() {
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
-      if (index >= 5) break;
+      if (options.length >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
@@ -302,15 +302,13 @@ export default function NetworkGraph() {
 
   const nodeOptions = useMemo(() => {
     const options = [];
-    let index = 0;
     for (const node of nodeInstanceMap.values()) {
-      if (index >= 8) break;
+      if (options.length >= 8) break;
       options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
-      index++;
     }
     return options;
   }, [nodeInstanceMap]);
