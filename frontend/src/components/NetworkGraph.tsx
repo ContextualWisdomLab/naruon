@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -157,9 +157,7 @@ function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
 
 import { apiClient } from '@/lib/api-client';
 
-// ⚡ Bolt: Memoized the NetworkGraph component to prevent expensive vis-network re-instantiations
-// and layout thrashing when parent components (like DashboardLayout or WorkspaceHome) frequently re-render.
-export default React.memo(function NetworkGraph() {
+const NetworkGraph = memo(function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const unavailableRelationshipDescriptionId = useId();
@@ -280,27 +278,44 @@ export default React.memo(function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    return nodes
-      .map((node) => String(node.label ?? node.id))
-      .filter(Boolean)
-      .slice(0, 5);
+    const labels: string[] = [];
+    for (const node of nodes) {
+      const label = String(node.label ?? node.id);
+      if (label) {
+        labels.push(label);
+        if (labels.length >= 5) break;
+      }
+    }
+    return labels;
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
-      edge,
-      id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
+    const options = [];
+    let index = 0;
+    for (const edge of edgeMap.values()) {
+      if (options.length >= 5) break;
+      options.push({
+        edge,
+        id: String(edge.id),
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+      });
+      index++;
+    }
+    return options;
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
-      id: String(node.id),
-      label: `노드: ${String(node.label ?? node.id)}`,
-      node,
-    }));
+    const options = [];
+    for (const node of nodeInstanceMap.values()) {
+      if (options.length >= 8) break;
+      options.push({
+        id: String(node.id),
+        label: `노드: ${String(node.label ?? node.id)}`,
+        node,
+      });
+    }
+    return options;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
@@ -481,3 +496,5 @@ export default React.memo(function NetworkGraph() {
     </div>
   );
 });
+
+export default NetworkGraph;
