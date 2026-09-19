@@ -138,3 +138,8 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
+
+## 2024-09-19 - Information Disclosure in LLM Service Error Handling
+**Vulnerability:** Exception objects were string-interpolated into log messages and raised exceptions when calling the LLM API, potentially leaking sensitive information such as API keys or internal stack traces.
+**Learning:** String-interpolating exception objects directly into logs or user-facing error messages can lead to unintended information disclosure.
+**Prevention:** Use `logger.error(..., exc_info=True)` for secure logging, and raise exceptions with generic messages instead of interpolating the exception object.
