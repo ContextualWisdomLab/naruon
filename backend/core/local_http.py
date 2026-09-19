@@ -111,7 +111,15 @@ def validate_local_request_target(
         )
     for raw_segment in parsed.path.split("/"):
         try:
-            decoded_segment = unquote(raw_segment, errors="strict")
+            decoded_segment = raw_segment
+            for _ in range(4):
+                next_segment = unquote(decoded_segment, errors="strict")
+                if next_segment == decoded_segment:
+                    break
+                decoded_segment = next_segment
+            else:
+                if unquote(decoded_segment, errors="strict") != decoded_segment:
+                    raise LocalHTTPValidationError("local request path traversal is not allowed")
         except UnicodeDecodeError as exc:
             raise LocalHTTPValidationError(
                 "local request path contains invalid percent encoding"

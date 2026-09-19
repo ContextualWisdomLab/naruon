@@ -126,6 +126,8 @@ def test_local_request_target_preserves_safe_path_and_query() -> None:
         "/api/%5cadmin",
         "/api/%5Cadmin",
         r"/api/\admin",
+        "/api/%252e%252e/auth/session",
+        "/api/%252E%252E/auth/session",
     ],
 )
 def test_local_request_target_rejects_raw_and_encoded_traversal(path: str) -> None:
