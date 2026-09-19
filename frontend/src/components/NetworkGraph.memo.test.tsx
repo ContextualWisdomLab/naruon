@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import React, { act, useState } from "react";
+import React, { Profiler, act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -36,11 +36,7 @@ describe("NetworkGraph memo boundary", () => {
   });
 
   it("does not render again when an unrelated parent state changes", async () => {
-    // Spy on the internal render function wrapped by memo
-    const memoComponent = NetworkGraph as unknown as { type: (...args: any[]) => any };
-    const originalRender = memoComponent.type;
-    const renderSpy = vi.fn(originalRender);
-    memoComponent.type = renderSpy;
+    const onRender = vi.fn();
 
     function Parent() {
       const [, setParentVersion] = useState(0);
@@ -49,7 +45,9 @@ describe("NetworkGraph memo boundary", () => {
           <button type="button" onClick={() => setParentVersion((value) => value + 1)}>
             update parent
           </button>
-          <NetworkGraph />
+          <Profiler id="network-graph" onRender={onRender}>
+            <NetworkGraph />
+          </Profiler>
         </>
       );
     }
@@ -62,7 +60,7 @@ describe("NetworkGraph memo boundary", () => {
       root?.render(<Parent />);
     });
 
-    expect(renderSpy).toHaveBeenCalledTimes(1);
+    expect(onRender).toHaveBeenCalledTimes(1);
 
     const parentUpdateButton = container.querySelector("button");
     expect(parentUpdateButton).toBeInstanceOf(HTMLButtonElement);
@@ -71,10 +69,6 @@ describe("NetworkGraph memo boundary", () => {
       parentUpdateButton?.click();
     });
 
-    // If memo is working, the component's internal render function is not called again
-    expect(renderSpy).toHaveBeenCalledTimes(1);
-
-    // Restore original
-    memoComponent.type = originalRender;
+    expect(onRender).toHaveBeenCalledTimes(1);
   });
 });
