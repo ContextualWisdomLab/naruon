@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.7  
+**Baseline version:** 2.8  
 **Observed on:** 2026-09-19 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
@@ -33,15 +33,15 @@ GA-1 remains **Customer-owned Mail, Calendar, Contact, and File Control Plane**.
 
 ### 3.1 Central CI/security control plane
 
-Protected central truth remains `.github/main@64aa08d7fa487deacd41c761c36277ca68cab6c9`.
+Protected central truth advanced to `.github/main@e6334e229581a918e2f22de18733b76fa65d7e71`, the ordinary merge of #2279 exact `d1e4380c15e948aaf104d46aa134fa614058782a`. The URL/redirect authority is therefore protected ancestry now; descendants must consume that landed owner state rather than wait for #2279 as an open prerequisite.
 
-- `.github#712` remains the canonical organization Actions queue-starvation owner. During this observation window the central queue contracted as low as **156 queued / 1 in-progress**; the two fresh sweeps immediately before this source update both observed **184 queued / 1 in-progress**. That is materially below v2.6's 531/4 snapshot but still volatile and is not evidence that runner acquisition is healthy. The latest owner specimen shows a current head where some lanes execute while other required jobs remain runnerless and later terminate cancelled. Keep this a fail-closed execution-capacity prerequisite until current-head required evidence reliably acquires runners and settles terminally. Preserve sole current-head evidence, remove only obsolete/superseded pressure through the owner path, and do not blind-rerun unchanged heads.
-- `.github#2040@ecc9e1d11149ae44ec4f8389e4ac72a08ba45ba7` has completed ordinary/non-force path-wise protected-main reconciliation. Its reconciled source repairs repository identity, removes the superseded unversioned CodeQL fallback, preserves the v2 producer/credential/no-restamp contracts and current-main queue/GHAS behavior, and verified locally at **496 focused passed; 3,404 passed / 28 skipped / 40 subtests**. Hosted exact-head checks and qualifying independent current-head approval remain prerequisites; source reconciliation is not merge authority.
-- `.github#2279@d1e4380c15e948aaf104d46aa134fa614058782a` is now the current authenticated GitHub API authority. It ordinary-forwarded beyond the v2.5 `b338d1e...` generation, retaining initial-authority validation, no-redirect production openers, bearer non-forwarding, executable G-17 ancestry validation, and now owner-qualifying the foreign Semgrep evidence reference. It is Ready for review, not merge-authoritative; its current Python Security/CodeQL/Security/Semgrep/Runtime Quality generation is still pending/queued and independent current-head review remains required.
-- `.github#2271@8aff1a6a581613709c01747fe68c1f7523fe84da` is the current CodeQL dispatch repository-identity descendant of #2279 `d1e4380...`. Its ordinary two-parent reconciliation preserves the latest #2279 authority and the dispatch admission/stderr contract. Focused reconciliation is locally GREEN, but hosted current-head evidence and independent approval must be reacquired.
-- `.github#2275@f54aeb6f5c6b30534ee2f12e040208e098957b4b` is now the current GHAS analysis-read capability-selector descendant of #2271/#2279. It hardens the executable selector test so success requires the exact `code-scanning/analyses?per_page=1&tool_name=CodeQL` endpoint and reviewed headers; focused stack is **165 passed**, full local suite **3,378 passed / 28 skipped / 40 subtests**. It remains Draft/Proposed until its foundation is accepted, hosted evidence is terminal, independent approval is current, and #2276 proves real target permission.
-- `.github#2272@5c71e889a5ec7e4ad0e0d010c222ec521050bb9a` still preserves the Pages caller-input shell boundary and the earlier #2279 `b338d1e...` security lineage, with 93 focused tests in both normal and `GITHUB_ACTIONS=true` modes and a full 3,372-passed local run. It is **no longer the current #2279 successor** because #2279 advanced to `d1e4380...`. Keep it Draft and ordinary/non-force adopt the current foundation before any acceptance claim; its predecessor receipts do not transfer.
-- `.github#2269@834d285f90241b4741247408001fd7534ce5a3b0` remains a divergent historical redirect/test-seam lane. Do not close it until a fresh succession audit proves every valid delta/test/doctoring contract is inherited or intentionally superseded.
+- `.github#712` remains the canonical organization Actions queue-starvation owner. During this observation window the queue had previously contracted as low as 156 queued / 1 in-progress, but the current fresh observation is **268 queued / 1 in-progress**. This is still materially below v2.6's 531/4 snapshot but is volatile and not evidence of stable runner acquisition. Preserve sole current-head evidence, remove only obsolete/superseded pressure through the owner path, and do not blind-rerun unchanged heads.
+- `.github#2279` is **merged**. Protected merge commit `e6334e229581a918e2f22de18733b76fa65d7e71` has parents prior `main@64aa08d7fa487deacd41c761c36277ca68cab6c9` and exact owner head `d1e4380c15e948aaf104d46aa134fa614058782a`. Initial GitHub REST authority validation, no-redirect production openers, bearer non-forwarding, executable G-17 ancestry validation, and owner-qualified foreign Semgrep evidence are now protected central source authority. Do not continue to model #2279 as a pending foundation PR.
+- `.github#2040@ecc9e1d11149ae44ec4f8389e4ac72a08ba45ba7` had completed path-wise reconciliation against the previous protected main and locally verified **496 focused passed; 3,404 passed / 28 skipped / 40 subtests**. The #2279 merge moved protected main again. Fresh compare against `main@e6334e...` is now **diverged, 169 ahead / 33 behind, merge base `64aa08d7...`**. #2040 therefore needs another ordinary/non-force path-wise adoption of the newly landed central URL/redirect authority before exact-head acceptance; its previous reconciliation evidence remains source history, not acceptance for the new base.
+- `.github#2271@8aff1a6a581613709c01747fe68c1f7523fe84da` is the CodeQL dispatch repository-identity descendant. Its PR base now points to protected `main@e6334e...`, so #2279 is no longer an unlanded stack prerequisite. The head already carries the #2279 owner commit through prior ordinary two-parent ancestry and preserves the dispatch admission/stderr repair. Keep Draft until current-base hosted evidence and qualifying independent approval are current.
+- `.github#2275@f54aeb6f5c6b30534ee2f12e040208e098957b4b` remains the GHAS analysis-read capability-selector descendant of #2271. It requires the exact `code-scanning/analyses?per_page=1&tool_name=CodeQL` endpoint and reviewed headers; focused stack is **165 passed**, full local suite **3,378 passed / 28 skipped / 40 subtests**. Its narrative that #2279 is still an acceptance prerequisite is now stale; the remaining prerequisites are current-base #2271/hosted acceptance and #2276 real target permission.
+- `.github#2272@cd3b41b8989e096d1ee375d332347c8bb819acf9` has ordinary-forward adopted complete #2279 `d1e4380...` while preserving the Pages caller-input shell boundary and SAST compatibility work. Its exact tree verified **94 focused passed**, **94 passed with `GITHUB_ACTIONS=true`**, and **3,373 passed / 28 skipped / 40 subtests**. Its base is now protected `main@e6334e...`; keep Draft until fresh exact-head Pages/security/SAST/CodeQL/runtime evidence and independent review are terminal.
+- `.github#2269@834d285f90241b4741247408001fd7534ce5a3b0` remains historical redirect/test-seam lineage. Do not close it until a fresh succession audit proves every valid delta/test/doctoring contract is present in protected `main@e6334e...` or an accepted successor.
 - `.github#2276` remains the distinct real target-repository permission/canary boundary for the observed `code-scanning/analyses` 403. Capability selection cannot manufacture installation/repository permission. Acceptance requires an unchanged-target canary reading both protected-base and exact-head analyses and completing language pairing.
 
 No Naruon PR copies central workflow source. Naruon records owner identities, waits fail-closed for accepted/released contracts, then ordinary-restacks its own consumers.
@@ -56,13 +56,15 @@ No Naruon PR copies central workflow source. Naruon records owner identities, wa
 
 `0018_workspace_registry → 0019_email_read_state_repair → 0020_workspace_organization_binding → 0021_workspace_personal_owner_binding`
 
-No downstream feature may create a parallel Alembic head from protected `develop`; descendants adopt the then-current canonical migration head. [#1727](https://github.com/ContextualWisdomLab/naruon/pull/1727) remains correctly stacked on #1503 for opaque-ID backfill entropy and stays Draft.
+No downstream feature may create a parallel Alembic head from protected `develop`; descendants adopt the then-current canonical migration head.
+
+[#1727](https://github.com/ContextualWisdomLab/naruon/pull/1727) remains correctly retargeted to #1503 for opaque-ID backfill entropy. An intervening Sentinel commit `103a52c9fad2081cf6ff6d10d8e9c73bea7395e4` retained a valid prompt-template assertion but deleted the dedicated 42-line entropy regression and 33-line doctoring/TRACEABILITY record. Ordinary children `f501b09af6086de4e9a79ac77488622eb67fcd63` and exact current `2ac48fb7e591827804ba8e7e911f211b0c134ddf` restore those artifacts byte-for-byte while retaining the intervening commit in ancestry. The effective delta remains five files: the historical migration, bootstrap generation, bootstrap expectations, focused regression, and doctoring. #1727 stays Draft; it is mechanically mergeable but **ahead 6 / behind 37** relative to #1503's shared protected merge base, and exact `2ac48fb...` currently has no workflow runs or formal reviews/threads. No predecessor receipt transfers.
 
 ### 3.4 Generated provenance lanes
 
 Generated branches that rediscover an owned delta are provenance, not new owners. Current examples include #1724, #1728 and #1730. Their ordinary/non-force reconciliations reduce effective delta to the canonical owner tree or protected tree, and their checks/reviews do not transfer to actual owners.
 
-Repeated source re-entry after zero-delta reconciliation remains a control-plane Gap. Generated writers should perform semantic owner-overlap detection before source mutation and become terminal/read-only after provenance reconciliation. Source-neutral `trigger CI` commits are not acceptance evidence.
+Repeated source re-entry after zero-delta reconciliation or deletion of owner tests/doctoring remains a control-plane Gap. #1727's `103a52c9...` regression is a current example: a generated writer kept one narrow assertion while removing broader executable coverage and traceability. Generated writers should perform semantic owner-overlap detection before source mutation and become terminal/read-only after provenance reconciliation. Source-neutral `trigger CI` commits are not acceptance evidence.
 
 ### 3.5 Auditable data-hygiene owner
 
@@ -70,7 +72,7 @@ Repeated source re-entry after zero-delta reconciliation remains a control-plane
 
 ### 3.6 OpenSSF governance evidence owner
 
-Issue [#1178](https://github.com/ContextualWisdomLab/naruon/issues/1178) and PR [#1732](https://github.com/ContextualWisdomLab/naruon/pull/1732) now own the bounded OpenSSF Best Practices evidence lane. #1732 exact `a8e83d6701e4195e984d2e72de29b056cae55268` repairs the private vulnerability-reporting URL and adds a truthful enrollment packet, but remains Draft after a current review found the licensing boundary had been framed too softly.
+Issue [#1178](https://github.com/ContextualWisdomLab/naruon/issues/1178) and PR [#1732](https://github.com/ContextualWisdomLab/naruon/pull/1732) own the bounded OpenSSF Best Practices evidence lane. #1732 exact `a8e83d6701e4195e984d2e72de29b056cae55268` repairs the private vulnerability-reporting URL and adds a truthful enrollment packet, but remains Draft.
 
 OpenSSF Best Practices Passing is for FLOSS projects and requires every MUST/MUST NOT criterion, including `floss_license`, to be satisfied. Naruon's current proprietary license is therefore a **legal/business eligibility blocker** to Passing unless an authorized copyright-holder/legal/business licensing decision changes that boundary. Engineering must not fabricate a project id, badge, waiver, or remediation date. This lane is governance evidence, not a reason to weaken product gates or a mandatory release dependency unless the business explicitly chooses OpenSSF Passing as a release criterion.
 
@@ -104,10 +106,10 @@ Current contextual-orchestrator protected main is `5665b0ad1e07ffb5e9f8c59e44b6b
 | Priority | Gap | Current boundary | Completion evidence |
 | --- | --- | --- | --- |
 | P0 | Release-train convergence | 280 open PRs; many stacked/provenance/dependency/governance lanes; protected head unchanged | canonical owner inventory, parent-first protected integration, no orphaned valid delta, one immutable RC source SHA |
-| P0 | Actions execution capacity | `.github#712` remains open; observation window moved from 156 to 184 queued / 1 in-progress, materially below v2.6 but still volatile; current-head runnerless/cancelled specimens remain and current #1602 evidence lanes are queued | owner health separates current/obsolete runs; obsolete pressure removed without cancelling sole current-head evidence; required lanes receive runner assignment and settle terminally |
-| P0 | Central CI/security acceptance | #2040 reconciled; current security/GHAS stack is #2279 `d1e4380...` → #2271 `8aff1a...` → #2275 `f54aeb...`; Pages #2272 still trails the previous #2279 generation; #2269 succession and #2276 permission remain incomplete | terminal hosted checks, current-head independent review, Pages foundation reconciliation, verified succession, real unchanged-target GHAS canary |
+| P0 | Actions execution capacity | `.github#712` remains open; current snapshot is 268 queued / 1 in-progress after an earlier contraction to 156/1; runner acquisition remains volatile | owner health separates current/obsolete runs; obsolete pressure removed without cancelling sole current-head evidence; required lanes receive runner assignment and settle terminally |
+| P0 | Central CI/security acceptance | protected main now includes #2279 at `e6334e...`; #2040 re-diverged after that merge; current descendant stack is #2271 `8aff1a...` → #2275 `f54aeb...`; Pages #2272 `cd3b41...` has adopted #2279; #2269 succession and #2276 permission remain incomplete | #2040 current-main reconciliation, descendant terminal hosted checks/current-head review, verified #2269 succession, real unchanged-target GHAS canary |
 | P0 | Dependency-security freshness | #1623 generation GREEN, later Trivy DB sees protected-base debt | revalidate fixed source against then-current base and vulnerability database |
-| P0 | Workspace/migration convergence | #1503 source repairs owner-binding RED but is not protected-integrated | one Alembic head, real PostgreSQL fresh + historical upgrade, exact-head CI/security/review |
+| P0 | Workspace/migration convergence | #1503 source repairs owner-binding RED but is not protected-integrated; #1727 entropy child repaired a generated test/doctoring deletion and remains Draft | one Alembic head, real PostgreSQL fresh + historical upgrade, exact-head CI/security/review, ordinary descendant adoption |
 | P0 | LLM governance contradiction | protected AGENTS still advertises direct provider/model routing; #1548/#1549 own repair | #1549 normal integration after released CO identity + current-base exact-head checks/review |
 | P0 | Immutable LLM contract | CO protected main exists but releases are `[]` | immutable owner release, consumer version/digest pin, schema/E2E/model behavior/security/SBOM/provenance |
 | P0 | Product/release truth | latest Naruon Release `v0.14.4` is mutable and predates current protected head | code-current docs, version/CHANGELOG, immutable publication, SBOM/provenance/reproducibility/rollback |
@@ -116,7 +118,7 @@ Current contextual-orchestrator protected main is `5665b0ad1e07ffb5e9f8c59e44b6b
 | P1 | Auditable data hygiene | #1418 locally GREEN; hosted checks/current-head approval pending | terminal exact-head checks/review, normal protected integration, verified #1590 succession |
 | P1 | UI localization | #1731 is architecture Gap only; current surfaces still embed Korean product copy | versioned 8-locale DB resource/API/cache/publish + Storybook/browser/a11y acceptance |
 | P1 | OIDC pending UX | #1729 jsdom repair exists but hosted/browser/multilingual evidence incomplete | terminal exact-head checks/review + browser/AT/responsive evidence + released locale resource consumption |
-| P1 | Generated-writer owner lock | repeated generated source re-entry after zero-delta reconciliation | semantic owner-overlap detection and writer-terminal/read-only control with regression evidence |
+| P1 | Generated-writer owner lock | repeated generated source re-entry after zero-delta reconciliation; #1727 had executable regression/doctoring deleted by an intervening generated commit | semantic owner-overlap detection and writer-terminal/read-only control with regression evidence |
 | P1 | Typed context/scientific differentiation | generic context/search/extractor foundations exist; no protected live STM/TEPP claim | released typed/scientific owner contract with uncertainty/provenance/abstention; no lexical-as-psychometrics marketing |
 
 ## 7. Performance, data, and DDD acceptance
@@ -149,15 +151,16 @@ Current **Merge/Release Gate: FAIL**.
 
 Current causal order:
 
-1. recover current-head Actions execution capacity through `.github#712`, removing only obsolete/superseded pressure and preserving current-head required evidence; the reduced queue count is encouraging but does not substitute for stable runner acquisition;
-2. terminalize and independently review #2040 and current #2279; then validate descendants #2271 → #2275 while separately ordinary-forwarding Pages #2272 onto the accepted current foundation;
-3. complete #2269 succession audit and #2276 unchanged-target analysis-read canary before claiming central CodeQL/GHAS acceptance;
-4. revalidate and normally integrate #1623 against then-current protected ancestry and vulnerability database;
-5. integrate #1694 → #1691 and direct-code prerequisites, then #1503 with one healthy migration head and real PostgreSQL fresh/historical evidence;
-6. ordinary-restack downstream workspace/Reply-SLA/migration consumers and reacquire invalidated exact-head evidence;
-7. after CO publishes an immutable API/client/schema release, finish canonical #1549 governance integration without mutable-owner binding;
-8. create one #1731 localization implementation owner from the then-current migration head, publish/test the eight-locale screen-resource contract, then ordinary-adapt #1729;
-9. only after an exact integrated protected candidate exists, update version/CHANGELOG and publish an immutable release/package/OCI identity with SBOM, provenance, reproducibility, rollback, and buyer-visible acceptance evidence.
+1. continue `.github#712` execution-capacity repair without blind unchanged-head reruns; the queue is lower than the earlier 531 snapshot but remains volatile;
+2. ordinary/non-force reconcile #2040 onto protected `main@e6334e...`, preserving both its scheduler contracts and the now-landed #2279 URL/redirect authority, then reacquire exact-head hosted evidence and qualifying independent review;
+3. terminalize/review #2271 → #2275 on the current protected foundation, and terminalize/review Pages #2272 `cd3b41...` separately;
+4. complete #2269 succession audit and #2276 unchanged-target analysis-read canary before claiming central CodeQL/GHAS acceptance;
+5. revalidate and normally integrate #1623 against then-current protected ancestry and vulnerability database;
+6. integrate #1694 → #1691 and direct-code prerequisites, then #1503 with one healthy migration head and real PostgreSQL fresh/historical evidence; ordinary-adopt #1727's bounded entropy delta on the then-current owner tree and reacquire evidence;
+7. ordinary-restack downstream workspace/Reply-SLA/migration consumers and reacquire invalidated exact-head evidence;
+8. after CO publishes an immutable API/client/schema release, finish canonical #1549 governance integration without mutable-owner binding;
+9. create one #1731 localization implementation owner from the then-current migration head, publish/test the eight-locale screen-resource contract, then ordinary-adapt #1729;
+10. only after an exact integrated protected candidate exists, update version/CHANGELOG and publish an immutable release/package/OCI identity with SBOM, provenance, reproducibility, rollback, and buyer-visible acceptance evidence.
 
 OpenSSF #1178/#1732 proceeds as a separate governance/legal lane. It does not enter the release-critical causal chain unless an authorized business decision explicitly makes a Passing badge a release criterion.
 
@@ -172,6 +175,10 @@ Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110).
 World Wide Web Consortium. (2024). *Web Content Accessibility Guidelines (WCAG) 2.2*. https://www.w3.org/TR/WCAG22/
 
 Open Source Security Foundation. (n.d.). *OpenSSF Best Practices Badge criteria: Passing*. https://www.bestpractices.dev/en/criteria?details=true&rationale=true
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: UUID functions*. PostgreSQL Documentation. https://www.postgresql.org/docs/current/functions-uuid.html
+
+PyCQA. (2026). *B608: hardcoded_sql_expressions*. Bandit documentation. https://bandit.readthedocs.io/en/latest/plugins/b608_hardcoded_sql_expressions.html
 
 The archived v1.9 baseline retains the broader protocol, observability, provenance, storage, supply-chain, and UI research bibliography. New implementations must bind cited standards to exact code/API/test evidence rather than cite them decoratively.
 
