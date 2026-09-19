@@ -13,12 +13,15 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _HASH_PATTERN = re.compile(r"--hash=sha256:([0-9a-f]{64})")
 _EXACT_PIN_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\\\s]+)")
+_EXACT_SEMVER_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+POSTCSS_SECURITY_FLOOR = (8, 5, 24)
 
 
 def read_repo_text(relative_path: str) -> str:
@@ -83,6 +86,13 @@ def importer_resolution(importer_section: dict[str, object], group: str, name: s
     return resolution
 
 
+def exact_semver(value: str) -> tuple[int, int, int]:
+    """Return one exact three-part semantic version for security-floor comparison."""
+    match = _EXACT_SEMVER_PATTERN.fullmatch(value)
+    assert match is not None, f"expected exact semantic version, got {value!r}"
+    return tuple(int(part) for part in match.groups())
+
+
 def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None:
     """Keep backend, Strix, and frontend dependency floors reviewable together."""
     backend_pins = exact_requirement_pins(read_repo_text("backend/requirements.txt"))
@@ -94,6 +104,7 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         read_repo_text("requirements-strix-ci-hashes.txt")
     )
     frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
     frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
 
     assert backend_pins["cryptography"] == "50.0.0"
@@ -116,31 +127,98 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         for digest in strix_records[pin]
     )
 
+    reviewed_postcss = frontend_package["devDependencies"]["postcss"]
+    assert isinstance(reviewed_postcss, str)
+    assert exact_semver(reviewed_postcss) >= POSTCSS_SECURITY_FLOOR
+    assert frontend_package["overrides"]["postcss"] == reviewed_postcss
+    assert frontend_workspace["overrides"]["postcss"] == reviewed_postcss
+
     root_importer = frontend_lock["importers"]["."]
     postcss_resolution = importer_resolution(
         root_importer, "devDependencies", "postcss"
     )
     jsdom_resolution = importer_resolution(root_importer, "devDependencies", "jsdom")
-    assert postcss_resolution == {"specifier": "8.5.24", "version": "8.5.24"}
+    assert postcss_resolution == {
+        "specifier": reviewed_postcss,
+        "version": reviewed_postcss,
+    }
     assert jsdom_resolution == {"specifier": "^30.0.1", "version": "30.0.1"}
 
-    assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
-    assert frontend_package["overrides"]["postcss"] == "8.5.24"
     assert frontend_package["overrides"]["brace-expansion"] == "5.0.9"
     assert frontend_package["overrides"]["undici"] == "8.9.0"
 
     assert frontend_lock["overrides"] == {
         **frontend_lock["overrides"],
-        "postcss": "8.5.24",
+        "postcss": reviewed_postcss,
         "brace-expansion": "5.0.9",
         "undici": "8.9.0",
     }
+    for section_name in ("packages", "snapshots"):
+        section_records = frontend_lock[section_name]
+        assert isinstance(section_records, dict)
+        postcss_entries = [
+            key for key in section_records if key.startswith("postcss@")
+        ]
+        assert postcss_entries, f"{section_name} must contain postcss"
+        for package_key in postcss_entries:
+            resolved_postcss = package_key.removeprefix("postcss@")
+            assert (
+                exact_semver(resolved_postcss) >= POSTCSS_SECURITY_FLOOR
+            ), f"{section_name} contains postcss below the reviewed security floor"
+
+    postcss_snapshot_key = f"postcss@{postcss_resolution['version']}"
+    assert (
+        postcss_snapshot_key in frontend_lock["snapshots"]
+    ), "root importer postcss snapshot must exist"
+
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
-        "postcss@8.5.24",
+        f"postcss@{reviewed_postcss}",
         "jsdom@30.0.1",
         "brace-expansion@5.0.9",
         "undici@8.9.0",
     ):
         assert exact_lock_entry in package_records
+
+
+@pytest.mark.parametrize("section_name", ("packages", "snapshots"))
+def test_postcss_security_floor_rejects_below_floor_lock_entry(
+    monkeypatch: pytest.MonkeyPatch,
+    section_name: str,
+) -> None:
+    """Reject a stale transitive PostCSS resolution even when the direct pin is valid."""
+    original_read_repo_text = read_repo_text
+    lock = yaml.safe_load(original_read_repo_text("frontend/pnpm-lock.yaml"))
+    lock[section_name]["postcss@8.5.23"] = {}
+    mutated_lock_text = yaml.safe_dump(lock, sort_keys=False)
+
+    def read_mutated_repo_text(relative_path: str) -> str:
+        if relative_path == "frontend/pnpm-lock.yaml":
+            return mutated_lock_text
+        return original_read_repo_text(relative_path)
+
+    monkeypatch.setitem(globals(), "read_repo_text", read_mutated_repo_text)
+    with pytest.raises(AssertionError, match=f"{section_name} contains postcss below"):
+        test_container_provenance_dependency_pins_match_reviewed_manifests()
+
+
+def test_postcss_root_importer_requires_exact_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject a lockfile whose root PostCSS resolution has no matching snapshot."""
+    original_read_repo_text = read_repo_text
+    lock = yaml.safe_load(original_read_repo_text("frontend/pnpm-lock.yaml"))
+    postcss_version = lock["importers"]["."]["devDependencies"]["postcss"]["version"]
+    lock["snapshots"].pop(f"postcss@{postcss_version}")
+    lock["snapshots"].setdefault("postcss@8.5.25", {})
+    mutated_lock_text = yaml.safe_dump(lock, sort_keys=False)
+
+    def read_mutated_repo_text(relative_path: str) -> str:
+        if relative_path == "frontend/pnpm-lock.yaml":
+            return mutated_lock_text
+        return original_read_repo_text(relative_path)
+
+    monkeypatch.setitem(globals(), "read_repo_text", read_mutated_repo_text)
+    with pytest.raises(AssertionError, match="root importer postcss snapshot"):
+        test_container_provenance_dependency_pins_match_reviewed_manifests()
