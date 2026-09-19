@@ -15,9 +15,19 @@ Tracking:
 Do not fabricate OpenSSF Best Practices attestations. Answer only from live
 repository and organization evidence. Leave unmet criteria unmet.
 
+The OpenSSF Best Practices program is for FLOSS projects. The Passing level
+requires every MUST and MUST NOT criterion to be met, including
+`floss_license` ("The software produced by the project MUST be released as
+FLOSS"). Naruon's current proprietary license is therefore a **hard blocker to
+a Passing badge**, not an engineering criterion that can be waived with a
+justification. Only an authorized copyright-holder/legal/business licensing
+decision can change this boundary. Primary criteria:
+https://www.bestpractices.dev/en/criteria?details=true&rationale=true
+
 Do not add a Best Practices badge image or project URL to README until
 `https://www.bestpractices.dev/projects.json?url=https://github.com/ContextualWisdomLab/naruon`
-returns a real project record.
+returns a real project record. Do not claim Passing until the live project
+record satisfies every required criterion.
 
 ## Live gap (re-check before enrollment)
 
@@ -44,19 +54,20 @@ As of the companion handoff dated 2026-09-19:
 
 | Topic | Current fact | Owner / remediation |
 | --- | --- | --- |
-| FLOSS license | Proprietary license text; GitHub license key `other` / SPDX `NOASSERTION` | Copyright holder — OpenSSF FLOSS license criteria stay unmet unless license policy changes |
+| FLOSS license | Proprietary license text; GitHub license key `other` / SPDX `NOASSERTION`; OpenSSF Passing requires `floss_license` MUST to be met | Copyright holder / legal / business decision. No engineering ETA or waiver exists; a qualifying FLOSS or dual-license path must be explicitly authorized before Passing can be claimed |
 | Governance doc | No `GOVERNANCE.md` | Maintainers — add only if governance is real |
 | Independent reviewers | Collaborators: `seonghobae` only | Naruon #1371 — do not claim multi-maintainer review from inventory alone |
-| Effective branch protection | Rulesets `17214772` and `18156473` each require one approving review; `17214772` also requires approval after last push; thread resolution required. Ruleset `15586698` alone is **not** the full contract. | Record integrated rules at answer time; **do not weaken** |
+| Effective branch protection | Rulesets `17214772` and `18156473` each require one approving review; `17214772` also requires approval after last push; both require review-thread resolution. Ruleset `15586698` alone is **not** the full contract. | Record integrated rules at answer time; **do not weaken** |
 
 ## Enrollment steps (external)
 
 1. Authorized identity signs into https://www.bestpractices.dev/ via GitHub OAuth.
-2. Create/claim project with repo URL `https://github.com/ContextualWisdomLab/naruon`.
-3. Fill passing-level criteria from this packet and live rulesets; leave proprietary-license and other unmet items unmet with justification.
-4. Record the project URL in this file and README via a reviewed PR (preserve approval rules).
-5. Re-run / wait for Scorecard (central `security-scan` Scorecard job and Scorecard API) until `CII-Best-Practices` is not score 0.
-6. Close alert #67 and the tracking issues only from refreshed evidence.
+2. Create/claim a project with repo URL `https://github.com/ContextualWisdomLab/naruon` only if the organization wants an explicit program record; project creation by itself is not a Passing badge.
+3. Fill criteria strictly from this packet and live repository/ruleset evidence. Record the proprietary-license condition as a hard Passing blocker; do not mark `floss_license` met or treat it as waivable.
+4. If an authorized licensing decision makes Naruon eligible, refresh every MUST/MUST NOT criterion before pursuing Passing. Otherwise keep the project record non-Passing and do not publish a badge.
+5. Record a real project URL in this file and README only after it exists, via a reviewed PR that preserves the effective approval rules.
+6. Re-run / wait for Scorecard (central `security-scan` Scorecard job and Scorecard API) and verify `CII-Best-Practices` against the actual program record rather than assuming project creation closes the finding.
+7. Close alert #67 and the tracking issues only from refreshed evidence that satisfies their acceptance criteria; an unresolved legal licensing blocker remains open.
 
 ## README badge placeholder (do not paste until id exists)
 
