@@ -10,9 +10,9 @@ This is a bounded interaction-state repair. It does not change the OIDC protocol
 
 Protected `develop@042b0c70531b229af3acbd0421a2f23098d848b3` had static OIDC action labels. `handleOidcLogin()` can wait on the server login request before navigation, and `handleOidcLogout()` waits while the persisted session is cleared before navigation. During either wait, the corresponding button gave no operation-specific progress feedback and remained eligible for another activation.
 
-The first implementation commit is `eeb0c83455786861d79ec455030c5e66c8dceedc`. `frontend/src/components/SettingsLayout.oidc-pending-feedback.test.ts` pins the source-order contract for state entry, awaited call, `finally` cleanup, native `disabled`, `aria-busy`, spinner visibility, and pending labels.
+The first implementation commit is `eeb0c83455786861d79ec455030c5e66c8dceedc`. The first focused contract commit, `1ff12c590eb432caf4b4a72fc88bcdc24b40d130`, used source-order assertions. That was useful for pinning wiring but weaker than the repository's existing rendered `SettingsLayout` test style because it could pass without proving that React exposed the pending state to an actual button.
 
-The regression is intentionally a focused source contract, not rendered-browser evidence. It prevents the implementation from silently dropping the pending-state wiring while the broader UI evidence lane remains incomplete.
+The current regression therefore renders `SettingsLayout` in jsdom, uses deferred OIDC promises, and checks the observable DOM state while those promises remain unsettled. It proves that login shows `로그인 중`, native `disabled`, `aria-busy="true"`, and a decorative spinner; a second native `.click()` does not invoke the login action again; resolving the promise restores the control. The logout case proves the same pending semantics and then rejects the provider promise, requiring the button to recover and the existing error surface to contain the provider failure. This remains component-level DOM evidence, not Storybook/Playwright, real browser, or assistive-technology acceptance.
 
 ## Ownership and rejected alternatives
 
@@ -28,18 +28,18 @@ A single shared login/logout mutex was considered but is not introduced without 
 
 The implementation preserves native button semantics and uses `disabled` for the in-flight action rather than adding redundant `aria-disabled`. `aria-busy` communicates that the control is being updated, while the visible label and decorative spinner provide sighted feedback. The spinner remains `aria-hidden` so it does not add a second accessible object.
 
-This is not a WCAG-conformance claim. Current-head rendered keyboard/screen-reader behavior, focus retention after the button becomes disabled, touch behavior, responsive wrapping, and screenshot evidence still require browser-level verification. The new visible strings are also Korean-only because the current protected Settings surface has no released DB-versioned translation-resource contract. KO/EN/JA/ZH/VI/ES/DE/FR delivery therefore remains a product gap rather than being papered over by a browser catalog.
+The rendered jsdom regression improves functional evidence but is not a WCAG-conformance claim. Current-head real-browser keyboard/screen-reader behavior, focus retention after the button becomes disabled, touch behavior, responsive wrapping, and screenshot evidence still require Storybook/Playwright or equivalent verification. The new visible strings are also Korean-only because the current protected Settings surface has no released DB-versioned translation-resource contract. KO/EN/JA/ZH/VI/ES/DE/FR delivery therefore remains a product gap rather than being papered over by a browser catalog.
 
 ## Delivery gate
 
 - Intent: PASS — progress feedback is tied to the actual awaited OIDC operations.
-- Functional completeness: PARTIAL — focused source regression exists; hosted exact-head checks and rendered interaction evidence are not yet terminal.
+- Functional completeness: PARTIAL — rendered component regressions cover pending, duplicate activation, success cleanup, rejected logout cleanup, and error surfacing; exact-current hosted checks are not yet terminal.
 - Content: PASS for the Korean protected surface; multilingual delivery is unresolved.
-- Resilience: PARTIAL — rejection cleanup is represented in source; keyboard/touch/responsive/error-state browser evidence is absent.
+- Resilience: PARTIAL — rejection cleanup is rendered in jsdom; real-browser keyboard/touch/responsive/focus evidence is absent.
 - Evidence: FAIL for delivery — no current-head Storybook/E2E screenshot or assistive-technology receipt yet.
 - Distinctiveness: N/A — interaction-state repair, not a visual-identity redesign.
 
-**UI Delivery Gate: FAIL** until the exact integrated candidate has terminal required checks, qualifying independent review, and current-head rendered evidence. Do not manufacture that evidence with a source-neutral wake commit.
+**UI Delivery Gate: FAIL** until the exact integrated candidate has terminal required checks, qualifying independent review, and current-head rendered browser evidence. Do not manufacture that evidence with a source-neutral wake commit.
 
 ## Traceability
 
@@ -47,4 +47,4 @@ World Wide Web Consortium. (2023). *Accessible Rich Internet Applications (WAI-A
 
 World Wide Web Consortium. (2024). *Web Content Accessibility Guidelines (WCAG) 2.2*. W3C Recommendation (updated 12 December 2024). https://www.w3.org/TR/WCAG22/
 
-Relevant implementation paths: `frontend/src/components/SettingsLayout.tsx`, `frontend/src/components/SettingsLayout.oidc-pending-feedback.test.ts`.
+Relevant implementation paths: `frontend/src/components/SettingsLayout.tsx`, `frontend/src/components/SettingsLayout.oidc-pending-feedback.test.ts`, and the existing rendered harness in `frontend/src/components/SettingsLayout.test.tsx`.
