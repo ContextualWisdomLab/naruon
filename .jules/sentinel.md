@@ -92,7 +92,7 @@
 **Prevention:** Avoid interpolating absolute paths or system details into exceptions that might be logged or surfaced; use generic error messages instead.
 
 ## 2024-06-25 - [Fix Email SMTP CRLF Injection & Double Extension Upload]
-**Vulnerability:** Attackers could inject arbitrary SMTP commands (e.g. MAIL FROM) using CRLF (\r\n) sequences in email subjects or recipients because `^[^\r\n]*$` validation in Pydantic wasn't catching all edge cases correctly. Attackers could also bypass file upload validations by providing double extensions (e.g., `malicious.exe.eml`).
+**Vulnerability:** Attackers could inject arbitrary SMTP commands (e.g. MAIL FROM) using CRLF (`\r\n`) sequences in email subjects or recipients because `^[^\r\n]*$` validation in Pydantic wasn't catching all edge cases correctly. Attackers could also bypass file upload validations by providing double extensions (e.g., `malicious.exe.eml`).
 **Learning:** Pydantic regex patterns might fall short for strict network protocol inputs like SMTP headers if improperly formulated or bypassed. Simple `.endswith()` checks for file uploads fail to prevent embedded dangerous extensions.
 **Prevention:** Always use `@field_validator` with explicit `mode="before"` string matching for `chr(10)` and `chr(13)` across all user-controlled email header fields (to, subject, in_reply_to, references). Always tokenize uploaded filenames via `.split(".")` and reject if any segment matches a known dangerous extension (e.g., `.exe`, `.sh`).
 
@@ -138,8 +138,3 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
-
-## 2024-09-19 - Information Disclosure in LLM Service Error Handling
-**Vulnerability:** Exception objects were string-interpolated into log messages and raised exceptions when calling the LLM API, potentially leaking sensitive information such as API keys or internal stack traces.
-**Learning:** String-interpolating exception objects directly into logs or user-facing error messages can lead to unintended information disclosure.
-**Prevention:** Use `logger.error(..., exc_info=True)` for secure logging, and raise exceptions with generic messages instead of interpolating the exception object.
