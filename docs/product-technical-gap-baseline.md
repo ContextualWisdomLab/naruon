@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.2  
+**Baseline version:** 2.3  
 **Observed on:** 2026-09-19 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
@@ -96,7 +96,7 @@ Canonical localization Gap is [#1731](https://github.com/ContextualWisdomLab/nar
 
 All Naruon model-backed production work consumes the released `contextual-orchestrator` API/client/schema through an Agent boundary. Actions request `orchestrator/free` through the gateway token only; they do not hard-code provider/model/group or paid fallback.
 
-Current `contextual-orchestrator` protected main is `afad3e90caac73d5b94eb68f70953b5589a01008`, but its GitHub Releases inventory is empty. Therefore protected `main` is not a released consumer identity. Naruon must keep any production path that requires an immutable CO API/client/schema release fail-closed until the owner publishes one and the consumer pins that released identity. No source copy or mutable-head dependency is accepted.
+Current `contextual-orchestrator` protected main is `5665b0ad1e07ffb5e9f8c59e44b6b2a785298013`, but its GitHub Releases inventory is empty. Therefore protected `main` is not a released consumer identity. Naruon must keep any production path that requires an immutable CO API/client/schema release fail-closed until the owner publishes one and the consumer pins that released identity. No source copy or mutable-head dependency is accepted.
 
 ## 6. Buyer-visible P0/P1 Gap baseline
 
