@@ -257,7 +257,7 @@ def _get_update_webdav_accounts_statements() -> list[Executable]:
         text(
             "UPDATE webdav_accounts "
             "SET source_uid = 'webdav_src_' || encode(sha256(("
-            "random()::text || ':' || clock_timestamp()::text || ':' || "
+            "gen_random_uuid()::text || ':' || clock_timestamp()::text || ':' || "
             "user_id || ':' || server_url"
             ")::bytea), 'hex') "
             "WHERE source_uid IS NULL OR source_uid = ''"
@@ -292,7 +292,7 @@ def _get_update_project_folders_statements() -> list[Executable]:
         text(
             "UPDATE project_folders "
             "SET folder_uid = 'webdav_folder_' || encode(sha256(("
-            "random()::text || ':' || clock_timestamp()::text || ':' || "
+            "gen_random_uuid()::text || ':' || clock_timestamp()::text || ':' || "
             "user_id || ':' || project_name || ':' || webdav_path"
             ")::bytea), 'hex') "
             "WHERE folder_uid IS NULL OR folder_uid = ''"
@@ -314,7 +314,7 @@ def _get_update_prompt_template_statements() -> list[Executable]:
         _static_bootstrap_sql(
             "UPDATE prompt_templates "
             "SET prompt_uid = 'prompt_' || encode(sha256(("
-            "random()::text || ':' || clock_timestamp()::text || ':' || "
+            "gen_random_uuid()::text || ':' || clock_timestamp()::text || ':' || "
             "created_by || ':' || title"
             ")::bytea), 'hex') "
             "WHERE prompt_uid IS NULL OR prompt_uid = ''"

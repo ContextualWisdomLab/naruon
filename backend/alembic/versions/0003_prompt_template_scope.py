@@ -37,7 +37,7 @@ def upgrade() -> None:
         """
         UPDATE prompt_templates
         SET prompt_uid = 'prompt_' || encode(sha256((
-            random()::text || ':' || clock_timestamp()::text || ':' ||
+            gen_random_uuid()::text || ':' || clock_timestamp()::text || ':' ||
             created_by || ':' || title
         )::bytea), 'hex')
         WHERE prompt_uid IS NULL OR prompt_uid = ''
