@@ -3,26 +3,28 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const HiddenIcon = () => React.createElement("svg", { "aria-hidden": "true" });
-
-vi.mock("lucide-react", () => ({
-  Activity: HiddenIcon,
-  AlertCircle: HiddenIcon,
-  Loader2: HiddenIcon,
-  Bell: HiddenIcon,
-  Bot: HiddenIcon,
-  CheckCircle2: HiddenIcon,
-  Cpu: HiddenIcon,
-  Mail: HiddenIcon,
-  Monitor: HiddenIcon,
-  Network: HiddenIcon,
-  Plus: HiddenIcon,
-  RefreshCw: HiddenIcon,
-  Settings: HiddenIcon,
-  Shield: HiddenIcon,
-  Smartphone: HiddenIcon,
-  User: HiddenIcon,
-}));
+vi.mock("lucide-react", async () => {
+  const { createElement } = await import("react");
+  const HiddenIcon = () => createElement("svg", { "aria-hidden": "true" });
+  return {
+    Activity: HiddenIcon,
+    AlertCircle: HiddenIcon,
+    Loader2: HiddenIcon,
+    Bell: HiddenIcon,
+    Bot: HiddenIcon,
+    CheckCircle2: HiddenIcon,
+    Cpu: HiddenIcon,
+    Mail: HiddenIcon,
+    Monitor: HiddenIcon,
+    Network: HiddenIcon,
+    Plus: HiddenIcon,
+    RefreshCw: HiddenIcon,
+    Settings: HiddenIcon,
+    Shield: HiddenIcon,
+    Smartphone: HiddenIcon,
+    User: HiddenIcon,
+  };
+});
 
 const oidcMocks = vi.hoisted(() => ({
   clearOidcSession: vi.fn(),
