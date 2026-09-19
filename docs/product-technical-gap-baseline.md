@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.1  
+**Baseline version:** 2.2  
 **Observed on:** 2026-09-19 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
@@ -37,6 +37,7 @@ The north-star dense knowledge graph, correct-by-exception inference, minimal-di
 
 Protected central truth is `.github/main@64aa08d7fa487deacd41c761c36277ca68cab6c9`.
 
+- `.github#712` is the canonical operations owner for organization GitHub Actions queue starvation. Fresh observation on 2026-09-19 found **481 queued** and **11 in-progress** runs in the central `.github` repository; #1418 and #1602 exact-head repository workflows were also entirely queued. This is a fail-closed execution-capacity prerequisite, not product GREEN or a reason to rerun unchanged heads. Diagnose and cancel only obsolete generations through the owner path, preserve the sole current-head required evidence, and recover runner assignment before treating hosted acceptance as available.
 - `.github#2040@12c3fa6f3623aa5f2979d3d5ee4ed987002a6c0d` is the shared CodeQL/current-head scheduler owner. It is open, Draft and non-mergeable. Exact branch and protected main diverge from merge base `fb17ef556f94f673234aa557254ae52779e9a7b0`, and both changed the shared scheduler. The next branch-moving action is ordinary/non-force **path-wise protected-main reconciliation**, not whole-file adoption or an isolated stale-side regex patch. The resolved scheduler must preserve the v2 CodeQL producer, no-restamp behavior, private-consumer read grants, repository-scoped credential routing, selected-token/workflow-token proof, exact-head stale-run revalidation, current-main queue/coalescing/capacity behavior, and the stronger repository-identity admission invariant.
 - `.github#2279@25f83aaee9eb97e423f6ef2467e722035bc2e362` owns authenticated GitHub API initial-authority validation, redirect refusal, and the corrected `_GITHUB_API_OPENER.open` transport test seam. Its current Python Security, CodeQL, Runtime Quality, Semgrep, and Security runs are queued; source repair is not acceptance evidence.
 - `.github#2272@4967d66f303bde675080466e359e75c260a91e06` separately owns reusable Pages caller-input shell-boundary regression and its executable CI. It is not a complete successor for the authenticated HTTP boundary unless the #2279/#2269 delta is losslessly inherited.
@@ -102,6 +103,7 @@ Current `contextual-orchestrator` protected main is `afad3e90caac73d5b94eb68f709
 | Priority | Gap | Current boundary | Completion evidence |
 | --- | --- | --- | --- |
 | P0 | Release-train convergence | 279 open PRs; many stacked/provenance/dependency/governance lanes; protected head unchanged | canonical owner inventory, parent-first protected integration, no orphaned valid delta, one immutable RC source SHA |
+| P0 | Actions execution capacity | `.github#712` remains open; fresh central snapshot has 481 queued / 11 in-progress runs and current #1418/#1602 evidence lanes are queued | owner health report distinguishes current vs obsolete runs, obsolete pressure is removed without cancelling the sole current-head evidence, and required current-head lanes receive runner assignment and settle terminally |
 | P0 | Central CI/security acceptance | central scheduler and authenticated HTTP/GHAS permission lanes remain Draft/queued | reconciled protected-main exact head, terminal central checks, independent review, real cross-repository canary |
 | P0 | Dependency-security freshness | #1623 generation GREEN, later Trivy DB sees protected-base debt | revalidate canonical fixed source against then-current base and vulnerability database after central integration |
 | P0 | Workspace/migration convergence | #1503 source repairs owner-binding RED but is not protected-integrated | one Alembic head, real PostgreSQL fresh + historical upgrade, exact-head CI/security/review |
@@ -147,14 +149,15 @@ Current **Merge/Release Gate: FAIL**.
 
 The current causal order is:
 
-1. converge the central authenticated-HTTP / Pages / GHAS capability and permission lanes without losing valid owner deltas;
-2. perform #2040 ordinary/non-force protected-main path-wise reconciliation and acquire fresh exact-head central GREEN + qualifying independent review;
-3. prove the unchanged external authenticated dispatch/GHAS canary;
-4. revalidate and normally integrate #1623 against the then-current protected base and vulnerability database;
-5. integrate the Alembic/CI prerequisite line (#1694 → #1691 and direct code prerequisite) and then #1503 with one healthy migration head and real PostgreSQL fresh/historical evidence;
-6. ordinary-restack downstream workspace/Reply-SLA/migration consumers and reacquire invalidated exact-head evidence;
-7. create one #1731 localization implementation owner from the then-current canonical migration head, publish/test the 8-locale screen-resource contract, then ordinary-adapt #1729;
-8. only after an exact integrated protected candidate exists, update version/CHANGELOG and produce immutable release/package/OCI publication with SBOM, provenance, reproducibility, rollback, and buyer-visible acceptance evidence.
+1. recover current-head Actions execution capacity through `.github#712`, cancelling only obsolete/superseded pressure and preserving fail-closed current-head required evidence; do not blind-rerun or create source-neutral wake commits;
+2. converge the central authenticated-HTTP / Pages / GHAS capability and permission lanes without losing valid owner deltas;
+3. perform #2040 ordinary/non-force protected-main path-wise reconciliation and acquire fresh exact-head central GREEN + qualifying independent review;
+4. prove the unchanged external authenticated dispatch/GHAS canary;
+5. revalidate and normally integrate #1623 against the then-current protected base and vulnerability database;
+6. integrate the Alembic/CI prerequisite line (#1694 → #1691 and direct code prerequisite) and then #1503 with one healthy migration head and real PostgreSQL fresh/historical evidence;
+7. ordinary-restack downstream workspace/Reply-SLA/migration consumers and reacquire invalidated exact-head evidence;
+8. create one #1731 localization implementation owner from the then-current canonical migration head, publish/test the 8-locale screen-resource contract, then ordinary-adapt #1729;
+9. only after an exact integrated protected candidate exists, update version/CHANGELOG and produce immutable release/package/OCI publication with SBOM, provenance, reproducibility, rollback, and buyer-visible acceptance evidence.
 
 No force push, destructive rebase, self-approval, admin bypass, source-neutral wake commit, synthetic success, stale check/review transfer, duplicate owner, mutable sibling dependency, whole-file conflict overwrite, or gate weakening is part of this path.
 
