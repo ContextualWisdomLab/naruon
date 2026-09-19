@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.16  
+**Baseline version:** 2.17  
 **Observed on:** 2026-09-20 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-This file is the current product/technical authority overlay. v2.15 remains audit-visible as blob `07699b4588e1b8198c1357b8ca2064703151628f` in Git ancestry; v2.13/v2.12/v2.11 and v1.9 historical snapshots remain under `docs/product-technical-gap-history/`. Historical evidence is audit material, not current merge or release authority.
+This file is the current product/technical authority overlay. v2.16 remains audit-visible as blob `c09c9e2f02b9f173b6d14689730b382c03701216`; v2.15 remains blob `07699b4588e1b8198c1357b8ca2064703151628f`; earlier snapshots remain audit material in Git ancestry and `docs/product-technical-gap-history/`. Historical evidence is not current merge or release authority.
 
 ## 1. Evidence and release posture
 
@@ -21,7 +21,7 @@ A releasable candidate requires one exact integrated protected head, terminal re
 
 Protected central authority remains `.github/main@e6334e229581a918e2f22de18733b76fa65d7e71`, the protected merge of #2279 exact `d1e4380c15e948aaf104d46aa134fa614058782a`. GitHub REST authority validation, redirect refusal, bearer non-forwarding, evidence-lineage validation, and owner-qualified foreign Semgrep evidence are protected ancestry; #2279 is not an open prerequisite.
 
-- `.github#712` remains the Actions execution-capacity owner. The current point-in-time observation is **785 queued / 0 in-progress**. This is stronger starvation evidence than v2.15's partial-recovery snapshot, but it remains an operational observation rather than source acceptance. Preserve sole current-head evidence; remove only obsolete/superseded pressure through the canonical owner path; distinguish runner acquisition from workflow parse/admission defects; do not create source-neutral wake commits or blind reruns.
+- `.github#712` remains the Actions execution-capacity owner. The latest fresh observations in this generation remain in the high-700 backlog range, with runner acquisition fluctuating between zero and low single digits. This is starvation evidence, not source acceptance. Preserve sole current-head evidence; remove only obsolete/superseded pressure through the canonical owner path; distinguish runner acquisition from workflow parse/admission defects; do not create source-neutral wake commits or blind reruns.
 - `.github#2040@652764a37fc8af032f03cbe75da84ca88aee96bb` remains current-main based, 175 ahead / 0 behind, mergeable and Draft. Repository-identity repair and current-main reconciliation are present. Exact-head CodeQL, Python Security, Security, SAST, Runtime Quality and Trusted-uv generations remain nonterminal; local/predecessor evidence does not substitute for hosted exact-head acceptance or independent approval.
 - `.github#2271@a0e1424de409ec474e7bc6e9f91a9e99b8a0915e`, `.github#2275@572cfed270ae3b3cd38faca4d97ce028093e5373`, and separate Pages/SAST/Strix owner `.github#2272@4e8829f5e44c0e101cd1843106a4639ffd7f243a` remain downstream acceptance lanes. #2272 preserves the Pages caller-input shell boundary and repairs the isolated Strix fixture omission of `strix_evidence_binding.py`; intermediate broken reconstructions remain audit ancestry only.
 - `.github#2269` remains historical redirect/test-seam lineage until a lossless succession audit proves all valid contracts are preserved. `.github#2276` remains the real unchanged-target `code-scanning/analyses` permission/canary boundary. Capability selection cannot manufacture repository permission.
@@ -44,7 +44,7 @@ Naruon must not copy central workflow source. It records owner identities and co
 
 [#1727](https://github.com/ContextualWisdomLab/naruon/pull/1727) remains the sole opaque-UID backfill entropy owner at exact `2ac48fb7e591827804ba8e7e911f211b0c134ddf`, stacked on #1503. It correctly treats Bandit B608 as the hard-coded SQL-expression heuristic rather than a weak-randomness rule, covers all three bootstrap UID generators plus historical migration `0003_prompt_template_scope`, forbids `random()::text`, preserves already-populated identifiers, and retains dedicated regression + doctoring/TRACEABILITY.
 
-New generated direct-`develop` PR [#1736](https://github.com/ContextualWisdomLab/naruon/pull/1736) duplicated that same repair with inflated MEDIUM/cryptographic-vulnerability framing and task-specific Sentinel doctrine. It was repaired ordinary-forward: current head `46c7a9b3a6472f4e4188964ee1778bc99960d752` keeps generated predecessor `22020df3...` as first-parent provenance, adopts #1727 as second parent, points at exact canonical #1727 tree `ea5333fbf6949573a7a99ddb3e1f0439d81bdad8`, retargets onto the #1727 branch, and is Draft with **zero changed files / zero additions / zero deletions**. #1736 owns no independent security/migration delta and its former direct-`develop` receipts do not transfer.
+Generated direct-`develop` PR [#1736](https://github.com/ContextualWisdomLab/naruon/pull/1736) duplicated that same repair with inflated MEDIUM/cryptographic-vulnerability framing and task-specific Sentinel doctrine. It was repaired ordinary-forward: current head `46c7a9b3a6472f4e4188964ee1778bc99960d752` keeps generated predecessor `22020df3...` as first-parent provenance, adopts #1727 as second parent, points at exact canonical #1727 tree `ea5333fbf6949573a7a99ddb3e1f0439d81bdad8`, retargets onto the #1727 branch, and is Draft with zero effective product delta. #1736 owns no independent security/migration delta and its former direct-`develop` receipts do not transfer.
 
 ### LLM governance / released contract
 
@@ -60,11 +60,15 @@ New generated direct-`develop` PR [#1736](https://github.com/ContextualWisdomLab
 
 ### Tasks async loading feedback
 
-[#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) is now the repaired canonical owner for visual loading feedback on `팔로업 작업 생성`, `의도 생성`, and `실행 요청`. Its previous head had accumulated unrelated central-governance, backend URL-validation, broad formatting/doctoring and self-modifying Palette changes. Ordinary two-parent repair `9673832c785db70470432b42f2e7cd046867a4ee` preserves that ancestry, adopts protected `develop`, and restores a bounded **three-file** effective delta only: `TasksLayout.tsx` plus synchronized Lucide mocks in its component/page tests. Protected-base compare is ahead-only, 14 commits in ancestry, 0 behind. The spinner is supplemental/`aria-hidden`; accessible state remains the existing text transition and `aria-busy` contract.
+[#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) is the repaired canonical owner for visual loading feedback on `팔로업 작업 생성`, `의도 생성`, and `실행 요청`. Ordinary two-parent repair `9673832c785db70470432b42f2e7cd046867a4ee` preserves its prior polluted ancestry, adopts protected `develop`, and reduces effective scope to exactly three intended files: `TasksLayout.tsx` plus synchronized component/page Lucide mocks. Unrelated central-governance, backend URL-validation, doctoring/generated-guidance, scratch artifacts and duplicate CHANGELOG changes are absent from the effective diff.
 
-The current #1463 exact head still lacks focused interaction proof for the loading transitions, real-browser keyboard/focus/responsive/AT evidence, terminal hosted required checks and qualifying independent post-last-push approval. **UI Delivery Gate: FAIL.**
+Fresh review/source verification exposed a still-valid functional RED on that repaired exact head. `의도 생성` and `실행 요청` share the single per-task `currentKnowledgeIntent.state === 'loading'`. Triggering either POST therefore disables both controls, marks both `aria-busy=true`, displays a Loader2 on both, and simultaneously changes the labels to `생성 중` and `실행 중`, even though only one action initiated the request. A resolved/outdated predecessor thread does not make this current behavior correct.
 
-Generated direct-`develop` duplicate [#1735](https://github.com/ContextualWisdomLab/naruon/pull/1735) re-proposed the same feature and also introduced `TasksLayout.test.tsx.orig` plus duplicate CHANGELOG text. It was repaired ordinary-forward after #1463: current head `be1172b745c0e786597aa1a9ce5142b3b6fa3745` preserves generated predecessor `831bbfe9...`, adopts #1463 `9673832c...`, points at the exact canonical #1463 tree `56a1fe2f444db0ddfd482503c7db4814842a291e`, retargets onto #1463, and is Draft with **zero changed files / zero additions / zero deletions**. #1735 is provenance only.
+The minimum causal fix is action-specific pending identity per task (for example `pendingAction: 'create' | 'execute' | null`) while preserving mutual exclusion. Both controls may stay disabled while either request is pending, but only the initiating control may be busy, render the spinner and expose its loading label. Add deferred-request regressions that hold create and execute POSTs unresolved independently, prove the active/inactive button states, and prove success/error settlement resets. Reply-SLA has independent state and must remain unchanged.
+
+No source fix is claimed at `9673832c...`; #1463 remains Draft. **UI Delivery Gate: FAIL.** Functional completeness and accessibility semantics fail on the shared-pending-state RED; real-browser keyboard/focus/responsive/AT evidence, terminal exact-head hosted checks and qualifying independent post-last-push approval also remain missing.
+
+Generated direct-`develop` duplicate [#1735](https://github.com/ContextualWisdomLab/naruon/pull/1735) re-proposed the same feature and introduced `TasksLayout.test.tsx.orig` plus duplicate CHANGELOG text. It was repaired ordinary-forward after #1463: current head `be1172b745c0e786597aa1a9ce5142b3b6fa3745` preserves generated predecessor `831bbfe9...`, adopts #1463 `9673832c...`, points at exact canonical #1463 tree `56a1fe2f444db0ddfd482503c7db4814842a291e`, retargets onto #1463, and is Draft with zero effective product delta. #1735 is provenance only; it does not repair the canonical #1463 interaction RED.
 
 ## 5. Generated-writer invariant
 
@@ -79,13 +83,13 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 | Priority | Gap | Current boundary | Completion evidence |
 | --- | --- | --- | --- |
 | P0 | Release-train convergence | 284 open PRs; newest #1735/#1736 reduced to canonical-owner provenance; protected head unchanged | parent-first integration, no orphaned valid delta, one immutable RC source SHA |
-| P0 | Actions execution capacity | `.github#712`; point-in-time 785 queued / 0 in-progress | stable runner acquisition, parse/admission RCA separated, obsolete pressure removed without cancelling sole current-head evidence |
+| P0 | Actions execution capacity | `.github#712`; high-700 queued backlog with unstable low/zero runner acquisition | stable runner acquisition, parse/admission RCA separated, obsolete pressure removed without cancelling sole current-head evidence |
 | P0 | Central CI/security acceptance | #2279 landed; #2040 current-main reconciled; #2271→#2275 plus separate #2272; #2276 real canary pending | terminal exact-head checks, qualifying independent review, #2269 succession, unchanged-target GHAS canary |
 | P0 | Dependency-security freshness | frontend #1623 revalidation; backend #1565→#1685 real ancestry/coherent graph repair | current vulnerability scans, coherent manifests/locks, hostile regressions, terminal CI/security/review |
 | P0 | LLM provider error confidentiality | #1733 source/test/TRACEABILITY repair present | terminal current-head hosted evidence + zero valid findings + qualifying review |
 | P0 | Workspace/migration convergence | #1503 sole migration line; #1727 sole opaque-ID descendant; #1736 zero-delta provenance | one Alembic head, real PostgreSQL fresh/historical execution, ordinary descendant restacks |
 | P0 | Released LLM contract | immutable CO release absent | immutable API/client/schema publication + consumer bump + contract/E2E/security/SBOM/provenance |
-| P1 | Tasks loading interaction | #1463 bounded three-file source repaired; #1735 zero-delta provenance | focused loading transition regression, browser keyboard/focus/responsive/AT, terminal exact-head checks/review |
+| P1 | Tasks loading interaction | #1463 bounded owner repaired, but create/execute share one pending state; #1735 is zero-delta provenance | action-specific pending identity, deferred-request regressions, browser keyboard/focus/responsive/AT, terminal exact-head checks/review |
 | P1 | Executable Storybook/design system | #1354 static precursor only | pinned runtime/build, representative states, browser/a11y/responsive evidence, token audit, fresh Figma mapping |
 | P1 | UI localization | #1731 specified; implementation not yet protected | eight-locale versioned resource + Storybook/browser/a11y + cache/API/rollback evidence |
 | P1 | OIDC interaction acceptance | #1729 rendered contract incomplete | real browser/AT/responsive/eight-locale current-head acceptance |
@@ -101,7 +105,7 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 6. Integrate #1694 → #1691 and prerequisites, then #1503 as the sole migration lineage; ordinary-adopt #1727 and downstream consumers. Keep #1736 zero-delta provenance only.
 7. After contextual-orchestrator publishes an immutable API/client/schema release, finish #1549 without mutable-owner binding.
 8. Implement #1731 as the sole localization owner, then ordinary-adopt released screen resources into #1729 and other UI surfaces.
-9. Finish #1463 with actual loading-transition/browser/a11y evidence; keep #1735 as zero-delta provenance rather than an independent merge lane.
+9. Repair #1463's create/execute pending-action identity ordinary-forward, add deferred-request RED→GREEN tests, then acquire real browser keyboard/focus/responsive/AT and hosted/review evidence. Keep #1735 zero-delta provenance only.
 10. Reconcile #1354 onto the then-current protected base and build executable Storybook/design-system delivery with real component/browser/a11y/responsive/Figma evidence.
 11. Reacquire buyer-visible acceptance, build one exact integrated protected candidate, then publish an immutable Naruon version/tag/package/GitHub Release with SBOM/provenance/reproducibility/rollback.
 
