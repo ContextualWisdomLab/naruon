@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.17  
+**Baseline version:** 2.18  
 **Observed on:** 2026-09-20 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-This file is the current product/technical authority overlay. v2.16 remains audit-visible as blob `c09c9e2f02b9f173b6d14689730b382c03701216`; v2.15 remains blob `07699b4588e1b8198c1357b8ca2064703151628f`; earlier snapshots remain audit material in Git ancestry and `docs/product-technical-gap-history/`. Historical evidence is not current merge or release authority.
+This file is the current product/technical authority overlay. v2.17 remains audit-visible as blob `d611e0d3cb1dd90e9d8429fcfa112a977e989726`; v2.16 remains blob `c09c9e2f02b9f173b6d14689730b382c03701216`; v2.15 remains blob `07699b4588e1b8198c1357b8ca2064703151628f`; earlier snapshots remain audit material in Git ancestry and `docs/product-technical-gap-history/`. Historical evidence is not current merge or release authority.
 
 ## 1. Evidence and release posture
 
@@ -21,9 +21,10 @@ A releasable candidate requires one exact integrated protected head, terminal re
 
 Protected central authority remains `.github/main@e6334e229581a918e2f22de18733b76fa65d7e71`, the protected merge of #2279 exact `d1e4380c15e948aaf104d46aa134fa614058782a`. GitHub REST authority validation, redirect refusal, bearer non-forwarding, evidence-lineage validation, and owner-qualified foreign Semgrep evidence are protected ancestry; #2279 is not an open prerequisite.
 
-- `.github#712` remains the Actions execution-capacity owner. The latest fresh observations in this generation remain in the high-700 backlog range, with runner acquisition fluctuating between zero and low single digits. This is starvation evidence, not source acceptance. Preserve sole current-head evidence; remove only obsolete/superseded pressure through the canonical owner path; distinguish runner acquisition from workflow parse/admission defects; do not create source-neutral wake commits or blind reruns.
+- `.github#712` remains the Actions execution-capacity owner. The latest fresh observation is **599 queued / 3 in progress**. Runner acquisition is no longer literally zero at this instant, but three active runs against a ~600-run backlog is not stable capacity. Preserve sole current-head evidence; remove only obsolete/superseded pressure through the canonical owner path; distinguish runner acquisition from workflow parse/admission defects; do not create source-neutral wake commits or blind reruns.
 - `.github#2040@652764a37fc8af032f03cbe75da84ca88aee96bb` remains current-main based, 175 ahead / 0 behind, mergeable and Draft. Repository-identity repair and current-main reconciliation are present. Exact-head CodeQL, Python Security, Security, SAST, Runtime Quality and Trusted-uv generations remain nonterminal; local/predecessor evidence does not substitute for hosted exact-head acceptance or independent approval.
-- `.github#2271@a0e1424de409ec474e7bc6e9f91a9e99b8a0915e`, `.github#2275@572cfed270ae3b3cd38faca4d97ce028093e5373`, and separate Pages/SAST/Strix owner `.github#2272@4e8829f5e44c0e101cd1843106a4639ffd7f243a` remain downstream acceptance lanes. #2272 preserves the Pages caller-input shell boundary and repairs the isolated Strix fixture omission of `strix_evidence_binding.py`; intermediate broken reconstructions remain audit ancestry only.
+- `.github#2291@00082e8dc7ab6bdd3261c4f7131f6e300a66b645` is now the canonical Strix trusted-binder/runtime owner. Its production gate resolves `strix_evidence_binding.py` beside the trusted script source, while executable fixtures keep `STRIX_REPO_ROOT` as a binder-free consumer workspace and invoke the trusted gate by absolute path. Earlier fixture/recovery mistakes remain ancestry only. Current-head Runtime Quality, CodeQL, Security, Python Security and Semgrep runs are queued; same-account COMMENT receipts and predecessor full-suite results are not acceptance.
+- `.github#2271@a0e1424de409ec474e7bc6e9f91a9e99b8a0915e` and `.github#2275@572cfed270ae3b3cd38faca4d97ce028093e5373` remain repository-identity/GHAS acceptance lanes. `.github#2272@0379535a87cb3c7fd4b4038c76b0670f4730fb7b` has now ordinary-adopted exact #2291 as its stack base while preserving the Pages caller-input shell boundary; the superseded consumer-binder copies and count-only fixture contract are no longer its effective owner claim. #2272 remains Draft and its Pages Input Security, Runtime Quality, Security, Python Security, Semgrep and CodeQL runs are queued/nonterminal.
 - `.github#2269` remains historical redirect/test-seam lineage until a lossless succession audit proves all valid contracts are preserved. `.github#2276` remains the real unchanged-target `code-scanning/analyses` permission/canary boundary. Capability selection cannot manufacture repository permission.
 
 Naruon must not copy central workflow source. It records owner identities and consumes accepted/released contracts through ordinary-forward changes only.
@@ -83,8 +84,8 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 | Priority | Gap | Current boundary | Completion evidence |
 | --- | --- | --- | --- |
 | P0 | Release-train convergence | 284 open PRs; newest #1735/#1736 reduced to canonical-owner provenance; protected head unchanged | parent-first integration, no orphaned valid delta, one immutable RC source SHA |
-| P0 | Actions execution capacity | `.github#712`; high-700 queued backlog with unstable low/zero runner acquisition | stable runner acquisition, parse/admission RCA separated, obsolete pressure removed without cancelling sole current-head evidence |
-| P0 | Central CI/security acceptance | #2279 landed; #2040 current-main reconciled; #2271→#2275 plus separate #2272; #2276 real canary pending | terminal exact-head checks, qualifying independent review, #2269 succession, unchanged-target GHAS canary |
+| P0 | Actions execution capacity | `.github#712`; 599 queued / 3 in progress in the latest fresh observation | stable runner acquisition, parse/admission RCA separated, obsolete pressure removed without cancelling sole current-head evidence |
+| P0 | Central CI/security acceptance | #2279 landed; #2040 current-main reconciled; #2271→#2275 plus #2291→#2272; #2276 real canary pending | terminal exact-head checks, qualifying independent review, #2269 succession, unchanged-target GHAS canary |
 | P0 | Dependency-security freshness | frontend #1623 revalidation; backend #1565→#1685 real ancestry/coherent graph repair | current vulnerability scans, coherent manifests/locks, hostile regressions, terminal CI/security/review |
 | P0 | LLM provider error confidentiality | #1733 source/test/TRACEABILITY repair present | terminal current-head hosted evidence + zero valid findings + qualifying review |
 | P0 | Workspace/migration convergence | #1503 sole migration line; #1727 sole opaque-ID descendant; #1736 zero-delta provenance | one Alembic head, real PostgreSQL fresh/historical execution, ordinary descendant restacks |
@@ -98,7 +99,7 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 ## 7. Current causal order
 
 1. Restore stable Actions runner acquisition through `.github#712`; do not blind-rerun unchanged heads.
-2. Terminalize #2040 exact `652764a...`, then #2271 → #2275 and separate #2272; prove #2269 succession and #2276 unchanged-target GHAS canary.
+2. Terminalize #2040 exact `652764a...`, then #2271 → #2275 and #2291 → #2272; prove #2269 succession and #2276 unchanged-target GHAS canary.
 3. Revalidate frontend dependency-security #1623 against current vulnerability data.
 4. Preserve #1565 as the bounded TestClient/httpx2 owner; ordinary/non-force reconcile #1685 and regenerate one coherent dependency graph before hosted acceptance.
 5. Terminalize #1733 without reintroducing provider text, traceback logging or generated TRACEABILITY rollback.
