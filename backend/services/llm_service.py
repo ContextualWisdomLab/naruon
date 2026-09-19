@@ -37,6 +37,14 @@ class ExtractionResult(BaseModel):
     )
 
 
+def _log_llm_provider_failure(operation: str, error: Exception) -> None:
+    """Log provider failure metadata without rendering exception-controlled text."""
+    logger.error(
+        "LLM provider request failed",
+        extra={"operation": operation, "error_type": type(error).__name__},
+    )
+
+
 async def extract_action_items_and_summary(
     email_body: str,
     openai_api_key: str,
@@ -80,9 +88,9 @@ async def extract_action_items_and_summary(
                 operation_name="summary extraction",
             ),
         )
-    except Exception as e:
-        logger.error("Error calling LLM API for extraction", exc_info=True)
-        raise LLMServiceError("LLM API error during extraction") from e
+    except Exception as error:
+        _log_llm_provider_failure("extraction", error)
+        raise LLMServiceError("LLM API error during extraction") from None
     finally:
         await client.close()
 
@@ -146,9 +154,9 @@ async def translate_email_body(
                 operation_name="translation",
             ),
         )
-    except Exception as e:
-        logger.error("Error calling LLM API for translation", exc_info=True)
-        raise LLMServiceError("LLM API error during translation") from e
+    except Exception as error:
+        _log_llm_provider_failure("translation", error)
+        raise LLMServiceError("LLM API error during translation") from None
     finally:
         await client.close()
 
@@ -188,9 +196,9 @@ async def draft_reply(
                 selected_model,
                 messages,
             )
-        except Exception as e:
-            logger.error("Error calling LLM API for drafting", exc_info=True)
-            raise LLMServiceError("LLM API error during drafting") from e
+        except Exception as error:
+            _log_llm_provider_failure("drafting", error)
+            raise LLMServiceError("LLM API error during drafting") from None
         finally:
             await http_client.aclose()
 
@@ -210,9 +218,9 @@ async def draft_reply(
                 operation_name="reply drafting",
             ),
         )
-    except Exception as e:
-        logger.error("Error calling LLM API for drafting", exc_info=True)
-        raise LLMServiceError("LLM API error during drafting") from e
+    except Exception as error:
+        _log_llm_provider_failure("drafting", error)
+        raise LLMServiceError("LLM API error during drafting") from None
     finally:
         await client.close()
 
