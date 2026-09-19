@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.6  
+**Baseline version:** 2.7  
 **Observed on:** 2026-09-19 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
@@ -21,7 +21,7 @@ When sources disagree, use this order:
 
 Pending, queued, stale, predecessor-head, skipped-required, neutral, author-only, local-only, or model-only evidence is not passing evidence. A protected release requires one exact integrated head, terminal required contexts, zero valid unresolved review findings, qualifying independent post-last-push review, immutable publication identity, SBOM/provenance, reproducibility, rollback evidence, and buyer-visible acceptance where behavior changes.
 
-Current repository shape is **279 open PRs and 75 open Issues**. The three effective rulesets — `CWL Central required workflows`, `Lock default branch`, and `PR` — are active. The latest GitHub Release is `v0.14.4`, published 2026-06-19, and is `immutable=false`; it is historical publication evidence, not the target commercial immutable release.
+Current repository shape is **280 open PRs and 75 open Issues**. The three effective rulesets — `CWL Central required workflows`, `Lock default branch`, and `PR` — are active. The latest GitHub Release is `v0.14.4`, published 2026-06-19, and is `immutable=false`; it is historical publication evidence, not the target commercial immutable release.
 
 ## 2. Current commercial classification
 
@@ -35,7 +35,7 @@ GA-1 remains **Customer-owned Mail, Calendar, Contact, and File Control Plane**.
 
 Protected central truth remains `.github/main@64aa08d7fa487deacd41c761c36277ca68cab6c9`.
 
-- `.github#712` remains the canonical organization Actions queue-starvation owner. Fresh observation now shows **531 queued / 4 in-progress** runs in the central `.github` repository. This is worse queue pressure than v2.5's 512/11 snapshot and remains a fail-closed execution-capacity prerequisite. Preserve the sole current-head evidence, remove only obsolete/superseded pressure through the owner path, and do not blind-rerun unchanged heads.
+- `.github#712` remains the canonical organization Actions queue-starvation owner. Fresh observation now shows **156 queued / 1 in-progress** runs in the central `.github` repository, a material contraction from v2.6's 531/4 snapshot but not evidence that runner acquisition is healthy. The latest owner specimen shows a current head where some lanes execute while other required jobs remain runnerless and later terminate cancelled. Keep this a fail-closed execution-capacity prerequisite until current-head required evidence reliably acquires runners and settles terminally. Preserve sole current-head evidence, remove only obsolete/superseded pressure through the owner path, and do not blind-rerun unchanged heads.
 - `.github#2040@ecc9e1d11149ae44ec4f8389e4ac72a08ba45ba7` has completed ordinary/non-force path-wise protected-main reconciliation. Its reconciled source repairs repository identity, removes the superseded unversioned CodeQL fallback, preserves the v2 producer/credential/no-restamp contracts and current-main queue/GHAS behavior, and verified locally at **496 focused passed; 3,404 passed / 28 skipped / 40 subtests**. Hosted exact-head checks and qualifying independent current-head approval remain prerequisites; source reconciliation is not merge authority.
 - `.github#2279@d1e4380c15e948aaf104d46aa134fa614058782a` is now the current authenticated GitHub API authority. It ordinary-forwarded beyond the v2.5 `b338d1e...` generation, retaining initial-authority validation, no-redirect production openers, bearer non-forwarding, executable G-17 ancestry validation, and now owner-qualifying the foreign Semgrep evidence reference. It is Ready for review, not merge-authoritative; its current Python Security/CodeQL/Security/Semgrep/Runtime Quality generation is still pending/queued and independent current-head review remains required.
 - `.github#2271@8aff1a6a581613709c01747fe68c1f7523fe84da` is the current CodeQL dispatch repository-identity descendant of #2279 `d1e4380...`. Its ordinary two-parent reconciliation preserves the latest #2279 authority and the dispatch admission/stderr contract. Focused reconciliation is locally GREEN, but hosted current-head evidence and independent approval must be reacquired.
@@ -68,6 +68,14 @@ Repeated source re-entry after zero-delta reconciliation remains a control-plane
 
 [#1418](https://github.com/ContextualWisdomLab/naruon/pull/1418) remains canonical at exact `87a94a4c2b78f12a61ec699dee9ce081ea3d8578`. Its delimiter repair is locally RED→GREEN, including 11 focused URL tests and 1,830 backend tests / 33 skipped with warnings-as-errors, but current hosted checks and qualifying post-last-push approval remain absent. ADR-0008 remains Proposed and #1590 remains open until protected-tree succession proves complete inheritance.
 
+### 3.6 OpenSSF governance evidence owner
+
+Issue [#1178](https://github.com/ContextualWisdomLab/naruon/issues/1178) and PR [#1732](https://github.com/ContextualWisdomLab/naruon/pull/1732) now own the bounded OpenSSF Best Practices evidence lane. #1732 exact `a8e83d6701e4195e984d2e72de29b056cae55268` repairs the private vulnerability-reporting URL and adds a truthful enrollment packet, but remains Draft after a current review found the licensing boundary had been framed too softly.
+
+OpenSSF Best Practices Passing is for FLOSS projects and requires every MUST/MUST NOT criterion, including `floss_license`, to be satisfied. Naruon's current proprietary license is therefore a **legal/business eligibility blocker** to Passing unless an authorized copyright-holder/legal/business licensing decision changes that boundary. Engineering must not fabricate a project id, badge, waiver, or remediation date. This lane is governance evidence, not a reason to weaken product gates or a mandatory release dependency unless the business explicitly chooses OpenSSF Passing as a release criterion.
+
+The current effective change-control contract must also be represented accurately: ruleset `17214772` requires one approving review, stale-review dismissal, last-push approval and resolved threads; inherited `18156473` requires one approving review, stale-review dismissal and resolved threads but currently has `require_last_push_approval=false`. The integrated contract still requires last-push approval because `17214772` is active.
+
 ## 4. UI, localization, and OIDC interaction state
 
 [#1729](https://github.com/ContextualWisdomLab/naruon/pull/1729) remains the bounded OIDC pending-feedback owner at exact `85e312360c6342f9bb02b6a6004b2a69599bd4e6`. Its effective delta is `SettingsLayout.tsx`, the rendered pending-feedback regression, and doctoring. jsdom proves per-action pending state, duplicate-click prevention, `aria-busy`, visible pending copy, success cleanup, rejected-logout cleanup and error surfacing. Real-browser keyboard/focus/touch/AT, responsive screenshots, multilingual resource consumption, terminal exact-head hosted evidence and qualifying independent review remain absent.
@@ -95,8 +103,8 @@ Current contextual-orchestrator protected main is `5665b0ad1e07ffb5e9f8c59e44b6b
 
 | Priority | Gap | Current boundary | Completion evidence |
 | --- | --- | --- | --- |
-| P0 | Release-train convergence | 279 open PRs; many stacked/provenance/dependency/governance lanes; protected head unchanged | canonical owner inventory, parent-first protected integration, no orphaned valid delta, one immutable RC source SHA |
-| P0 | Actions execution capacity | `.github#712` remains open; fresh central snapshot is 531 queued / 4 in-progress and current #1602 evidence lanes are queued | owner health separates current/obsolete runs; obsolete pressure removed without cancelling sole current-head evidence; required lanes receive runner assignment and settle terminally |
+| P0 | Release-train convergence | 280 open PRs; many stacked/provenance/dependency/governance lanes; protected head unchanged | canonical owner inventory, parent-first protected integration, no orphaned valid delta, one immutable RC source SHA |
+| P0 | Actions execution capacity | `.github#712` remains open; fresh central snapshot contracted to 156 queued / 1 in-progress, but current-head runnerless/cancelled specimens remain and current #1602 evidence lanes are still queued | owner health separates current/obsolete runs; obsolete pressure removed without cancelling sole current-head evidence; required lanes receive runner assignment and settle terminally |
 | P0 | Central CI/security acceptance | #2040 reconciled; current security/GHAS stack is #2279 `d1e4380...` → #2271 `8aff1a...` → #2275 `f54aeb...`; Pages #2272 still trails the previous #2279 generation; #2269 succession and #2276 permission remain incomplete | terminal hosted checks, current-head independent review, Pages foundation reconciliation, verified succession, real unchanged-target GHAS canary |
 | P0 | Dependency-security freshness | #1623 generation GREEN, later Trivy DB sees protected-base debt | revalidate fixed source against then-current base and vulnerability database |
 | P0 | Workspace/migration convergence | #1503 source repairs owner-binding RED but is not protected-integrated | one Alembic head, real PostgreSQL fresh + historical upgrade, exact-head CI/security/review |
@@ -141,7 +149,7 @@ Current **Merge/Release Gate: FAIL**.
 
 Current causal order:
 
-1. recover current-head Actions execution capacity through `.github#712`, removing only obsolete/superseded pressure and preserving current-head required evidence;
+1. recover current-head Actions execution capacity through `.github#712`, removing only obsolete/superseded pressure and preserving current-head required evidence; the reduced queue count is encouraging but does not substitute for stable runner acquisition;
 2. terminalize and independently review #2040 and current #2279; then validate descendants #2271 → #2275 while separately ordinary-forwarding Pages #2272 onto the accepted current foundation;
 3. complete #2269 succession audit and #2276 unchanged-target analysis-read canary before claiming central CodeQL/GHAS acceptance;
 4. revalidate and normally integrate #1623 against then-current protected ancestry and vulnerability database;
@@ -150,6 +158,8 @@ Current causal order:
 7. after CO publishes an immutable API/client/schema release, finish canonical #1549 governance integration without mutable-owner binding;
 8. create one #1731 localization implementation owner from the then-current migration head, publish/test the eight-locale screen-resource contract, then ordinary-adapt #1729;
 9. only after an exact integrated protected candidate exists, update version/CHANGELOG and publish an immutable release/package/OCI identity with SBOM, provenance, reproducibility, rollback, and buyer-visible acceptance evidence.
+
+OpenSSF #1178/#1732 proceeds as a separate governance/legal lane. It does not enter the release-critical causal chain unless an authorized business decision explicitly makes a Passing badge a release criterion.
 
 No force push, destructive rebase, self-approval, admin bypass, source-neutral wake commit, synthetic success, stale check/review transfer, duplicate owner, mutable sibling dependency, whole-file conflict overwrite, or gate weakening is part of this path.
 
@@ -160,6 +170,8 @@ Phillips, A., & Davis, M. (2009). *Tags for identifying languages* (BCP 47; RFC 
 Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110). RFC Editor. https://doi.org/10.17487/RFC9110
 
 World Wide Web Consortium. (2024). *Web Content Accessibility Guidelines (WCAG) 2.2*. https://www.w3.org/TR/WCAG22/
+
+Open Source Security Foundation. (n.d.). *OpenSSF Best Practices Badge criteria: Passing*. https://www.bestpractices.dev/en/criteria?details=true&rationale=true
 
 The archived v1.9 baseline retains the broader protocol, observability, provenance, storage, supply-chain, and UI research bibliography. New implementations must bind cited standards to exact code/API/test evidence rather than cite them decoratively.
 
