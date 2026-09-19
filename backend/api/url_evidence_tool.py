@@ -16,7 +16,10 @@ MAX_URL_EVIDENCE_MATCHES = 128
 MAX_URL_EVIDENCE_MATCH_BYTES = 2_048
 URL_EVIDENCE_DETECTOR_VERSION = "url_evidence_v1"
 
-_CANDIDATE_PATTERN = re.compile(r"(?<![\w@])https?://[^\s<>\"']+", re.IGNORECASE)
+_CANDIDATE_PATTERN = re.compile(
+    r"(?<![\w@])https?://(?:(?!\]\(https?://)[^\s<>\"'“”‘’])+",
+    flags=re.IGNORECASE,
+)
 _PERCENT_ESCAPE_PATTERN = re.compile(r"%(?![0-9A-Fa-f]{2})")
 _DNS_LABEL_PATTERN = re.compile(
     r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"

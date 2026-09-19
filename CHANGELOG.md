@@ -6,7 +6,8 @@
 
 - `url_evidence_extractor`는 HTTP(S) URL을 네트워크 요청 없이 파싱하고 원문
   위치, IDNA/IPv6 호스트, userinfo·percent-encoding 경고, 결정적 중복 목록을
-  반환합니다.
+  반환합니다. 인접한 Markdown 링크와 스마트 따옴표를 URL 경계로 인식해 서로
+  다른 URL을 하나의 잘못된 후보로 합치거나 닫는 따옴표를 포함하지 않습니다.
 - `contact_data_redactor`는 ASCII 이메일과 한국/E.164 호환 전화번호만
   결정적 placeholder로 치환하고 원문·치환 span 및 detector version을
   반환합니다. 지원하지 않는 PII는 제거되었다고 주장하지 않습니다.

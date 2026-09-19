@@ -36,6 +36,25 @@ async def test_url_evidence_preserves_unicode_spans_and_normalizes_hosts() -> No
 
 
 @pytest.mark.asyncio
+async def test_url_evidence_separates_markdown_links_and_smart_quotes() -> None:
+    """Adjacent Markdown URLs and typographic quotes delimit candidates."""
+    text = "[https://a.example](https://b.example) and “https://example.com”"
+
+    result = await registry.invoke_tool("url_evidence_extractor", {"text": text})
+
+    raw_values = [match["raw_value"] for match in result["matches"]]
+    assert raw_values == [
+        "https://a.example",
+        "https://b.example",
+        "https://example.com",
+    ]
+    assert all(match["validation_status"] == "valid" for match in result["matches"])
+    assert [match["source_start"] for match in result["matches"]] == [
+        text.index(raw_value) for raw_value in raw_values
+    ]
+
+
+@pytest.mark.asyncio
 async def test_url_evidence_validates_dns_and_ip_host_syntax_without_network() -> None:
     """Accept enterprise/IDNA hosts while rejecting malformed DNS/IP syntax."""
     text = (

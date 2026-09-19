@@ -1,6 +1,6 @@
 # ADR-0008: Bound URL evidence and contact redaction to explicit classes
 
-**Status:** Accepted
+**Status:** Proposed
 
 **Date:** 2026-08-19
 
