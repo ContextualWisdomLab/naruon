@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.0  
+**Baseline version:** 2.1  
 **Observed on:** 2026-09-19 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
@@ -65,6 +65,12 @@ Generated branches that rediscover an owned delta are provenance, not new owners
 
 The recurrence itself is a control-plane Gap: once a generated branch is reconciled to provenance, its writer should become terminal/read-only or new generated work should perform semantic owner-overlap detection and route to the canonical owner before product source is rewritten. Source-neutral `trigger CI` commits are not acceptance evidence.
 
+### 3.5 Auditable data-hygiene owner
+
+[#1418](https://github.com/ContextualWisdomLab/naruon/pull/1418) is the canonical URL/contact data-hygiene owner at exact head `87a94a4c2b78f12a61ec699dee9ce081ea3d8578` and tree `f17cc6848752749ca965af1a7ca9d3f422c4b4d7`. On predecessor `a4a4da69...`, a RED regression proved that adjacent Markdown links were merged into one malformed URL candidate and that a typographic closing quote remained inside the candidate. The exact-head repair separates those delimiters while preserving IPv6 and balanced punctuation contracts; the focused URL suite is 11 passed and the full backend is 1,830 passed / 33 skipped with warnings as errors. Ruff, compileall and diff checks also pass.
+
+This remains Draft source evidence, not integrated product acceptance. ADR-0008 is correctly Proposed while unlanded. Exact-head Application CI `35433208478`, Bandit `35433208495`, Docker `35433208617`, Security `35433208474`, Semgrep `35433208453` and CodeQL `35433208463` were queued at the latest poll; zero unresolved review threads and local GREEN do not substitute for terminal hosted checks or a qualifying post-last-push independent approval. #1590 remains open until protected-tree succession proves its valid URL delta is fully inherited.
+
 ## 4. UI, localization, and OIDC interaction state
 
 [#1729](https://github.com/ContextualWisdomLab/naruon/pull/1729) is the bounded OIDC pending-feedback owner at exact head `85e312360c6342f9bb02b6a6004b2a69599bd4e6`. An intervening generated rewrite removed the rendered regression and doctoring; ordinary child `85e312...` restored the reviewed tree without force-push. The effective delta is exactly `SettingsLayout.tsx`, the rendered pending-feedback test, and its doctoring record.
@@ -103,6 +109,7 @@ Current `contextual-orchestrator` protected main is `afad3e90caac73d5b94eb68f709
 | P0 | Product/release truth | latest Naruon Release `v0.14.4` is mutable and predates current protected head | code-current docs, version/CHANGELOG, immutable publication, SBOM/provenance/reproducibility/rollback |
 | P0 | Connector/provider operability | protocol/writeback/retry foundations exist; full released connector lifecycle remains incomplete | signed installable artifact, enrollment/rotation, capability health, idempotent reconciliation, support evidence |
 | P0 | Recovery/customer exit | historical baseline records partial backup/object/portability work, not one buyer round trip | restore/PITR and tenant export→clean-import rehearsal preserving provenance/authorization |
+| P1 | Auditable data hygiene | #1418 delimiter repair is exact-tree GREEN locally; hosted checks and current-head approval are pending | terminal exact-head checks/review, normal protected integration, then verified #1590 succession |
 | P1 | UI localization | #1731 is architecture Gap only; current surfaces still embed Korean product copy | versioned 8-locale DB resource/API/cache/publish contract + locale Storybook/browser/a11y acceptance |
 | P1 | OIDC pending UX | #1729 rendered jsdom repair exists but hosted/browser/multilingual evidence is incomplete | exact-head terminal checks/review + browser/AT/responsive evidence + released locale resource consumption |
 | P1 | Generated-writer owner lock | repeated generated source re-entry after zero-delta reconciliation | semantic owner-overlap detection and writer-terminal/read-only control with regression evidence |
