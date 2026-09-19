@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X , Loader2} from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { toSafeReactText } from '@/lib/safe-text';
@@ -522,7 +522,7 @@ export function TasksLayout() {
                 onClick={() => void handleReplySlaEscalation()}
                 className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
               >
-                {replySlaStatus === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" />}
+                {replySlaStatus === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" aria-hidden="true" />}
                 {replySlaStatus === 'loading' ? '확인 중' : '팔로업 작업 생성'}
               </button>
             </div>
@@ -625,7 +625,7 @@ export function TasksLayout() {
                             onClick={() => void handleKnowledgeIntentCreate(task.id)}
                             className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
                           >
-                            {currentKnowledgeIntent.state === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" />}
+                            {currentKnowledgeIntent.state === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" aria-hidden="true" />}
                             {currentKnowledgeIntent.state === 'loading' ? '생성 중' : '의도 생성'}
                           </button>
                           <button
@@ -636,8 +636,8 @@ export function TasksLayout() {
                             onClick={() => void handleKnowledgeIntentCreate(task.id, true)}
                             className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-70"
                           >
-                            {currentKnowledgeIntent.state === 'loading' && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
-                            실행 요청
+                            {currentKnowledgeIntent.state === 'loading' && <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden="true" />}
+                            {currentKnowledgeIntent.state === 'loading' ? '실행 중' : '실행 요청'}
                           </button>
                         </div>
                       </div>
