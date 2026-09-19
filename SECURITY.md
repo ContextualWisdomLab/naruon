@@ -9,7 +9,7 @@
 
 Report suspected vulnerabilities through GitHub private vulnerability
 reporting:
-https://github.com/Seongho-Bae/naruon/security/advisories/new
+https://github.com/ContextualWisdomLab/naruon/security/advisories/new
 
 If GitHub private reporting is unavailable, email `security@naruon.net` with:
 
