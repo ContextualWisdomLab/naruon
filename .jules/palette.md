@@ -80,3 +80,6 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+## 2024-05-18 - 버튼의 aria-disabled 안티패턴 수정
+**Learning:** 네이티브 `disabled` 속성과 `aria-disabled` 속성을 함께 사용하는 것은 스크린 리더 등에서 혼란을 줄 수 있는 접근성 안티패턴입니다. 네이티브 `disabled` 속성만으로 상태를 전달하고, 비동기 작업 시에는 `aria-busy`를 사용해야 합니다.
+**Action:** 다음 작업부터는 비동기 작업이 있는 버튼에 `disabled`와 `aria-disabled`를 중복해서 사용하지 않도록 유의하여 검토합니다.
