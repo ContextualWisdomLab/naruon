@@ -770,6 +770,31 @@ registry.register(
 
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    if algorithm not in ("md5", "sha256", "sha512", "blake2b"):
+        raise ValueError(f"Unsupported algorithm: {algorithm}. Supported algorithms are md5, sha256, sha512, blake2b.")
+
+    hasher = hashlib.new(algorithm)
+    hasher.update(text.encode("utf-8"))
+
+    return {"hash": hasher.hexdigest(), "algorithm": algorithm}
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="입력된 텍스트를 지정된 해시 알고리즘(MD5, SHA-256, SHA-512, BLAKE2b)을 사용하여 해시값으로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
