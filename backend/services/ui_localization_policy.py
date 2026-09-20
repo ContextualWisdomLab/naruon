@@ -43,6 +43,7 @@ SUPPORTED_LOCALE_CODES: tuple[SupportedLocaleCode, ...] = (
 )
 DEFAULT_LOCALE_CODE: SupportedLocaleCode = "ko"
 _SUPPORTED_LOCALE_SET = frozenset(SUPPORTED_LOCALE_CODES)
+_MAX_ACCEPT_LANGUAGE_EMPTY_MEMBERS = 32
 _LOCALE_TAG_PATTERN = re.compile(
     r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
     flags=re.ASCII,
@@ -142,10 +143,17 @@ def _accept_language_preferences(
 
     explicit_best: dict[SupportedLocaleCode, tuple[float, int]] = {}
     wildcard_best: tuple[float, int] | None = None
+    empty_members = 0
 
     for position, raw_item in enumerate(candidate.split(",")):
         item = raw_item.strip(" \t")
         if not item:
+            empty_members += 1
+            if empty_members > _MAX_ACCEPT_LANGUAGE_EMPTY_MEMBERS:
+                raise UiLocalizationValidationError(
+                    "ui_accept_language_invalid",
+                    "Accept-Language contains too many empty list members",
+                )
             continue
         match = _ACCEPT_LANGUAGE_ITEM_PATTERN.fullmatch(item)
         if match is None:
