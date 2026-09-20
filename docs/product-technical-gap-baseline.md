@@ -1,19 +1,21 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.30  
+**Baseline version:** 2.31  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.29 remains audit-visible as blob `0fa173a24b98b3ce1336c9516c4d787c7e76c539`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.30 remains audit-visible as blob `18c91f9c10c3027d6cdc6f3ac4658995e44ef140`; v2.29 remains blob `0fa173a24b98b3ce1336c9516c4d787c7e76c539`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+
+v2.31 also removes an avoidably volatile baseline assertion introduced in v2.30: exact-head workflow *status* belongs to live PR/check authority rather than a durable product Gap ledger. The baseline records whether required evidence has been generated and whether acceptance has been established; per-run queued/pending/terminal state is read fresh from GitHub before any merge decision.
 
 ## 1. Evidence hierarchy and release posture
 
 When evidence conflicts, use this order: exact protected-branch code/migrations/tests/runtime contracts → protected architecture/operations docs → exact current PR source and current-head evidence → live Issue/Proposed ADR authority → historical snapshots. Pending, queued, cancelled, stale, predecessor-head, skipped-required, source-neutral, author-only, local-only, or model-only evidence is not passing evidence.
 
-Fresh repository inventory is **289 open PRs / 75 open Issues**. Protected `develop` remains exact `042b0c70531b229af3acbd0421a2f23098d848b3`, tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`, with 17 required status contexts. Rulesets `18156473` (`CWL Central required workflows`), `17214772` (`Lock default branch`) and `15586698` (`PR`) are active.
+Fresh repository inventory at this observation is **289 open PRs / 75 open Issues**. Protected `develop` remains exact `042b0c70531b229af3acbd0421a2f23098d848b3`, tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`, with 17 required status contexts. Rulesets `18156473` (`CWL Central required workflows`), `17214772` (`Lock default branch`) and `15586698` (`PR`) are active.
 
 Latest Naruon GitHub Release remains `v0.14.4`, published 2026-06-19, with `immutable=false`. It is historical publication evidence only. A commercial candidate requires one exact integrated protected head with terminal required contexts, current security evidence, zero valid unresolved review findings, qualifying independent post-last-push review, immutable publication identity, SBOM/provenance, reproducibility, rollback and buyer-visible acceptance for changed behavior.
 
@@ -23,9 +25,9 @@ Latest Naruon GitHub Release remains `v0.14.4`, published 2026-06-19, with `immu
 
 Protected central authority remains `ContextualWisdomLab/.github/main@e6334e229581a918e2f22de18733b76fa65d7e71`, the protected merge of #2279.
 
-- `.github#712` remains the sole Actions execution-capacity owner. Fresh observation is **265 queued / 0 in progress**. The newest queued sample is repository-dispatch run `35523656599`, a CodeQL Scan Dispatch on the protected-main SHA. Admitted work is accumulating while no run owns an executing lane, so this is acquisition-starvation evidence rather than merely a large backlog. No blind rerun, source-neutral wake commit or required-check weakening is permitted.
-- `.github#1911@c965664a6d7fe0b75bf7ea019a9059220a32f06b` remains the canonical repository-wide/full-suite Trusted-uv owner. Its current Python Security, SAST, Security, Trusted-uv and CodeQL generation is terminal cancelled; cancellation is missing hosted acceptance, not source GREEN.
-- `.github#2040@bd039185ddf8df88480971cdd3b69c38f4558609` has losslessly converged the Trusted-uv files through #1911. Its remaining owner scope is CodeQL scheduler/credential/runtime-quality. Runtime Quality/SAST/Security/Python Security/Trusted-uv are cancelled and CodeQL is nonterminal; predecessor evidence does not transfer.
+- `.github#712` remains the sole Actions execution-capacity owner. Fresh observation at v2.31 authoring is **265 queued / 0 in progress**. The newest queued sample is repository-dispatch run `35523656599`, a CodeQL Scan Dispatch on the protected-main SHA. Admitted work is accumulating while no run owns an executing lane, so this is acquisition-starvation evidence rather than merely a large backlog. No blind rerun, source-neutral wake commit or required-check weakening is permitted.
+- `.github#1911@c965664a6d7fe0b75bf7ea019a9059220a32f06b` remains the canonical repository-wide/full-suite Trusted-uv owner. Its current hosted acceptance is not GREEN; cancellation is missing hosted acceptance, not source GREEN.
+- `.github#2040@bd039185ddf8df88480971cdd3b69c38f4558609` has losslessly converged the Trusted-uv files through #1911. Its remaining owner scope is CodeQL scheduler/credential/runtime-quality; current hosted acceptance remains incomplete and predecessor evidence does not transfer.
 - `.github#2291@a8d6261d4fc2c2a82a9b8ad6636e75677ecc5081` is the canonical Strix trusted-runtime/evidence-binder owner and is **source RED before hosted acceptance**. Exact RED `tests/test_strix_trusted_fixture_boundary.py` enumerates 24 specialized fixtures that still call `materialize_trusted_gate_fixture "$repo_root_dir/scripts/ci"`, co-locating trusted binder/runtime with the consumer root and masking a regression to consumer-controlled binder resolution. One unresolved Major current-head review thread independently requires the same complete matrix repair. Acceptance requires all 24 affected fixture families to use a non-consumer trusted runtime, absolute trusted-gate invocation with explicit `STRIX_REPO_ROOT`, binder-free consumer roots and preserved scenario assertions; a representative-only extra fixture is not sufficient.
 - `.github#2109@42e3f7a8cbb03b117c898d3e125af87a5c6ce86b` remains the Draft/Ready + stacked-base heavy-workflow admission successor. Its live base has advanced to #2291 `a8d6261d...`, so it is intentionally diverged and must ordinary/non-force adopt the repaired owner after #2291 completes. Same-tree Ready-generation / Draft-withdrawal evidence proves lifecycle shape only, not hosted GREEN.
 - `.github#2271`, `#2275`, `#2276` retain repository-identity, GHAS analysis-capability and unchanged-target permission/canary boundaries respectively. #2275 must reacquire its own Python Security/Runtime Quality after the stacked-base admission contract is protected; capability selection cannot manufacture target-repository permission.
@@ -65,13 +67,13 @@ Generated NetworkGraph lanes, including #1741 and repaired #1734, remain Draft p
 
 Issue #1247 remains the checksum contract. Normal security-labelled checksum surface is SHA-256, SHA-3-256 and BLAKE2b-256 only; MD5/SHA-1 are excluded from the normal surface. #1361 remains the sole `content_checksum_generator` implementation owner on #1623; generated #1739 remains zero-effective-delta provenance.
 
-## 4. UI Localization Catalog — v2.30 material delta
+## 4. UI Localization Catalog — v2.30/v2.31 material contract
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded implementation owner and has advanced to exact **`41aeb4ea59b7a2e24bc326b3239c434c3e135edf`**.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded implementation owner at exact **`41aeb4ea59b7a2e24bc326b3239c434c3e135edf`**.
 
 #1740 still owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, stable screen/message keys, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
 
-Four ordinary-forward RED→repair sequences now define the executable policy:
+Four ordinary-forward RED→repair sequences define the executable policy:
 
 1. RFC 4647 wildcard ordering and explicit `q=0` exclusion.
 2. Boundary-specific control-character codes (`ui_locale_input_invalid` vs `ui_accept_language_invalid`).
@@ -86,7 +88,7 @@ Current localization invariants:
 - once a locale is selected, missing active translation keys must fail rather than silently fall back per message;
 - UI-copy resources remain separate from ontology/concept-label authority.
 
-The fourth repair has executable regression source, but **no local/container PASS is claimed** because the current automation runtime cannot execute the repository stack. Exact #1740 `41aeb4ea...` currently has zero PR workflow runs and no formal review submission while Draft. Predecessor local/hosted evidence does not transfer and no source-neutral wake commit was created.
+The fourth repair has executable regression source, but **no local/container PASS is claimed** because the current automation runtime cannot execute the repository stack. Exact-head repository workflows have naturally generated for `41aeb4ea...`; their live state is authoritative in #1740/checks and must be read fresh before any acceptance decision. The baseline claims no terminal GREEN and no qualifying independent post-last-push review. No predecessor receipt transfer or source-neutral wake commit is permitted.
 
 Persistence remains blocked until #1503 or a verified complete successor reaches protected ancestry. Then localization storage must create the next ordinary single-head Alembic descendant, use normalized 3NF resources, immutable published versions, placeholder/completeness validation, short aggregate publication transactions, screen-scoped reads with ETag/version identity and no whole-catalog browser hydration.
 
