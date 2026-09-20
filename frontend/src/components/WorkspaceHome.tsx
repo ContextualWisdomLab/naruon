@@ -926,6 +926,30 @@ export function WorkspaceHome({
           >
             {effectiveMobileView === 'calendar' ? <MobileCalendarPanel /> : null}
           </section>
+          <section
+            id="mobile-reply-review"
+            aria-label="모바일 답장 검토"
+            role="region"
+            className={`mobile-workspace-panel h-full ${effectiveMobileView === 'reply-review' ? 'flex' : 'hidden'} flex-col overflow-y-auto bg-gradient-to-b from-primary/5 via-background to-card p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]`}
+          >
+            {effectiveMobileView === 'reply-review' ? <MobileReplyReviewPanel /> : null}
+          </section>
+          <section
+            id="mobile-source-drawer"
+            aria-label="모바일 근거 원본"
+            role="region"
+            className={`mobile-workspace-panel h-full ${effectiveMobileView === 'source-drawer' ? 'flex' : 'hidden'} flex-col overflow-y-auto bg-gradient-to-b from-primary/5 via-background to-card p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]`}
+          >
+            {effectiveMobileView === 'source-drawer' ? <MobileSourceDrawerPanel /> : null}
+          </section>
+          <section
+            id="mobile-schedule-confirmation"
+            aria-label="모바일 일정 확정"
+            role="region"
+            className={`mobile-workspace-panel h-full ${effectiveMobileView === 'schedule-confirmation' ? 'flex' : 'hidden'} flex-col overflow-y-auto bg-gradient-to-b from-primary/5 via-background to-card p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]`}
+          >
+            {effectiveMobileView === 'schedule-confirmation' ? <MobileScheduleConfirmationPanel /> : null}
+          </section>
       </div>
     </>
   );
