@@ -213,3 +213,18 @@ def test_placeholder_input_and_schema_must_be_bounded():
         "ui_placeholder_schema_invalid",
         lambda: validate_translation_placeholders("{name}", (None,)),
     )
+
+
+@pytest.mark.parametrize(
+    "placeholder_schema",
+    (
+        None,
+        {"name": "ignored-value"},
+    ),
+)
+def test_placeholder_schema_container_type_fails_closed(placeholder_schema):
+    """Only the declared tuple/list schema boundary is accepted at runtime."""
+    assert_error(
+        "ui_placeholder_schema_invalid",
+        lambda: validate_translation_placeholders("{name}", placeholder_schema),
+    )
