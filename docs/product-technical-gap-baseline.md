@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.32  
+**Baseline version:** 2.33  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.31 remains audit-visible as blob `560fe59c120171492eb113a08ce3ee95c2fdae52`; v2.30 remains blob `18c91f9c10c3027d6cdc6f3ac4658995e44ef140`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.32 remains audit-visible as blob `26a92eccb1e5479aef443ce278f293bf01a684b7`; v2.31 remains blob `560fe59c120171492eb113a08ce3ee95c2fdae52`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.31 separated durable product/evidence contracts from volatile per-run workflow state. v2.32 advances the durable localization protocol contract only: RFC 9110 defines the content-negotiation quality parameter name `q` as case-insensitive, so valid `Q=` weights must be accepted with exactly the same qvalue and OWS semantics as `q=`.
+v2.31 separated durable product/evidence contracts from volatile per-run workflow state. v2.32 advanced the RFC 9110 case-insensitive `q` parameter contract. v2.33 advances the durable localization publication boundary: placeholder schemas are declared tuple/list collections, and arbitrary runtime iterables must not be silently coerced into versioned publication metadata or escape typed validation.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -25,7 +25,7 @@ Latest Naruon GitHub Release remains `v0.14.4`, published 2026-06-19, with `immu
 
 Protected central authority remains `ContextualWisdomLab/.github/main@e6334e229581a918e2f22de18733b76fa65d7e71`, the protected merge of #2279.
 
-- `.github#712` remains the sole Actions execution-capacity owner. Fresh observation at v2.31 authoring was **265 queued / 0 in progress**; live queue/running state is volatile and must be read from GitHub before any acceptance decision. No blind rerun, source-neutral wake commit or required-check weakening is permitted.
+- `.github#712` remains the sole Actions execution-capacity owner. Runner queue/running state is volatile and must be read from GitHub before any acceptance decision. No blind rerun, source-neutral wake commit or required-check weakening is permitted.
 - `.github#1911@c965664a6d7fe0b75bf7ea019a9059220a32f06b` remains the canonical repository-wide/full-suite Trusted-uv owner. Its current hosted acceptance is not GREEN; cancellation is missing hosted acceptance, not source GREEN.
 - `.github#2040@bd039185ddf8df88480971cdd3b69c38f4558609` has losslessly converged the Trusted-uv files through #1911. Its remaining owner scope is CodeQL scheduler/credential/runtime-quality; current hosted acceptance remains incomplete and predecessor evidence does not transfer.
 - `.github#2291@a8d6261d4fc2c2a82a9b8ad6636e75677ecc5081` is the canonical Strix trusted-runtime/evidence-binder owner and is **source RED before hosted acceptance**. Exact RED `tests/test_strix_trusted_fixture_boundary.py` enumerates 24 specialized fixtures that still call `materialize_trusted_gate_fixture "$repo_root_dir/scripts/ci"`, co-locating trusted binder/runtime with the consumer root and masking a regression to consumer-controlled binder resolution. One unresolved Major current-head review thread independently requires the same complete matrix repair. Acceptance requires all 24 affected fixture families to use a non-consumer trusted runtime, absolute trusted-gate invocation with explicit `STRIX_REPO_ROOT`, binder-free consumer roots and preserved scenario assertions; a representative-only extra fixture is not sufficient.
@@ -67,19 +67,20 @@ Generated NetworkGraph lanes, including #1741 and repaired #1734, remain Draft p
 
 Issue #1247 remains the checksum contract. Normal security-labelled checksum surface is SHA-256, SHA-3-256 and BLAKE2b-256 only; MD5/SHA-1 are excluded from the normal surface. #1361 remains the sole `content_checksum_generator` implementation owner on #1623; generated #1739 remains zero-effective-delta provenance.
 
-## 4. UI Localization Catalog — v2.32 material contract
+## 4. UI Localization Catalog — v2.33 material contract
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded implementation owner at exact **`2bc067e7b0a98b1d35630e77623e55bc9594992b`**.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded implementation owner at exact **`b1808593ca9ac147c06d8c6d1cc3ac0d0ed5efb2`**.
 
 #1740 still owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, stable screen/message keys, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
 
-Five ordinary-forward RED→repair sequences define the executable policy:
+Six ordinary-forward RED→repair sequences define the executable policy:
 
 1. RFC 4647 wildcard ordering and explicit `q=0` exclusion.
 2. Boundary-specific control-character codes (`ui_locale_input_invalid` vs `ui_accept_language_invalid`).
 3. Control rejection before normalization so leading/trailing CRLF cannot disappear through `.strip()`.
 4. **RFC 9110 protocol-whitespace repair**: RED `8265e9bb08cc407c860f148f1823dd0f4ab6d13d` proves that generic Python `str.strip()` and regex `\s` are broader than HTTP OWS. Causal fix `9a6c8bb04be237c968b58987ca6ac4efb789a482` rejects C0/DEL at explicit-locale boundaries, permits HTAB only in the HTTP boundary where OWS allows it, restricts OWS parsing to SP/HTAB, and replaces broad stripping with explicit ASCII normalization.
-5. **RFC 9110 quality-parameter case repair**: the standard explicitly defines the content-negotiation parameter name `q` as case-insensitive, while the implementation matched lowercase `q=` only. RED `962e250c54d0da324ec29b21283ab0b02cd55e8c` pins `Q=` semantics at two ordering points. Causal fix `b20b5593498c09855e6ef6fb213d9bf6ea764e15` narrows the change to `[qQ]=` while preserving the existing qvalue and OWS grammar. Doctoring/TRACEABILITY is current at `2bc067e7...`.
+5. **RFC 9110 quality-parameter case repair**: the standard explicitly defines the content-negotiation parameter name `q` as case-insensitive, while the implementation matched lowercase `q=` only. RED `962e250c54d0da324ec29b21283ab0b02cd55e8c` pins `Q=` semantics at two ordering points. Causal fix `b20b5593498c09855e6ef6fb213d9bf6ea764e15` narrows the change to `[qQ]=` while preserving the existing qvalue and OWS grammar.
+6. **Placeholder-schema runtime boundary repair**: RED `e299d29b14943c368e581bcb3d35303a1ba3fb8f` proves blind `tuple(placeholder_schema)` coercion lets `None` escape as raw `TypeError` and lets a one-key mapping masquerade as a valid schema by iterating its key. Causal fix `92a50acef8c7a3fbb38a926994add1641ac6c49d` validates the declared tuple/list container before conversion and emits `ui_placeholder_schema_invalid` for invalid containers. Doctoring/TRACEABILITY is current at `b1808593...`.
 
 Current localization invariants:
 
@@ -87,10 +88,11 @@ Current localization invariants:
 - `Accept-Language`: reject C0/DEL except HTAB in valid RFC 9110 OWS positions; protocol OWS is exactly SP/HTAB; VT, FF, NBSP and other Unicode whitespace are not protocol OWS;
 - `q=` and `Q=` are equivalent quality-parameter spellings; qvalue syntax and range remain strict;
 - boundary-specific stable validation codes are preserved;
+- placeholder schemas are tuple/list runtime collections of unique lowercase names; mappings, generators, scalars, `None` and other arbitrary iterables fail closed rather than inheriting Python iteration semantics;
 - once a locale is selected, missing active translation keys must fail rather than silently fall back per message;
 - UI-copy resources remain separate from ontology/concept-label authority.
 
-The fifth repair has executable regression source, but **no local/container PASS is claimed** because the current automation runtime cannot execute the repository stack. Exact-head workflow state is authoritative in #1740/checks and must be read fresh before acceptance. The baseline claims no terminal GREEN and no qualifying independent post-last-push review. No predecessor receipt transfer or source-neutral wake commit is permitted.
+The sixth repair has executable regression source, but **no local/container PASS is claimed** because the current automation runtime does not contain the repository checkout needed for exact-head execution. Exact-head workflow state is authoritative in #1740/checks and must be read fresh before acceptance. The baseline claims no terminal GREEN and no qualifying independent post-last-push review. No predecessor receipt transfer or source-neutral wake commit is permitted.
 
 Persistence remains blocked until #1503 or a verified complete successor reaches protected ancestry. Then localization storage must create the next ordinary single-head Alembic descendant, use normalized 3NF resources, immutable published versions, placeholder/completeness validation, short aggregate publication transactions, screen-scoped reads with ETag/version identity and no whole-catalog browser hydration.
 
