@@ -228,3 +228,18 @@ def test_placeholder_schema_container_type_fails_closed(placeholder_schema):
         "ui_placeholder_schema_invalid",
         lambda: validate_translation_placeholders("{name}", placeholder_schema),
     )
+
+
+@pytest.mark.parametrize(
+    "placeholder_schema",
+    (
+        (["name"],),
+        ({"name": "ignored-value"},),
+    ),
+)
+def test_placeholder_schema_unhashable_element_fails_closed(placeholder_schema):
+    """Nested mutable values fail with the catalog error instead of raw TypeError."""
+    assert_error(
+        "ui_placeholder_schema_invalid",
+        lambda: validate_translation_placeholders("{name}", placeholder_schema),
+    )
