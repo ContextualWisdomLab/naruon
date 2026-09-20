@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.28  
-**Observed on:** 2026-09-20 (Asia/Seoul)  
+**Baseline version:** 2.29  
+**Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-This file is the current product/technical authority overlay. v2.27 remains audit-visible as blob `bf7e6e36d58899704ac3331cace1be59387b62e4`; v2.26 remains blob `5d453f080d2d8b496cf14d1be2c4de5f6205358f`; earlier snapshots remain audit material in Git ancestry and `docs/product-technical-gap-history/`. Historical evidence is not current merge or release authority.
+This file is the current product/technical authority overlay. v2.28 remains audit-visible as blob `acbfc43cc759c4a6689dd931f41bcbe3648eaab3`; v2.27 remains blob `bf7e6e36d58899704ac3331cace1be59387b62e4`; earlier snapshots remain audit material in Git ancestry and `docs/product-technical-gap-history/`. Historical evidence is not current merge or release authority.
 
 ## 1. Evidence and release posture
 
@@ -21,7 +21,7 @@ A releasable candidate requires one exact integrated protected head, terminal re
 
 Protected central authority remains `.github/main@e6334e229581a918e2f22de18733b76fa65d7e71`, the protected merge of #2279 exact `d1e4380c15e948aaf104d46aa134fa614058782a`.
 
-- `.github#712` remains the Actions execution-capacity owner. Fresh observation is **211 queued / 1 in progress**. The newest queued sample is a `repository_dispatch` CodeQL dispatch on protected central `main`; the single in-progress workload remains the long-running #2274 Strix run. This is not stable runner acquisition. Preserve sole current-head evidence and distinguish generation/admission, first runner acquisition, downstream acquisition, cancellation and preemption. No source-neutral wake commits or blind unchanged-head reruns.
+- `.github#712` remains the Actions execution-capacity owner. Fresh observation is **250 queued / 0 in progress**. The newest queued sample is Required OpenCode Review for `.github#2166@43aa19ac...`; protected central `main` itself remains unchanged. A non-empty queue with no running lane is stronger starvation evidence than queue depth alone. Preserve sole current-head evidence and distinguish generation/admission, first runner acquisition, downstream acquisition, cancellation and preemption. No source-neutral wake commits or blind unchanged-head reruns.
 - `.github#1911@c965664a6d7fe0b75bf7ea019a9059220a32f06b` remains the repository-wide/full-suite Trusted-uv owner. Its current hosted acceptance is not GREEN.
 - `.github#2040@bd039185ddf8df88480971cdd3b69c38f4558609` has converged off parallel Trusted-uv ownership; its distinct CodeQL/scheduler/runtime-quality scope remains unaccepted.
 - `.github#2291@a8d6261d4fc2c2a82a9b8ad6636e75677ecc5081` remains **source RED before queue acceptance**. Its executable RED enumerates the remaining 24 specialized `materialize_trusted_gate_fixture` call sites that still co-locate trusted runtime/binder material with the consumer root and can mask a regression to consumer-controlled binder resolution. Acceptance requires all affected production-boundary fixtures to move gate/model/binder to a non-consumer trusted runtime, invoke the trusted gate by absolute path with explicit `STRIX_REPO_ROOT`, preserve scenario assertions, and prove consumer-binder absence.
@@ -80,11 +80,13 @@ Generated/provenance NetworkGraph descendants have been ordinary-restacked after
 
 Generated #1738 remains quarantined zero-delta provenance after fabricated participant/attachment data and static/unbound UI behavior. Its valid intent must be rebuilt through authoritative mail/thread/attachment/calendar/mobile owners with real data and full lifecycle/browser/a11y evidence.
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single DB-versioned, screen-scoped **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`f07de3fce6b61afd8fe9dc5b72352a9b184ab854`** and currently owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release identities, persisted → session → weighted `Accept-Language` → product-default selection, stable screen/message keys, exact named-placeholder schemas, and typed validation boundaries.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single DB-versioned, screen-scoped **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`ae34dee31fdef2e59359ec532fcc9865f4994566`** and currently owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release identities, persisted → session → weighted `Accept-Language` → product-default selection, stable screen/message keys, exact named-placeholder schemas, and typed validation boundaries.
 
-#1740 now preserves two ordinary-forward RED→repair sequences. First, RFC 4647 lookup review repaired wildcard ordering and explicit `q=0` exclusion. Second, a fresh RED proved that CR/LF/NUL arriving via `Accept-Language` was incorrectly reported as `ui_locale_input_invalid` because a shared control-character helper hard-coded the explicit-locale code. The causal repair parameterizes that helper by caller boundary: explicit locale controls → `ui_locale_input_invalid`; `Accept-Language` controls → `ui_accept_language_invalid`. Temporary duplicate regression coverage was folded into the canonical policy suite and removed.
+#1740 now preserves three ordinary-forward RED→repair sequences. First, RFC 4647 lookup review repaired wildcard ordering and explicit `q=0` exclusion. Second, a RED proved that CR/LF/NUL arriving via `Accept-Language` was incorrectly reported as `ui_locale_input_invalid` because a shared control-character helper hard-coded the explicit-locale code; the repair parameterizes that helper by caller boundary. Third, current-head review found both explicit locale and `Accept-Language` input were `.strip()`-normalized before control validation, so leading/trailing CRLF disappeared before the fail-closed guard. RED `de6bbfaf...` pins edge CRLF for both boundaries; `2d84ee69...` validates the original input before whitespace normalization. `da5288c...` folds the remaining wildcard q=0 regression into the canonical suite, `3d27ddc...` removes the superseded duplicate test file, and `ae34dee3...` makes doctoring/TRACEABILITY code-current.
 
-The current #1740 head has no independent review. Application CI, CodeQL, Security Scan, SAST Semgrep, Bandit and Docker generations are queued. Earlier local 16-test/100%-coverage and `PYTHONPATH=.` receipts are predecessor history and **do not** count for the current head. Doctoring/TRACEABILITY now records RFC 5646, RFC 4647 and RFC 9110 plus the typed boundary decision without transferring stale receipts.
+The exact #1740 contract is now: explicit locale CR/LF/NUL anywhere → `ui_locale_input_invalid`; `Accept-Language` CR/LF/NUL anywhere → `ui_accept_language_invalid`; only then may benign outer whitespace be normalized. This closes a boundary-canonicalization gap without broadening #1740 into persistence, API, browser or publication ownership.
+
+The current #1740 exact head has no independent review and GitHub currently reports **zero workflow runs** while the PR remains Draft. Earlier local/full-suite/coverage and predecessor hosted receipts do not transfer. Doctoring/TRACEABILITY records RFC 5646, RFC 4647 and RFC 9110 plus typed validation identity and the pre-normalization control-character decision.
 
 #1740 intentionally owns no database/Alembic/API/browser/Storybook/authoring/ontology/LLM path. Persistence still waits for #1503 or a verified complete successor to reach protected ancestry, then creates the next ordinary single-head Alembic descendant. [#1729](https://github.com/ContextualWisdomLab/naruon/pull/1729) remains the bounded OIDC interaction-state owner and consumes released screen resources only after localization persistence/API reach protected ancestry.
 
@@ -103,7 +105,7 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 | Priority | Gap | Current boundary | Completion evidence |
 | --- | --- | --- | --- |
 | P0 | Release-train convergence | 289 open PRs; protected head unchanged | parent-first integration, no orphaned valid delta, one immutable RC source SHA |
-| P0 | Actions execution capacity | `.github#712`; fresh 211 queued / 1 in progress | stable runner acquisition; admission/runner/cancellation classes separated; obsolete pressure removed without cancelling sole current-head evidence |
+| P0 | Actions execution capacity | `.github#712`; fresh 250 queued / 0 in progress | stable runner acquisition; admission/runner/cancellation classes separated; obsolete pressure removed without cancelling sole current-head evidence |
 | P0 | Strix trusted-runtime isolation | #2291 exact `a8d6261d...` executable RED for 24 specialized masking call sites | complete fixture migration, consumer-binder negative proof, exact-head GREEN/review/hosted acceptance |
 | P0 | Central CI/security acceptance | #1911/#2040 incomplete; #2109 depends on #2291; #2271→#2275 admission incomplete | exact-head hosted GREEN, qualifying review, accepted stacked-base contract, #2276 canary |
 | P0 | Dependency-security freshness | #1623 owns Trivy/dependency revalidation and rejected #1593 cross-owner rollback evidence | current vulnerability scans, coherent manifests/locks, hostile regressions, terminal CI/security/review |
@@ -112,7 +114,7 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 | P0 | Released LLM contract | contextual-orchestrator release inventory empty | immutable API/client/schema release + consumer bump + contract/E2E/security/SBOM/provenance |
 | P1 | NetworkGraph performance stack | #1593 `cd6f6d...` → #1628 `8786c6e...` → #1674 provenance → #1675 `059481ed...`; descendants restacked | current-head hosted GREEN/review, real browser/main-thread profile, no unsupported O(1)/p95 claim |
 | P1 | Data-hygiene checksum contract | #1361 sole implementation; #1739 provenance | #1623 integration, stacked admission, exact-head hosted/security/review acceptance |
-| P1 | UI localization catalog | #1731 Gap; #1740 `f07de3fc...` pure-policy owner; persistence waits for #1503 | versioned 3NF resource, immutable publication/rollback, screen-scoped API/cache, eight-locale completeness/placeholder enforcement |
+| P1 | UI localization catalog | #1731 Gap; #1740 `ae34dee3...` pure-policy owner; persistence waits for #1503 | edge-control-safe locale policy, versioned 3NF resource, immutable publication/rollback, screen-scoped API/cache, eight-locale completeness/placeholder enforcement |
 | P1 | Tasks/Settings interaction acceptance | #1463/#1676 source repairs; #1735/#1737 provenance | hosted GREEN + browser keyboard/focus/touch/responsive/AT + qualifying review |
 | P1 | Design-QA fidelity/mobile states | #1738 quarantined placeholder | authoritative data/action implementation, lifecycle states, browser/E2E/a11y evidence |
 | P1 | Executable Storybook/design system | #1354 static owner; #1436 runtime lineage | owner-safe reconstruction, coherent lock, representative states, browser/a11y/Figma evidence |
@@ -131,7 +133,7 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 9. Preserve #1565 as bounded TestClient/httpx2 owner; ordinary/non-force reconcile #1685 and regenerate one coherent dependency graph.
 10. Terminalize #1733 after #1623 revalidation/adoption without provider-text or traceback leakage.
 11. Integrate migration prerequisites and #1694 → #1691 → #1503 as the sole migration lineage; ordinary-adopt #1727/downstream consumers.
-12. Preserve #1740 as the bounded #1731 pure-policy owner while current-head checks/review are incomplete. After #1503 reaches protected ancestry, extend the same lineage with the next single-head catalog migration, immutable resource aggregate and screen-scoped API/cache.
+12. Preserve #1740 `ae34dee3...` as the bounded #1731 pure-policy owner with the pre-normalization CRLF repair while current-head checks/review are incomplete. After #1503 reaches protected ancestry, extend the same lineage with the next single-head catalog migration, immutable resource aggregate and screen-scoped API/cache.
 13. After contextual-orchestrator publishes an immutable API/client/schema release, finish #1549 without mutable-owner binding.
 14. Ordinary-adopt released localization resources into #1729 and UI surfaces; prove KO/EN/JA/ZH/VI/ES/DE/FR normal/loading/empty/error/permission, CJK/text expansion/font fallback, keyboard/focus/touch/a11y/responsive behavior.
 15. Terminalize #1463/#1676, rebuild #1738 surviving intent through authoritative data owners, and reconstruct #1436 Storybook through #1623 → #1354 with current Figma/browser/a11y evidence.
