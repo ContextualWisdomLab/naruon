@@ -70,19 +70,21 @@ def test_accept_language_duplicate_quality_is_not_first_occurrence_biased():
     assert selected.locale_code == "fr"
 
 
-def test_accept_language_zero_quality_excludes_language_from_wildcard():
-    """An explicit q=0 exclusion is not reintroduced by a wildcard range."""
+def test_accept_language_zero_quality_and_wildcard_follow_lookup_order():
+    """Wildcard lookup defers to a later concrete range and q=0 stays excluded."""
     selected = select_ui_locale(accept_language="ko;q=0, *;q=0.8, en;q=0.7")
-    assert selected.locale_code == "ja"
+    assert selected.locale_code == "en"
     selected = select_ui_locale(accept_language="fr;q=0, *;q=0")
     assert selected.locale_code == "ko"
 
 
-def test_wildcard_quality_and_header_position_are_respected():
-    """Wildcard candidates participate at declared quality without hiding specifics."""
+def test_wildcard_lookup_skips_to_later_concrete_range():
+    """RFC 4647 lookup skips wildcard when a later concrete range can be tried."""
     selected = select_ui_locale(accept_language="en;q=0.9, *;q=0.8, fr;q=0.7")
     assert selected.locale_code == "en"
     selected = select_ui_locale(accept_language="*;q=0.7, *;q=0.9, *;q=0.5, fr;q=0.8")
+    assert selected.locale_code == "fr"
+    selected = select_ui_locale(accept_language="*;q=0.9")
     assert selected.locale_code == "ko"
 
 
