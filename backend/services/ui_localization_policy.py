@@ -54,7 +54,7 @@ _MESSAGE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$", flags=re.ASCII)
 _PLACEHOLDER_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$", flags=re.ASCII)
 _ACCEPT_LANGUAGE_ITEM_PATTERN = re.compile(
     r"^(?P<range>\*|[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*)"
-    r"(?:[ \t]*;[ \t]*q=(?P<quality>0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?$",
+    r"(?:[ \t]*;[ \t]*[qQ]=(?P<quality>0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?$",
     flags=re.ASCII,
 )
 
