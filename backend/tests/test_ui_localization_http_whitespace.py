@@ -52,3 +52,12 @@ def test_accept_language_allows_only_sp_and_htab_as_ows():
     """RFC 9110 OWS remains accepted around list members and q-weights."""
     selected = select_ui_locale(accept_language="\ten-US\t,\tfr ;\tq=0.5\t")
     assert (selected.locale_code, selected.selection_source) == ("en", "accept_language")
+
+
+def test_accept_language_quality_parameter_name_is_case_insensitive():
+    """RFC 9110 defines the q parameter name as case-insensitive."""
+    selected = select_ui_locale(accept_language="fr;Q=0.4, en;q=0.8")
+    assert (selected.locale_code, selected.selection_source) == ("en", "accept_language")
+
+    selected = select_ui_locale(accept_language="fr;Q=0.9, en;q=0.8")
+    assert (selected.locale_code, selected.selection_source) == ("fr", "accept_language")
