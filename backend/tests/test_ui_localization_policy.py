@@ -43,6 +43,12 @@ def test_explicit_unsupported_or_invalid_locale_fails_closed():
     )
 
 
+@pytest.mark.parametrize("locale_tag", ("\r\nen-US", "en-US\r\n"))
+def test_locale_normalization_rejects_edge_crlf_before_trimming(locale_tag):
+    """CR/LF at either edge is rejected rather than normalized away by whitespace trimming."""
+    assert_error("ui_locale_input_invalid", lambda: normalize_supported_locale(locale_tag))
+
+
 def test_selection_precedence_is_persisted_session_accept_language_default():
     """Locale authority follows the catalog contract in descending precedence."""
     selected = select_ui_locale(
@@ -97,6 +103,15 @@ def test_malformed_accept_language_fails_closed():
     assert_error(
         "ui_accept_language_invalid",
         lambda: select_ui_locale(accept_language="en\r\nX-Test: bad"),
+    )
+
+
+@pytest.mark.parametrize("header_value", ("\r\nen-US", "en-US\r\n"))
+def test_accept_language_rejects_edge_crlf_before_trimming(header_value):
+    """Header-edge CR/LF cannot disappear before the injection guard runs."""
+    assert_error(
+        "ui_accept_language_invalid",
+        lambda: select_ui_locale(accept_language=header_value),
     )
 
 
