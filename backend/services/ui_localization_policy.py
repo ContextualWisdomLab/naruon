@@ -305,10 +305,10 @@ def validate_translation_placeholders(
             "placeholder schema must be a tuple or list of names",
         )
     schema = tuple(placeholder_schema)
-    if len(schema) != len(set(schema)) or any(
+    if any(
         not isinstance(name, str) or not _PLACEHOLDER_NAME_PATTERN.fullmatch(name)
         for name in schema
-    ):
+    ) or len(schema) != len(set(schema)):
         raise UiLocalizationValidationError(
             "ui_placeholder_schema_invalid",
             "placeholder schema must contain unique lowercase snake_case names",
