@@ -138,8 +138,3 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
-
-## 2026-08-11 - [SQL 난수 생성 취약점 수정 (gen_random_uuid 적용)]
-**Vulnerability:** PostgreSQL에서 취약한 난수 생성 함수인 `random()`이 인증 및 식별자(`prompt_uid`, `folder_uid` 등) 생성에 사용되었습니다.
-**Learning:** 약한 난수를 사용하면 충돌이 발생하거나 예측 가능성으로 인해 인증이 우회될 수 있는 DoS 또는 보안 위험이 존재합니다.
-**Prevention:** 식별자 생성과 같이 암호학적으로 안전한 난수가 필요한 경우 `random()` 대신 PostgreSQL의 `gen_random_uuid()`를 사용해야 합니다.
