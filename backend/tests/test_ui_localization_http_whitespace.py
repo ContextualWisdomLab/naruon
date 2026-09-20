@@ -61,3 +61,12 @@ def test_accept_language_quality_parameter_name_is_case_insensitive():
 
     selected = select_ui_locale(accept_language="fr;Q=0.9, en;q=0.8")
     assert (selected.locale_code, selected.selection_source) == ("fr", "accept_language")
+
+
+def test_accept_language_ignores_reasonable_empty_list_elements():
+    """RFC 9110 recipients ignore empty members introduced while list values are merged."""
+    selected = select_ui_locale(accept_language=", fr;q=0.4, , en;q=0.8,")
+    assert (selected.locale_code, selected.selection_source) == ("en", "accept_language")
+
+    selected = select_ui_locale(accept_language=",")
+    assert (selected.locale_code, selected.selection_source) == ("ko", "product_default")
