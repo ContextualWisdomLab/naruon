@@ -1,17 +1,17 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.21  
+**Baseline version:** 2.22  
 **Observed on:** 2026-09-20 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-This file is the current product/technical authority overlay. v2.20 remains audit-visible as blob `a9e35592842c7b06bc78181e7d6fe25a20843e91`; v2.19 remains blob `23cfa4c3ec24177741b8e05c45896edc540a1536`; v2.18 remains blob `25ec56b6493a1ed577ce4481072d6db6c74ec7eb`. Earlier snapshots remain audit material in Git ancestry and `docs/product-technical-gap-history/`. Historical evidence is not current merge or release authority.
+This file is the current product/technical authority overlay. v2.21 remains audit-visible as blob `b993307ebcd05fb9f09090bb85f02af7697e2be1`; v2.20 remains blob `a9e35592842c7b06bc78181e7d6fe25a20843e91`; v2.19 remains blob `23cfa4c3ec24177741b8e05c45896edc540a1536`. Earlier snapshots remain audit material in Git ancestry and `docs/product-technical-gap-history/`. Historical evidence is not current merge or release authority.
 
 ## 1. Evidence and release posture
 
-Authority order is protected code/runtime/migrations/tests → protected architecture/operations docs → exact current PR source and current-head evidence → open Issues/Proposed ADRs → historical snapshots. Pending, queued, stale, predecessor-head, skipped-required, neutral, local-only, author-only, model-only, or source-neutral wake evidence is not passing evidence.
+Authority order is protected code/runtime/migrations/tests → protected architecture/operations docs → exact current PR source and current-head evidence → open Issues/Proposed ADRs → historical snapshots. Pending, queued, cancelled, stale, predecessor-head, skipped-required, neutral, local-only, author-only, model-only, or source-neutral wake evidence is not passing evidence.
 
 Fresh repository inventory before this generation is **286 open PRs and 75 open Issues**. Protected `develop` remains exact `042b0c70531b229af3acbd0421a2f23098d848b3`, tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`, with 17 required contexts. Latest published Naruon release remains `v0.14.4`, `immutable=false`; it is historical publication evidence, not a commercial immutable release candidate.
 
@@ -21,9 +21,9 @@ A releasable candidate requires one exact integrated protected head, terminal re
 
 Protected central authority remains `.github/main@e6334e229581a918e2f22de18733b76fa65d7e71`, the protected merge of #2279 exact `d1e4380c15e948aaf104d46aa134fa614058782a`. GitHub REST authority validation, redirect refusal, bearer non-forwarding, evidence-lineage validation, and owner-qualified foreign Semgrep evidence are protected ancestry; #2279 is not an open prerequisite.
 
-- `.github#712` remains the Actions execution-capacity owner. Fresh observation immediately before this generation was **236 queued / 2 in progress**. This is far below the earlier 600–780 backlog but still not stable acquisition: a three-digit queue with only two active runs remains capacity-constrained. Preserve sole current-head evidence, remove only obsolete/superseded pressure through the canonical owner path, distinguish runner acquisition from workflow parse/admission defects, and do not create source-neutral wake commits or blind reruns.
-- Canonical repository-wide/full-suite Trusted-uv owner `.github#1911` is now ordinary-reconciled to current protected main at exact `169852c7fd0d0a451f1a3ef595b0922298ff331a`. The current commit keeps prior owner ancestry as first parent, adopts `main@e6334e229...` as the additional parent, starts from the protected-main tree, and reapplies the canonical owner blobs. Fresh compare is **ahead 23 / behind 0 / merge base exact protected main**. Because the materializer implementation and focused contract-test blobs already equal protected main, the effective current-main delta is now only `.github/workflows/trusted-uv-materializer-quality-ci.yml` (+41/-36). Ten natural exact-head workflow runs were created; they were nonterminal at the immediate post-reconciliation read, so predecessor receipts do not transfer.
-- `.github#2040@7901ca565fb93a9e869cd4136476384ac3a07bdf` remains Draft/mergeable on current protected main with distinct CodeQL scheduler/credential/runtime-quality responsibilities, but it still changes `trusted-uv-materializer-quality-ci.yml`. It must ordinary/non-force adopt/adapt current #1911 or prove byte-/contract-equivalent succession before integration. #2040 must not remain a parallel Trusted-uv workflow owner, and its overlapping workflow must not be copied back into #1911.
+- `.github#712` remains the Actions execution-capacity owner. Fresh observation immediately before this generation was **232 queued / 0 in progress**. The newest queued sample is a `repository_dispatch` against protected `main@e6334e...`, so the remaining starvation is not only stale side-branch pressure. Preserve sole current-head evidence, remove only obsolete/superseded pressure through the canonical owner path, and distinguish workflow generation/admission, runner acquisition, and terminal cancellation/preemption. Do not create source-neutral wake commits or blind unchanged-head reruns.
+- Canonical repository-wide/full-suite Trusted-uv owner `.github#1911` is exact `c965664a6d7fe0b75bf7ea019a9059220a32f06b`, ordinary-reconciled to current protected main. The predecessor `169852c7...` correctly reduced the protected-base owner delta, but its retained contract test still encoded the older two-job/path-filter design. Current `c965664a...` repairs the test to the actual single hardened job, unfiltered `push: main`, exact PR-head/main-push checkout semantics, and both hash-locked OpenCode/Noema dependency closures. Fresh current-head hosted evidence is **not GREEN**: Python Security `35484950365`, SAST `35484950385`, Security `35484950398`, Trusted-uv `35484950390`, and CodeQL `35484950369` are terminal **CANCELLED**. Combined statuses show successful Devin Review and CodeRabbit only; those do not substitute for the required hosted families. Keep Draft and route execution RCA through #712 rather than mutating source to manufacture another generation.
+- `.github#2040@bd039185ddf8df88480971cdd3b69c38f4558609` has now completed the Trusted-uv owner convergence that v2.21 still listed as pending. It ordinary-adopts exact #1911 `c965664a...`; fresh compare is ahead-only with merge base exactly `c965664a...`, and neither `trusted-uv-materializer-quality-ci.yml` nor its contract test appears in #2040's remaining delta. #2040 therefore retains only its distinct CodeQL scheduler/credential/runtime-quality and related documentation/test surface rather than a parallel Trusted-uv implementation. Hosted acceptance remains incomplete: SAST `35484975926`, Security `35484975879`, Python Security `35484975909`, Trusted-uv `35484975956`, and Runtime Quality `35484975898` are **CANCELLED** while CodeQL `35484975910` remains pending. No #1911 or predecessor receipt transfers.
 - `.github#2271@8da5f48fa0438ff33c766f03325f6e7f2a77dd9d` ordinary-adopts canonical AnyIO owner #2278 and retains repository-identity admission while using `anyio==4.14.2`. It remains Draft/Proposed pending exact-head terminal security/CodeQL evidence.
 - `.github#2275@0d68d7a8435652edc288d7bb3dfb06a7c8a59eb6` is ordinary-restacked on current #2271, ahead 11 / behind 0 with merge base exact parent, preserving only the bounded GHAS credential-routing delta. #2276 still must prove real target-repository `code-scanning/analyses` permission.
 - `.github#2291@782d67b433aa71cf2c81b2a81f55ae192a317f3b` remains the canonical Strix trusted-binder/runtime owner. `STRIX_REPO_ROOT` is the consumer scan/artifact root; gate/model helper/binder remain trusted-source-owned. Fresh hosted acceptance and qualifying approval remain required.
@@ -66,9 +66,9 @@ Required executable Storybook reconstruction is **#1623 → #1354 → repaired #
 
 ### Tasks async loading feedback
 
-[#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) remains the canonical Tasks async-loading owner. Exact `bf9ce8e8f5ad1b4cf2f2ddc9c5f547a7d733f60e` repairs the prior shared-busy RED with action-specific `pending_action`, preserving mutual exclusion while assigning `aria-busy`, Loader2 and busy label only to the initiating action. Fresh repository workflows exist but remain nonterminal; real-browser keyboard/focus/touch/responsive/AT evidence and qualifying independent review remain absent. **UI Delivery Gate remains FAIL despite source-level functional repair.**
+[#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) remains the canonical Tasks async-loading owner. Exact `bf9ce8e8f5ad1b4cf2f2ddc9c5f547a7d733f60e` repairs the prior shared-busy RED with action-specific `pending_action`, preserving mutual exclusion while assigning `aria-busy`, Loader2 and busy label only to the initiating action. Fresh exact-head Application CI, CodeQL, Security, Semgrep, Bandit and Docker generations all remain queued; all review threads are resolved/outdated, but there is still no qualifying independent post-last-push approval. Real-browser keyboard/focus/touch/responsive/AT evidence is also absent. **UI Delivery Gate remains FAIL despite source-level functional repair.**
 
-Generated duplicate [#1735](https://github.com/ContextualWisdomLab/naruon/pull/1735) remains ordinary-restacked zero-effective-delta provenance at `b53d2018a14ec0aa2ed778142d04ef4abd7be1d7` and must be reswept if #1463 moves again.
+Generated duplicate [#1735](https://github.com/ContextualWisdomLab/naruon/pull/1735) is ordinary-restacked zero-effective-delta provenance at `b53d2018a14ec0aa2ed778142d04ef4abd7be1d7` against current #1463 and must be reswept if #1463 moves again.
 
 ### Settings native-disabled semantics
 
@@ -107,8 +107,8 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 | Priority | Gap | Current boundary | Completion evidence |
 | --- | --- | --- | --- |
 | P0 | Release-train convergence | 286 open PRs; protected head unchanged; owner movement requires descendant resweep | parent-first integration, no orphaned valid delta, one immutable RC source SHA |
-| P0 | Actions execution capacity | `.github#712`; 236 queued / 2 in progress immediately before this generation | stable runner acquisition, parse/admission RCA separated, obsolete pressure removed without cancelling sole current-head evidence |
-| P0 | Central CI/security acceptance | #1911 current-main reconciled; #2040 overlap remains; #2271→#2275; #2291→#2272; #2276 canary pending | #2040 adopts/adapts #1911, terminal exact-head checks, qualifying review, #2269 succession, unchanged-target GHAS canary |
+| P0 | Actions execution capacity | `.github#712`; 232 queued / 0 in progress immediately before this generation | stable runner acquisition; admission/acquisition/cancellation RCA separated; obsolete pressure removed without cancelling sole current-head evidence |
+| P0 | Central CI/security acceptance | #1911 `c965664a...` contract repaired but current hosted families cancelled; #2040 `bd039185...` now losslessly converged; #2271→#2275; #2291→#2272; #2276 canary pending | exact-head hosted GREEN without wake commits, qualifying review, #2269 succession, unchanged-target GHAS canary |
 | P0 | Dependency-security freshness | frontend #1623 revalidation; backend #1565→#1685 real ancestry/coherent graph repair | current vulnerability scans, coherent manifests/locks, hostile regressions, terminal CI/security/review |
 | P0 | LLM provider error confidentiality | #1733 source/test/TRACEABILITY repair present | terminal current-head hosted evidence + zero valid findings + qualifying review |
 | P0 | Workspace/migration convergence | #1503 sole migration line; #1727 sole opaque-ID descendant; #1736 provenance | one Alembic head, real PostgreSQL fresh/historical execution, ordinary descendant restacks |
@@ -123,8 +123,8 @@ Issue #1178 and PR #1732 remain the OpenSSF governance/legal lane. Current propr
 
 ## 7. Current causal order
 
-1. Restore stable Actions runner acquisition through `.github#712`; reduced backlog is not yet stable capacity.
-2. Terminalize canonical `.github#1911@169852c7...` on current protected main, then ordinary/non-force converge #2040's overlapping Trusted-uv workflow while preserving #2040's unique CodeQL/runtime-quality responsibilities.
+1. Restore stable Actions runner acquisition through `.github#712`; a smaller backlog does not make current-head cancellation acceptable evidence.
+2. Reacquire legitimate exact-head hosted evidence for canonical `.github#1911@c965664a...`; then terminalize already-converged `.github#2040@bd039185...` on its distinct CodeQL/runtime-quality scope without reopening Trusted-uv ownership.
 3. Terminalize current #2271→#2275 and separately #2291→#2272; prove #2269 succession and #2276 unchanged-target GHAS canary.
 4. Revalidate frontend dependency-security #1623 against current vulnerability data.
 5. Preserve #1565 as bounded TestClient/httpx2 owner; ordinary/non-force reconcile #1685 and regenerate one coherent dependency graph before hosted acceptance.
