@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.34  
+**Baseline version:** 2.35  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.33 remains audit-visible as blob `91b1dcc62409da0720823f136af204ddb97b8829`; v2.32 remains blob `26a92eccb1e5479aef443ce278f293bf01a684b7`; v2.31 remains blob `560fe59c120171492eb113a08ce3ee95c2fdae52`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.34 remains audit-visible as blob `0244bcccd5dfeed18d0994429a70ba6428a3076e`; v2.33 remains blob `91b1dcc62409da0720823f136af204ddb97b8829`; v2.32 remains blob `26a92eccb1e5479aef443ce278f293bf01a684b7`; v2.31 remains blob `560fe59c120171492eb113a08ce3ee95c2fdae52`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.31 separated durable product/evidence contracts from volatile per-run workflow state. v2.32 advanced the RFC 9110 case-insensitive `q` parameter contract. v2.33 advanced the placeholder-schema container boundary. v2.34 advances the durable translation-text persistence boundary: catalog text must reject PostgreSQL-incompatible U+0000 and non-scalar surrogate code points before placeholder parsing and must preserve a stable translation-input validation identity rather than leaking database/codec failures.
+v2.31 separated durable product/evidence contracts from volatile per-run workflow state. v2.32 advanced the RFC 9110 case-insensitive `q` parameter contract. v2.33 advanced the placeholder-schema container boundary. v2.34 advanced the translation-text persistence boundary. v2.35 advances the placeholder-element validation ordering: collection elements must be validated as valid string names before hash-based duplicate detection so unhashable nested values cannot leak raw runtime exceptions past the localization boundary.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -67,13 +67,13 @@ Generated NetworkGraph lanes, including #1741 and repaired #1734, remain Draft p
 
 Issue #1247 remains the checksum contract. Normal security-labelled checksum surface is SHA-256, SHA-3-256 and BLAKE2b-256 only; MD5/SHA-1 are excluded from the normal surface. #1361 remains the sole `content_checksum_generator` implementation owner on #1623; generated #1739 remains zero-effective-delta provenance.
 
-## 4. UI Localization Catalog — v2.34 material contract
+## 4. UI Localization Catalog — v2.35 material contract
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded implementation owner at exact **`5d7056b15041e254bf2a6e33c70272534af7a7ea`**.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded implementation owner at exact **`05c00ca9c48ba995e531200405e30f6eb0fb5f6a`**.
 
 #1740 still owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, stable screen/message keys, translation-text persistence validation, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
 
-Seven ordinary-forward RED→repair sequences define the executable policy:
+Eight ordinary-forward RED→repair sequences define the executable policy:
 
 1. RFC 4647 wildcard ordering and explicit `q=0` exclusion.
 2. Boundary-specific control-character codes (`ui_locale_input_invalid` vs `ui_accept_language_invalid`).
@@ -82,6 +82,7 @@ Seven ordinary-forward RED→repair sequences define the executable policy:
 5. **RFC 9110 quality-parameter case repair**: the standard explicitly defines the content-negotiation parameter name `q` as case-insensitive, while the implementation matched lowercase `q=` only. RED `962e250c54d0da324ec29b21283ab0b02cd55e8c` pins `Q=` semantics at two ordering points. Causal fix `b20b5593498c09855e6ef6fb213d9bf6ea764e15` narrows the change to `[qQ]=` while preserving the existing qvalue and OWS grammar.
 6. **Placeholder-schema runtime boundary repair**: RED `e299d29b14943c368e581bcb3d35303a1ba3fb8f` proves blind `tuple(placeholder_schema)` coercion lets `None` escape as raw `TypeError` and lets a one-key mapping masquerade as a valid schema by iterating its key. Causal fix `92a50acef8c7a3fbb38a926994add1641ac6c49d` validates the declared tuple/list container before conversion and emits `ui_placeholder_schema_invalid` for invalid containers.
 7. **Translation-text persistence boundary repair**: RED `3e251cc253d2ccf62ec1a3209ab629c6cffbe149` pins leading/trailing U+0000, isolated high/low surrogate code points, non-string translation input and valid multiline Unicode. Causal fix `dec6c694dcf930ef184b158de04260d8db433bec` adds `ui_translation_input_invalid` and rejects PostgreSQL-incompatible NUL plus non-scalar surrogate code points before placeholder parsing. Doctoring `8d7bae267c9b7d3cd640fece9d2d43173ebfc867` records PostgreSQL 18 and Unicode 18 primary authority; `5d7056b1...` aligns the pre-existing canonical regression with the new typed input boundary.
+8. **Placeholder-element validation-order repair**: RED `489bfd4fa2d6f3630cf33412f6d910d73c47e110` proves a declared tuple/list schema can still contain an unhashable nested list or mapping and leak raw `TypeError` because `set(schema)` ran before element validation. Causal fix `244cff4f8d8805f2b3eacf91a75c7da84052bfc2` validates every element as a simple string name before hash-based duplicate detection; doctoring `05c00ca9c48ba995e531200405e30f6eb0fb5f6a` records the ordering invariant.
 
 Current localization invariants:
 
@@ -90,11 +91,11 @@ Current localization invariants:
 - `q=` and `Q=` are equivalent quality-parameter spellings; qvalue syntax and range remain strict;
 - boundary-specific stable validation codes are preserved;
 - translated catalog text rejects U+0000 and U+D800–U+DFFF before placeholder parsing with `ui_translation_input_invalid`; ordinary valid Unicode, line breaks and tabs remain valid copy;
-- placeholder schemas are tuple/list runtime collections of unique lowercase names; mappings, generators, scalars, `None` and other arbitrary iterables fail closed rather than inheriting Python iteration semantics;
+- placeholder schemas are tuple/list runtime collections of unique lowercase names; mappings, generators, scalars, `None` and other arbitrary containers fail closed, and collection elements are validated before hash-based uniqueness so nested unhashable values also fail with `ui_placeholder_schema_invalid` rather than raw Python exceptions;
 - once a locale is selected, missing active translation keys must fail rather than silently fall back per message;
 - UI-copy resources remain separate from ontology/concept-label authority.
 
-The seventh repair has executable regression source, but **no local/container PASS is claimed** because the current automation runtime does not contain the repository checkout needed for exact-head execution. Exact-head workflow state is authoritative in #1740/checks and must be read fresh before acceptance. The baseline claims no terminal GREEN and no qualifying independent post-last-push review. No predecessor receipt transfer or source-neutral wake commit is permitted.
+The eighth repair has executable regression source, but **no local/container PASS is claimed** because the current automation runtime does not contain the repository checkout needed for exact-head execution. Exact-head workflow state is authoritative in #1740/checks and must be read fresh before acceptance. The baseline claims no terminal GREEN and no qualifying independent post-last-push review. No predecessor receipt transfer or source-neutral wake commit is permitted.
 
 Persistence remains blocked until #1503 or a verified complete successor reaches protected ancestry. Then localization storage must create the next ordinary single-head Alembic descendant, use normalized 3NF resources, immutable published versions, translation-text/placeholder/completeness validation, short aggregate publication transactions, screen-scoped reads with ETag/version identity and no whole-catalog browser hydration.
 
@@ -116,6 +117,6 @@ Generated descendants are re-read every run. When they duplicate an existing own
 
 The current minimum causal sequence is:
 
-`.github#712` stable runner acquisition → `.github#1911/#2040` legitimate terminal acceptance → **`.github#2291` complete 24-specialized-fixture trusted-runtime repair, exact-head GREEN/review/hosted acceptance** → #2109/#2272 ordinary adoption → #2271/#2275/#2276 → #1623 current vulnerability revalidation → #1694 → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 and generated provenance convergence → #1361/#1739 → #1565/#1685 → #1733 → #1503/#1727 migration lineage → #1740 `5d7056b1...` exact pure-policy acceptance → localization persistence/API/cache after #1503 protected ancestry → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → #1463/#1676 and authoritative #1738 intent → #1354/#1436 Storybook/runtime acceptance → one exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback`.
+`.github#712` stable runner acquisition → `.github#1911/#2040` legitimate terminal acceptance → **`.github#2291` complete 24-specialized-fixture trusted-runtime repair, exact-head GREEN/review/hosted acceptance** → #2109/#2272 ordinary adoption → #2271/#2275/#2276 → #1623 current vulnerability revalidation → #1694 → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 and generated provenance convergence → #1361/#1739 → #1565/#1685 → #1733 → #1503/#1727 migration lineage → #1740 `05c00ca9...` exact pure-policy acceptance → localization persistence/API/cache after #1503 protected ancestry → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → #1463/#1676 and authoritative #1738 intent → #1354/#1436 Storybook/runtime acceptance → one exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback`.
 
 Review/check waiting blocks only the affected lane. Any genuine failure is RCA/fix/retest work, not a reason to weaken a gate. No force push, destructive rebase, self-approval, administrator bypass, source-neutral wake commit, blind rerun, mutable sibling dependency, cross-service SQL, duplicate canonical owner, parallel Alembic head, fabricated buyer-visible content, dead CTA, synthetic status or predecessor-evidence transfer is accepted.
