@@ -95,7 +95,7 @@ def test_malformed_accept_language_fails_closed():
         lambda: select_ui_locale(accept_language="en;q=1.2"),
     )
     assert_error(
-        "ui_locale_input_invalid",
+        "ui_accept_language_invalid",
         lambda: select_ui_locale(accept_language="en\r\nX-Test: bad"),
     )
 
