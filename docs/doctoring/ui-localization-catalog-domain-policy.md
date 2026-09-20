@@ -22,6 +22,8 @@ Current domain objects are:
 
 The locale authority order is persisted preference → session preference → `Accept-Language` → product default. Explicit persisted/session values are validated rather than silently replaced. `Accept-Language` quality values are bounded and malformed/control-character input fails closed. Regional/script variants resolve to one of the release-level product languages; this is intentionally narrower than preserving every BCP 47 variant as a separate catalog identity.
 
+Stable machine-readable validation codes belong to the boundary that rejected the input. An explicit locale value with CR/LF/NUL remains `ui_locale_input_invalid`; the same control characters arriving through `Accept-Language` are `ui_accept_language_invalid`. This distinction is part of the public domain contract so later HTTP/API adapters can map failures without inferring their origin from human-readable text.
+
 ## Placeholder invariant
 
 Translation publication must preserve the exact named placeholder schema. The policy accepts only simple lowercase named fields such as `{account_name}`. Attribute/index traversal, positional fields, conversion flags, format specifications, malformed braces, missing placeholders, and extra placeholders fail closed with stable machine-readable error codes.
@@ -40,18 +42,9 @@ LLM translation is outside this slice. Future assisted translation must use the 
 
 The focused policy suite covers supported-language identity, precedence, regional/script normalization, weighted `Accept-Language`, duplicate ranges, wildcard handling, q=0 exclusion, malformed/control-character inputs, screen/message identity, literal braces, and placeholder schema mismatch/formatter features.
 
-Standalone verification against the exact source/test text before publication:
+The current branch contains two ordinary-forward RED→repair sequences. The first corrected wildcard lookup and q=0 fallback semantics. The second pinned the typed validation boundary for control characters: a RED required `Accept-Language` CR/LF input to return `ui_accept_language_invalid`, while explicit locale input retains `ui_locale_input_invalid`; the causal repair parameterized the shared control-character helper by the caller's stable validation code and folded the regression into the canonical policy suite.
 
-```text
-PYTHONPATH=. python -m pytest -q -W error tests/test_ui_localization_policy.py
-16 passed
-
-PYTHONPATH=. python -m coverage run --branch -m pytest -q -W error tests/test_ui_localization_policy.py
-python -m coverage report -m services/ui_localization_policy.py
-125 statements, 0 missed; 60 branches, 0 partial; 100%
-```
-
-This is focused domain-policy evidence. It is not repository CI, PostgreSQL migration, HTTP/API, Storybook, browser, assistive-technology, eight-locale typography, performance, protected-branch, or release evidence.
+Predecessor local verification receipts are historical evidence only after the current head moved. This document does not transfer the earlier `PYTHONPATH=.` test/coverage commands or claim current-head full-suite, coverage, hosted CI, PostgreSQL migration, HTTP/API, Storybook, browser, assistive-technology, eight-locale typography, performance, protected-branch, or release acceptance. Current-head hosted evidence and independent post-last-push review must be reacquired without a source-neutral wake commit.
 
 ## Next causal work
 
