@@ -206,7 +206,7 @@ def select_ui_locale(
     product_default: SupportedLocaleCode = DEFAULT_LOCALE_CODE,
 ) -> UiLocaleSelection:
     """Resolve one supported locale using the product's explicit authority order."""
-    if product_default not in _SUPPORTED_LOCALE_SET:
+    if not isinstance(product_default, str) or product_default not in _SUPPORTED_LOCALE_SET:
         raise UiLocalizationValidationError(
             "ui_locale_unsupported",
             "product default locale must be supported",
