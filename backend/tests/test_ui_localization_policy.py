@@ -199,7 +199,7 @@ def test_placeholder_schema_rejects_missing_extra_and_formatter_features():
 
 def test_placeholder_input_and_schema_must_be_bounded():
     """Malformed text, duplicates, and invalid schema names fail before publication."""
-    assert_error("ui_placeholder_schema_invalid", lambda: extract_placeholder_names(None))
+    assert_error("ui_translation_input_invalid", lambda: extract_placeholder_names(None))
     assert_error("ui_placeholder_schema_invalid", lambda: extract_placeholder_names("{missing"))
     assert_error(
         "ui_placeholder_schema_invalid",
