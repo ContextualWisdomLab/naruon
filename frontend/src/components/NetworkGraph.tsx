@@ -277,28 +277,51 @@ export default function NetworkGraph() {
     }
   }, [nodes, edges, nodeMap, edgeMap]);
 
+  // Performance optimization: Replace O(N) map/filter/slice on potentially large graph data
+  // with O(1) bounded iteration to prevent unnecessary array allocations and iterations.
   const nodeLabels = useMemo(() => {
-    return nodes
-      .map((node) => String(node.label ?? node.id))
-      .filter(Boolean)
-      .slice(0, 5);
+    const labels: string[] = [];
+    for (const node of nodes) {
+      const label = String(node.label ?? node.id);
+      if (label) {
+        labels.push(label);
+        if (labels.length >= 5) break;
+      }
+    }
+    return labels;
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+  // Performance optimization: Avoid Array.from() which allocates an O(N) array for values.
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
-      edge,
-      id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
+    const options = [];
+    let index = 0;
+    for (const edge of edgeMap.values()) {
+      if (index >= 5) break;
+      options.push({
+        edge,
+        id: String(edge.id),
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+      });
+      index++;
+    }
+    return options;
   }, [edgeMap, nodeMap]);
 
+  // Performance optimization: Avoid Array.from() for node options to bound iteration to O(1).
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
-      id: String(node.id),
-      label: `노드: ${String(node.label ?? node.id)}`,
-      node,
-    }));
+    const options = [];
+    let index = 0;
+    for (const node of nodeInstanceMap.values()) {
+      if (index >= 8) break;
+      options.push({
+        id: String(node.id),
+        label: `노드: ${String(node.label ?? node.id)}`,
+        node,
+      });
+      index++;
+    }
+    return options;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
