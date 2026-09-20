@@ -76,13 +76,15 @@ class UiLocaleSelection:
     selection_source: LocaleSelectionSource
 
 
-def _reject_header_controls(value: str) -> None:
-    """Reject control characters that could create an additional header line."""
+def _reject_control_characters(
+    value: str,
+    *,
+    error_code: UiLocalizationValidationCode,
+    message: str,
+) -> None:
+    """Reject header-breaking controls while preserving the caller's boundary code."""
     if any(character in value for character in ("\r", "\n", "\x00")):
-        raise UiLocalizationValidationError(
-            "ui_locale_input_invalid",
-            "locale input contains forbidden control characters",
-        )
+        raise UiLocalizationValidationError(error_code, message)
 
 
 def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
@@ -93,7 +95,11 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
             "locale input must be a string",
         )
     candidate = locale_tag.strip()
-    _reject_header_controls(candidate)
+    _reject_control_characters(
+        candidate,
+        error_code="ui_locale_input_invalid",
+        message="locale input contains forbidden control characters",
+    )
     if not candidate or not _LOCALE_TAG_PATTERN.fullmatch(candidate):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
@@ -119,7 +125,11 @@ def _accept_language_preferences(
             "Accept-Language must be a string",
         )
     candidate = header_value.strip()
-    _reject_header_controls(candidate)
+    _reject_control_characters(
+        candidate,
+        error_code="ui_accept_language_invalid",
+        message="Accept-Language contains forbidden control characters",
+    )
     if not candidate:
         return ()
 
