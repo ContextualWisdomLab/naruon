@@ -145,6 +145,8 @@ def _accept_language_preferences(
 
     for position, raw_item in enumerate(candidate.split(",")):
         item = raw_item.strip(" \t")
+        if not item:
+            continue
         match = _ACCEPT_LANGUAGE_ITEM_PATTERN.fullmatch(item)
         if match is None:
             raise UiLocalizationValidationError(
