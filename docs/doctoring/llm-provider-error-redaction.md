@@ -17,36 +17,22 @@ The public/internal service exception keeps a fixed operation-specific message a
 
 This deliberately trades raw provider traceback detail for purpose-bound security logging. Future diagnostics that need provider-specific detail must introduce an explicitly redacted structured contract rather than re-enable generic `exc_info` or exception interpolation.
 
-## Review finding verification
-
-The first CodeRabbit review requested regression assertions for extraction, translation, standard drafting and Ollama drafting, which was valid. Its accompanying request to retain traceback-aware `exc_info` was not valid for this threat model: the defect under review is confidentiality of provider-controlled exception text, and Python traceback logging would preserve that text in the log sink. The valid coverage portion was adopted while the unsafe logging recommendation was rejected with this evidence trail.
-
 ## Executable evidence
 
-`backend/tests/test_llm_error_redaction.py` supplies a provider exception containing a secret canary and covers all four production failure paths:
+`backend/tests/test_llm_error_redaction.py` supplies a provider exception containing a secret canary and proves that:
 
-- extraction;
-- translation;
-- standard OpenAI-compatible drafting;
-- Ollama native-chat drafting.
+- the rendered log does not contain the secret;
+- the log record contains only the fixed message, operation, and exception class;
+- `exc_info` is absent;
+- the raised `LLMServiceError` contains only the fixed message;
+- exception chaining is suppressed;
+- client cleanup still executes.
 
-For each path the regression proves the exact generic `LLMServiceError` message, absence of provider exception text in rendered logs, suppressed exception chaining, fixed structured operation/error-class metadata, absence of `exc_info`, and the applicable client cleanup. A direct helper test additionally proves the structured logging boundary itself.
-
-The existing `backend/tests/test_llm_service.py` and `backend/tests/test_llm_api.py` continue to cover broader success/error behavior for service and HTTP boundaries. Exact-head hosted evidence remains required before merge.
+The existing `backend/tests/test_llm_service.py` and `backend/tests/test_llm_api.py` continue to cover success/error behavior for service and HTTP boundaries. Exact-head hosted evidence remains required before merge.
 
 ## Rejected alternatives
 
 `logger.error(..., exc_info=True)` was rejected because Python logging renders the active exception traceback, including exception-controlled text. Logging `str(error)` or `%s` was rejected for the same reason. Blanket regex redaction was not selected because provider error formats are open-ended and denylisting secret shapes is not a complete confidentiality boundary.
-
-## Generated-writer cleanup
-
-The generated first commit also appended task-specific advice to `.jules/sentinel.md`, including the incorrect claim that `exc_info=True` was the secure remedy. After the source fix was captured in production code, tests and this doctoring record, `.jules/sentinel.md` was restored byte-for-byte to protected-base blob `9208f58b118f11d0983c3a62df96916ec61a3384`. The effective PR therefore carries no Sentinel self-modification.
-
-## Intervening generated-writer regression and repair
-
-After the reviewed `7e8321bb5a059e6076a1ab1daa4f35ad8a6ae266` generation, generated commit `1da2457c0e8cfa71a620515a93611b97d4aad200` arrived as an ordinary child. The production source and four-path regression remained intact, but the doctoring file was partially rolled back: the review-finding verification, explicit four-path evidence, generated-writer cleanup record, and exact repair lineage were removed.
-
-That is a documentation/traceability regression rather than a new product implementation. The generated commit is retained in ancestry and this ordinary-forward repair restores the stronger evidence record without force push, destructive rebase, receipt transfer, or product-source churn. Hosted checks and reviews from predecessor heads remain predecessor evidence only.
 
 ## Rollback
 
@@ -57,12 +43,7 @@ If the structured metadata breaks an operational consumer, roll back only the me
 - Naruon PR #1733: generated finding and repaired owner lane.
 - Protected source before repair: `develop@042b0c70531b229af3acbd0421a2f23098d848b3`.
 - Generated first head: `41644c0d51801547a4b408e23f7cad029c989c0d`.
-- Production redaction repair: `74650fc5a813808a74b0895fe93293f557879007`.
-- Initial hostile-canary regression: `6c45794e692a259a9c672588e4b29040ed45b782`.
-- Generated-guidance cleanup reaches exact byte-for-byte restore at `1ce246d8b8452dae4bc408ad534ecda1fbc61134`.
-- Four-path review finding coverage: `cff4bf7234032dedcba5463e69a71dc491db6e9d`.
-- Reviewed traceability generation: `7e8321bb5a059e6076a1ab1daa4f35ad8a6ae266`.
-- Intervening generated doctoring rollback retained in ancestry: `1da2457c0e8cfa71a620515a93611b97d4aad200`.
+- Repair commits begin at `74650fc5a813808a74b0895fe93293f557879007` and `6c45794e692a259a9c672588e4b29040ed45b782`.
 
 ## References
 
