@@ -70,3 +70,16 @@ def test_accept_language_ignores_reasonable_empty_list_elements():
 
     selected = select_ui_locale(accept_language=",")
     assert (selected.locale_code, selected.selection_source) == ("ko", "product_default")
+
+
+def test_accept_language_bounds_empty_list_elements_against_dos():
+    """Only a bounded reasonable number of empty RFC 9110 list members is ignored."""
+    accepted = ",".join([""] * 32 + ["en"])
+    selected = select_ui_locale(accept_language=accepted)
+    assert (selected.locale_code, selected.selection_source) == ("en", "accept_language")
+
+    excessive = ",".join([""] * 33 + ["en"])
+    assert_error(
+        "ui_accept_language_invalid",
+        lambda: select_ui_locale(accept_language=excessive),
+    )
