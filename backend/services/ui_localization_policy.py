@@ -26,6 +26,7 @@ UiLocalizationValidationCode = Literal[
     "ui_accept_language_invalid",
     "ui_screen_key_invalid",
     "ui_message_key_invalid",
+    "ui_translation_input_invalid",
     "ui_placeholder_schema_invalid",
     "ui_translation_placeholder_mismatch",
 ]
@@ -247,13 +248,25 @@ def validate_message_key(message_key: str) -> str:
     return message_key
 
 
-def extract_placeholder_names(message_text: str) -> tuple[str, ...]:
-    """Extract simple named interpolation fields without evaluating the message."""
+def _validate_translation_text(message_text: str) -> None:
+    """Reject text that cannot cross the catalog's UTF-8/PostgreSQL boundary."""
     if not isinstance(message_text, str):
         raise UiLocalizationValidationError(
-            "ui_placeholder_schema_invalid",
+            "ui_translation_input_invalid",
             "translated message must be a string",
         )
+    if "\x00" in message_text or any(
+        0xD800 <= ord(character) <= 0xDFFF for character in message_text
+    ):
+        raise UiLocalizationValidationError(
+            "ui_translation_input_invalid",
+            "translated message must contain persistable Unicode scalar text without NUL",
+        )
+
+
+def extract_placeholder_names(message_text: str) -> tuple[str, ...]:
+    """Extract simple named interpolation fields without evaluating the message."""
+    _validate_translation_text(message_text)
     names: list[str] = []
     seen: set[str] = set()
     try:
