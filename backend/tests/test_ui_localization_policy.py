@@ -77,9 +77,11 @@ def test_accept_language_duplicate_quality_is_not_first_occurrence_biased():
 
 
 def test_accept_language_zero_quality_and_wildcard_follow_lookup_order():
-    """Wildcard lookup defers to a later concrete range and q=0 stays excluded."""
+    """Wildcard lookup defers to concrete ranges and never revives a q=0 locale."""
     selected = select_ui_locale(accept_language="ko;q=0, *;q=0.8, en;q=0.7")
     assert selected.locale_code == "en"
+    selected = select_ui_locale(accept_language="ko;q=0, *;q=0.8")
+    assert (selected.locale_code, selected.selection_source) == ("en", "accept_language")
     selected = select_ui_locale(accept_language="fr;q=0, *;q=0")
     assert selected.locale_code == "ko"
 
