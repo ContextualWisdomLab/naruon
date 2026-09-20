@@ -286,31 +286,29 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    // ⚡ Bolt: Replace O(N) array allocation with O(1) bounded for...of loop
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
+      if (options.length >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
         label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
       });
-      if (++index >= 5) break;
+      index++;
     }
     return options;
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    // ⚡ Bolt: Replace O(N) array allocation with O(1) bounded for...of loop
     const options = [];
-    let count = 0;
     for (const node of nodeInstanceMap.values()) {
+      if (options.length >= 8) break;
       options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
-      if (++count >= 8) break;
     }
     return options;
   }, [nodeInstanceMap]);
