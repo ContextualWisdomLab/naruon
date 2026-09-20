@@ -286,6 +286,11 @@ def validate_translation_placeholders(
     placeholder_schema: tuple[str, ...] | list[str],
 ) -> tuple[str, ...]:
     """Require the translated message to preserve the exact placeholder schema."""
+    if not isinstance(placeholder_schema, (tuple, list)):
+        raise UiLocalizationValidationError(
+            "ui_placeholder_schema_invalid",
+            "placeholder schema must be a tuple or list of names",
+        )
     schema = tuple(placeholder_schema)
     if len(schema) != len(set(schema)) or any(
         not isinstance(name, str) or not _PLACEHOLDER_NAME_PATTERN.fullmatch(name)
