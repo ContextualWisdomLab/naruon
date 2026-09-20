@@ -1,4 +1,5 @@
 ## [Unreleased]
+- NetworkGraph 컴포넌트에서 관계 및 노드 옵션을 생성할 때 사용되던 `Array.from(map.values()).slice()` 체인을 조기 종료(early break)가 포함된 `for...of` 루프로 교체하여, O(N)의 불필요한 배열 할당을 제거하고 성능을 개선했습니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
@@ -39,7 +40,7 @@
 - OIDC token endpoint는 운영 환경에서 서버 전용 `OIDC_ALLOWED_HOSTS` 정확 호스트 allowlist를 필수로 적용합니다. hostname의 모든 DNS 결과가 공인 주소인지 검증한 뒤 해당 주소 집합을 native HTTP(S) 연결의 `lookup`에 고정하고, 원래 issuer hostname은 Host/TLS SNI로 유지해 사설 주소 해석과 DNS rebinding 사이의 TOCTOU를 차단합니다. 실패 로그는 입력 URL·token 대신 고정된 configuration/DNS·transport/response/backend-verification reason code만 남깁니다.
 - Trivy 2026-07-26 DB에서 새로 확인된 Next.js High 4건·Medium 5건(`CVE-2026-64641`–`CVE-2026-64649`)과 PostCSS High 1건(`GHSA-r28c-9q8g-f849`)을 제거하기 위해 Next.js/`eslint-config-next`를 `16.2.11`, PostCSS를 `8.5.18`로 갱신했습니다. 이후 2026-08-04 DB가 `8.5.18`에서 추가 탐지한 PostCSS Medium(`CVE-2026-69153`, 최초 수정 `8.5.23`)도 제거하도록 manifest·workspace override·lock을 `8.5.24`로 동기화했으며 저장소의 release-age 정책을 우회하지 않습니다.
 - `pnpm audit`가 개발 도구 체인에서 추가 탐지한 `brace-expansion <=5.0.7` High DoS(`GHSA-mh99-v99m-4gvg`)와 이후 `5.0.8`까지 영향을 주는 우회형 High DoS(`GHSA-rgw5-rvv9-x895`)는 `5.0.9` 전역 override로 제거했습니다. CommonJS default export를 기대하는 legacy `minimatch 3.1.5`에는 `expand` named export도 수용하는 최소 pnpm 패치를 적용해 ESLint/glob 동작을 보존합니다. 같은 감사에서 확인된 `undici 7.28.0`의 High 1건·Moderate 4건(`GHSA-4cwx-7wf7-3272` 등)은 `jsdom 30.0.1` 및 release-age 정책을 통과하는 `undici 8.9.0`으로 갱신했습니다.
-- PostCSS의 Nano ID 해석을 `3.3.19`로 갱신해 사용자 제공 음수 크기에서 비보안 생성기가 무한 반복될 수 있는 High DoS(`CVE-2026-67214`, `GHSA-28wg-ghj8-5hjv`)와 후속 3.x 보안 floor를 충족합니다. workspace override·lockfile·release-governance 회귀 테스트가 같은 패치 버전을 강제합니다.
+- PostCSS의 Nano ID 해석을 `3.3.18`로 갱신해 사용자 제공 음수 크기에서 비보안 생성기가 무한 반복될 수 있는 High DoS(`CVE-2026-67214`, `GHSA-28wg-ghj8-5hjv`)를 제거했습니다. lockfile과 release-governance 회귀 테스트가 같은 최초 수정 3.x 버전을 강제합니다.
 - root·frontend Docker build의 frozen install 계층이 pnpm manifest와 함께 `frontend/patches`를 먼저 복사하도록 수정해, 이미지 검증에서도 lockfile의 patched dependency를 동일하게 재현합니다.
 - Scorecard SARIF normalizer는 고정 workspace artifact로 정규화되는 `./scorecard-results.sarif`와 절대 경로를 동일하게 허용하면서 symlink·workspace 이탈은 계속 거부합니다. 도구 실행 실패 API는 CR/LF·제어 문자를 escape하고 500자로 제한하며, 로그에는 raw 도구 코드·예외 text 대신 SHA-256 기반 코드·traceback 상관 식별자만 기록합니다.
 - 백엔드 origin 보안 경계를 `frontend/src/lib/backend-url.ts`의 단일 생성기로 통합해 API proxy·session·OIDC callback이 같은 검증을 사용합니다. UI smoke의 새 `NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE` 이름은 실제 selector 의미를 드러내며, 기존 `..._SCREENSHOT_DIR`은 호환 alias로 계속 지원합니다.
