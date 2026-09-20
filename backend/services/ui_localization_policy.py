@@ -54,7 +54,7 @@ _MESSAGE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$", flags=re.ASCII)
 _PLACEHOLDER_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$", flags=re.ASCII)
 _ACCEPT_LANGUAGE_ITEM_PATTERN = re.compile(
     r"^(?P<range>\*|[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*)"
-    r"(?:\s*;\s*q=(?P<quality>0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?$",
+    r"(?:[ \t]*;[ \t]*q=(?P<quality>0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?$",
     flags=re.ASCII,
 )
 
@@ -81,10 +81,15 @@ def _reject_control_characters(
     *,
     error_code: UiLocalizationValidationCode,
     message: str,
+    allow_horizontal_tab: bool = False,
 ) -> None:
-    """Reject header-breaking controls while preserving the caller's boundary code."""
-    if any(character in value for character in ("\r", "\n", "\x00")):
-        raise UiLocalizationValidationError(error_code, message)
+    """Reject C0/DEL controls while preserving the caller's boundary code."""
+    for character in value:
+        code_point = ord(character)
+        if code_point == 0x7F or (
+            code_point < 0x20 and not (allow_horizontal_tab and character == "\t")
+        ):
+            raise UiLocalizationValidationError(error_code, message)
 
 
 def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
@@ -99,7 +104,7 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
         error_code="ui_locale_input_invalid",
         message="locale input contains forbidden control characters",
     )
-    candidate = locale_tag.strip()
+    candidate = locale_tag.strip(" ")
     if not candidate or not _LOCALE_TAG_PATTERN.fullmatch(candidate):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
@@ -128,8 +133,9 @@ def _accept_language_preferences(
         header_value,
         error_code="ui_accept_language_invalid",
         message="Accept-Language contains forbidden control characters",
+        allow_horizontal_tab=True,
     )
-    candidate = header_value.strip()
+    candidate = header_value.strip(" \t")
     if not candidate:
         return ()
 
@@ -137,7 +143,7 @@ def _accept_language_preferences(
     wildcard_best: tuple[float, int] | None = None
 
     for position, raw_item in enumerate(candidate.split(",")):
-        item = raw_item.strip()
+        item = raw_item.strip(" \t")
         match = _ACCEPT_LANGUAGE_ITEM_PATTERN.fullmatch(item)
         if match is None:
             raise UiLocalizationValidationError(
