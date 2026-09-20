@@ -1,8 +1,3 @@
-## 2025-02-12 - Replaced Array.from().slice().map() with Bounded for...of Loop
-
-**Learning:** When generating small derived UI lists from large `Map` or `Set` objects, chained array operations like `Array.from(map.values()).slice(0, 5).map(...)` are highly inefficient. `Array.from()` forces iteration over the *entire* Map to allocate a transient array in memory, resulting in `O(N)` time and space complexity, only for `.slice()` to immediately discard all but the first few elements.
-**Action:** Replace `Array.from().slice()` chains with a bounded `for...of` loop over the iterator (e.g., `for (const item of map.values())`). By maintaining a counter and using an early `break`, time and space complexity drop to `O(1)` (or strictly `O(K)` where `K` is the small slice limit), entirely avoiding large transient array allocations while safely maintaining the Map's insertion order.
-
 ## 2025-02-12 - Eliminated O(N log N) Final Sort in Backend Email Fetching
 
 **Learning:** The database query inside `get_emails` (`backend/api/emails.py`) already returns rows sorted chronologically descending (`order_by(Email.date.desc())`). Previously, this array was manually reversed, grouped by thread with a dictionary, and then the dictionary values were sorted again into descending order. Because Python 3.7+ preserves dictionary insertion order, iterating the descending query results and inserting elements into a group dictionary inherently guarantees that the dict's values are strictly ordered by the *newest message in each thread*. This eliminates the need for both the `O(N)` list reversal and the costly `O(N log N)` `sorted()` final step when assembling threads.
