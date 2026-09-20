@@ -18,7 +18,7 @@ Current domain objects are:
 - `UiLocaleSelection`: the selected locale plus the authority tier that selected it;
 - `screen_key`: a dotted lowercase product-screen identity such as `settings.identity`;
 - `message_key`: a lowercase snake-case message identity within a screen;
-- `placeholder_schema`: the immutable set of named interpolation fields a published translation must preserve.
+- `placeholder_schema`: the immutable ordered collection of named interpolation fields a published translation must preserve.
 
 The locale authority order is persisted preference → session preference → `Accept-Language` → product default. Explicit persisted/session values are validated rather than silently replaced. `Accept-Language` quality values are bounded and malformed/control-character input fails closed. Regional/script variants resolve to one of the release-level product languages; this is intentionally narrower than preserving every BCP 47 variant as a separate catalog identity.
 
@@ -29,6 +29,8 @@ The HTTP quality parameter name is case-insensitive. `q=` and `Q=` therefore car
 ## Placeholder invariant
 
 Translation publication must preserve the exact named placeholder schema. The policy accepts only simple lowercase named fields such as `{account_name}`. Attribute/index traversal, positional fields, conversion flags, format specifications, malformed braces, missing placeholders, and extra placeholders fail closed with stable machine-readable error codes.
+
+The schema container itself is part of the boundary. Runtime callers may provide only the declared tuple/list collection. A mapping, generator, scalar, `None`, or other iterable is not silently coerced into a schema. This prevents Python container iteration semantics from changing the meaning of publication metadata and guarantees `ui_placeholder_schema_invalid` instead of raw `TypeError` or accidental acceptance.
 
 This is a catalog integrity boundary, not a rendering engine. It inspects placeholder syntax without evaluating it.
 
@@ -42,15 +44,17 @@ Using Python `str.strip()` and regex `\s` as protocol whitespace is rejected. Py
 
 Treating the literal spelling `q` as case-sensitive is also rejected. RFC 9110 defines the content-negotiation weight parameter name `q` as case-insensitive; only its qvalue grammar remains strict.
 
+Coercing an arbitrary iterable with `tuple(placeholder_schema)` is rejected. A one-key mapping can otherwise be accepted accidentally because iteration yields keys, while `None` raises a raw runtime exception before the localization policy can emit its stable boundary code.
+
 LLM translation is outside this slice. Future assisted translation must use the released contextual-orchestrator contract and cannot bypass human/publication validation or placeholder integrity.
 
 ## Verification
 
-The focused policy suite covers supported-language identity, precedence, regional/script normalization, weighted `Accept-Language`, duplicate ranges, wildcard handling, q=0 exclusion, malformed/control-character input, screen/message identity, literal braces, and placeholder schema mismatch/formatter features. The dedicated HTTP-boundary regression covers VT/FF/Unicode-whitespace rejection, explicit-locale HTAB rejection, valid SP/HTAB OWS around `Accept-Language` list members and q-weights, and case-insensitive `q` parameter names.
+The focused policy suite covers supported-language identity, precedence, regional/script normalization, weighted `Accept-Language`, duplicate ranges, wildcard handling, q=0 exclusion, malformed/control-character input, screen/message identity, literal braces, placeholder schema mismatch/formatter features, and runtime schema-container rejection. The dedicated HTTP-boundary regression covers VT/FF/Unicode-whitespace rejection, explicit-locale HTAB rejection, valid SP/HTAB OWS around `Accept-Language` list members and q-weights, and case-insensitive `q` parameter names.
 
-The branch now contains five ordinary-forward RED→repair sequences. The first corrected wildcard lookup and q=0 fallback semantics. The second pinned boundary-specific validation codes for control characters. The third proved that CR/LF could disappear when `.strip()` ran before validation and moved control rejection ahead of normalization. The fourth RED `8265e9bb...` demonstrated that the remaining `.strip()` and regex `\s` semantics still accepted VT/FF, explicit-locale HTAB, and edge Unicode whitespace that are not part of the intended boundary; causal fix `9a6c8bb0...` rejects C0/DEL at the locale boundary, permits only HTTP HTAB where appropriate, restricts protocol OWS to `[ SP / HTAB ]`, and replaces generic stripping with explicit ASCII normalization. The fifth RED `962e250c54d0da324ec29b21283ab0b02cd55e8c` pins RFC 9110's case-insensitive quality-parameter name with `Q=` examples; causal fix `b20b5593498c09855e6ef6fb213d9bf6ea764e15` changes only the parameter-name matcher from literal `q` to `[qQ]`, preserving the existing qvalue and OWS grammar.
+The branch now contains six ordinary-forward RED→repair sequences. The first corrected wildcard lookup and q=0 fallback semantics. The second pinned boundary-specific validation codes for control characters. The third proved that CR/LF could disappear when `.strip()` ran before validation and moved control rejection ahead of normalization. The fourth RED `8265e9bb...` demonstrated that the remaining `.strip()` and regex `\s` semantics still accepted VT/FF, explicit-locale HTAB, and edge Unicode whitespace that are not part of the intended boundary; causal fix `9a6c8bb0...` rejects C0/DEL at the locale boundary, permits only HTTP HTAB where appropriate, restricts protocol OWS to `[ SP / HTAB ]`, and replaces generic stripping with explicit ASCII normalization. The fifth RED `962e250c54d0da324ec29b21283ab0b02cd55e8c` pins RFC 9110's case-insensitive quality-parameter name with `Q=` examples; causal fix `b20b5593498c09855e6ef6fb213d9bf6ea764e15` changes only the parameter-name matcher from literal `q` to `[qQ]`, preserving the existing qvalue and OWS grammar. The sixth RED `e299d29b14943c368e581bcb3d35303a1ba3fb8f` proves that `None` escapes as raw `TypeError` and a one-key mapping is silently accepted when the implementation blindly applies `tuple(...)`; causal fix `92a50acef8c7a3fbb38a926994add1641ac6c49d` validates the tuple/list container before conversion and preserves `ui_placeholder_schema_invalid` for invalid containers.
 
-No local/container PASS is claimed for the fourth or fifth repair because this automation environment cannot execute the repository test stack. The exact source and regressions are committed, but current-head full-suite/coverage/hosted evidence and independent post-last-push review must be reacquired naturally. No source-neutral wake commit or predecessor receipt transfer is authorized.
+No local/container PASS is claimed for the fourth, fifth, or sixth repair because this automation environment does not contain the repository checkout needed for exact-head execution. The exact source and regressions are committed, but current-head full-suite/coverage/hosted evidence and independent post-last-push review must be reacquired naturally. No source-neutral wake commit or predecessor receipt transfer is authorized.
 
 ## Next causal work
 
@@ -65,3 +69,5 @@ Phillips, A., & Davis, M. (2006). *Matching of language tags* (RFC 4647, BCP 47)
 Fielding, R. T., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110). RFC Editor. https://doi.org/10.17487/RFC9110
 
 RFC 9110 defines `Accept-Language` as weighted language ranges, defines `weight = OWS ";" OWS "q=" qvalue`, defines OWS exactly as zero or more SP/HTAB octets, and explicitly states that the `q` parameter name is case-insensitive. It also states that field values containing CTL characters are invalid, with CR/LF/NUL specifically dangerous. RFC 4647 supplies language-range matching and RFC 5646 supplies language-tag structure. Naruon's first release intentionally reduces supported variants to eight product-language identities, so this module is a bounded product policy over those standards rather than a general-purpose BCP 47 library.
+
+The placeholder-container repair is an internal product invariant rather than a new standards interpretation: public/runtime boundaries must preserve stable localization validation codes and must not rely on incidental Python iteration behavior to define a versioned schema.
