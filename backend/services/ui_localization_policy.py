@@ -77,7 +77,7 @@ class UiLocaleSelection:
 
 
 def _reject_header_controls(value: str) -> None:
-    """Reject control characters that could create an additional header line."""
+    """Reject control characters that could smuggle an additional header line."""
     if any(character in value for character in ("\r", "\n", "\x00")):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
@@ -109,7 +109,7 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
 
 
 def _accept_language_preferences(header_value: str) -> tuple[SupportedLocaleCode, ...]:
-    """Return supported preferences ordered by quality and original specificity."""
+    """Return supported preferences using weighted RFC 4647 lookup ordering."""
     if not isinstance(header_value, str):
         raise UiLocalizationValidationError(
             "ui_accept_language_invalid",
@@ -134,9 +134,8 @@ def _accept_language_preferences(header_value: str) -> tuple[SupportedLocaleCode
         quality = float(match.group("quality") or "1")
         language_range = match.group("range")
         if language_range == "*":
-            candidate_rank = (quality, position)
-            if wildcard_best is None or candidate_rank[0] > wildcard_best[0]:
-                wildcard_best = candidate_rank
+            if wildcard_best is None or quality > wildcard_best[0]:
+                wildcard_best = (quality, position)
             continue
 
         primary_language = language_range.split("-", 1)[0].lower()
@@ -147,21 +146,23 @@ def _accept_language_preferences(header_value: str) -> tuple[SupportedLocaleCode
         if current is None or quality > current[0]:
             explicit_best[locale_code] = (quality, position)
 
-    ranked: list[tuple[float, int, int, SupportedLocaleCode]] = []
-    for release_order, locale_code in enumerate(SUPPORTED_LOCALE_CODES):
-        explicit_rank = explicit_best.get(locale_code)
-        if explicit_rank is not None:
-            quality, position = explicit_rank
-        elif wildcard_best is not None:
-            quality, position = wildcard_best
-        else:
-            continue
-        if quality == 0:
-            continue
-        ranked.append((quality, position, release_order, locale_code))
+    ranked: list[tuple[float, int, SupportedLocaleCode | None]] = [
+        (quality, position, locale_code)
+        for locale_code, (quality, position) in explicit_best.items()
+        if quality > 0
+    ]
+    if wildcard_best is not None and wildcard_best[0] > 0:
+        ranked.append((wildcard_best[0], wildcard_best[1], None))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
 
-    ranked.sort(key=lambda item: (-item[0], item[1], item[2]))
-    return tuple(item[3] for item in ranked)
+    ordered: list[SupportedLocaleCode] = []
+    for index, (_, _, locale_code) in enumerate(ranked):
+        if locale_code is None:
+            if any(later_locale is not None for _, _, later_locale in ranked[index + 1 :]):
+                continue
+            break
+        ordered.append(locale_code)
+    return tuple(ordered)
 
 
 def select_ui_locale(
@@ -195,7 +196,7 @@ def select_ui_locale(
 
 
 def validate_screen_key(screen_key: str) -> str:
-    """Return a normalized screen identity or fail closed on invalid input."""
+    """Return a normalized screen identity or fail closed on hostile input."""
     if not isinstance(screen_key, str) or not _SCREEN_KEY_PATTERN.fullmatch(screen_key):
         raise UiLocalizationValidationError(
             "ui_screen_key_invalid",
@@ -205,7 +206,7 @@ def validate_screen_key(screen_key: str) -> str:
 
 
 def validate_message_key(message_key: str) -> str:
-    """Return a normalized message identity or fail closed on invalid input."""
+    """Return a normalized message identity or fail closed on hostile input."""
     if not isinstance(message_key, str) or not _MESSAGE_KEY_PATTERN.fullmatch(message_key):
         raise UiLocalizationValidationError(
             "ui_message_key_invalid",
