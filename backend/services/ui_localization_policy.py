@@ -94,12 +94,12 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
             "ui_locale_input_invalid",
             "locale input must be a string",
         )
-    candidate = locale_tag.strip()
     _reject_control_characters(
-        candidate,
+        locale_tag,
         error_code="ui_locale_input_invalid",
         message="locale input contains forbidden control characters",
     )
+    candidate = locale_tag.strip()
     if not candidate or not _LOCALE_TAG_PATTERN.fullmatch(candidate):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
@@ -124,12 +124,12 @@ def _accept_language_preferences(
             "ui_accept_language_invalid",
             "Accept-Language must be a string",
         )
-    candidate = header_value.strip()
     _reject_control_characters(
-        candidate,
+        header_value,
         error_code="ui_accept_language_invalid",
         message="Accept-Language contains forbidden control characters",
     )
+    candidate = header_value.strip()
     if not candidate:
         return ()
 
