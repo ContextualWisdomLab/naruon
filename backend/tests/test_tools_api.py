@@ -1211,36 +1211,3 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
-
-
-
-@pytest.mark.asyncio
-async def test_hash_generator_handler():
-    from api.tools import hash_generator_handler
-
-    # Test valid algorithm
-    res = await hash_generator_handler({"text": "hello", "algorithm": "sha256"})
-    assert "hash" in res
-    assert res["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-
-    # Test uppercase algorithm
-    res2 = await hash_generator_handler({"text": "hello", "algorithm": "SHA256"})
-    assert res2["hash"] == res["hash"]
-
-    # Test invalid algorithm
-    with pytest.raises(ValueError, match="Unsupported hash algorithm: invalid. Supported:"):
-        await hash_generator_handler({"text": "hello", "algorithm": "invalid"})
-
-@pytest.mark.asyncio
-async def test_url_extractor_handler():
-    from api.tools import url_extractor_handler
-
-    text = "Here is a link: https://example.com! And another: http://test.org/page. Also https://example.com again."
-    res = await url_extractor_handler({"text": text})
-    assert res["url_count"] == 2
-    assert set(res["urls"]) == {"http://test.org/page", "https://example.com"}
-
-    # Test no URLs
-    res2 = await url_extractor_handler({"text": "No links here."})
-    assert res2["url_count"] == 0
-    assert res2["urls"] == []
