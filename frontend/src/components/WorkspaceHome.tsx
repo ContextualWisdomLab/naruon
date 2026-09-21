@@ -13,7 +13,7 @@ import { apiClient } from '@/lib/api-client';
 import { setMobileWorkspaceView, useMobileWorkspaceView } from '@/lib/mobile-workspace';
 import { toSafeReactText } from '@/lib/safe-text';
 import { setWorkspaceStartupView, useWorkspaceStartupView, type WorkspaceStartupView } from '@/lib/workspace-preferences';
-import { MobileCalendarPanel, MobileSearchPanel } from '@/components/mobile-workspace-panels';
+import { MobileCalendarPanel, MobileSearchPanel, MobileReplyReviewPanel, MobileSourceDrawerPanel, MobileScheduleConfirmationPanel } from '@/components/mobile-workspace-panels';
 const NetworkGraph = dynamic(() => import('@/components/NetworkGraph'), { ssr: false });
 
 type WorkspaceActionCommand = { id: number; action: string; target: 'desktop' | 'tablet'; modeVersion: number };
