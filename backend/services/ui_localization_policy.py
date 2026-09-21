@@ -49,6 +49,9 @@ _MAX_ACCEPT_LANGUAGE_MEMBERS = 64
 _MAX_ACCEPT_LANGUAGE_EMPTY_MEMBERS = 32
 _MAX_SCREEN_KEY_CHARS = 128
 _MAX_MESSAGE_KEY_CHARS = 128
+_MAX_TRANSLATION_MESSAGE_CHARS = 16_384
+_MAX_PLACEHOLDER_NAME_CHARS = 64
+_MAX_PLACEHOLDER_SCHEMA_ITEMS = 32
 _LOCALE_TAG_PATTERN = re.compile(
     r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
     flags=re.ASCII,
@@ -296,11 +299,16 @@ def validate_message_key(message_key: str) -> str:
 
 
 def _validate_translation_text(message_text: str) -> None:
-    """Reject text that cannot cross the catalog's UTF-8/PostgreSQL boundary."""
+    """Reject text that cannot cross the catalog's bounded UTF-8/PostgreSQL boundary."""
     if not isinstance(message_text, str):
         raise UiLocalizationValidationError(
             "ui_translation_input_invalid",
             "translated message must be a string",
+        )
+    if len(message_text) > _MAX_TRANSLATION_MESSAGE_CHARS:
+        raise UiLocalizationValidationError(
+            "ui_translation_input_invalid",
+            "translated message exceeds the 16384-character product limit",
         )
     if "\x00" in message_text or any(
         0xD800 <= ord(character) <= 0xDFFF for character in message_text
@@ -338,7 +346,7 @@ def _reject_placeholder_operators(message_text: str) -> None:
 
 
 def extract_placeholder_names(message_text: str) -> tuple[str, ...]:
-    """Extract simple named interpolation fields without evaluating the message."""
+    """Extract bounded simple named interpolation fields without evaluating the message."""
     _validate_translation_text(message_text)
     _reject_placeholder_operators(message_text)
     names: list[str] = []
@@ -349,15 +357,21 @@ def extract_placeholder_names(message_text: str) -> tuple[str, ...]:
             if field_name is None:
                 continue
             if (
-                not _PLACEHOLDER_NAME_PATTERN.fullmatch(field_name)
+                len(field_name) > _MAX_PLACEHOLDER_NAME_CHARS
+                or not _PLACEHOLDER_NAME_PATTERN.fullmatch(field_name)
                 or format_spec
                 or conversion is not None
             ):
                 raise UiLocalizationValidationError(
                     "ui_placeholder_schema_invalid",
-                    "placeholders must be simple named fields without conversion or format specifiers",
+                    "placeholders must be bounded simple named fields without conversion or format specifiers",
                 )
             if field_name not in seen:
+                if len(names) >= _MAX_PLACEHOLDER_SCHEMA_ITEMS:
+                    raise UiLocalizationValidationError(
+                        "ui_placeholder_schema_invalid",
+                        "translated message contains too many unique placeholders",
+                    )
                 seen.add(field_name)
                 names.append(field_name)
     except ValueError as error:
@@ -372,20 +386,27 @@ def validate_translation_placeholders(
     translated_message: str,
     placeholder_schema: tuple[str, ...] | list[str],
 ) -> tuple[str, ...]:
-    """Require the translated message to preserve the exact placeholder schema."""
+    """Require translated text to preserve one bounded versioned placeholder schema."""
     if not isinstance(placeholder_schema, (tuple, list)):
         raise UiLocalizationValidationError(
             "ui_placeholder_schema_invalid",
             "placeholder schema must be a tuple or list of names",
         )
+    if len(placeholder_schema) > _MAX_PLACEHOLDER_SCHEMA_ITEMS:
+        raise UiLocalizationValidationError(
+            "ui_placeholder_schema_invalid",
+            "placeholder schema exceeds the 32-name product limit",
+        )
     schema = tuple(placeholder_schema)
     if any(
-        not isinstance(name, str) or not _PLACEHOLDER_NAME_PATTERN.fullmatch(name)
+        not isinstance(name, str)
+        or len(name) > _MAX_PLACEHOLDER_NAME_CHARS
+        or not _PLACEHOLDER_NAME_PATTERN.fullmatch(name)
         for name in schema
     ) or len(schema) != len(set(schema)):
         raise UiLocalizationValidationError(
             "ui_placeholder_schema_invalid",
-            "placeholder schema must contain unique lowercase snake_case names",
+            "placeholder schema must contain unique lowercase snake_case names up to 64 characters",
         )
     actual = extract_placeholder_names(translated_message)
     if set(actual) != set(schema):
