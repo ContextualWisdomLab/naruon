@@ -65,7 +65,7 @@ _PRIVATEUSE_TAG_PATTERN = re.compile(
     r"^[xX](?:-[A-Za-z0-9]{1,8})+$",
     flags=re.ASCII,
 )
-_IRREGULAR_GRANDFATHERED_TAGS = frozenset(
+_GRANDFATHERED_TAGS = frozenset(
     tag.lower()
     for tag in (
         "en-GB-oed",
@@ -85,8 +85,15 @@ _IRREGULAR_GRANDFATHERED_TAGS = frozenset(
         "sgn-BE-FR",
         "sgn-BE-NL",
         "sgn-CH-DE",
+        "art-lojban",
+        "cel-gaulish",
+        "no-bok",
+        "no-nyn",
+        "zh-guoyu",
+        "zh-hakka",
         "zh-min",
         "zh-min-nan",
+        "zh-xiang",
     )
 )
 _SCREEN_KEY_PATTERN = re.compile(
@@ -226,18 +233,31 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
     )
     candidate = locale_tag
     candidate_lower = candidate.lower()
+    is_grandfathered = candidate_lower in _GRANDFATHERED_TAGS
     is_structural_langtag = _LANGTAG_PATTERN.fullmatch(candidate) is not None
-    if is_structural_langtag and _has_multiple_extlang_subtags(candidate):
+    if (
+        is_structural_langtag
+        and not is_grandfathered
+        and _has_multiple_extlang_subtags(candidate)
+    ):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
             "locale input contains more than one RFC 5646 extended language subtag",
         )
-    if is_structural_langtag and _has_repeated_extension_singleton(candidate):
+    if (
+        is_structural_langtag
+        and not is_grandfathered
+        and _has_repeated_extension_singleton(candidate)
+    ):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
             "locale input repeats an RFC 5646 extension singleton",
         )
-    if is_structural_langtag and _has_repeated_variant_subtag(candidate):
+    if (
+        is_structural_langtag
+        and not is_grandfathered
+        and _has_repeated_variant_subtag(candidate)
+    ):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
             "locale input repeats an RFC 5646 variant subtag",
@@ -245,7 +265,7 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
     if not candidate or not (
         is_structural_langtag
         or _PRIVATEUSE_TAG_PATTERN.fullmatch(candidate)
-        or candidate_lower in _IRREGULAR_GRANDFATHERED_TAGS
+        or is_grandfathered
     ):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
