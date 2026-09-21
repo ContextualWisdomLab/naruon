@@ -224,7 +224,7 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
         error_code="ui_locale_input_invalid",
         message="locale input contains forbidden control characters",
     )
-    candidate = locale_tag.strip(" ")
+    candidate = locale_tag
     candidate_lower = candidate.lower()
     is_structural_langtag = _LANGTAG_PATTERN.fullmatch(candidate) is not None
     if is_structural_langtag and _has_multiple_extlang_subtags(candidate):
