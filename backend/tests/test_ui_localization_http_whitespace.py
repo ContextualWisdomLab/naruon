@@ -83,3 +83,9 @@ def test_accept_language_bounds_empty_list_elements_against_dos():
         "ui_accept_language_invalid",
         lambda: select_ui_locale(accept_language=excessive),
     )
+
+
+def test_wildcard_before_unsupported_range_does_not_claim_negotiation_source():
+    """RFC 4647 lookup skips a wildcard when any later concrete range remains to try."""
+    selected = select_ui_locale(accept_language="*;q=0.9, pt-BR;q=0.8")
+    assert (selected.locale_code, selected.selection_source) == ("ko", "product_default")
