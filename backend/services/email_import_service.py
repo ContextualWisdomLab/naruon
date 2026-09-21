@@ -31,7 +31,12 @@ from services.batch_embedding_service import (
     try_batch_import_embeddings,
 )
 from services.content_graph import ParseResult, parse_content
-from services.email_dedupe_service import strong_email_fingerprint
+from services.email_dedupe_service import (
+    canonical_email_source_content,
+    has_complete_strong_email_metadata,
+    source_email_fingerprint,
+    strong_email_fingerprint,
+)
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
@@ -50,7 +55,6 @@ from services.project_graph.extractor_registry import (
 )
 from services.threading_service import (
     assign_thread_id,
-    generate_email_fingerprint,
     normalize_message_id,
 )
 
@@ -194,20 +198,50 @@ def _message_id_for(parsed: EmailData, content: bytes) -> str:
     )
 
 
-def _email_fingerprint(parsed: EmailData, persisted_date: datetime.datetime) -> str:
-    strong_fingerprint = strong_email_fingerprint(
+def _has_strong_email_metadata(parsed: EmailData) -> bool:
+    """Return whether parsed metadata may drive an automatic strong fingerprint."""
+    return parsed.get("date_provenance") == "parsed" and has_complete_strong_email_metadata(
         sender=parsed.get("sender"),
+        recipients=parsed.get("recipients"),
         subject=parsed.get("subject"),
-        date=persisted_date,
         body=parsed.get("body"),
     )
+
+
+def _dedupe_review_reason(parsed: EmailData) -> str | None:
+    """Expose when an import lacks enough metadata for strong automatic linking."""
+    return None if _has_strong_email_metadata(parsed) else "dedupe_review_required"
+
+
+def _email_fingerprint(
+    parsed: EmailData,
+    persisted_date: datetime.datetime,
+    source_content: bytes | None = None,
+) -> str:
+    """Return trusted complete-metadata evidence or source-bound fallback identity.
+
+    ``persisted_date`` remains the storage timestamp and participates in
+    duplicate evidence only when it came from a valid sender ``Date`` and the
+    sender/recipient/subject/body metadata evidence set is complete.
+    """
+    strong_fingerprint = None
+    if _has_strong_email_metadata(parsed):
+        strong_fingerprint = strong_email_fingerprint(
+            sender=parsed.get("sender"),
+            subject=parsed.get("subject"),
+            date=persisted_date,
+            body=parsed.get("body"),
+        )
     if strong_fingerprint:
         return strong_fingerprint
-    return generate_email_fingerprint(
-        parsed.get("subject"),
-        persisted_date.isoformat(),
-        parsed.get("sender"),
-        parsed.get("recipients"),
+    source_identity = (
+        source_content
+        if source_content is not None
+        else canonical_email_source_content(parsed)
+    )
+    return source_email_fingerprint(
+        source_identity,
+        source_kind="raw" if source_content is not None else "canonical",
     )
 
 
@@ -370,6 +404,7 @@ def _build_email_object(
         in_reply_to=parsed.get("in_reply_to"),
         references=parsed.get("references"),
         date=persisted_date,
+        date_provenance=parsed.get("date_provenance", "unknown"),
         body=parsed.get("body", ""),
         embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
     )
@@ -862,7 +897,7 @@ async def _import_single_eml(
     message_id = _message_id_for(parsed, content)
     parsed["message_id"] = message_id
     persisted_date = _utc_datetime(parsed.get("date"))
-    fingerprint = _email_fingerprint(parsed, persisted_date)
+    fingerprint = _email_fingerprint(parsed, persisted_date, content)
 
     existing_email = await _find_existing_email(
         session,
@@ -933,6 +968,7 @@ async def _import_single_eml(
     return EmailImportItemResult(
         filename=display_filename,
         status="imported",
+        reason_code=_dedupe_review_reason(parsed),
         attachment_count=attachment_count,
     )
 
