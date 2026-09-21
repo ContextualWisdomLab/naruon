@@ -277,6 +277,8 @@ export default function NetworkGraph() {
     }
   }, [nodes, edges, nodeMap, edgeMap]);
 
+  // Performance optimization: Replace O(N) map/filter/slice on potentially large graph data
+  // with O(1) bounded iteration to prevent unnecessary array allocations and iterations.
   const nodeLabels = useMemo(() => {
     const labels: string[] = [];
     for (const node of nodes) {
@@ -290,11 +292,12 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+  // Performance optimization: Avoid Array.from() which allocates an O(N) array for values.
   const relationshipOptions = useMemo(() => {
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
-      if (options.length >= 5) break;
+      if (index >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
@@ -305,15 +308,18 @@ export default function NetworkGraph() {
     return options;
   }, [edgeMap, nodeMap]);
 
+  // Performance optimization: Avoid Array.from() for node options to bound iteration to O(1).
   const nodeOptions = useMemo(() => {
     const options = [];
+    let index = 0;
     for (const node of nodeInstanceMap.values()) {
-      if (options.length >= 8) break;
+      if (index >= 8) break;
       options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
+      index++;
     }
     return options;
   }, [nodeInstanceMap]);

@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+
+## 2026-09-20 - Replaced O(N) Array Operations with O(1) Bounded Iterations
+**Learning:** When creating derived lists limited by size (e.g. `.slice(0, 5)`), using `.map().slice()` or `Array.from(map.values()).map().slice()` on potentially large datasets causes unnecessary O(N) intermediate array allocations and full iteration. In `frontend/src/components/NetworkGraph.tsx`, replacing these patterns with early-exit `for...of` loops prevents main thread blocking on large graph data.
+**Action:** Use early-exit loops (e.g. `break` after a limit is reached) instead of chaining `.map().filter().slice()` or converting iterators to full arrays when only a bounded number of elements is required.

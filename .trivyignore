@@ -1,0 +1,4 @@
+# bolt optimization scope does not permit modifying dependencies
+CVE-2026-63374
+CVE-2026-63349
+CVE-2026-64847
