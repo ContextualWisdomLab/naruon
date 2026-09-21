@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.51  
+**Baseline version:** 2.52  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.50 remains audit-visible as blob `e6faf4e0b6d507d6a62e3b96c8583ff7c912cab3`; v2.49 remains blob `02b9072d40909dc7a5ec17e36155c751a5957758`; v2.48 remains blob `a1c08dc7af7ede905c14cbc6874d6d2853bcc360`; earlier snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.51 remains audit-visible as blob `0d60c3296e3e5d29fea9749effd2fa43dc61aed1`; v2.50 remains blob `e6faf4e0b6d507d6a62e3b96c8583ff7c912cab3`; v2.49 remains blob `02b9072d40909dc7a5ec17e36155c751a5957758`; earlier snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.51 preserves v2.50's owner graph, measured-performance boundary, localization resource ceilings and earlier durable contracts while recording the twenty-first and twenty-second localization RED→repair sequences. #1740 now enforces two additional registry-independent RFC 5646 validity rules after structural `langtag` matching: duplicate variant subtags are rejected case-insensitively before extensions/private use, and the compatibility ABNF's permanently reserved second/third extlang positions may not be occupied. Current #1740 exact is `91a0e8c402be8338b917feabfaa7e9872f76467f`; exact-current-head hosted full-suite/security and qualifying independent review remain required before policy acceptance.
+v2.52 preserves v2.51's owner graph, localization resource ceilings and registry-independent RFC 5646 repairs while correcting the AI Hub RunHistory performance lane. Generated #1745 no longer carries an effective product change: the generated `useMemo([events])` claim was checked against the canonical `/api/ai-hub/surface` source, whose run-event inputs are bounded to at most eight current rows, and no buyer-path browser profile or p95 evidence identifies that bounded map as a causal bottleneck. #1745 is now ordinary/non-force converged at `a501ca663e01a53b3c60a1264a6e014ad0228c64` to the exact protected `develop` tree with zero changed files. The generated commit remains first-parent provenance; the unsupported memoization and task-specific doctrine are not current product delta.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -69,11 +69,13 @@ Generated #1716, #1737 and #1744 are provenance only. #1744 ordinary convergence
 
 ### 3.6 AI Hub run-history rendering performance
 
-Generated [#1745](https://github.com/ContextualWisdomLab/naruon/pull/1745) remains Draft at exact `5cdebe154f1ea24b0f924769d0073c4dc701e7d6`. Memoizing the mapped `RunEvent` subtree on `events` reference identity is a performance hypothesis, not acceptance evidence.
+Generated [#1745](https://github.com/ContextualWisdomLab/naruon/pull/1745) is now Draft zero-effective-delta provenance at exact `a501ca663e01a53b3c60a1264a6e014ad0228c64`. Fresh compare from protected `develop` is ahead-only with zero changed files; the current tree is exactly protected tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`.
 
-Acceptance requires reproducible before/after browser profiling on the same realistic workload, evidence that unrelated state changes preserve `events` identity and currently incur material list construction/reconciliation cost, correctness/a11y parity, and the applicable buyer-path p95. If profiling identifies list volume, reconciliation, unstable data identity or another bottleneck, repair that causal path rather than retaining `useMemo` by inertia. Synthetic tiny lists, cache-warm-only runs, decorative performance comments and task-specific `.jules/bolt.md` text are not acceptance evidence.
+The generated predecessor `5cdebe154f1ea24b0f924769d0073c4dc701e7d6` wrapped `RunHistoryPanel`'s mapped event subtree in `useMemo([events])`, added task-specific `.jules/bolt.md` doctrine and asserted that potentially large event arrays justified the optimization. Canonical backend review disproved that premise for the current product surface: `_list_agent_run_records(...).limit(8)` feeds the primary `run_events`; fallback audit events are also bounded to eight and prompt fallback to five. No current browser profile, React render/commit timing, reference-stability evidence or buyer-path p95 receipt identifies mapping at most eight run rows as a material bottleneck.
 
-## 4. UI Localization Catalog — v2.51 material contract
+Ordinary convergence `a501ca66...` preserves the generated commit as first-parent history, adopts protected `develop` as an additional parent and restores the protected product tree without force rewrite. The generated performance claim therefore remains auditable but is not product progress. If future realistic profiling identifies RunHistory rendering as material, the measured owner must reproduce the real trigger on the bounded backend contract and fix the measured cause; the rejected memoization is not revived by inertia.
+
+## 4. UI Localization Catalog — v2.52 material contract
 
 [#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`91a0e8c402be8338b917feabfaa7e9872f76467f`**. Current source repairs are present; exact-current-head hosted acceptance is pending.
 
@@ -124,7 +126,9 @@ All Naruon LLM behavior must consume an immutable released contextual-orchestrat
 
 The current causal order remains:
 
-`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1745 measured AI Hub performance acceptance or causal replacement → #1503 → #1727 plus zero-delta provenance → #1740 `91a0e8c4...` exact-head policy acceptance → localization persistence/API/cache preserving repaired explicit-locale syntax/support/registry-independent validity semantics, 128/128 key, 128/8192/64/32 negotiation and 16,384/64/32 translation/placeholder contracts → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
+`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1503 → #1727 plus zero-delta provenance → #1740 `91a0e8c4...` exact-head policy acceptance → localization persistence/API/cache preserving repaired explicit-locale syntax/support/registry-independent validity semantics, 128/128 key, 128/8192/64/32 negotiation and 16,384/64/32 translation/placeholder contracts → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
+
+#1745 is no longer an active causal blocker. It retains generated performance intent as zero-effective-delta provenance only. Any future RunHistory performance owner must start from reproduced buyer-path evidence rather than this rejected memoization.
 
 Wait state in one lane does not stop repair/development in independent lanes. Generated descendants remain open as provenance unless a verified successor fully inherits all valid delta/test/fixture/contract/evidence or the user explicitly authorizes closure.
 
@@ -132,6 +136,6 @@ Wait state in one lane does not stop repair/development in independent lanes. Ge
 
 **Merge/Release Gate: FAIL.** There is no exact protected integrated candidate satisfying required checks, current security evidence, independent post-last-push review and immutable release evidence.
 
-**UI Delivery Gate: FAIL.** The localization pure-policy source repairs are present, but exact-current-head acceptance is pending and eight-locale catalog persistence/API/page composition, Storybook/browser/a11y acceptance and current exact resource-version evidence are not integrated. #1745 also lacks measured browser performance evidence and cannot be treated as UI delivery progress yet.
+**UI Delivery Gate: FAIL.** The localization pure-policy source repairs are present, but exact-current-head acceptance is pending and eight-locale catalog persistence/API/page composition, Storybook/browser/a11y acceptance and current exact resource-version evidence are not integrated. #1745's generated memoization has been removed from effective product scope rather than counted as UI/performance progress.
 
 Do not claim completion from routine reporting, queued checks, historical GREEN, mutable release artifacts, generated-provenance branches, unmeasured memoization, source-only correctness, malformed-versus-unsupported locale collapse, repeated extension singletons, duplicate variants, reserved multi-extlang occupancy or unresolved exact-head acceptance evidence. The next run must fresh-read all live authority before mutating or accepting any lane.
