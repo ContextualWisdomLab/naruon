@@ -36,3 +36,11 @@ def test_explicit_locale_accepts_supported_primary_grandfathered_language_tags(
 ):
     """RFC 5646 grandfathered tags remain Language-Tag values even outside langtag ABNF."""
     assert normalize_supported_locale(locale_tag) == expected_locale
+
+
+@pytest.mark.parametrize("locale_tag", ("x-private", "i-klingon", "sgn-BE-FR"))
+def test_well_formed_language_tags_without_supported_primary_are_unsupported(locale_tag):
+    """Well-formed private-use/irregular tags are unsupported, not syntactically invalid."""
+    with pytest.raises(UiLocalizationValidationError) as caught:
+        normalize_supported_locale(locale_tag)
+    assert caught.value.error_code == "ui_locale_unsupported"
