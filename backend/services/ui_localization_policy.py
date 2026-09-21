@@ -61,6 +61,7 @@ _LOCALE_TAG_PATTERN = re.compile(
     r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
     r"(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?"
     r"|en-GB-oed"
+    r"|zh-min(?:-nan)?"
     r")$",
     flags=re.ASCII | re.IGNORECASE,
 )
