@@ -33,8 +33,13 @@ updates:
       interval: "weekly"
     groups:
       backend-python:
+        applies-to: "version-updates"
         patterns:
           - "*"
+        exclude-patterns:
+          - "aiosmtplib"
+        update-types:
+          - "patch"
 
   - package-ecosystem: "pip"
     directory: "/"
@@ -42,8 +47,11 @@ updates:
       interval: "weekly"
     groups:
       ci-python:
+        applies-to: "version-updates"
         patterns:
           - "*"
+        update-types:
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/frontend"
@@ -51,8 +59,11 @@ updates:
       interval: "weekly"
     groups:
       frontend-npm:
+        applies-to: "version-updates"
         patterns:
           - "*"
+        update-types:
+          - "patch"
 
   - package-ecosystem: docker
     directory: /connector
