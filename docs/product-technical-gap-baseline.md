@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.41  
+**Baseline version:** 2.42  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.40 remains audit-visible as blob `6092e23c545afe845b206842eb118d06999faf8e`; v2.39 remains blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`; v2.37 remains blob `7716f37c571d4d631d6d385515a4cbe76e0e19cd`; v2.36 remains blob `46a79021d3811b8e0018021a437326be19bba6df`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.41 remains audit-visible as blob `2eba56966e2079e8eeca9e79c22e050b3ab90daa`; v2.40 remains blob `6092e23c545afe845b206842eb118d06999faf8e`; v2.39 remains blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`; v2.37 remains blob `7716f37c571d4d631d6d385515a4cbe76e0e19cd`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.41 preserves the v2.40 canonical-placeholder publication contract and records one owner-graph repair discovered after that baseline was written. Generated #1744 independently repeated #1676's Settings native-disabled semantics directly from protected `develop`; it has been ordinary/non-force converged at `e50d25580a3fa840b14855661e215a3368d8a73d` onto canonical #1676 exact `8a3ac51662fbe8e49f26a317ac0afe85f853c9ac`, retargeted to that owner, converted to Draft, and reduced to zero effective product delta. The generated `.jules/palette.md` doctrine and weaker source-only implementation are provenance, not product authority.
+v2.42 preserves v2.41's owner-graph repair and adds one performance-evidence boundary discovered from generated #1745. #1745 exact `5cdebe154f1ea24b0f924769d0073c4dc701e7d6` memoizes the `RunHistoryPanel` event-element subtree, but no realistic browser profile, stable-array trigger proof, before/after render receipt, or buyer-path p95 evidence currently supports the claimed performance improvement. The PR is therefore Draft and remains a performance hypothesis rather than accepted product progress. `useMemo` itself is not performance evidence, and task-specific `.jules/bolt.md` doctrine or decorative implementation comments are not product authority.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -69,9 +69,15 @@ Issue #1247 remains the checksum contract. Normal security-labelled checksum sur
 
 [#1676](https://github.com/ContextualWisdomLab/naruon/pull/1676) remains the sole Settings native-disabled semantics owner at exact `8a3ac51662fbe8e49f26a317ac0afe85f853c9ac`, stacked on #1623. Its bounded product tree owns the two source removals, focused `SettingsLayout.native-disabled.test.tsx` regression and standards doctoring; browser/keyboard/responsive acceptance remains a separate delivery gate.
 
-Generated #1716, #1737 and fresh #1744 are provenance only. #1744 started as a direct-`develop` two-line duplicate plus task-specific `.jules/palette.md`; ordinary convergence `e50d25580a3fa840b14855661e215a3368d8a73d` preserves the generated history while adopting the exact #1676 tree, retargeting the PR to #1676 and leaving zero changed files. It must not independently merge or broaden the narrow native-control decision into a repository-wide ban on `aria-disabled`.
+Generated #1716, #1737 and #1744 are provenance only. #1744 started as a direct-`develop` two-line duplicate plus task-specific `.jules/palette.md`; ordinary convergence `e50d25580a3fa840b14855661e215a3368d8a73d` preserves the generated history while adopting the exact #1676 tree, retargeting the PR to #1676 and leaving zero changed files. It must not independently merge or broaden the narrow native-control decision into a repository-wide ban on `aria-disabled`.
 
-## 4. UI Localization Catalog — v2.41 material contract
+### 3.6 AI Hub run-history rendering performance
+
+Generated [#1745](https://github.com/ContextualWisdomLab/naruon/pull/1745) is Draft at exact `5cdebe154f1ea24b0f924769d0073c4dc701e7d6`. It memoizes the mapped `RunEvent` element subtree on `events` reference identity. The implementation is a hypothesis until the claimed trigger is demonstrated on realistic data and browser/runtime conditions.
+
+Acceptance requires a reproducible before/after profile on the same workload, evidence that unrelated state changes preserve `events` identity and currently incur material list construction/reconciliation cost, correctness/a11y parity, and the applicable buyer-path p95 measurement. If the profile instead identifies list volume, reconciliation, unstable data identity, or another bottleneck, repair that causal path rather than retaining `useMemo` by inertia. Synthetic tiny lists, cache-warm-only runs, decorative performance comments and task-specific `.jules/bolt.md` text are not acceptance evidence.
+
+## 4. UI Localization Catalog — v2.42 material contract
 
 [#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`eb8fe8c43a017fed0ea029623d1380d824fd3150`**.
 
@@ -110,7 +116,7 @@ All Naruon LLM behavior must consume an immutable released contextual-orchestrat
 
 The current causal order remains:
 
-`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1503 → #1727 plus zero-delta provenance → #1740 exact-head policy acceptance → localization persistence/API/cache → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
+`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1745 measured AI Hub performance acceptance or causal replacement → #1503 → #1727 plus zero-delta provenance → #1740 exact-head policy acceptance → localization persistence/API/cache → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
 
 Wait state in one lane does not stop repair/development in independent lanes. Generated descendants remain open as provenance unless a verified successor fully inherits all valid delta/test/fixture/contract/evidence or the user explicitly authorizes closure.
 
@@ -118,6 +124,6 @@ Wait state in one lane does not stop repair/development in independent lanes. Ge
 
 **Merge/Release Gate: FAIL.** There is no exact protected integrated candidate satisfying required checks, current security evidence, independent post-last-push review and immutable release evidence.
 
-**UI Delivery Gate: FAIL.** The eight-locale catalog persistence/API/page composition, Storybook/browser/a11y acceptance and current exact resource-version evidence are not yet integrated.
+**UI Delivery Gate: FAIL.** The eight-locale catalog persistence/API/page composition, Storybook/browser/a11y acceptance and current exact resource-version evidence are not yet integrated. #1745 also lacks measured browser performance evidence and cannot be treated as UI delivery progress yet.
 
-Do not claim completion from routine reporting, queued checks, historical GREEN, mutable release artifacts, generated-provenance branches or source-only correctness. The next run must fresh-read all live authority before mutating or accepting any lane.
+Do not claim completion from routine reporting, queued checks, historical GREEN, mutable release artifacts, generated-provenance branches, unmeasured memoization, or source-only correctness. The next run must fresh-read all live authority before mutating or accepting any lane.
