@@ -353,6 +353,8 @@ def _accept_language_preferences(
                 for concrete_quality, concrete_position in concrete_priorities
             ):
                 continue
+            if not excluded_locales:
+                break
             wildcard_candidates = (product_default, *SUPPORTED_LOCALE_CODES)
             for wildcard_candidate in wildcard_candidates:
                 if (
