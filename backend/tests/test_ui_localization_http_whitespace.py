@@ -87,7 +87,7 @@ def test_accept_language_bounds_empty_list_elements_against_dos():
 
 def test_locale_and_accept_language_have_explicit_resource_bounds():
     """Valid basic ranges cannot create unbounded parser work at product boundaries."""
-    locale_at_limit = "en-" + "-".join(["abcdefgh"] * 14)
+    locale_at_limit = "en-" + "-".join(f"var{index:05d}" for index in range(14))
     assert len(locale_at_limit) == 128
     assert normalize_supported_locale(locale_at_limit) == "en"
 
