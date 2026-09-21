@@ -43,6 +43,9 @@ SUPPORTED_LOCALE_CODES: tuple[SupportedLocaleCode, ...] = (
 )
 DEFAULT_LOCALE_CODE: SupportedLocaleCode = "ko"
 _SUPPORTED_LOCALE_SET = frozenset(SUPPORTED_LOCALE_CODES)
+_MAX_LOCALE_TAG_CHARS = 128
+_MAX_ACCEPT_LANGUAGE_CHARS = 8192
+_MAX_ACCEPT_LANGUAGE_MEMBERS = 64
 _MAX_ACCEPT_LANGUAGE_EMPTY_MEMBERS = 32
 _LOCALE_TAG_PATTERN = re.compile(
     r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
@@ -101,6 +104,11 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
             "ui_locale_input_invalid",
             "locale input must be a string",
         )
+    if len(locale_tag) > _MAX_LOCALE_TAG_CHARS:
+        raise UiLocalizationValidationError(
+            "ui_locale_input_invalid",
+            "locale input exceeds the 128-character product limit",
+        )
     _reject_control_characters(
         locale_tag,
         error_code="ui_locale_input_invalid",
@@ -131,6 +139,11 @@ def _accept_language_preferences(
             "ui_accept_language_invalid",
             "Accept-Language must be a string",
         )
+    if len(header_value) > _MAX_ACCEPT_LANGUAGE_CHARS:
+        raise UiLocalizationValidationError(
+            "ui_accept_language_invalid",
+            "Accept-Language exceeds the 8192-character product limit",
+        )
     _reject_control_characters(
         header_value,
         error_code="ui_accept_language_invalid",
@@ -144,6 +157,7 @@ def _accept_language_preferences(
     explicit_best: dict[SupportedLocaleCode, tuple[float, int]] = {}
     concrete_priorities: list[tuple[float, int]] = []
     wildcard_best: tuple[float, int] | None = None
+    non_empty_members = 0
     empty_members = 0
 
     for position, raw_item in enumerate(candidate.split(",")):
@@ -156,6 +170,12 @@ def _accept_language_preferences(
                     "Accept-Language contains too many empty list members",
                 )
             continue
+        non_empty_members += 1
+        if non_empty_members > _MAX_ACCEPT_LANGUAGE_MEMBERS:
+            raise UiLocalizationValidationError(
+                "ui_accept_language_invalid",
+                "Accept-Language contains too many language ranges",
+            )
         match = _ACCEPT_LANGUAGE_ITEM_PATTERN.fullmatch(item)
         if match is None:
             raise UiLocalizationValidationError(
