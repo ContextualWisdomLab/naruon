@@ -11,6 +11,7 @@ import {
   Share2,
   ShieldCheck,
   XCircle,
+  Loader2,
 } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
@@ -595,7 +596,13 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
           aria-busy={permissionSaving}
           className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
-          {permissionDraft === 'allow_writeback' ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
+          {permissionSaving ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : permissionDraft === 'allow_writeback' ? (
+            <CheckCircle2 className="size-4" aria-hidden="true" />
+          ) : (
+            <XCircle className="size-4" aria-hidden="true" />
+          )}
           {permissionSaving ? '권한 저장 중' : '권한 저장'}
         </button>
         {permissionSaveStatus ? (

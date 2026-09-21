@@ -10,6 +10,7 @@ vi.mock("next/link", () => ({
 vi.mock("lucide-react", () => ({
   AlertOctagon: () => <svg aria-hidden="true" />,
   CheckCircle2: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
   Database: () => <svg aria-hidden="true" />,
   Lock: () => <svg aria-hidden="true" />,
   RefreshCw: () => <svg aria-hidden="true" />,
