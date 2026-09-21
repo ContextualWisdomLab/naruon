@@ -1078,6 +1078,83 @@ def test_execute_grammar_checker():
     assert data["result"]["errors_found"] == 3
 
 
+
+def test_execute_hash_generator():
+    with TestClient(app) as client:
+        # Test SHA-256 (default fallback if omitted by UI, though parameters requires it)
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "hello",
+                    "algorithm": "sha256",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["algorithm"] == "sha256"
+    assert data["result"]["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+    with TestClient(app) as client:
+        # Test MD5
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "hello",
+                    "algorithm": "md5",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["algorithm"] == "md5"
+    assert data["result"]["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+    with TestClient(app) as client:
+        # Test Invalid Algorithm
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "hello",
+                    "algorithm": "invalid_algo",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Unsupported algorithm: invalid_algo" in data["message"]
+
+
+
+
+    with TestClient(app) as client:
+        # Test Default Fallback by omitting algorithm and testing text default if we provide required keys according to our custom ToolRegistry validation
+        # Actually our schema validation enforces both keys to be present since they are in `parameters` object, unless we pass empty strings to trigger the default fallback in the handler
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "",
+                    "algorithm": ""
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Unsupported algorithm" in data["message"]
+
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
