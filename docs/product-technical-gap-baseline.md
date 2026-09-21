@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.39  
+**Baseline version:** 2.40  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.38 remains audit-visible as blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`; v2.37 remains blob `7716f37c571d4d631d6d385515a4cbe76e0e19cd`; v2.36 remains blob `46a79021d3811b8e0018021a437326be19bba6df`; v2.35 remains blob `bd77e2d74834da8dc916d5979b828fe4cc200dea`; v2.34 remains blob `0244bcccd5dfeed18d0994429a70ba6428a3076e`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.39 remains audit-visible as blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`; v2.37 remains blob `7716f37c571d4d631d6d385515a4cbe76e0e19cd`; v2.36 remains blob `46a79021d3811b8e0018021a437326be19bba6df`; v2.35 remains blob `bd77e2d74834da8dc916d5979b828fe4cc200dea`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.39 advances one durable localization contract: RFC 4647 wildcard lookup control flow must preserve later concrete language ranges even when the current Naruon release does not support those ranges. Draft #1740 is advanced to exact `91d0b0a17a0492231e0d5bdfa163eb746837e8da`; RED `2ebe9758cb915841d86330bbabcd618f3f091d71` proves the old parser erased `pt-BR` too early for `*;q=0.9, pt-BR;q=0.8`, and causal fix `1664d9707d4b5b9366b422f8faf612418ecd7789` retains positive concrete-range ordering metadata before release-locale filtering. The selected locale remains `ko`, but the truthful authority becomes `product_default`, not `accept_language`. Focused TRACEABILITY is committed at exact `91d0b0a1...`.
+v2.40 advances one durable localization publication contract. Draft #1740 is advanced to exact `eb8fe8c43a017fed0ea029623d1380d824fd3150`; RED `8b19c7dfe43e3dca3c1e4b8980c0a9998a3aec43` proves the previous `Formatter.parse()`-based truthiness check silently treated `{account_name:}` like canonical `{account_name}` because Python represents an empty format specification as the empty string. Causal fix `6ed310e1065940fa14c258b48412490e7b98d751` preserves source-level `:`/`!` operator information before the standard parser normalizes it, and focused TRACEABILITY `eb8fe8c4...` records Python 3.14's replacement-field grammar. Versioned catalog source therefore accepts only the declared simple named-field syntax rather than semantically equivalent alternate formatter spellings.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -65,13 +65,13 @@ Generated #1743 is ordinary/non-force converged to #1727 and remains Draft zero-
 
 Issue #1247 remains the checksum contract. Normal security-labelled checksum surface is SHA-256, SHA-3-256 and BLAKE2b-256 only; MD5/SHA-1 remain outside the normal surface. #1361 remains the canonical `content_checksum_generator` owner; generated #1739 remains provenance.
 
-## 4. UI Localization Catalog — v2.39 material contract
+## 4. UI Localization Catalog — v2.40 material contract
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`91d0b0a17a0492231e0d5bdfa163eb746837e8da`**.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`eb8fe8c43a017fed0ea029623d1380d824fd3150`**.
 
 #1740 owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, stable screen/message keys, translation-text persistence validation, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
 
-Twelve ordinary-forward RED→repair sequences define the executable policy. The durable invariants include:
+Thirteen ordinary-forward RED→repair sequences define the executable policy. The durable invariants include:
 
 1. explicit persisted/session locale rejects C0 controls and DEL before normalization; only ASCII SP is benign outer whitespace;
 2. `Accept-Language` rejects C0/DEL except HTAB where HTTP OWS permits it; protocol OWS is SP/HTAB rather than Python generic whitespace;
@@ -81,11 +81,12 @@ Twelve ordinary-forward RED→repair sequences define the executable policy. The
 6. `placeholder_schema` is tuple/list only, validates element type/syntax before uniqueness, and never relies on incidental iterable/hashability behavior;
 7. translated catalog text rejects U+0000, isolated surrogate code points and non-string input before placeholder parsing/persistence;
 8. wildcard/q=0 behavior preserves release-level supported-locale exclusions;
-9. **RFC 4647 wildcard control flow preserves positive later concrete ranges even when they are unsupported by the current release.** RED `2ebe9758cb915841d86330bbabcd618f3f091d71` shows that `*;q=0.9, pt-BR;q=0.8` previously became `(ko, accept_language)` because `pt-BR` was discarded before wildcard deferral. Fix `1664d9707d4b5b9366b422f8faf612418ecd7789` retains concrete priority metadata before supported-locale filtering; the same input now reaches `(ko, product_default)`. Unsupported language ranges remain non-candidates.
+9. RFC 4647 wildcard control flow preserves positive later concrete ranges even when they are unsupported by the current release. `*;q=0.9, pt-BR;q=0.8` reaches `(ko, product_default)` rather than falsely attributing the same locale to `accept_language`;
+10. **placeholder source syntax is canonical before parser normalization.** `{account_name}` is valid; `{account_name:}`, conversions and format specifications are invalid publication input even where Python's formatter would produce the same visible value. RED `8b19c7dfe43e3dca3c1e4b8980c0a9998a3aec43` proves the empty-format-specifier ambiguity and fix `6ed310e1065940fa14c258b48412490e7b98d751` preserves lexical `:`/`!` operator information before `Formatter.parse()`.
 
-`UiLocaleSelection.selection_source` is part of product authority, not decoration. Returning the same display language with the wrong source corrupts explainability, session/persistence decisions and downstream evidence about which tier actually selected the locale.
+Python 3.14 defines `:` as the delimiter for `format_spec` and documents that an empty format specification has default behavior. The product therefore does not use parsed semantic equivalence as publication identity; versioned source must satisfy the narrower catalog grammar.
 
-No local/container PASS is claimed for the current twelfth repair because this execution environment cannot obtain an exact repository checkout. Current-head hosted full-suite/coverage/security evidence and qualifying independent post-last-push review must be reacquired naturally. Predecessor workflow/review receipts do not transfer.
+No exact-head local/container PASS is claimed for the current thirteenth repair. Current-head hosted full-suite/coverage/security evidence and qualifying independent post-last-push review must be reacquired naturally. Predecessor workflow/review receipts do not transfer.
 
 ### Localization persistence/API/UI order
 
