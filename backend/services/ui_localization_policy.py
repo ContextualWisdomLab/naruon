@@ -47,6 +47,8 @@ _MAX_LOCALE_TAG_CHARS = 128
 _MAX_ACCEPT_LANGUAGE_CHARS = 8192
 _MAX_ACCEPT_LANGUAGE_MEMBERS = 64
 _MAX_ACCEPT_LANGUAGE_EMPTY_MEMBERS = 32
+_MAX_SCREEN_KEY_CHARS = 128
+_MAX_MESSAGE_KEY_CHARS = 128
 _LOCALE_TAG_PATTERN = re.compile(
     r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
     flags=re.ASCII,
@@ -267,20 +269,28 @@ def select_ui_locale(
 
 def validate_screen_key(screen_key: str) -> str:
     """Return a normalized screen identity or fail closed on invalid input."""
-    if not isinstance(screen_key, str) or not _SCREEN_KEY_PATTERN.fullmatch(screen_key):
+    if (
+        not isinstance(screen_key, str)
+        or len(screen_key) > _MAX_SCREEN_KEY_CHARS
+        or not _SCREEN_KEY_PATTERN.fullmatch(screen_key)
+    ):
         raise UiLocalizationValidationError(
             "ui_screen_key_invalid",
-            "screen_key must be a dotted lowercase product identity",
+            "screen_key must be a dotted lowercase product identity up to 128 characters",
         )
     return screen_key
 
 
 def validate_message_key(message_key: str) -> str:
     """Return a normalized message identity or fail closed on invalid input."""
-    if not isinstance(message_key, str) or not _MESSAGE_KEY_PATTERN.fullmatch(message_key):
+    if (
+        not isinstance(message_key, str)
+        or len(message_key) > _MAX_MESSAGE_KEY_CHARS
+        or not _MESSAGE_KEY_PATTERN.fullmatch(message_key)
+    ):
         raise UiLocalizationValidationError(
             "ui_message_key_invalid",
-            "message_key must be lowercase snake_case",
+            "message_key must be lowercase snake_case up to 128 characters",
         )
     return message_key
 
