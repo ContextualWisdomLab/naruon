@@ -135,6 +135,21 @@ def _reject_control_characters(
             raise UiLocalizationValidationError(error_code, message)
 
 
+def _has_repeated_extension_singleton(locale_tag: str) -> bool:
+    """Return whether a structural langtag repeats an extension singleton before private use."""
+    seen_singletons: set[str] = set()
+    for subtag in locale_tag.split("-")[1:]:
+        normalized = subtag.lower()
+        if normalized == "x":
+            break
+        if len(subtag) != 1:
+            continue
+        if normalized in seen_singletons:
+            return True
+        seen_singletons.add(normalized)
+    return False
+
+
 def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
     """Normalize a supported language tag to its release-level product language."""
     if not isinstance(locale_tag, str):
@@ -154,8 +169,14 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
     )
     candidate = locale_tag.strip(" ")
     candidate_lower = candidate.lower()
+    is_structural_langtag = _LANGTAG_PATTERN.fullmatch(candidate) is not None
+    if is_structural_langtag and _has_repeated_extension_singleton(candidate):
+        raise UiLocalizationValidationError(
+            "ui_locale_input_invalid",
+            "locale input repeats an RFC 5646 extension singleton",
+        )
     if not candidate or not (
-        _LANGTAG_PATTERN.fullmatch(candidate)
+        is_structural_langtag
         or _PRIVATEUSE_TAG_PATTERN.fullmatch(candidate)
         or candidate_lower in _IRREGULAR_GRANDFATHERED_TAGS
     ):
