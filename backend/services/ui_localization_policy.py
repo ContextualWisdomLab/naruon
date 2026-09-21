@@ -142,6 +142,7 @@ def _accept_language_preferences(
         return ()
 
     explicit_best: dict[SupportedLocaleCode, tuple[float, int]] = {}
+    concrete_priorities: list[tuple[float, int]] = []
     wildcard_best: tuple[float, int] | None = None
     empty_members = 0
 
@@ -168,6 +169,8 @@ def _accept_language_preferences(
                 wildcard_best = (quality, position)
             continue
 
+        if quality > 0:
+            concrete_priorities.append((quality, position))
         primary_language = language_range.split("-", 1)[0].lower()
         if primary_language not in _SUPPORTED_LOCALE_SET:
             continue
@@ -191,9 +194,13 @@ def _accept_language_preferences(
         if quality == 0
     }
     ordered: list[SupportedLocaleCode] = []
-    for index, (_, _, locale_code) in enumerate(ranked):
+    for quality, position, locale_code in ranked:
         if locale_code is None:
-            if any(later_locale is not None for _, _, later_locale in ranked[index + 1 :]):
+            wildcard_priority = (-quality, position)
+            if any(
+                (-concrete_quality, concrete_position) > wildcard_priority
+                for concrete_quality, concrete_position in concrete_priorities
+            ):
                 continue
             wildcard_candidates = (product_default, *SUPPORTED_LOCALE_CODES)
             for wildcard_candidate in wildcard_candidates:
