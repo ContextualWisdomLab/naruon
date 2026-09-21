@@ -20,3 +20,19 @@ def test_explicit_locale_rejects_terminal_extension_or_private_use_singletons(lo
 def test_explicit_locale_accepts_well_formed_private_use_and_extension_suffixes(locale_tag):
     """Valid RFC 5646 suffixes remain compatible with release-level locale normalization."""
     assert normalize_supported_locale(locale_tag) == "en"
+
+
+@pytest.mark.parametrize(
+    ("locale_tag", "expected_locale"),
+    (
+        ("en-GB-oed", "en"),
+        ("zh-min", "zh"),
+        ("zh-min-nan", "zh"),
+    ),
+)
+def test_explicit_locale_accepts_supported_primary_grandfathered_language_tags(
+    locale_tag,
+    expected_locale,
+):
+    """RFC 5646 grandfathered tags remain Language-Tag values even outside langtag ABNF."""
+    assert normalize_supported_locale(locale_tag) == expected_locale
