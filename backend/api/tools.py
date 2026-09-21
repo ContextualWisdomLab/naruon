@@ -770,6 +770,54 @@ registry.register(
 
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params["text"]
+    algorithm = params["algorithm"].lower()
+
+    allowed_algorithms = {"md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "blake2s"}
+    if algorithm not in allowed_algorithms:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}. Supported: {', '.join(sorted(allowed_algorithms))}")
+
+    h = hashlib.new(algorithm)
+    h.update(text.encode("utf-8"))
+    return {"hash": h.hexdigest()}
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="지정된 텍스트의 암호화 해시(예: sha256, md5 등)를 생성합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+_URL_PATTERN = re.compile(r'https?://[^\s<>"]+')
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    text = params["text"]
+    urls = _URL_PATTERN.findall(text)
+    cleaned_urls = []
+    for u in urls:
+        cleaned_urls.append(u.rstrip(".,;!?"))
+
+    unique_urls = sorted(list(set(cleaned_urls)))
+    return {"urls": unique_urls, "url_count": len(unique_urls)}
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 모든 웹 링크(URL)를 추출합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
