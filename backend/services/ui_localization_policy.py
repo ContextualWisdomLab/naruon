@@ -150,6 +150,19 @@ def _has_repeated_extension_singleton(locale_tag: str) -> bool:
     return False
 
 
+def _has_multiple_extlang_subtags(locale_tag: str) -> bool:
+    """Return whether a structural langtag occupies a reserved second extlang position."""
+    subtags = locale_tag.split("-")
+    if len(subtags[0]) not in (2, 3):
+        return False
+    extlang_count = 0
+    for subtag in subtags[1:4]:
+        if len(subtag) != 3 or not subtag.isalpha():
+            break
+        extlang_count += 1
+    return extlang_count > 1
+
+
 def _has_repeated_variant_subtag(locale_tag: str) -> bool:
     """Return whether a structural langtag repeats a variant before extensions/private use."""
     subtags = locale_tag.split("-")
@@ -214,6 +227,11 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
     candidate = locale_tag.strip(" ")
     candidate_lower = candidate.lower()
     is_structural_langtag = _LANGTAG_PATTERN.fullmatch(candidate) is not None
+    if is_structural_langtag and _has_multiple_extlang_subtags(candidate):
+        raise UiLocalizationValidationError(
+            "ui_locale_input_invalid",
+            "locale input contains more than one RFC 5646 extended language subtag",
+        )
     if is_structural_langtag and _has_repeated_extension_singleton(candidate):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
