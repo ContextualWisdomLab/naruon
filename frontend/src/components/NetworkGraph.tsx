@@ -285,21 +285,21 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
-  // ⚡ Bolt: Replace O(N) Array.from().slice().map() with bounded O(1) loop to prevent unnecessary allocations
   const relationshipOptions = useMemo(() => {
     const options = [];
+    let index = 0;
     for (const edge of edgeMap.values()) {
       if (options.length >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
-        label: `관계 ${options.length + 1}: ${describeEdge(edge, nodeMap)}`,
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
       });
+      index++;
     }
     return options;
   }, [edgeMap, nodeMap]);
 
-  // ⚡ Bolt: Replace O(N) Array.from().slice().map() with bounded O(1) loop to prevent unnecessary allocations
   const nodeOptions = useMemo(() => {
     const options = [];
     for (const node of nodeInstanceMap.values()) {
