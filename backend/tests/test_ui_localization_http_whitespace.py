@@ -85,6 +85,40 @@ def test_accept_language_bounds_empty_list_elements_against_dos():
     )
 
 
+def test_locale_and_accept_language_have_explicit_resource_bounds():
+    """Valid basic ranges cannot create unbounded parser work at product boundaries."""
+    locale_at_limit = "en-" + "-".join(["abcdefgh"] * 14)
+    assert len(locale_at_limit) == 128
+    assert normalize_supported_locale(locale_at_limit) == "en"
+
+    locale_over_limit = locale_at_limit + "-abcdefgh"
+    assert_error(
+        "ui_locale_input_invalid",
+        lambda: normalize_supported_locale(locale_over_limit),
+    )
+
+    accepted_members = ",".join(["pt"] * 64)
+    selected = select_ui_locale(accept_language=accepted_members)
+    assert (selected.locale_code, selected.selection_source) == ("ko", "product_default")
+
+    excessive_members = ",".join(["pt"] * 65)
+    assert_error(
+        "ui_accept_language_invalid",
+        lambda: select_ui_locale(accept_language=excessive_members),
+    )
+
+    header_at_limit = "en-" + "-".join(["abcdefgh"] * 910)
+    assert len(header_at_limit) == 8192
+    selected = select_ui_locale(accept_language=header_at_limit)
+    assert (selected.locale_code, selected.selection_source) == ("en", "accept_language")
+
+    header_over_limit = header_at_limit + "-abcdefgh"
+    assert_error(
+        "ui_accept_language_invalid",
+        lambda: select_ui_locale(accept_language=header_over_limit),
+    )
+
+
 def test_wildcard_before_unsupported_range_does_not_claim_negotiation_source():
     """RFC 4647 lookup skips a wildcard when any later concrete range remains to try."""
     selected = select_ui_locale(accept_language="*;q=0.9, pt-BR;q=0.8")
