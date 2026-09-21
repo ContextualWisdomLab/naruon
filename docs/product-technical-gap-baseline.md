@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.43  
+**Baseline version:** 2.44  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.42 remains audit-visible as blob `68940ecd64c1d10f011969d861ce18bc206f2995`; v2.41 remains blob `2eba56966e2079e8eeca9e79c22e050b3ab90daa`; v2.40 remains blob `6092e23c545afe845b206842eb118d06999faf8e`; v2.39 remains blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.43 remains audit-visible as blob `78812f6798a91d8ee761b483d6a20b123f935ee4`; v2.42 remains blob `68940ecd64c1d10f011969d861ce18bc206f2995`; v2.41 remains blob `2eba56966e2079e8eeca9e79c22e050b3ab90daa`; v2.40 remains blob `6092e23c545afe845b206842eb118d06999faf8e`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.43 preserves v2.42's owner graph and performance-evidence boundary and adds #1740's fourteenth localization-policy repair: valid locale negotiation input now has explicit product resource ceilings before expensive normalization/list work. Explicit locale values are capped at 128 characters, raw `Accept-Language` at 8192 characters, non-empty language ranges at 64, and ignored empty members remain capped at 32. Over-limit input fails closed and is never truncated. These are Naruon product limits, not IETF constants.
+v2.44 preserves v2.43's owner graph, measured-performance boundary and locale/header parser ceilings, and adds #1740's fifteenth localization-policy repair: product-owned `screen_key` and `message_key` identities are now capped at 128 characters before regex acceptance. Over-limit keys fail with their existing boundary-specific validation codes and are never truncated. The 128/128 identity ceilings are Naruon product limits, not PostgreSQL constants.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -77,13 +77,13 @@ Generated [#1745](https://github.com/ContextualWisdomLab/naruon/pull/1745) is Dr
 
 Acceptance requires a reproducible before/after profile on the same workload, evidence that unrelated state changes preserve `events` identity and currently incur material list construction/reconciliation cost, correctness/a11y parity, and the applicable buyer-path p95 measurement. If the profile instead identifies list volume, reconciliation, unstable data identity, or another bottleneck, repair that causal path rather than retaining `useMemo` by inertia. Synthetic tiny lists, cache-warm-only runs, decorative performance comments and task-specific `.jules/bolt.md` text are not acceptance evidence.
 
-## 4. UI Localization Catalog — v2.43 material contract
+## 4. UI Localization Catalog — v2.44 material contract
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`30957821d00fa5e3eebc6cad5ed70820da8ac755`**.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`e91445f55c0355423d4475bbd7a8f5ca3de7465c`**.
 
-#1740 owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, bounded locale/header parsing, stable screen/message keys, translation-text persistence validation, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
+#1740 owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, bounded locale/header parsing, bounded stable screen/message identities, translation-text persistence validation, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
 
-Fourteen ordinary-forward RED→repair sequences define the executable policy. Durable invariants include:
+Fifteen ordinary-forward RED→repair sequences define the executable policy. Durable invariants include:
 
 1. explicit persisted/session locale rejects C0 controls and DEL before normalization; only ASCII SP is benign outer whitespace;
 2. explicit locale input is capped at **128 characters** and rejected above the limit without truncation;
@@ -98,15 +98,16 @@ Fourteen ordinary-forward RED→repair sequences define the executable policy. D
 11. wildcard/q=0 behavior preserves release-level supported-locale exclusions;
 12. RFC 4647 wildcard control flow preserves positive later concrete ranges even when unsupported by the current release. `*;q=0.9, pt-BR;q=0.8` reaches `(ko, product_default)` rather than falsely attributing the same locale to `accept_language`;
 13. placeholder source syntax is canonical before parser normalization. `{account_name}` is valid; `{account_name:}`, conversions and format specifications are invalid publication input even where Python's formatter would produce the same visible value;
-14. **valid parser work has an explicit product budget.** RED `978fdbbc6135fa88a8d43e0971ed075ae546f9de` covers the 128/8192/64 boundaries; causal fix `0fdb5371eef63d6d7abe87ac14b69269c8519ff8` enforces them before expensive normalization/list processing, and focused TRACEABILITY `d25c7a627af720242c9503f8f2b90553c7c94405` records why these are product limits rather than IETF constants.
+14. valid negotiation parser work has an explicit product budget. RED `978fdbbc6135fa88a8d43e0971ed075ae546f9de` covers the 128/8192/64 boundaries; causal fix `0fdb5371eef63d6d7abe87ac14b69269c8519ff8` enforces them before expensive normalization/list processing;
+15. product-owned catalog identities have an explicit product budget. RED `c0d802d33bf68ca6a8fbe70e4aaee5726b6d4a65` accepts 128-character `screen_key`/`message_key` values and rejects the 129th; causal fix `c40e2aa244249878405896fc1255d8c1df9d9dc5` enforces `_MAX_SCREEN_KEY_CHARS = 128` and `_MAX_MESSAGE_KEY_CHARS = 128` before regex acceptance, and focused TRACEABILITY `e91445f55c0355423d4475bbd7a8f5ca3de7465c` records the persistence/index rationale.
 
-RFC 9110 §5.4 allows recipients to refuse field values larger than they are willing to process and does not set one universal field-size ceiling. RFC 4647 §4.4 permits range-length restrictions comparable to tag restrictions; RFC 5646 §4.4.1 permits documented implementation limits and requires limited-buffer protocols to support at least 35 characters. Naruon's 128/8192/64/32 bounds are therefore explicit application resource contracts layered over those standards. Over-limit values fail closed; no truncation changes negotiation semantics.
+RFC 9110 §5.4 allows recipients to refuse field values larger than they are willing to process and does not set one universal field-size ceiling. RFC 4647 §4.4 permits range-length restrictions comparable to tag restrictions; RFC 5646 §4.4.1 permits documented implementation limits. Naruon's 128/8192/64/32 negotiation bounds are explicit application resource contracts layered over those standards. The separate 128/128 `screen_key`/`message_key` ceilings are Naruon semantic identity limits layered above PostgreSQL `text`; PostgreSQL does not supply that product identity contract. Over-limit values fail closed and no truncation changes identity or negotiation semantics.
 
-No exact-head local/container PASS is claimed for the current fourteenth repair. Current-head hosted full-suite/coverage/security evidence and qualifying independent post-last-push review must be reacquired naturally. Predecessor workflow/review receipts do not transfer.
+No exact-head local/container PASS is claimed for the current fifteenth repair: an exact checkout was attempted, but this runtime cannot resolve the outbound Git host. Current-head hosted full-suite/coverage/security evidence and qualifying independent post-last-push review must be reacquired naturally. Predecessor workflow/review receipts do not transfer.
 
 ### Localization persistence/API/UI order
 
-Translation persistence must wait until #1503 or a verified complete successor reaches protected ancestry, then create the next ordinary Alembic descendant from the then-current single head. Published catalog versions are immutable, complete for all eight release locales, placeholder/text validated before publication and rollback-selectable without rewriting history.
+Translation persistence must wait until #1503 or a verified complete successor reaches protected ancestry, then create the next ordinary Alembic descendant from the then-current single head. Published catalog versions are immutable, complete for all eight release locales, placeholder/text validated before publication and rollback-selectable without rewriting history. Persistence and API boundaries must preserve the same 128/128 key limits without truncation.
 
 A screen-scoped read contract returns only the requested screen/locale with immutable resource version and ETag/cache identity. The HTTP owner must preserve the exact parser resource contract and reject over-limit negotiation before buyer-path work; realistic k6/E2E must measure normal and hostile-boundary behavior. Do not ship a browser-wide mega-catalog, a per-key network waterfall or a heavy SPA i18n dependency by default. UI-copy authority remains separate from ontology/concept labels.
 
@@ -120,7 +121,7 @@ All Naruon LLM behavior must consume an immutable released contextual-orchestrat
 
 The current causal order remains:
 
-`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1745 measured AI Hub performance acceptance or causal replacement → #1503 → #1727 plus zero-delta provenance → #1740 `30957821...` exact-head policy acceptance → localization persistence/API/cache → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
+`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1745 measured AI Hub performance acceptance or causal replacement → #1503 → #1727 plus zero-delta provenance → #1740 `e91445f5...` exact-head policy acceptance → localization persistence/API/cache preserving 128/128 key and 128/8192/64/32 negotiation contracts → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
 
 Wait state in one lane does not stop repair/development in independent lanes. Generated descendants remain open as provenance unless a verified successor fully inherits all valid delta/test/fixture/contract/evidence or the user explicitly authorizes closure.
 
