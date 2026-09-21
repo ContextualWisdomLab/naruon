@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+
+## 2025-02-12 - Memoizing inline array maps in layout components
+**Learning:** Inline mapping of arrays inside JSX in large React layout components (like `AIHubLayout`) causes O(N) recalculation on every render when tabs or unrelated surface states change.
+**Action:** Wrap inline JSX elements that map over potentially large arrays (e.g., lists of execution events) in a `useMemo` hook with specific dependencies to prevent rendering bottlenecks.
