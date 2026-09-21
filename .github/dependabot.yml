@@ -45,6 +45,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    exclude-paths:
+      - "backend/**"
+      - "connector/**"
     groups:
       ci-python:
         applies-to: "version-updates"
