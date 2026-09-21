@@ -87,13 +87,15 @@ def test_accept_language_zero_quality_and_wildcard_follow_lookup_order():
 
 
 def test_wildcard_lookup_skips_to_later_concrete_range():
-    """RFC 4647 lookup skips wildcard when a later concrete range can be tried."""
+    """RFC 4647 lookup skips wildcard and attributes wildcard-only fallback to product default."""
     selected = select_ui_locale(accept_language="en;q=0.9, *;q=0.8, fr;q=0.7")
     assert selected.locale_code == "en"
     selected = select_ui_locale(accept_language="*;q=0.7, *;q=0.9, *;q=0.5, fr;q=0.8")
     assert selected.locale_code == "fr"
     selected = select_ui_locale(accept_language="*;q=0.9")
-    assert selected.locale_code == "ko"
+    assert (selected.locale_code, selected.selection_source) == ("ko", "product_default")
+    selected = select_ui_locale(accept_language="*;q=0.9", product_default="fr")
+    assert (selected.locale_code, selected.selection_source) == ("fr", "product_default")
 
 
 def test_malformed_accept_language_fails_closed():
