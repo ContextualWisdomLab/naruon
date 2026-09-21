@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.56  
-**Observed on:** 2026-09-21 (Asia/Seoul)  
+**Baseline version:** 2.57  
+**Observed on:** 2026-09-22 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.55 remains audit-visible as blob `383533ef84f4abfff5d428d508b6eceeeee342a2`; v2.54 remains blob `ccf12a55634e88fb1cd52caea4f1cb4d7c645f3e`; v2.53 remains blob `0eeb08e6a75a819e89adbf2d08e6c83a3909a26b`; earlier snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.56 remains audit-visible as blob `39341d4723d0982aa11aa7b24faf5394600bc074`; v2.55 remains blob `383533ef84f4abfff5d428d508b6eceeeee342a2`; v2.54 remains blob `ccf12a55634e88fb1cd52caea4f1cb4d7c645f3e`; earlier snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.56 preserves v2.55's owner graph, #1740 twenty-third RFC 4647 wildcard/default provenance repair and #1746 generated-tool overlap correction. The durable change is a second causal repair inside Draft #1752. The first #1752 repair bounded backend Python, root CI Python and frontend npm wildcard groups to version-update patches and excluded backend `aiosmtplib`. Fresh inspection of generated #1751 then showed that root `pip` scanning itself crossed owner boundaries before grouping: the same `ci-python` PR changed three `backend/` requirement files, two `connector/` requirement files and three root CI/Strix requirement files. #1752 exact `0b2b4386ac8a2da621602eeaa235bcff4d3b02d4` now carries a second RED/fix pair requiring root `pip` to exclude `backend/**` and `connector/**`, leaving those trees to their dedicated Dependabot entries while root CI requirements remain under the root entry.
+v2.57 preserves v2.56's owner graph and both causal repairs in Draft #1752. The durable addition is #1740's twenty-fourth RFC 5646 explicit-locale repair: persisted/session locale identity is no longer silently rewritten with ASCII-SP trimming before language-tag validation. RED `2ff28c208b8fd5a83bee3e179f4d66b31831be43` pins leading/trailing-SP inputs to `ui_locale_input_invalid`; causal fix `c94c9345008cf6e339a9f90f59afccc18adea39f` removes SP trimming only from the explicit locale path, while HTTP `Accept-Language` keeps its separate SP/HTAB OWS contract. #1740 current exact is `97279b9dfd8d47d3033007d36398ccf7aa9e6943`.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -53,7 +53,7 @@ Draft [#1752](https://github.com/ContextualWisdomLab/naruon/pull/1752) at exact 
 
 ### 3.3 NetworkGraph/performance
 
-[#1593](https://github.com/ContextualWisdomLab/naruon/pull/1593) remains the canonical bounded relationship/node option owner at exact `0eb4b6dc5264db8568fd2a54adde9a91feb3cece`, based on #1623. #1628 remains its first-five non-empty label-summary child; #1674 is provenance and #1675 is the memoization owner. Generated #1742 is zero-effective-delta provenance after ordinary convergence.
+[#1593](https://github.com/ContextualWisdomLab/naruon/pull/1593) remains the canonical bounded relationship/node option owner at exact `0eb4b6dc5264db8568fd2a54adde9a91feb3cece`, based on #1623. #1628 remains its first-five non-empty label-summary child; #1674 is provenance and #1675 is the memoization owner. Generated #1742 and #1754 are zero-effective-delta provenance after ordinary convergence; neither is independent product progress nor evidence for an end-to-end O(1) NetworkGraph path.
 
 ### 3.4 Data-hygiene/checksum/URL ownership
 
@@ -72,14 +72,14 @@ Issue [#1247](https://github.com/ContextualWisdomLab/naruon/issues/1247) is the 
 
 Generated [#1745](https://github.com/ContextualWisdomLab/naruon/pull/1745) is Draft zero-effective-delta provenance at exact `a501ca663e01a53b3c60a1264a6e014ad0228c64`. Its generated `useMemo([events])` premise was rejected because canonical `/api/ai-hub/surface` bounds primary run events to eight, fallback audit events to eight and prompt fallback to five, while no current browser profile, render/commit timing, reference-stability evidence or buyer-path p95 identifies that bounded map as causal. Future performance work must start from reproduced buyer-path evidence.
 
-## 4. UI Localization Catalog — v2.56 material contract
+## 4. UI Localization Catalog — v2.57 material contract
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact `d48e9e6f91d922e6b0dbf7497832836254c29eb9`. It owns pure localization domain policy only and no persistence, Alembic migration, HTTP API, browser cache/runtime, Storybook, authoring UI, ontology-label authority or LLM translation path.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact `97279b9dfd8d47d3033007d36398ccf7aa9e6943`. It owns pure localization domain policy only and no persistence, Alembic migration, HTTP API, browser cache/runtime, Storybook, authoring UI, ontology-label authority or LLM translation path.
 
-Twenty-three ordinary-forward RED→repair sequences define the current policy. Durable invariants are:
+Twenty-four ordinary-forward RED→repair sequences define the current policy. Durable invariants are:
 
 1. release locales are exactly KO/EN/JA/ZH/VI/ES/DE/FR;
-2. explicit persisted/session locale rejects C0/DEL before normalization, permits ASCII SP as the benign outer whitespace, and is capped at 128 characters without truncation;
+2. explicit persisted/session locale rejects C0/DEL and any surrounding SP before RFC 5646 acceptance, is capped at 128 characters without truncation, and is never silently trimmed into a different language-tag identity;
 3. malformed terminal singleton forms such as `en-x` and `en-u` are rejected while `en-x-private` and `en-u-ca-gregory` are retained;
 4. supported-primary grandfathered `en-GB-oed`, `zh-min`, and `zh-min-nan` are retained; private-use-only and irregular-grandfathered syntax is separated from eight-locale support;
 5. registry-independent RFC 5646 validity rejects repeated extension singletons, duplicate variants and permanently reserved second/third extlang occupancy while leaving live registry membership/prefix/preferred-value/canonicalization to a dated IANA-registry contract;
@@ -92,13 +92,14 @@ Twenty-three ordinary-forward RED→repair sequences define the current policy. 
 12. placeholder schema is tuple/list only, validates elements before uniqueness, caps names at 64 characters and a message/schema at 32 unique names, and direct extraction enforces the same 32-name ceiling;
 13. canonical source syntax accepts `{name}` only; empty/non-empty format specifiers, conversions and traversal are publication-invalid even where Python could render equivalent visible text;
 14. all parser/key/content ceilings are Naruon application resource contracts layered over standards/storage boundaries; over-limit values fail closed and no identity/content truncation is permitted;
-15. predecessor workflow/review receipts do not transfer. Exact `d48e9e6f...` still requires current full-suite/coverage/security and qualifying independent post-last-push review before policy acceptance.
+15. twenty-fourth RED `2ff28c208b8fd5a83bee3e179f4d66b31831be43` and fix `c94c9345008cf6e339a9f90f59afccc18adea39f` enforce RFC 5646's no-whitespace language-tag boundary for explicit persisted/session identity without changing HTTP `Accept-Language` OWS handling;
+16. predecessor workflow/review receipts do not transfer. Exact `97279b9d...` still requires current full-suite/coverage/security and qualifying independent post-last-push review before policy acceptance.
 
-RFC 4647 §3.4 states that `*` cannot identify a best matching tag and defaulting is computed when `*` is the only effective range or no later range follows; §3.4.1 requires the application to define default behavior. The doctoring on exact #1740 records this alongside RFC 9110/5646 resource-boundary reasoning.
+RFC 5646 §2.1 states that whitespace is not permitted in a language tag. RFC 4647 lookup and HTTP `Accept-Language` remain separate parsing surfaces: HTTP field OWS cannot be reused to normalize explicit persisted/session language-tag identity. RFC 4647 §3.4 also states that `*` cannot identify a best matching tag and defaulting is computed when `*` is the only effective range or no later range follows; §3.4.1 requires the application to define default behavior. The doctoring on exact #1740 records these boundaries alongside RFC 9110/5646 resource reasoning.
 
 ### Localization persistence/API/UI order
 
-Translation persistence waits until #1503 or a verified complete successor reaches protected ancestry and #1740 exact-current-head policy acceptance. The next persistence owner must create one ordinary Alembic descendant from the then-current single head, publish immutable complete eight-locale resource versions, preserve exact placeholder/text validation and truthful wildcard/default provenance, and retain the 128/128 key, 128/8192/64/32 negotiation and 16,384/64/32 translation/placeholder contracts without truncation.
+Translation persistence waits until #1503 or a verified complete successor reaches protected ancestry and #1740 exact-current-head policy acceptance. The next persistence owner must create one ordinary Alembic descendant from the then-current single head, publish immutable complete eight-locale resource versions, preserve exact placeholder/text validation, explicit-locale no-rewrite semantics and truthful wildcard/default provenance, and retain the 128/128 key, 128/8192/64/32 negotiation and 16,384/64/32 translation/placeholder contracts without truncation.
 
 The read API is screen-scoped with immutable resource version plus ETag/cache identity; no browser-wide mega-catalog, per-key network waterfall, heavy browser i18n default or cross-service SQL. Realistic k6/E2E must cover normal, exact-boundary and over-limit behavior. KO/EN/JA/ZH/VI/ES/DE/FR UI acceptance requires Storybook plus real browser E2E across normal/loading/empty/error/permission states, keyboard/focus/screen-reader/touch, CJK wrapping/font fallback, Vietnamese diacritics, DE/FR/ES expansion, mobile/intermediate widths and exact resource-version/source-head screenshots.
 
@@ -108,9 +109,9 @@ All Naruon LLM behavior consumes an immutable released contextual-orchestrator A
 
 ## 6. Current causal order and buyer-visible gaps
 
-`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1752 bounded dependency-update grouping + root manifest-owner isolation acceptance → #1623 current-vulnerability revalidation + generated #1750 owner reconciliation → #1565 exact dependency/TestClient acceptance + generated #1749 reconciliation → bounded successors of generated #1751 through their canonical owners → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 and canonical NetworkGraph descendants → canonical data-hygiene/checksum owners (#1361/#1418; generated #1746 is provenance only) → #1676 Settings native-disabled owner + generated provenance → #1503 → #1727 + generated provenance → #1740 `d48e9e6f...` exact-head policy acceptance → localization persistence/API/cache preserving repaired locale and wildcard/default provenance contracts → immutable contextual-orchestrator release + #1549 → #1729/eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through canonical owners → Storybook/browser/a11y owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.
+`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1752 bounded dependency-update grouping + root manifest-owner isolation acceptance → #1623 current-vulnerability revalidation + generated #1750 owner reconciliation → #1565 exact dependency/TestClient acceptance + generated #1749 reconciliation → bounded successors of generated #1751 through their canonical owners → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 and canonical NetworkGraph descendants → canonical data-hygiene/checksum owners (#1361/#1418; generated #1746 is provenance only) → #1676 Settings native-disabled owner + generated provenance → #1503 → #1727 + generated provenance → #1740 `97279b9d...` exact-head policy acceptance → localization persistence/API/cache preserving repaired locale/no-rewrite and wildcard/default provenance contracts → immutable contextual-orchestrator release + #1549 → #1729/eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through canonical owners → Storybook/browser/a11y owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.
 
-#1745 and #1746 are not active causal blockers; both preserve rejected/generated intent as zero-effective-delta provenance. #1749/#1750/#1751 remain open generated migration/provenance lanes until bounded owner descendants completely inherit their valid version intents, lock/test/fixture/contract/evidence deltas. Wait state in one lane does not stop repair/development in independent lanes. Generated descendants remain open unless a verified successor completely inherits every valid delta/test/fixture/contract/evidence or the user explicitly authorizes closure.
+#1745, #1746 and #1754 are not active causal blockers; they preserve rejected/generated intent as zero-effective-delta provenance. #1749/#1750/#1751 remain open generated migration/provenance lanes until bounded owner descendants completely inherit their valid version intents, lock/test/fixture/contract/evidence deltas. Wait state in one lane does not stop repair/development in independent lanes. Generated descendants remain open unless a verified successor completely inherits every valid delta/test/fixture/contract/evidence or the user explicitly authorizes closure.
 
 ## 7. Delivery gates
 
@@ -122,4 +123,4 @@ All Naruon LLM behavior consumes an immutable released contextual-orchestrator A
 
 **Data-hygiene duplicate-owner gate: PASS for #1746 convergence, not feature delivery.** The generated weak-digest and regex-only duplicate surfaces are removed from effective product delta and canonical #1361/#1418 ownership is preserved. This does not make either canonical feature owner merge-ready.
 
-Do not claim completion from routine reporting, queued checks, historical GREEN, mutable releases, generated-provenance branches, dependency mega-groups, cross-owner root manifest scanning, unmeasured performance claims, weak-digest security labelling, regex-only URL evidence, source-only correctness, malformed-versus-unsupported locale collapse, wildcard provenance fabrication, repeated extension singletons, duplicate variants, reserved multi-extlang occupancy or unresolved exact-head acceptance evidence. Every run must fresh-read live authority before mutation or acceptance.
+Do not claim completion from routine reporting, queued checks, historical GREEN, mutable releases, generated-provenance branches, dependency mega-groups, cross-owner root manifest scanning, unmeasured performance claims, weak-digest security labelling, regex-only URL evidence, source-only correctness, explicit-locale whitespace normalization, malformed-versus-unsupported locale collapse, wildcard provenance fabrication, repeated extension singletons, duplicate variants, reserved multi-extlang occupancy or unresolved exact-head acceptance evidence. Every run must fresh-read live authority before mutation or acceptance.
