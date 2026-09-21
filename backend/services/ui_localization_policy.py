@@ -150,6 +150,50 @@ def _has_repeated_extension_singleton(locale_tag: str) -> bool:
     return False
 
 
+def _has_repeated_variant_subtag(locale_tag: str) -> bool:
+    """Return whether a structural langtag repeats a variant before extensions/private use."""
+    subtags = locale_tag.split("-")
+    index = 1
+    primary_language = subtags[0]
+
+    if len(primary_language) in (2, 3):
+        extlang_count = 0
+        while (
+            index < len(subtags)
+            and extlang_count < 3
+            and len(subtags[index]) == 3
+            and subtags[index].isalpha()
+        ):
+            index += 1
+            extlang_count += 1
+
+    if index < len(subtags) and len(subtags[index]) == 4 and subtags[index].isalpha():
+        index += 1
+
+    if index < len(subtags) and (
+        (len(subtags[index]) == 2 and subtags[index].isalpha())
+        or (len(subtags[index]) == 3 and subtags[index].isdigit())
+    ):
+        index += 1
+
+    seen_variants: set[str] = set()
+    while index < len(subtags):
+        subtag = subtags[index]
+        if len(subtag) == 1:
+            break
+        is_variant = (5 <= len(subtag) <= 8 and subtag.isalnum()) or (
+            len(subtag) == 4 and subtag[0].isdigit() and subtag[1:].isalnum()
+        )
+        if not is_variant:
+            break
+        normalized = subtag.lower()
+        if normalized in seen_variants:
+            return True
+        seen_variants.add(normalized)
+        index += 1
+    return False
+
+
 def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
     """Normalize a supported language tag to its release-level product language."""
     if not isinstance(locale_tag, str):
@@ -174,6 +218,11 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
             "locale input repeats an RFC 5646 extension singleton",
+        )
+    if is_structural_langtag and _has_repeated_variant_subtag(candidate):
+        raise UiLocalizationValidationError(
+            "ui_locale_input_invalid",
+            "locale input repeats an RFC 5646 variant subtag",
         )
     if not candidate or not (
         is_structural_langtag
