@@ -46,6 +46,15 @@ def test_bulk_version_groups_bundle_patch_updates_only() -> None:
         assert group["update-types"] == ["patch"]
 
 
+def test_root_ci_pip_scan_does_not_cross_owned_runtime_trees() -> None:
+    """Keep root CI updates from recursively absorbing backend and connector manifests."""
+    root_pip = _update_config("pip", "/")
+    excluded_paths = root_pip["exclude-paths"]
+    assert isinstance(excluded_paths, list)
+    assert "backend/**" in excluded_paths
+    assert "connector/**" in excluded_paths
+
+
 def test_backend_security_material_patch_is_not_hidden_in_bulk_group() -> None:
     """Keep the current SMTP command-injection hardening update independently reviewable."""
     group = _group(_update_config("pip", "/backend"), "backend-python")
