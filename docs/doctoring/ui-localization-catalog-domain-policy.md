@@ -26,7 +26,7 @@ Locale authority is persisted preference → session preference → weighted `Ac
 
 Stable machine-readable validation codes belong to the boundary that rejects the input.
 
-Explicit locale input rejects every C0 control and DEL before normalization. Only ASCII SP is benign outer whitespace. `Accept-Language` applies HTTP field semantics instead: C0/DEL controls are rejected except HTAB where RFC 9110 permits it as OWS, and only SP/HTAB are normalized as optional whitespace. Python `str.strip()` and regex `\s` are intentionally not protocol authority.
+Explicit persisted/session locale input accepts no surrounding whitespace. C0 controls and DEL are rejected before structural parsing; ASCII SP and non-control Unicode whitespace such as NBSP are rejected because the anchored RFC 5646 language-tag alternatives do not admit them. The explicit-locale path does not trim or rewrite caller identity before validation. `Accept-Language` applies HTTP field semantics instead: C0/DEL controls are rejected except HTAB where RFC 9110 permits it as OWS, and only SP/HTAB are normalized as optional whitespace. Python generic `str.strip()` and regex `\s` are intentionally not protocol authority.
 
 The quality parameter name is case-insensitive, so `q=` and `Q=` carry identical parameter-name semantics while qvalue syntax remains strict.
 
@@ -79,7 +79,7 @@ LLM translation is outside this slice. Future assisted translation must use a re
 
 The focused policy suite covers supported-language identity, precedence, regional/script normalization, weighted `Accept-Language`, duplicate ranges, wildcard/q=0 handling, malformed/control input, screen/message identity, literal braces, placeholder schema mismatch/formatter features, runtime schema-container rejection, unhashable schema elements, translation-text persistence, product-default runtime typing, and explicit parser resource limits.
 
-The branch now contains **fourteen ordinary-forward RED→repair sequences**. The first three established wildcard/q=0 basics, boundary-specific control codes, and control rejection before whitespace normalization. Subsequent repairs are:
+This document records the first **fourteen** ordinary-forward RED→repair sequences that established the core catalog policy. Later RFC 5646/RFC 4647 validity, resource-bound, explicit-locale no-rewrite, wildcard-provenance, and fixed-grandfathered repairs are recorded in their focused doctoring files and current #1740 authority rather than being backfilled into this historical sequence count. The first three established wildcard/q=0 basics, boundary-specific control codes, and control rejection before whitespace normalization. Subsequent repairs recorded here are:
 
 4. RED `8265e9bb08cc407c860f148f1823dd0f4ab6d13d` → fix `9a6c8bb04be237c968b58987ca6ac4efb789a482`: replace generic Python whitespace semantics with boundary-specific SP/HTAB/C0 rules.
 5. RED `962e250c54d0da324ec29b21283ab0b02cd55e8c` → fix `b20b5593498c09855e6ef6fb213d9bf6ea764e15`: case-insensitive `q`/`Q` parameter name.
