@@ -57,3 +57,15 @@ def test_explicit_locale_rejects_duplicate_variant_subtags(locale_tag):
 def test_duplicate_variant_spelling_inside_private_use_is_not_a_variant_duplicate():
     """Private-use subtags do not participate in the duplicate-variant validity rule."""
     assert normalize_supported_locale("en-1901-x-1901") == "en"
+
+
+def test_explicit_locale_rejects_more_than_one_extlang_subtag():
+    """RFC 5646 reserves second and third extlang positions as permanently invalid."""
+    with pytest.raises(UiLocalizationValidationError) as caught:
+        normalize_supported_locale("zh-cmn-yue")
+    assert caught.value.error_code == "ui_locale_input_invalid"
+
+
+def test_explicit_locale_accepts_one_extlang_with_following_structural_subtags():
+    """One extlang remains valid before script and region subtags."""
+    assert normalize_supported_locale("zh-cmn-Hans-CN") == "zh"
