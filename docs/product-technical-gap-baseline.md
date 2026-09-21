@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.42  
+**Baseline version:** 2.43  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.41 remains audit-visible as blob `2eba56966e2079e8eeca9e79c22e050b3ab90daa`; v2.40 remains blob `6092e23c545afe845b206842eb118d06999faf8e`; v2.39 remains blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`; v2.37 remains blob `7716f37c571d4d631d6d385515a4cbe76e0e19cd`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.42 remains audit-visible as blob `68940ecd64c1d10f011969d861ce18bc206f2995`; v2.41 remains blob `2eba56966e2079e8eeca9e79c22e050b3ab90daa`; v2.40 remains blob `6092e23c545afe845b206842eb118d06999faf8e`; v2.39 remains blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.42 preserves v2.41's owner-graph repair and adds one performance-evidence boundary discovered from generated #1745. #1745 exact `5cdebe154f1ea24b0f924769d0073c4dc701e7d6` memoizes the `RunHistoryPanel` event-element subtree, but no realistic browser profile, stable-array trigger proof, before/after render receipt, or buyer-path p95 evidence currently supports the claimed performance improvement. The PR is therefore Draft and remains a performance hypothesis rather than accepted product progress. `useMemo` itself is not performance evidence, and task-specific `.jules/bolt.md` doctrine or decorative implementation comments are not product authority.
+v2.43 preserves v2.42's owner graph and performance-evidence boundary and adds #1740's fourteenth localization-policy repair: valid locale negotiation input now has explicit product resource ceilings before expensive normalization/list work. Explicit locale values are capped at 128 characters, raw `Accept-Language` at 8192 characters, non-empty language ranges at 64, and ignored empty members remain capped at 32. Over-limit input fails closed and is never truncated. These are Naruon product limits, not IETF constants.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -77,34 +77,38 @@ Generated [#1745](https://github.com/ContextualWisdomLab/naruon/pull/1745) is Dr
 
 Acceptance requires a reproducible before/after profile on the same workload, evidence that unrelated state changes preserve `events` identity and currently incur material list construction/reconciliation cost, correctness/a11y parity, and the applicable buyer-path p95 measurement. If the profile instead identifies list volume, reconciliation, unstable data identity, or another bottleneck, repair that causal path rather than retaining `useMemo` by inertia. Synthetic tiny lists, cache-warm-only runs, decorative performance comments and task-specific `.jules/bolt.md` text are not acceptance evidence.
 
-## 4. UI Localization Catalog — v2.42 material contract
+## 4. UI Localization Catalog — v2.43 material contract
 
-[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`eb8fe8c43a017fed0ea029623d1380d824fd3150`**.
+[#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`30957821d00fa5e3eebc6cad5ed70820da8ac755`**.
 
-#1740 owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, stable screen/message keys, translation-text persistence validation, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
+#1740 owns pure domain policy only: KO/EN/JA/ZH/VI/ES/DE/FR release locale identity, persisted → session → weighted `Accept-Language` → product-default precedence, bounded locale/header parsing, stable screen/message keys, translation-text persistence validation, exact simple named-placeholder schemas and typed boundary failures. It owns no database/Alembic revision, HTTP API, browser cache/runtime, Storybook page, authoring UI, ontology-label authority or LLM translation path.
 
-Thirteen ordinary-forward RED→repair sequences define the executable policy. The durable invariants include:
+Fourteen ordinary-forward RED→repair sequences define the executable policy. Durable invariants include:
 
 1. explicit persisted/session locale rejects C0 controls and DEL before normalization; only ASCII SP is benign outer whitespace;
-2. `Accept-Language` rejects C0/DEL except HTAB where HTTP OWS permits it; protocol OWS is SP/HTAB rather than Python generic whitespace;
-3. `q=` and `Q=` are equivalent quality-parameter names while qvalue syntax/range remains strict;
-4. RFC 9110 list recipients ignore at most 32 empty comma members under the Naruon product bound and reject the 33rd with `ui_accept_language_invalid`;
-5. runtime `product_default` is type-validated before set membership so arbitrary Python hashability cannot leak as product semantics;
-6. `placeholder_schema` is tuple/list only, validates element type/syntax before uniqueness, and never relies on incidental iterable/hashability behavior;
-7. translated catalog text rejects U+0000, isolated surrogate code points and non-string input before placeholder parsing/persistence;
-8. wildcard/q=0 behavior preserves release-level supported-locale exclusions;
-9. RFC 4647 wildcard control flow preserves positive later concrete ranges even when they are unsupported by the current release. `*;q=0.9, pt-BR;q=0.8` reaches `(ko, product_default)` rather than falsely attributing the same locale to `accept_language`;
-10. **placeholder source syntax is canonical before parser normalization.** `{account_name}` is valid; `{account_name:}`, conversions and format specifications are invalid publication input even where Python's formatter would produce the same visible value. RED `8b19c7dfe43e3dca3c1e4b8980c0a9998a3aec43` proves the empty-format-specifier ambiguity and fix `6ed310e1065940fa14c258b48412490e7b98d751` preserves lexical `:`/`!` operator information before `Formatter.parse()`.
+2. explicit locale input is capped at **128 characters** and rejected above the limit without truncation;
+3. `Accept-Language` rejects C0/DEL except HTAB where HTTP OWS permits it; protocol OWS is SP/HTAB rather than Python generic whitespace;
+4. raw `Accept-Language` is capped at **8192 characters** before comma materialization/regex work;
+5. no more than **64 non-empty language ranges** are processed per value;
+6. `q=` and `Q=` are equivalent quality-parameter names while qvalue syntax/range remains strict;
+7. RFC 9110 list recipients ignore at most **32 empty comma members** under the Naruon product bound and reject the 33rd with `ui_accept_language_invalid`;
+8. runtime `product_default` is type-validated before set membership so arbitrary Python hashability cannot leak as product semantics;
+9. `placeholder_schema` is tuple/list only, validates element type/syntax before uniqueness, and never relies on incidental iterable/hashability behavior;
+10. translated catalog text rejects U+0000, isolated surrogate code points and non-string input before placeholder parsing/persistence;
+11. wildcard/q=0 behavior preserves release-level supported-locale exclusions;
+12. RFC 4647 wildcard control flow preserves positive later concrete ranges even when unsupported by the current release. `*;q=0.9, pt-BR;q=0.8` reaches `(ko, product_default)` rather than falsely attributing the same locale to `accept_language`;
+13. placeholder source syntax is canonical before parser normalization. `{account_name}` is valid; `{account_name:}`, conversions and format specifications are invalid publication input even where Python's formatter would produce the same visible value;
+14. **valid parser work has an explicit product budget.** RED `978fdbbc6135fa88a8d43e0971ed075ae546f9de` covers the 128/8192/64 boundaries; causal fix `0fdb5371eef63d6d7abe87ac14b69269c8519ff8` enforces them before expensive normalization/list processing, and focused TRACEABILITY `d25c7a627af720242c9503f8f2b90553c7c94405` records why these are product limits rather than IETF constants.
 
-Python 3.14 defines `:` as the delimiter for `format_spec` and documents that an empty format specification has default behavior. The product therefore does not use parsed semantic equivalence as publication identity; versioned source must satisfy the narrower catalog grammar.
+RFC 9110 §5.4 allows recipients to refuse field values larger than they are willing to process and does not set one universal field-size ceiling. RFC 4647 §4.4 permits range-length restrictions comparable to tag restrictions; RFC 5646 §4.4.1 permits documented implementation limits and requires limited-buffer protocols to support at least 35 characters. Naruon's 128/8192/64/32 bounds are therefore explicit application resource contracts layered over those standards. Over-limit values fail closed; no truncation changes negotiation semantics.
 
-No exact-head local/container PASS is claimed for the current thirteenth repair. Current-head hosted full-suite/coverage/security evidence and qualifying independent post-last-push review must be reacquired naturally. Predecessor workflow/review receipts do not transfer.
+No exact-head local/container PASS is claimed for the current fourteenth repair. Current-head hosted full-suite/coverage/security evidence and qualifying independent post-last-push review must be reacquired naturally. Predecessor workflow/review receipts do not transfer.
 
 ### Localization persistence/API/UI order
 
 Translation persistence must wait until #1503 or a verified complete successor reaches protected ancestry, then create the next ordinary Alembic descendant from the then-current single head. Published catalog versions are immutable, complete for all eight release locales, placeholder/text validated before publication and rollback-selectable without rewriting history.
 
-A screen-scoped read contract returns only the requested screen/locale with immutable resource version and ETag/cache identity. Do not ship a browser-wide mega-catalog, a per-key network waterfall or a heavy SPA i18n dependency by default. UI-copy authority remains separate from ontology/concept labels.
+A screen-scoped read contract returns only the requested screen/locale with immutable resource version and ETag/cache identity. The HTTP owner must preserve the exact parser resource contract and reject over-limit negotiation before buyer-path work; realistic k6/E2E must measure normal and hostile-boundary behavior. Do not ship a browser-wide mega-catalog, a per-key network waterfall or a heavy SPA i18n dependency by default. UI-copy authority remains separate from ontology/concept labels.
 
 KO/EN/JA/ZH/VI/ES/DE/FR acceptance requires Storybook plus real-browser E2E for normal/loading/empty/error/permission states, keyboard/focus/screen-reader/touch semantics, CJK wrapping/font fallback, Vietnamese diacritics, DE/FR/ES text expansion, mobile/intermediate widths and exact resource-version/source-head screenshots.
 
@@ -116,7 +120,7 @@ All Naruon LLM behavior must consume an immutable released contextual-orchestrat
 
 The current causal order remains:
 
-`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1745 measured AI Hub performance acceptance or causal replacement → #1503 → #1727 plus zero-delta provenance → #1740 exact-head policy acceptance → localization persistence/API/cache → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
+`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1745 measured AI Hub performance acceptance or causal replacement → #1503 → #1727 plus zero-delta provenance → #1740 `30957821...` exact-head policy acceptance → localization persistence/API/cache → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
 
 Wait state in one lane does not stop repair/development in independent lanes. Generated descendants remain open as provenance unless a verified successor fully inherits all valid delta/test/fixture/contract/evidence or the user explicitly authorizes closure.
 
