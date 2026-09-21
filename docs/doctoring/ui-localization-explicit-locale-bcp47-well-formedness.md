@@ -8,6 +8,8 @@ Status: Proposed with PR #1740. This record covers the pure explicit-locale poli
 
 Accepting those values as persisted/session locale identities made the explicit preference boundary weaker than its own documentation and blurred two different standards surfaces: RFC 5646 language tags for explicit stored/session identities versus RFC 4647 basic language ranges used inside `Accept-Language`.
 
+A second standards sweep found the first structural repair incomplete. RFC 5646 defines `Language-Tag = langtag / privateuse / grandfathered`; some grandfathered values are intentionally outside the `langtag` production. For the current release-primary set, `en-GB-oed`, `zh-min`, and `zh-min-nan` therefore require explicit structural acceptance before release-level normalization. `zh-guoyu`, `zh-hakka`, and `zh-xiang` are grandfathered registry entries too, but their literal forms already satisfy the structural `langtag` pattern and do not need a separate alternation.
+
 ## RED
 
 Commit `478bd95fdbd2b6601fae1ab70c3513abf0f985fe` adds focused cases that fail on the predecessor policy:
@@ -17,11 +19,19 @@ Commit `478bd95fdbd2b6601fae1ab70c3513abf0f985fe` adds focused cases that fail o
 - `en-x-private` remains accepted and normalizes to `en`;
 - `en-u-ca-gregory` remains accepted and normalizes to `en`.
 
-The regression is intentionally scoped to explicit locale values. It does not tighten RFC 4647 language-range parsing in `Accept-Language`, where the grammar is different.
+Commit `8d9a0f67a47b26eb1e36a7bc65681470033c6f74` adds the follow-up grandfathered-tag regression:
+
+- `en-GB-oed` normalizes to `en`;
+- `zh-min` normalizes to `zh`;
+- `zh-min-nan` normalizes to `zh`.
+
+The regressions are intentionally scoped to explicit locale values. They do not tighten RFC 4647 language-range parsing in `Accept-Language`, where the grammar is different.
 
 ## Decision
 
-Causal fix `3a87209306ad1b3dee67cb9e0e9e513dfb7a4f3a` replaces the permissive explicit-locale pattern with an RFC 5646 structural `langtag` pattern covering language/extlang, optional script and region, variants, extensions, and optional private-use suffix. The one supported-primary irregular grandfathered tag that does not fit `langtag`, `en-GB-oed`, remains syntactically accepted so the policy does not reject an RFC 5646 language tag merely because it is grandfathered.
+Causal fix `3a87209306ad1b3dee67cb9e0e9e513dfb7a4f3a` replaces the permissive explicit-locale pattern with an RFC 5646 structural `langtag` pattern covering language/extlang, optional script and region, variants, extensions, and optional private-use suffix.
+
+Follow-up causal fix `aceef1b282d948411fe9b04b8cd08750fcdacfe8` completes the supported-primary grandfathered-tag path by explicitly accepting `zh-min` and `zh-min-nan` alongside the already explicit `en-GB-oed`. This is a finite product-owned syntax compatibility set, not a live registry lookup. Grandfathered forms that already satisfy the structural `langtag` pattern need no separate exception.
 
 The product continues to normalize a well-formed supported tag to its release-level primary language (`ko/en/ja/zh/vi/es/de/fr`). This is a syntax/well-formedness gate, not an IANA registry snapshot validator. RFC 5646 distinguishes well-formed tags from registry-valid tags; requiring a moving registry snapshot would create a separate versioned dependency that this pure policy does not currently own.
 
@@ -39,14 +49,20 @@ Rejected. RFC 4647 basic language ranges deliberately have a broader structural 
 
 Not selected for this slice. RFC 5646 defines well-formedness separately from registry validity. A registry-validity guarantee would require a pinned registry version, update/release process, reproducibility evidence, and failure policy; none belongs implicitly inside this bounded pure-domain repair.
 
+### Treat grandfathered values as malformed because they do not fit `langtag`
+
+Rejected. RFC 5646 defines grandfathered forms as part of `Language-Tag`. Rejecting `zh-min` or `zh-min-nan` merely because they sit outside the `langtag` branch would make the explicit-locale boundary contradict the standard it claims to implement.
+
 ## Downstream contract
 
 Persistence and future authoring/API boundaries must keep explicit locale values on this RFC 5646 well-formedness path and must not substitute the broader `Accept-Language` range grammar. They may add a pinned registry-validity requirement later only as an explicit versioned contract.
 
 ## Traceability
 
-- RED: `478bd95fdbd2b6601fae1ab70c3513abf0f985fe`.
-- Causal source fix: `3a87209306ad1b3dee67cb9e0e9e513dfb7a4f3a`.
+- Seventeenth RED: `478bd95fdbd2b6601fae1ab70c3513abf0f985fe`.
+- Seventeenth causal source fix: `3a87209306ad1b3dee67cb9e0e9e513dfb7a4f3a`.
+- Eighteenth RED: `8d9a0f67a47b26eb1e36a7bc65681470033c6f74`.
+- Eighteenth causal source fix: `aceef1b282d948411fe9b04b8cd08750fcdacfe8`.
 - Canonical product Gap: #1731.
 - Product/technical Gap ledger owner: #1602.
 
