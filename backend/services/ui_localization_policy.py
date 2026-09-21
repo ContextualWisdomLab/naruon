@@ -281,9 +281,36 @@ def _validate_translation_text(message_text: str) -> None:
         )
 
 
+def _reject_placeholder_operators(message_text: str) -> None:
+    """Reject formatter operators that Formatter.parse normalizes away when empty."""
+    index = 0
+    while index < len(message_text):
+        character = message_text[index]
+        if character == "{":
+            if index + 1 < len(message_text) and message_text[index + 1] == "{":
+                index += 2
+                continue
+            closing_index = message_text.find("}", index + 1)
+            if closing_index == -1:
+                return
+            field_source = message_text[index + 1 : closing_index]
+            if ":" in field_source or "!" in field_source:
+                raise UiLocalizationValidationError(
+                    "ui_placeholder_schema_invalid",
+                    "placeholders must be simple named fields without conversion or format specifiers",
+                )
+            index = closing_index + 1
+            continue
+        if character == "}" and index + 1 < len(message_text) and message_text[index + 1] == "}":
+            index += 2
+            continue
+        index += 1
+
+
 def extract_placeholder_names(message_text: str) -> tuple[str, ...]:
     """Extract simple named interpolation fields without evaluating the message."""
     _validate_translation_text(message_text)
+    _reject_placeholder_operators(message_text)
     names: list[str] = []
     seen: set[str] = set()
     try:
