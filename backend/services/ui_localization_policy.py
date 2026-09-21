@@ -52,18 +52,42 @@ _MAX_MESSAGE_KEY_CHARS = 128
 _MAX_TRANSLATION_MESSAGE_CHARS = 16_384
 _MAX_PLACEHOLDER_NAME_CHARS = 64
 _MAX_PLACEHOLDER_SCHEMA_ITEMS = 32
-_LOCALE_TAG_PATTERN = re.compile(
-    r"^(?:"
-    r"(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})"
+_LANGTAG_PATTERN = re.compile(
+    r"^(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})"
     r"(?:-[A-Za-z]{4})?"
     r"(?:-(?:[A-Za-z]{2}|[0-9]{3}))?"
     r"(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*"
     r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
-    r"(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?"
-    r"|en-GB-oed"
-    r"|zh-min(?:-nan)?"
-    r")$",
+    r"(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?$",
     flags=re.ASCII | re.IGNORECASE,
+)
+_PRIVATEUSE_TAG_PATTERN = re.compile(
+    r"^[xX](?:-[A-Za-z0-9]{1,8})+$",
+    flags=re.ASCII,
+)
+_IRREGULAR_GRANDFATHERED_TAGS = frozenset(
+    tag.lower()
+    for tag in (
+        "en-GB-oed",
+        "i-ami",
+        "i-bnn",
+        "i-default",
+        "i-enochian",
+        "i-hak",
+        "i-klingon",
+        "i-lux",
+        "i-mingo",
+        "i-navajo",
+        "i-pwn",
+        "i-tao",
+        "i-tay",
+        "i-tsu",
+        "sgn-BE-FR",
+        "sgn-BE-NL",
+        "sgn-CH-DE",
+        "zh-min",
+        "zh-min-nan",
+    )
 )
 _SCREEN_KEY_PATTERN = re.compile(
     r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$",
@@ -129,7 +153,12 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
         message="locale input contains forbidden control characters",
     )
     candidate = locale_tag.strip(" ")
-    if not candidate or not _LOCALE_TAG_PATTERN.fullmatch(candidate):
+    candidate_lower = candidate.lower()
+    if not candidate or not (
+        _LANGTAG_PATTERN.fullmatch(candidate)
+        or _PRIVATEUSE_TAG_PATTERN.fullmatch(candidate)
+        or candidate_lower in _IRREGULAR_GRANDFATHERED_TAGS
+    ):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
             "locale input is not a well-formed bounded RFC 5646 language tag",
