@@ -1,6 +1,6 @@
 import asyncio
 import logging
-import random
+import secrets
 
 from sqlalchemy import bindparam, func, or_, select
 
@@ -9,7 +9,7 @@ from db.session import AsyncSessionLocal
 from services.reply_sla_escalation_service import create_reply_sla_escalation_tasks
 
 logger = logging.getLogger(__name__)
-_sysrand = random.SystemRandom()
+_sysrand = secrets.SystemRandom()
 DEFAULT_REPLY_SLA_INTERVAL_SECONDS = 15 * 60
 DEFAULT_REPLY_SLA_OVERDUE_HOURS = 48
 DEFAULT_REPLY_SLA_LIMIT = 10

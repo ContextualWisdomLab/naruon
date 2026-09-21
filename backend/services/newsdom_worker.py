@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
+import secrets
 from collections.abc import Awaitable, Callable
 
 from sqlalchemy import bindparam, func, select
@@ -50,7 +50,7 @@ from services.newsdom_pdf_recognition import (
 )
 
 logger = logging.getLogger(__name__)
-_sysrand = random.SystemRandom()
+_sysrand = secrets.SystemRandom()
 
 # How the worker resolves a runtime config for an organization. Injectable so
 # the per-item processors are unit-testable without a database.
