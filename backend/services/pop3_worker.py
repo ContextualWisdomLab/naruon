@@ -454,6 +454,7 @@ class Pop3SyncWorker:
                 )
             except poplib.error_proto as exc:
                 if not self._is_negative_pop3_response(exc):
+                    retryable_uidls.add(identity.provider_uidl)
                     logger.warning(
                         "POP3 RETR stopped after malformed protocol response for user %s: %s",
                         config.user_id,
@@ -468,6 +469,7 @@ class Pop3SyncWorker:
                 retryable_uidls.add(identity.provider_uidl)
                 continue
             except OSError as exc:
+                retryable_uidls.add(identity.provider_uidl)
                 logger.warning(
                     "POP3 RETR stopped after transport failure for user %s: %s",
                     config.user_id,
