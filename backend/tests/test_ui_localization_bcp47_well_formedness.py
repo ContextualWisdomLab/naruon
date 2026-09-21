@@ -44,3 +44,16 @@ def test_well_formed_language_tags_without_supported_primary_are_unsupported(loc
     with pytest.raises(UiLocalizationValidationError) as caught:
         normalize_supported_locale(locale_tag)
     assert caught.value.error_code == "ui_locale_unsupported"
+
+
+@pytest.mark.parametrize("locale_tag", ("en-1901-1901", "en-oxendict-OXENDICT"))
+def test_explicit_locale_rejects_duplicate_variant_subtags(locale_tag):
+    """RFC 5646 validity forbids duplicate variant subtags case-insensitively."""
+    with pytest.raises(UiLocalizationValidationError) as caught:
+        normalize_supported_locale(locale_tag)
+    assert caught.value.error_code == "ui_locale_input_invalid"
+
+
+def test_duplicate_variant_spelling_inside_private_use_is_not_a_variant_duplicate():
+    """Private-use subtags do not participate in the duplicate-variant validity rule."""
+    assert normalize_supported_locale("en-1901-x-1901") == "en"
