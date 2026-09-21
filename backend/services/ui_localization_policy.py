@@ -53,8 +53,16 @@ _MAX_TRANSLATION_MESSAGE_CHARS = 16_384
 _MAX_PLACEHOLDER_NAME_CHARS = 64
 _MAX_PLACEHOLDER_SCHEMA_ITEMS = 32
 _LOCALE_TAG_PATTERN = re.compile(
-    r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
-    flags=re.ASCII,
+    r"^(?:"
+    r"(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})"
+    r"(?:-[A-Za-z]{4})?"
+    r"(?:-(?:[A-Za-z]{2}|[0-9]{3}))?"
+    r"(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*"
+    r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+    r"(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?"
+    r"|en-GB-oed"
+    r")$",
+    flags=re.ASCII | re.IGNORECASE,
 )
 _SCREEN_KEY_PATTERN = re.compile(
     r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$",
@@ -123,7 +131,7 @@ def normalize_supported_locale(locale_tag: str) -> SupportedLocaleCode:
     if not candidate or not _LOCALE_TAG_PATTERN.fullmatch(candidate):
         raise UiLocalizationValidationError(
             "ui_locale_input_invalid",
-            "locale input is not a valid bounded language tag",
+            "locale input is not a well-formed bounded RFC 5646 language tag",
         )
     primary_language = candidate.split("-", 1)[0].lower()
     if primary_language not in _SUPPORTED_LOCALE_SET:
