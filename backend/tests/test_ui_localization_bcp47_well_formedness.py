@@ -16,6 +16,14 @@ def test_explicit_locale_rejects_terminal_extension_or_private_use_singletons(lo
     assert caught.value.error_code == "ui_locale_input_invalid"
 
 
+@pytest.mark.parametrize("locale_tag", (" en-US", "en-US ", " en-US "))
+def test_explicit_locale_rejects_surrounding_spaces(locale_tag):
+    """RFC 5646 language-tag syntax does not permit SP around an explicit locale value."""
+    with pytest.raises(UiLocalizationValidationError) as caught:
+        normalize_supported_locale(locale_tag)
+    assert caught.value.error_code == "ui_locale_input_invalid"
+
+
 @pytest.mark.parametrize("locale_tag", ("en-x-private", "en-u-ca-gregory"))
 def test_explicit_locale_accepts_well_formed_private_use_and_extension_suffixes(locale_tag):
     """Valid RFC 5646 suffixes remain compatible with release-level locale normalization."""
