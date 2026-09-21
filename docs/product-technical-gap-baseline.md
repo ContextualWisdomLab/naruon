@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.40  
+**Baseline version:** 2.41  
 **Observed on:** 2026-09-21 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.39 remains audit-visible as blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`; v2.37 remains blob `7716f37c571d4d631d6d385515a4cbe76e0e19cd`; v2.36 remains blob `46a79021d3811b8e0018021a437326be19bba6df`; v2.35 remains blob `bd77e2d74834da8dc916d5979b828fe4cc200dea`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.40 remains audit-visible as blob `6092e23c545afe845b206842eb118d06999faf8e`; v2.39 remains blob `9db17305b3da88f7571df20a5ce7bbc5f7756acd`; v2.38 remains blob `dbcbb4a5d6a6b369b11bf23f845d2df401d4532e`; v2.37 remains blob `7716f37c571d4d631d6d385515a4cbe76e0e19cd`; v2.36 remains blob `46a79021d3811b8e0018021a437326be19bba6df`. Earlier v2.x snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.40 advances one durable localization publication contract. Draft #1740 is advanced to exact `eb8fe8c43a017fed0ea029623d1380d824fd3150`; RED `8b19c7dfe43e3dca3c1e4b8980c0a9998a3aec43` proves the previous `Formatter.parse()`-based truthiness check silently treated `{account_name:}` like canonical `{account_name}` because Python represents an empty format specification as the empty string. Causal fix `6ed310e1065940fa14c258b48412490e7b98d751` preserves source-level `:`/`!` operator information before the standard parser normalizes it, and focused TRACEABILITY `eb8fe8c4...` records Python 3.14's replacement-field grammar. Versioned catalog source therefore accepts only the declared simple named-field syntax rather than semantically equivalent alternate formatter spellings.
+v2.41 preserves the v2.40 canonical-placeholder publication contract and records one owner-graph repair discovered after that baseline was written. Generated #1744 independently repeated #1676's Settings native-disabled semantics directly from protected `develop`; it has been ordinary/non-force converged at `e50d25580a3fa840b14855661e215a3368d8a73d` onto canonical #1676 exact `8a3ac51662fbe8e49f26a317ac0afe85f853c9ac`, retargeted to that owner, converted to Draft, and reduced to zero effective product delta. The generated `.jules/palette.md` doctrine and weaker source-only implementation are provenance, not product authority.
 
 ## 1. Evidence hierarchy and release posture
 
@@ -65,7 +65,13 @@ Generated #1743 is ordinary/non-force converged to #1727 and remains Draft zero-
 
 Issue #1247 remains the checksum contract. Normal security-labelled checksum surface is SHA-256, SHA-3-256 and BLAKE2b-256 only; MD5/SHA-1 remain outside the normal surface. #1361 remains the canonical `content_checksum_generator` owner; generated #1739 remains provenance.
 
-## 4. UI Localization Catalog — v2.40 material contract
+### 3.5 Settings native-disabled accessibility
+
+[#1676](https://github.com/ContextualWisdomLab/naruon/pull/1676) remains the sole Settings native-disabled semantics owner at exact `8a3ac51662fbe8e49f26a317ac0afe85f853c9ac`, stacked on #1623. Its bounded product tree owns the two source removals, focused `SettingsLayout.native-disabled.test.tsx` regression and standards doctoring; browser/keyboard/responsive acceptance remains a separate delivery gate.
+
+Generated #1716, #1737 and fresh #1744 are provenance only. #1744 started as a direct-`develop` two-line duplicate plus task-specific `.jules/palette.md`; ordinary convergence `e50d25580a3fa840b14855661e215a3368d8a73d` preserves the generated history while adopting the exact #1676 tree, retargeting the PR to #1676 and leaving zero changed files. It must not independently merge or broaden the narrow native-control decision into a repository-wide ban on `aria-disabled`.
+
+## 4. UI Localization Catalog — v2.41 material contract
 
 [#1731](https://github.com/ContextualWisdomLab/naruon/issues/1731) remains the single buyer-visible **UI Localization Catalog** Gap. Draft [#1740](https://github.com/ContextualWisdomLab/naruon/pull/1740) is the first bounded executable owner at exact **`eb8fe8c43a017fed0ea029623d1380d824fd3150`**.
 
@@ -104,7 +110,7 @@ All Naruon LLM behavior must consume an immutable released contextual-orchestrat
 
 The current causal order remains:
 
-`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1503 → #1727 plus zero-delta provenance → #1740 exact-head policy acceptance → localization persistence/API/cache → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
+`.github#712` stable runner acquisition → #1911/#2040 legitimate terminal acceptance → #2291 complete 24-specialized-fixture trusted-runtime repair → #2109/#2272 → #2271/#2275/#2276 → #1623 current-vulnerability revalidation → #1694 fresh-bootstrap Alembic repair → #1691 repository-local stacked admission → #1593 → #1628/#1674/#1675 → checksum/backend dependency owners → #1676 Settings native-disabled owner + zero-delta generated provenance → #1503 → #1727 plus zero-delta provenance → #1740 exact-head policy acceptance → localization persistence/API/cache → immutable contextual-orchestrator release + #1549 → #1729 and eight-locale rendered UI → Tasks/Settings and authoritative #1738 intent through their canonical owners → Storybook owners → exact protected integrated candidate → immutable Naruon release with SBOM/provenance/reproducibility/rollback.`
 
 Wait state in one lane does not stop repair/development in independent lanes. Generated descendants remain open as provenance unless a verified successor fully inherits all valid delta/test/fixture/contract/evidence or the user explicitly authorizes closure.
 
