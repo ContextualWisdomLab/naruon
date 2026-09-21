@@ -25,8 +25,8 @@ def assert_error(code, callable_):
         "\u00a0en-US",
     ),
 )
-def test_explicit_locale_rejects_non_space_boundary_whitespace(locale_tag):
-    """Only ASCII SP is benign outer whitespace for stored/session locale values."""
+def test_explicit_locale_rejects_control_and_unicode_boundary_whitespace(locale_tag):
+    """HTAB, VT, FF, and NBSP cannot surround an explicit locale identity."""
     assert_error("ui_locale_input_invalid", lambda: normalize_supported_locale(locale_tag))
 
 
