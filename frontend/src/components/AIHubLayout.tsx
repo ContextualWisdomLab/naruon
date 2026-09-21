@@ -365,9 +365,30 @@ function EvaluationPanel({ metrics, onOpenRuns }: { metrics: EvaluationMetric[];
 }
 
 function RunHistoryPanel({ events }: { events: RunEvent[] }) {
+  // ⚡ Bolt: Wrap long lists of execution events in useMemo to prevent O(N) re-renders
+  // 🎯 Why: Unrelated state changes in the layout should not trigger full recalculation of this list
+  const eventsList = useMemo(() => (
+    <div className="divide-y divide-border">
+      {events.map((event) => (
+        <article key={event.event_key} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_9rem_8rem] md:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-black">{event.event_title}</h2>
+              <StatusBadge stateCode={event.state_code} />
+            </div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.detail_text ?? '상세 증거 없음'}</p>
+          </div>
+          <p className="text-sm font-semibold text-primary">{event.evidence_source}</p>
+          <p className="text-sm font-semibold text-muted-foreground">{formatDateTime(event.observed_at)}</p>
+        </article>
+      ))}
+    </div>
+  ), [events]);
+
   if (events.length === 0) {
     return <EmptyState title="기록된 실행 증거가 없습니다." detail="에이전트 실행 row 또는 운영 감사 근거가 생기면 실행 근거로 정렬됩니다." />;
   }
+
   return (
     <Card className="py-0">
       <div className="grid grid-cols-[minmax(0,1fr)_9rem_8rem] gap-4 border-b border-border px-4 py-3 text-xs font-black text-muted-foreground max-md:hidden">
@@ -375,21 +396,7 @@ function RunHistoryPanel({ events }: { events: RunEvent[] }) {
         <span>증거</span>
         <span>시간</span>
       </div>
-      <div className="divide-y divide-border">
-        {events.map((event) => (
-          <article key={event.event_key} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_9rem_8rem] md:items-center">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-black">{event.event_title}</h2>
-                <StatusBadge stateCode={event.state_code} />
-              </div>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.detail_text ?? '상세 증거 없음'}</p>
-            </div>
-            <p className="text-sm font-semibold text-primary">{event.evidence_source}</p>
-            <p className="text-sm font-semibold text-muted-foreground">{formatDateTime(event.observed_at)}</p>
-          </article>
-        ))}
-      </div>
+      {eventsList}
     </Card>
   );
 }
