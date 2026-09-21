@@ -278,8 +278,7 @@ export default function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    // ⚡ Bolt: Avoid O(N) allocations for map/filter by using a bounded loop
-    const labels = [];
+    const labels: string[] = [];
     for (const node of nodes) {
       const label = String(node.label ?? node.id);
       if (label) {
@@ -292,33 +291,29 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    // ⚡ Bolt: Avoid O(N) Array.from allocation by iterating iterator directly
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
+      if (options.length >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
         label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
       });
       index++;
-      if (index >= 5) break;
     }
     return options;
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    // ⚡ Bolt: Avoid O(N) Array.from allocation by iterating iterator directly
     const options = [];
-    let count = 0;
     for (const node of nodeInstanceMap.values()) {
+      if (options.length >= 8) break;
       options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
-      count++;
-      if (count >= 8) break;
     }
     return options;
   }, [nodeInstanceMap]);
