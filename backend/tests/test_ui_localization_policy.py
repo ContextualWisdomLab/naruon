@@ -195,6 +195,10 @@ def test_placeholder_schema_rejects_missing_extra_and_formatter_features():
         "ui_placeholder_schema_invalid",
         lambda: validate_translation_placeholders("{account_name!r}", ("account_name",)),
     )
+    assert_error(
+        "ui_placeholder_schema_invalid",
+        lambda: validate_translation_placeholders("{account_name:}", ("account_name",)),
+    )
 
 
 def test_placeholder_input_and_schema_must_be_bounded():
