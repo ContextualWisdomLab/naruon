@@ -12,6 +12,8 @@ A second standards sweep found the first structural repair incomplete. RFC 5646 
 
 A third sweep found a typed-boundary defect left by treating only supported-primary tags as syntactically relevant. RFC 5646 permits a language tag to consist entirely of private-use subtags, and irregular grandfathered tags remain well-formed language tags. Values such as `x-private`, `i-klingon`, and `sgn-BE-FR` are therefore syntactically well-formed but do not map to one of Naruon's eight release primaries. They belong to `ui_locale_unsupported`, not `ui_locale_input_invalid`.
 
+A later boundary sweep found a separate whitespace-normalization defect. The explicit persisted/session path called `locale_tag.strip(" ")` before RFC 5646 validation, so `" en-US"`, `"en-US "`, and `" en-US "` were silently accepted as `en-US`. RFC 5646 states that whitespace is not permitted in a language tag. That differs from the HTTP `Accept-Language` surface, where HTTP list syntax deliberately permits optional whitespace around field-value list elements. Explicit stored/session locale identity therefore must not borrow HTTP OWS normalization.
+
 ## RED
 
 Commit `478bd95fdbd2b6601fae1ab70c3513abf0f985fe` adds focused cases that fail on the predecessor policy:
@@ -33,7 +35,13 @@ Commit `d23d4095d1c2ac8542f1ac247b6fee87fcb9485c` adds the syntax-versus-support
 - `i-klingon` is an irregular grandfathered language tag and must fail with `ui_locale_unsupported`;
 - `sgn-BE-FR` is an irregular grandfathered language tag and must fail with `ui_locale_unsupported`.
 
-The regressions are intentionally scoped to explicit locale values. They do not tighten RFC 4647 language-range parsing in `Accept-Language`, where the grammar is different.
+Commit `2ff28c208b8fd5a83bee3e179f4d66b31831be43` adds the explicit-boundary whitespace regression:
+
+- leading SP before `en-US` must fail with `ui_locale_input_invalid`;
+- trailing SP after `en-US` must fail with `ui_locale_input_invalid`;
+- leading and trailing SP together must fail with `ui_locale_input_invalid`.
+
+The regressions are intentionally scoped to explicit locale values. They do not tighten RFC 4647 language-range parsing in `Accept-Language`, where the grammar and HTTP OWS boundary are different.
 
 ## Decision
 
@@ -45,6 +53,8 @@ Causal fix `dc077bec9ae47e1421fa678ae43451f65784c410` separates three syntax bra
 
 The irregular grandfathered set is fixed by RFC 5646 and therefore does not create a moving registry dependency. Regular grandfathered forms that already satisfy `langtag` continue through the structural branch. Registry validity beyond this fixed syntax exception remains outside this pure policy.
 
+Causal fix `c94c9345008cf6e339a9f90f59afccc18adea39f` removes SP trimming from the explicit locale path. The raw persisted/session value now reaches the RFC 5646 structural checks unchanged, so surrounding SP is rejected as malformed. The `Accept-Language` parser keeps its SP/HTAB handling because that is an HTTP field-value concern rather than a language-tag normalization rule.
+
 ## Rejected alternatives
 
 ### Keep the broad subtag regex because only the primary language is used
@@ -54,6 +64,10 @@ Rejected. Persisted/session preference is itself product data. A malformed suffi
 ### Reuse the `Accept-Language` language-range regex
 
 Rejected. RFC 4647 basic language ranges deliberately have a broader structural grammar than RFC 5646 language tags. Sharing the same regex would preserve the original boundary confusion.
+
+### Trim explicit locale strings before validation
+
+Rejected. Trimming converts malformed persisted/session identity data into a different valid language tag and hides the rejecting boundary. HTTP OWS handling belongs only to the `Accept-Language` parser; RFC 5646 language-tag syntax itself does not permit whitespace.
 
 ### Validate every subtag against the live IANA Language Subtag Registry
 
@@ -65,7 +79,7 @@ Rejected. Support is a product-release question after syntax classification. Col
 
 ## Downstream contract
 
-Persistence and future authoring/API boundaries must keep explicit locale values on this RFC 5646 well-formedness path and must not substitute the broader `Accept-Language` range grammar. A well-formed tag that lacks a supported release primary fails as unsupported; malformed syntax fails as input-invalid. They may add a pinned registry-validity requirement later only as an explicit versioned contract.
+Persistence and future authoring/API boundaries must keep explicit locale values on this RFC 5646 well-formedness path and must not substitute the broader `Accept-Language` range grammar. They also must not trim or otherwise rewrite explicit locale identity before validation. A well-formed tag that lacks a supported release primary fails as unsupported; malformed syntax fails as input-invalid. They may add a pinned registry-validity requirement later only as an explicit versioned contract.
 
 ## Traceability
 
@@ -75,6 +89,8 @@ Persistence and future authoring/API boundaries must keep explicit locale values
 - Eighteenth causal source fix: `aceef1b282d948411fe9b04b8cd08750fcdacfe8`.
 - Nineteenth RED: `d23d4095d1c2ac8542f1ac247b6fee87fcb9485c`.
 - Nineteenth causal source fix: `dc077bec9ae47e1421fa678ae43451f65784c410`.
+- Twenty-fourth RED: `2ff28c208b8fd5a83bee3e179f4d66b31831be43`.
+- Twenty-fourth causal source fix: `c94c9345008cf6e339a9f90f59afccc18adea39f`.
 - Canonical product Gap: #1731.
 - Product/technical Gap ledger owner: #1602.
 
