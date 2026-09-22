@@ -7,6 +7,8 @@ import re
 import unicodedata
 import urllib.parse
 import uuid
+import secrets
+import string
 from collections import Counter
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
@@ -769,6 +771,59 @@ registry.register(
 )
 
 
+
+
+async def password_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    length = params["length"]
+    if length < 4 or length > 128:
+        raise ValueError("Length must be between 4 and 128")
+
+    include_numbers = params["include_numbers"]
+    include_symbols = params["include_symbols"]
+
+    chars = string.ascii_letters
+    if include_numbers:
+        chars += string.digits
+    if include_symbols:
+        chars += "!@#$%^&*()-_=+"
+
+    password = "".join(secrets.choice(chars) for _ in range(length))
+    return {"password": password}
+
+registry.register(
+    ToolInfo(
+        code="password_generator",
+        name="비밀번호 생성기 (Password Generator)",
+        description="지정된 길이와 조건에 맞는 안전한 무작위 비밀번호를 생성합니다. (길이는 4 이상 128 이하)",
+        category="보안",
+        parameters={
+            "length": "integer",
+            "include_numbers": "boolean",
+            "include_symbols": "boolean"
+        },
+    ),
+    password_generator_handler,
+)
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    json_string = params["json_string"]
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="주어진 JSON 문자열을 들여쓰기하여 포매팅합니다. 문자열이 유효한 JSON 형식이 아닌 경우 예외를 발생시킵니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:

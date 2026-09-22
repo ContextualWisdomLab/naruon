@@ -80,7 +80,7 @@ def test_get_tools_returns_valid_data():
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) >= 8
+    assert len(data) >= 10
 
     first_tool = data[0]
     assert "code" in first_tool
@@ -1211,3 +1211,67 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_password_generator_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/password_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "length": 16,
+                    "include_numbers": True,
+                    "include_symbols": True,
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "password" in data["result"]
+    assert len(data["result"]["password"]) == 16
+
+def test_password_generator_invalid_length():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/password_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "length": 3,
+                    "include_numbers": True,
+                    "include_symbols": True,
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Length must be between 4 and 128" in data["message"]
+
+def test_json_formatter_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"a": 1, "b": [2, 3]}'}}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "formatted_json" in data["result"]
+
+def test_json_formatter_invalid():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"a": 1, "b": [2, 3]'}}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Invalid JSON string" in data["message"]
