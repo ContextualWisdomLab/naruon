@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 import { apiClient } from "@/lib/api-client";
 import {
@@ -214,18 +215,19 @@ function SenderDagPanel({
             <p className="text-xs">
               원본 메일의 sender/thread 근거로 관계와 다음 액션을 캡처합니다.
             </p>
-            <button
+            <Button
               type="button"
               onClick={onCapture}
               disabled={captureStatus === "loading"}
               aria-busy={captureStatus === "loading"}
-              className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-wait disabled:opacity-60 sm:w-auto inline-flex items-center justify-center"
+              className="w-full sm:w-auto"
+              size="sm"
             >
               {captureStatus === "loading" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
               )}
               {captureStatus === "loading" ? "캡처 중" : "발신자 관계 캡처"}
-            </button>
+            </Button>
           </div>
         ) : null}
         {captureStatus === "error" ? (
@@ -661,28 +663,30 @@ export function SearchLayout() {
               className="h-12 w-full rounded-full border-2 border-primary/20 bg-background pl-12 pr-12 text-base shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 [&::-webkit-search-cancel-button]:hidden"
             />
             {query && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={() => {
                   setQuery("");
                   searchInputRef.current?.focus();
                 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full hover:bg-transparent"
                 aria-label="맥락 검색어 지우기"
               >
-                <X className="size-4" aria-hidden="true" />
-              </button>
+                <X className="size-4 text-muted-foreground hover:text-foreground" aria-hidden="true" />
+              </Button>
             )}
           </div>
-          <button
+          <Button
             type="submit"
             disabled={loading}
             aria-busy={loading}
-            className="h-12 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait disabled:opacity-60 inline-flex items-center justify-center"
+            className="h-12 shrink-0 px-4"
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
             {loading ? "맥락 검색 중" : "맥락 검색"}
-          </button>
+          </Button>
         </form>
       </header>
 
@@ -696,19 +700,17 @@ export function SearchLayout() {
           </div>
           <div className="flex gap-2 overflow-x-auto border-b border-border p-4">
             {resultFilters.map((filter) => (
-              <button
+              <Button
                 key={filter.key}
                 type="button"
+                variant={activeFilter === filter.key ? "default" : "secondary"}
+                size="sm"
                 aria-pressed={activeFilter === filter.key}
                 onClick={() => setActiveFilter(filter.key)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
-                  activeFilter === filter.key
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                }`}
+                className="rounded-full px-3 py-1 text-xs"
               >
                 {filter.label}
-              </button>
+              </Button>
             ))}
           </div>
           {resultList}
@@ -736,14 +738,16 @@ export function SearchLayout() {
                 {answerState.citations.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {answerState.citations.map((citation) => (
-                      <button
+                      <Button
                         key={citation.email_id}
                         type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() => setActiveResultId(citation.email_id)}
-                        className="rounded-full border border-primary/30 bg-card px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                        className="rounded-full border-primary/30 text-primary hover:bg-primary/10 px-3 py-1 text-xs"
                       >
                         근거: {citation.subject ?? `메일 #${citation.email_id}`}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 ) : null}
@@ -816,12 +820,13 @@ export function SearchLayout() {
                       <CalendarDays className="size-4" aria-hidden="true" />
                       일정 후보 보기
                     </Link>
-                    <button
+                    <Button
                       type="button"
                       onClick={captureSenderRelationship}
                       disabled={!canCaptureRelationship || captureStatus === "loading"}
                       aria-busy={captureStatus === "loading"}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      className="h-9"
+                      size="sm"
                     >
                       {captureStatus === "loading" ? (
                         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -829,7 +834,7 @@ export function SearchLayout() {
                         <Network className="size-4" aria-hidden="true" />
                       )}
                       {captureStatus === "loading" ? "관계 캡처 중" : "관계 캡처"}
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="rounded-2xl border border-border bg-background/80 p-2">
@@ -839,7 +844,7 @@ export function SearchLayout() {
                       className="grid gap-1 rounded-xl bg-secondary/50 p-1 sm:grid-cols-3"
                     >
                       {detailTabs.map((tab) => (
-                        <button
+                        <Button
                           key={tab.key}
                           type="button"
                           role="tab"
@@ -848,14 +853,12 @@ export function SearchLayout() {
                           aria-selected={activeDetailTab === tab.key}
                           tabIndex={activeDetailTab === tab.key ? 0 : -1}
                           onClick={() => setActiveDetailTab(tab.key)}
-                          className={`rounded-lg px-3 py-2 text-xs font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                            activeDetailTab === tab.key
-                              ? "bg-card text-primary shadow-sm"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
+                          className={activeDetailTab === tab.key ? "bg-card text-primary shadow-sm hover:bg-card hover:text-primary" : "text-muted-foreground hover:text-foreground hover:bg-transparent"}
+                          variant={activeDetailTab === tab.key ? "default" : "ghost"}
+                          size="sm"
                         >
                           {tab.label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
 
