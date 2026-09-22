@@ -805,6 +805,11 @@ registry.register(
 )
 
 
+def _reject_nonstandard_json_constant(constant: str) -> None:
+    """Reject numeric constants that are outside the JSON grammar."""
+    raise ValueError(f"non-standard numeric constant: {constant}")
+
+
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
     """Pretty-print bounded, syntactically valid JSON text."""
     raw_json = params.get("raw_json", "")
@@ -814,11 +819,20 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
         )
 
     try:
-        parsed = json.loads(raw_json)
-    except json.JSONDecodeError as exc:
+        parsed = json.loads(
+            raw_json, parse_constant=_reject_nonstandard_json_constant
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
         raise ValueError(f"Invalid JSON string: {exc}") from exc
 
-    return {"formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False)}
+    try:
+        formatted_json = json.dumps(
+            parsed, indent=2, ensure_ascii=False, allow_nan=False
+        )
+    except ValueError as exc:
+        raise ValueError(f"Invalid JSON string: {exc}") from exc
+
+    return {"formatted_json": formatted_json}
 
 
 registry.register(
