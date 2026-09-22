@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X , Loader2} from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { toSafeReactText } from '@/lib/safe-text';
@@ -40,6 +40,7 @@ type KnowledgeMaterializationIntent = {
 type KnowledgeIntentEntry = {
   state: 'idle' | 'loading' | 'ready' | 'error';
   result: KnowledgeMaterializationIntent | null;
+  pending_action: 'create' | 'execute' | null;
 };
 
 type ReplySlaEscalationResponse = {
@@ -207,9 +208,10 @@ export function TasksLayout() {
   };
 
   const handleKnowledgeIntentCreate = async (taskId: string, executeProvider = false) => {
+    const pending_action: KnowledgeIntentEntry['pending_action'] = executeProvider ? 'execute' : 'create';
     setKnowledgeIntentByTask((current) => ({
       ...current,
-      [taskId]: { state: 'loading', result: null },
+      [taskId]: { state: 'loading', result: null, pending_action },
     }));
     try {
       const result = await apiClient.post<KnowledgeMaterializationIntent>(
@@ -221,12 +223,12 @@ export function TasksLayout() {
       );
       setKnowledgeIntentByTask((current) => ({
         ...current,
-        [taskId]: { state: 'ready', result },
+        [taskId]: { state: 'ready', result, pending_action: null },
       }));
     } catch {
       setKnowledgeIntentByTask((current) => ({
         ...current,
-        [taskId]: { state: 'error', result: null },
+        [taskId]: { state: 'error', result: null, pending_action: null },
       }));
     }
   };
@@ -520,9 +522,9 @@ export function TasksLayout() {
                 disabled={replySlaStatus === 'loading'}
                 aria-busy={replySlaStatus === 'loading'}
                 onClick={() => void handleReplySlaEscalation()}
-                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
               >
-                {replySlaStatus === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" />}
+                {replySlaStatus === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" aria-hidden="true" />}
                 {replySlaStatus === 'loading' ? '확인 중' : '팔로업 작업 생성'}
               </button>
             </div>
@@ -606,8 +608,12 @@ export function TasksLayout() {
                   const currentKnowledgeIntent = knowledgeIntentByTask[task.id] ?? {
                     state: 'idle',
                     result: null,
+                    pending_action: null,
                   };
                   const currentIntent = currentKnowledgeIntent.result;
+                  const knowledgeIntentLoading = currentKnowledgeIntent.state === 'loading';
+                  const createIntentLoading = knowledgeIntentLoading && currentKnowledgeIntent.pending_action === 'create';
+                  const executeIntentLoading = knowledgeIntentLoading && currentKnowledgeIntent.pending_action === 'execute';
                   const displayTitle = safeTaskTitle(task.title);
                   return (
                     <article key={task.id} className="rounded-lg border border-border bg-background/75 p-3 text-sm">
@@ -620,24 +626,24 @@ export function TasksLayout() {
                           <button
                             type="button"
                             aria-label={`${displayTitle} WebDAV 지식 노트 의도 생성`}
-                            disabled={currentKnowledgeIntent.state === 'loading'}
-                            aria-busy={currentKnowledgeIntent.state === 'loading'}
+                            disabled={knowledgeIntentLoading}
+                            aria-busy={createIntentLoading || undefined}
                             onClick={() => void handleKnowledgeIntentCreate(task.id)}
-                            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+                            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
                           >
-                            {currentKnowledgeIntent.state === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" />}
-                            {currentKnowledgeIntent.state === 'loading' ? '생성 중' : '의도 생성'}
+                            {createIntentLoading ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" aria-hidden="true" />}
+                            {createIntentLoading ? '생성 중' : '의도 생성'}
                           </button>
                           <button
                             type="button"
                             aria-label={`${displayTitle} WebDAV 지식 노트 실행 요청`}
-                            disabled={currentKnowledgeIntent.state === 'loading'}
-                            aria-busy={currentKnowledgeIntent.state === 'loading'}
+                            disabled={knowledgeIntentLoading}
+                            aria-busy={executeIntentLoading || undefined}
                             onClick={() => void handleKnowledgeIntentCreate(task.id, true)}
-                            className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-70"
+                            className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-70"
                           >
-                            {currentKnowledgeIntent.state === 'loading' && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
-                            {currentKnowledgeIntent.state === 'loading' ? '요청 중' : '실행 요청'}
+                            {executeIntentLoading && <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden="true" />}
+                            {executeIntentLoading ? '실행 중' : '실행 요청'}
                           </button>
                         </div>
                       </div>
