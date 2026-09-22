@@ -204,6 +204,62 @@ describe("SearchLayout product events", () => {
     expect(JSON.stringify(getRecordedProductEvents())).not.toContain("계약");
   });
 
+  it("moves detail-tab focus with arrow keys and keeps tab selection semantics", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({ results: [{
+          id: 301,
+          source_message_id: "<keyboard-source@example.com>",
+          subject: "키보드 탐색 검증",
+          sender: "pm@example.com",
+          date: "2026-09-23T00:00:00Z",
+          snippet: "탭 키보드 탐색을 검증합니다.",
+          thread_id: "thread-keyboard",
+          reply_count: 1,
+          score: 0.91,
+        }] }));
+      }
+      if (url.endsWith("/api/search/answer")) {
+        return Promise.resolve(jsonResponse({ answer: null, citations: [], provenance: null }));
+      }
+      if (url.includes("/api/ontology/relationships?")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+    await waitForCondition(() => (container?.querySelectorAll<HTMLButtonElement>("[role='tab']").length ?? 0) === 3);
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>("[role='tab']"));
+    expect(tabs).toHaveLength(3);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    expect(tabs[0].tabIndex).toBe(0);
+    expect(tabs[1].getAttribute("aria-selected")).toBe("false");
+    expect(tabs[1].tabIndex).toBe(-1);
+
+    tabs[0].focus();
+    expect(document.activeElement).toBe(tabs[0]);
+    await act(async () => {
+      tabs[0].dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(tabs[1].tabIndex).toBe(0);
+    expect(tabs[0].tabIndex).toBe(-1);
+    expect(document.activeElement).toBe(tabs[1]);
+  });
+
   it.each([
     ["summarize_then_archive", "요약 후 보관합니다."],
     ["track_reply_and_tasks", "답장과 후속 작업을 확인합니다."],
