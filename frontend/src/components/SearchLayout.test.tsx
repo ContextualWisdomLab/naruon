@@ -238,27 +238,44 @@ describe("SearchLayout product events", () => {
     await waitForCondition(() => (container?.querySelectorAll<HTMLButtonElement>("[role='tab']").length ?? 0) === 3);
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>("[role='tab']"));
+    const pressTabKey = async (tab: HTMLButtonElement, key: string) => {
+      await act(async () => {
+        tab.dispatchEvent(new KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+    };
+    const expectSelectedTab = (selectedIndex: number) => {
+      tabs.forEach((tab, index) => {
+        expect(tab.getAttribute("aria-selected")).toBe(index === selectedIndex ? "true" : "false");
+        expect(tab.tabIndex).toBe(index === selectedIndex ? 0 : -1);
+      });
+      expect(document.activeElement).toBe(tabs[selectedIndex]);
+    };
+
     expect(tabs).toHaveLength(3);
     expect(tabs.every((tab) => tab.dataset.slot === "button")).toBe(true);
-    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
-    expect(tabs[0].tabIndex).toBe(0);
-    expect(tabs[1].getAttribute("aria-selected")).toBe("false");
-    expect(tabs[1].tabIndex).toBe(-1);
-
     tabs[0].focus();
-    expect(document.activeElement).toBe(tabs[0]);
-    await act(async () => {
-      tabs[0].dispatchEvent(new KeyboardEvent("keydown", {
-        key: "ArrowRight",
-        bubbles: true,
-        cancelable: true,
-      }));
-    });
+    expectSelectedTab(0);
 
-    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
-    expect(tabs[1].tabIndex).toBe(0);
-    expect(tabs[0].tabIndex).toBe(-1);
-    expect(document.activeElement).toBe(tabs[1]);
+    await pressTabKey(tabs[0], "ArrowRight");
+    expectSelectedTab(1);
+    await pressTabKey(tabs[1], "ArrowDown");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "ArrowRight");
+    expectSelectedTab(0);
+    await pressTabKey(tabs[0], "ArrowLeft");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "Home");
+    expectSelectedTab(0);
+    await pressTabKey(tabs[0], "End");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "ArrowUp");
+    expectSelectedTab(1);
+    await pressTabKey(tabs[1], "PageDown");
+    expectSelectedTab(1);
   });
 
   it.each([
