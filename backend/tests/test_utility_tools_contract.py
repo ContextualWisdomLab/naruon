@@ -48,3 +48,19 @@ async def test_json_formatter_formats_only_valid_json():
 
     with pytest.raises(ValueError, match="Invalid JSON string"):
         await json_formatter_handler({"raw_json": "{'not': 'json'}"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw_json",
+    [
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        '{"nested":{"value":NaN}}',
+        '{"nested":[1,Infinity,-Infinity]}',
+    ],
+)
+async def test_json_formatter_rejects_nonstandard_numeric_constants(raw_json: str):
+    with pytest.raises(ValueError, match="Invalid JSON string"):
+        await json_formatter_handler({"raw_json": raw_json})
