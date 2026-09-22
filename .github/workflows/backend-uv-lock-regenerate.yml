@@ -42,7 +42,7 @@ jobs:
           set -euo pipefail
           cp backend/uv.lock /tmp/uv.lock.before
           cd backend
-          uv lock --upgrade-package anyio
+          uv lock --upgrade-package 'anyio==4.14.2'
           cd ..
           python - <<'PY'
           import tomllib
