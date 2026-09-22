@@ -1,4 +1,5 @@
 import { CalendarDays, Clock, Video } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { CalendarDetailEvent } from './types';
 
 type Props = {
@@ -43,15 +44,17 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p id="calendar-location-summary" className="min-w-0 flex-1 truncate text-sm font-semibold">{selectedDetailEvent?.location || '장소 없음'}</p>
-              <button
+              <Button
                 type="button"
+                variant="link"
+                size="sm"
                 disabled
                 aria-label={`${selectedDetailEvent?.location || '장소'} 위치 보기`}
                 aria-describedby={locationDescriptionId}
-                className="shrink-0 rounded-sm text-xs font-semibold text-primary opacity-50 cursor-not-allowed"
+                className="h-auto shrink-0 p-0 text-xs"
               >
                 위치 보기
-              </button>
+              </Button>
             </div>
             {selectedDetailEvent?.location && (
               <p id="calendar-location-action-disabled-reason" className="mt-1 text-xs text-muted-foreground">
@@ -73,9 +76,9 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
         삭제·복사·수정은 이 상세 패널에서 지원하지 않습니다.
       </p>
       <div className="mt-3 flex gap-3">
-        <button type="button" disabled aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 삭제` : '일정 삭제'} aria-describedby="calendar-action-disabled-reason" className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm opacity-50 cursor-not-allowed">삭제</button>
-        <button type="button" disabled aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 복사` : '일정 복사'} aria-describedby="calendar-action-disabled-reason" className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm opacity-50 cursor-not-allowed">복사</button>
-        <button type="button" disabled aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 수정` : '일정 수정'} aria-describedby="calendar-action-disabled-reason" className="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground shadow-sm opacity-50 cursor-not-allowed">수정</button>
+        <Button type="button" variant="outline" disabled aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 삭제` : '일정 삭제'} aria-describedby="calendar-action-disabled-reason" className="flex-1 shadow-sm">삭제</Button>
+        <Button type="button" variant="outline" disabled aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 복사` : '일정 복사'} aria-describedby="calendar-action-disabled-reason" className="flex-1 shadow-sm">복사</Button>
+        <Button type="button" variant="default" disabled aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 수정` : '일정 수정'} aria-describedby="calendar-action-disabled-reason" className="flex-1 shadow-sm">수정</Button>
       </div>
     </aside>
   );
