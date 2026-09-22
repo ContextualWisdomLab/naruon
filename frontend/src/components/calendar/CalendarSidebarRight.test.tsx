@@ -139,6 +139,21 @@ describe('CalendarSidebarRight action honesty', () => {
     expect(locationButton.hasAttribute('title')).toBe(false);
   });
 
+  it('renders unsupported controls through the shared Button primitive without changing disabled semantics', () => {
+    renderComponent(DETAIL_EVENT_WITH_LOCATION);
+
+    for (const label of [
+      '서울 회의실 위치 보기',
+      '제품 검토 일정 삭제',
+      '제품 검토 일정 복사',
+      '제품 검토 일정 수정',
+    ]) {
+      const button = buttonByLabel(label);
+      expect(button.getAttribute('data-slot')).toBe('button');
+      expect(button.disabled).toBe(true);
+    }
+  });
+
   it('renders selected-event facts only when they exist in the detail contract', () => {
     renderComponent(DETAIL_EVENT);
 
