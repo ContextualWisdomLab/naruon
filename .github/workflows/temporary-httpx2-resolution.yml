@@ -1,0 +1,55 @@
+name: Temporary httpx2 lock resolution
+
+on:
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    if: github.head_ref == 'codex/starlette-testclient-dependency'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install pinned resolver
+        run: python -m pip install --disable-pip-version-check 'uv==0.10.0'
+
+      - name: Resolve secure TestClient dependency without writing repository history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          for path in (Path('backend/requirements.txt'), Path('backend/pyproject.toml')):
+              text = path.read_text()
+              old = 'httpx2==2.5.0'
+              assert text.count(old) == 1, (path, text.count(old))
+              path.write_text(text.replace(old, 'httpx2==2.12.0'))
+          PY
+          (
+            cd backend
+            uv lock --upgrade-package 'httpx2==2.12.0'
+          )
+          uv pip compile \
+            --generate-hashes \
+            --python-version 3.14 \
+            --python-platform x86_64-unknown-linux-gnu \
+            --output-file backend/requirements-hashes.txt \
+            backend/requirements.txt
+          git diff --check
+          echo '=== GENERATED HTTPX2 RESOLUTION DIFF START ==='
+          git diff -- backend/requirements.txt backend/pyproject.toml backend/requirements-hashes.txt backend/uv.lock
+          echo '=== GENERATED HTTPX2 RESOLUTION DIFF END ==='
+          sha256sum backend/requirements-hashes.txt backend/uv.lock
