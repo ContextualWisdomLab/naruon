@@ -201,3 +201,23 @@ def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
             found_in_logs = True
 
     assert found_in_logs, "DAV Request log was not found"
+
+def test_dav_normalization_limit():
+    from api.dav import _normalize_dav_authorization_path
+    from fastapi import HTTPException
+
+    # Should work
+    assert _normalize_dav_authorization_path("/user/projects") == "/user/projects"
+
+    # Should fail due to too many encodings
+    # e -> %65 -> %2565 -> %252565 -> ...
+    payload = "projects"
+    for _ in range(10):
+        payload = payload.replace("e", "%65")
+        payload = payload.replace("%", "%25")
+
+    import pytest
+    with pytest.raises(HTTPException) as excinfo:
+        _normalize_dav_authorization_path(f"/user/{payload}")
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.detail == "DAV path decoding limit exceeded"
