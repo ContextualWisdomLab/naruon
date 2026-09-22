@@ -1,0 +1,80 @@
+name: Backend uv.lock regeneration
+
+on:
+  push:
+    branches:
+      - codex/starlette-testclient-dependency
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backend-uv-lock-regenerate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
+        with:
+          egress-policy: audit
+
+      - name: Checkout owner branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/starlette-testclient-dependency
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.14'
+
+      - name: Install pinned uv
+        run: python -m pip install --disable-pip-version-check 'uv==0.10.0'
+
+      - name: Regenerate only the AnyIO resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp backend/uv.lock /tmp/uv.lock.before
+          cd backend
+          uv lock --upgrade-package anyio
+          cd ..
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          before = tomllib.loads(Path('/tmp/uv.lock.before').read_text())
+          after = tomllib.loads(Path('backend/uv.lock').read_text())
+
+          before_other = [p for p in before['package'] if p.get('name') != 'anyio']
+          after_other = [p for p in after['package'] if p.get('name') != 'anyio']
+          if before_other != after_other:
+              raise SystemExit('uv lock changed packages outside AnyIO; refusing to commit')
+
+          anyio = [p for p in after['package'] if p.get('name') == 'anyio']
+          if len(anyio) != 1 or anyio[0].get('version') != '4.14.2':
+              raise SystemExit(f'expected exactly AnyIO 4.14.2, got {anyio!r}')
+          PY
+          git diff --check -- backend/uv.lock
+          git diff --exit-code -- backend/pyproject.toml backend/requirements.txt backend/requirements-hashes.txt
+          git diff -- backend/uv.lock
+
+      - name: Commit generated lock only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/uv.lock
+          git diff --cached --quiet && { echo 'No generated lock delta'; exit 1; }
+          if git diff --cached --name-only | grep -vx 'backend/uv.lock'; then
+            echo 'Refusing to commit files outside backend/uv.lock'
+            exit 1
+          fi
+          git commit -m 'fix(deps): regenerate AnyIO uv lock'
+          git push origin HEAD:codex/starlette-testclient-dependency
