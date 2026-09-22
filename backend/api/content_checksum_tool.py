@@ -50,20 +50,35 @@ _HASHERS: dict[str, Callable[[bytes], str]] = {
     "blake2b_256": _blake2b_256,
 }
 
+_ALGORITHM_ALIASES = {
+    "sha-256": "sha256",
+    "sha3-256": "sha3_256",
+    "sha-3-256": "sha3_256",
+    "blake2b-256": "blake2b_256",
+}
+
+
+def _normalize_algorithm_code(value: str) -> str:
+    """Map documented human-facing labels to the bounded canonical codes."""
+    normalized = value.lower()
+    return _ALGORITHM_ALIASES.get(normalized, normalized)
+
 
 async def content_checksum_handler(params: dict[str, Any]) -> dict[str, Any]:
     """Hash exact UTF-8 bytes with an allowlisted modern checksum algorithm.
 
     The input is never Unicode-normalized, so the digest compares the exact
     byte representation Naruon received. Inputs larger than one MiB after
-    UTF-8 encoding are rejected before hashing.
+    UTF-8 encoding are rejected before hashing. Canonical algorithm codes and
+    the documented SHA/BLAKE2 display labels resolve to the same bounded
+    allowlist; legacy or out-of-contract algorithms still fail closed.
 
     Args:
         params: Validated tool parameters containing ``text`` and ``algorithm``.
 
     Returns:
-        A deterministic checksum receipt with the algorithm, digest, byte
-        length, encoding, and an authenticity warning.
+        A deterministic checksum receipt with the canonical algorithm code,
+        digest, byte length, encoding, and an authenticity warning.
 
     Raises:
         ContentChecksumError: If the algorithm is not allowlisted, the text
@@ -72,7 +87,7 @@ async def content_checksum_handler(params: dict[str, Any]) -> dict[str, Any]:
             ``error_code``.
     """
     text = params["text"]
-    algorithm = params["algorithm"]
+    algorithm = _normalize_algorithm_code(params["algorithm"])
     if algorithm not in _HASHERS:
         raise ContentChecksumError(
             "Unsupported checksum algorithm; choose sha256, sha3_256, or blake2b_256",

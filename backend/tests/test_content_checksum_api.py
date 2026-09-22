@@ -87,6 +87,22 @@ def test_content_checksum_api_executes_authenticated_request() -> None:
     assert payload["message"] == "Execution successful"
 
 
+def test_content_checksum_api_accepts_advertised_sha256_label() -> None:
+    """The catalog's human-facing SHA-256 label must execute and return the canonical code."""
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/content_checksum_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "abc", "algorithm": "SHA-256"}},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "success"
+    assert payload["result"]["algorithm_code"] == "sha256"
+    assert payload["result"]["digest_hex"] == EXPECTED_SHA256_ABC
+
+
 def test_content_checksum_api_rejects_unauthenticated_request() -> None:
     """The checksum execute route must retain the generic tools auth boundary."""
     with TestClient(app) as client:

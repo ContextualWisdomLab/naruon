@@ -77,6 +77,29 @@ async def test_content_checksum_generator_matches_published_vectors(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("algorithm", "expected_code"),
+    [
+        ("SHA-256", "sha256"),
+        ("SHA-3-256", "sha3_256"),
+        ("SHA3-256", "sha3_256"),
+        ("BLAKE2b-256", "blake2b_256"),
+    ],
+)
+async def test_content_checksum_generator_accepts_advertised_algorithm_labels(
+    algorithm: str,
+    expected_code: str,
+) -> None:
+    """Human-facing algorithm labels in the catalog must execute as canonical codes."""
+    result = await registry.invoke_tool(
+        "content_checksum_generator",
+        {"text": "abc", "algorithm": algorithm},
+    )
+
+    assert result["algorithm_code"] == expected_code
+
+
+@pytest.mark.asyncio
 async def test_content_checksum_generator_hashes_empty_sha256_input() -> None:
     """Empty UTF-8 content is valid input and must produce the published SHA-256 digest."""
     result = await registry.invoke_tool(
@@ -165,11 +188,11 @@ async def test_content_checksum_generator_rejects_invalid_utf8_scalar_input() ->
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("algorithm", ["sha1", "md5", "SHA256", "sha-256", ""])
+@pytest.mark.parametrize("algorithm", ["sha1", "md5", "sha512", "blake2b", ""])
 async def test_content_checksum_generator_rejects_unapproved_algorithm_names(
     algorithm: str,
 ) -> None:
-    """Legacy or ambiguous algorithm names must fail closed instead of being guessed."""
+    """Legacy or out-of-contract algorithm names must fail closed."""
     with pytest.raises(ValueError, match="Unsupported checksum algorithm"):
         await registry.invoke_tool(
             "content_checksum_generator",

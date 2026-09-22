@@ -8,13 +8,23 @@
 
 Naruon's `content_checksum_generator` compares the exact UTF-8 byte sequence supplied by the caller. It deliberately does **not** Unicode-normalize input before hashing, because normalization would change the byte-level evidence being compared. The deterministic tool accepts at most 1,048,576 UTF-8 bytes per invocation and exposes only these normal-surface algorithms:
 
-- `sha256` — SHA-256 from FIPS 180-4;
-- `sha3_256` — SHA3-256 from FIPS 202;
-- `blake2b_256` — BLAKE2b with a 256-bit digest, using the BLAKE2 construction standardized in RFC 7693.
+- canonical `sha256`, with documented display spelling `SHA-256`;
+- canonical `sha3_256`, with documented display spellings `SHA3-256` and `SHA-3-256`;
+- canonical `blake2b_256`, with documented display spelling `BLAKE2b-256`.
+
+Input matching for these canonical/display spellings is case-insensitive, and output always returns the canonical code. The mapping is an explicit presentation compatibility boundary, not free-form `hashlib` alias resolution. SHA-512, generic BLAKE2b, MD5, SHA-1 and other unlisted names remain outside the normal surface.
 
 MD5 and SHA-1 are intentionally absent from the normal surface. NIST states that SHA-1 is being transitioned out for applying cryptographic protection by December 31, 2030; Naruon therefore does not introduce SHA-1 as a new customer-facing checksum choice. No legacy-compatibility checksum mode is part of this slice.
 
 A returned digest is an equality/integrity fingerprint for the exact supplied bytes. It does not authenticate a sender, prove provenance, or replace a keyed MAC or digital signature. Customer-facing output carries that warning with every result so the next action is explicit: compare the digest with an independently obtained expected digest when checking content equality; use an authenticated construction when sender or origin authenticity matters.
+
+## Catalog/API label mismatch finding and repair
+
+Generated hash-tool provenance PR #1739 carried a review finding that human-facing algorithm names could be rejected by the execution boundary. Fresh inspection confirmed the same narrower mismatch on the canonical checksum owner: the catalog description advertised `SHA-256`, `SHA-3-256`, and `BLAKE2b-256`, while the handler accepted only internal codes.
+
+The repair is deliberately bounded. Regression `d23b6f82d61de219ceb6fc0eec7781d810a580f4` requires documented display labels to resolve to canonical codes. Production fix `e1a0d464fcfcecca7e97819978fd183b995f6b7d` adds only the explicit label map and canonicalization. API regression `d0edb517759e3aeaff115e5f449b0f23d1b90cc6` proves `SHA-256` through the authenticated execute route. MD5, SHA-1, SHA-512, generic BLAKE2b, unknown names, and unlisted aliases still fail closed.
+
+The broader generated-PR review finding that the protected Tools page fabricated placeholder `test_value` parameters is owned by the canonical utility-console form lane #1505, which replaces placeholder execution with real user-entered parameter values. This checksum owner does not copy or parallel-write that frontend. Final buyer-visible acceptance therefore requires the utility-console owner path and this checksum owner to coexist on the integrated tree before browser/UI completion can be claimed.
 
 ## Standards status reviewed 2026-09-10
 
@@ -33,7 +43,7 @@ No paper PDF is committed in this slice because redistribution permission for th
 
 ## Acceptance evidence
 
-The regression contract covers published/stable `abc` digest vectors for all three algorithms, exact-byte distinction between canonically equivalent Unicode strings, **equivalence between the one-shot tool result and incremental hashing of the identical multilingual UTF-8 byte sequence across chunk boundaries for all three allowed algorithms**, rejection of SHA-1/MD5 and ambiguous aliases, rejection of text that cannot be represented as valid UTF-8 Unicode scalar values, the one-MiB UTF-8 boundary, and idempotent application registration. The chunk-equivalence regression is evidence about digest invariance for identical bytes; it does not introduce or claim a streaming public API. Protected-branch integration still requires exact-current-head CI, security, **100% owned production statement/branch coverage where exposed as required by [ADR-0007](../adr/0007-bounded-content-checksum-surface.md)**, and independent review gates before the capability may be described as shipped.
+The regression contract covers published/stable `abc` digest vectors for all three algorithms, exact-byte distinction between canonically equivalent Unicode strings, **equivalence between the one-shot tool result and incremental hashing of the identical multilingual UTF-8 byte sequence across chunk boundaries for all three allowed algorithms**, documented display-label normalization to canonical codes, rejection of legacy/out-of-contract names, rejection of text that cannot be represented as valid UTF-8 Unicode scalar values, the one-MiB UTF-8 boundary, authenticated API execution for an advertised label, and idempotent application registration. The chunk-equivalence regression is evidence about digest invariance for identical bytes; it does not introduce or claim a streaming public API. Protected-branch integration still requires exact-current-head CI, security, **100% owned production statement/branch coverage where exposed as required by [ADR-0007](../adr/0007-bounded-content-checksum-surface.md)**, independent review gates, and integration with #1505's real parameter-entry UI before the capability may be described as shipped.
 
 ## References (APA 7th)
 
