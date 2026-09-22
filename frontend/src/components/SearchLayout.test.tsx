@@ -239,6 +239,7 @@ describe("SearchLayout product events", () => {
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>("[role='tab']"));
     expect(tabs).toHaveLength(3);
+    expect(tabs.every((tab) => tab.dataset.slot === "button")).toBe(true);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(tabs[0].tabIndex).toBe(0);
     expect(tabs[1].getAttribute("aria-selected")).toBe("false");
