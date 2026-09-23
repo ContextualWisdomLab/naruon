@@ -165,3 +165,19 @@ jobs:
           NARUON_FULL_PRODUCT_BASE_URL: "http://127.0.0.1:3001"
           NARUON_FULL_PRODUCT_SCREENSHOT_DIR: "/tmp/naruon-full-product-smoke"
         run: cd frontend && pnpm run full:smoke
+
+      - name: Run Playwright browser acceptance
+        env:
+          PLAYWRIGHT_HTML_OPEN: "never"
+        run: cd frontend && pnpm run test:e2e -- --reporter=line,html
+
+      - name: Upload Playwright browser evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: playwright-browser-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: warn
+          retention-days: 14
