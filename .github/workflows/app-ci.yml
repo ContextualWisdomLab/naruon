@@ -171,7 +171,7 @@ jobs:
       - name: Install pinned resolver
         run: python -m pip install --disable-pip-version-check "uv==${UV_VERSION}"
 
-      - name: Resolve current secure TestClient dependency without writing repository history
+      - name: Resolve coherent core and optional-agent TestClient dependencies without writing repository history
         shell: bash
         run: |
           set -euo pipefail
@@ -199,23 +199,95 @@ jobs:
             backend/requirements.txt
           grep -F "httpx2==${HTTPX2_VERSION}" backend/requirements-hashes.txt
           grep -F "httpcore2==2.13.0" backend/requirements-hashes.txt
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          core_path = Path("backend/requirements-hashes.txt")
+          agent_path = Path("backend/requirements-agent.txt")
+          core_text = core_path.read_text()
+          agent_text = agent_path.read_text()
+
+          def record(text: str, package: str) -> tuple[str, list[str]]:
+              lines = text.splitlines()
+              start = next(
+                  (i for i, line in enumerate(lines) if line.startswith(f"{package}==")),
+                  None,
+              )
+              if start is None:
+                  raise SystemExit(f"missing generated core record for {package}")
+              pin = lines[start].split(" \\", 1)[0]
+              hashes: list[str] = []
+              for line in lines[start + 1 :]:
+                  stripped = line.strip()
+                  if stripped.startswith("--hash=sha256:"):
+                      hashes.append(stripped.rstrip(" \\").removeprefix("--hash=sha256:"))
+                      continue
+                  if stripped.startswith("#"):
+                      break
+                  if line and not line.startswith((" ", "\t")):
+                      break
+              if not hashes:
+                  raise SystemExit(f"generated core record has no hashes for {package}")
+              return pin, hashes
+
+          def replace_record(text: str, package: str, via: str) -> str:
+              pin, hashes = record(core_text, package)
+              lines = text.splitlines()
+              start = next(
+                  (i for i, line in enumerate(lines) if line.startswith(f"{package}==")),
+                  None,
+              )
+              if start is None:
+                  raise SystemExit(f"missing optional-agent record for {package}")
+              end = start + 1
+              while end < len(lines):
+                  stripped = lines[end].strip()
+                  if stripped.startswith("--hash=sha256:") or stripped.startswith("#"):
+                      end += 1
+                      continue
+                  break
+              rendered = [f"{pin} \\"]
+              for index, digest in enumerate(hashes):
+                  suffix = " \\" if index < len(hashes) - 1 else ""
+                  rendered.append(f"    --hash=sha256:{digest}{suffix}")
+              rendered.append(f"    # via {via}")
+              return "\n".join(lines[:start] + rendered + lines[end:]) + "\n"
+
+          agent_text = replace_record(agent_text, "httpcore2", "httpx2")
+          agent_text = replace_record(agent_text, "httpx2", "genai-prices")
+          if "httpx2==2.5.0" in agent_text or "httpcore2==2.5.0" in agent_text:
+              raise SystemExit("stale 2.5.0 TestClient dependency remains in optional-agent lock")
+          agent_path.write_text(agent_text)
+          PY
+
+          python -m pip install --disable-pip-version-check --dry-run --ignore-installed --require-hashes \
+            -r backend/requirements-hashes.txt \
+            -r backend/requirements-agent.txt
+          grep -F "httpx2==${HTTPX2_VERSION}" backend/requirements-agent.txt
+          grep -F "httpcore2==2.13.0" backend/requirements-agent.txt
           git diff --check
           mkdir -p .resolver-evidence
           git diff --binary -- \
             backend/requirements.txt \
             backend/pyproject.toml \
             backend/requirements-hashes.txt \
+            backend/requirements-agent.txt \
             backend/uv.lock \
             > .resolver-evidence/generated.diff
           sha256sum \
             backend/requirements.txt \
             backend/pyproject.toml \
             backend/requirements-hashes.txt \
+            backend/requirements-agent.txt \
             backend/uv.lock \
             | tee .resolver-evidence/sha256.txt
           cat > .resolver-evidence/upstream.txt <<'EOF'
           candidate=httpx2==2.13.0
           expected_httpcore2=httpcore2==2.13.0
+          optional_agent_consumer=genai-prices==0.0.71
+          optional_agent_requirement=httpx2>=2.0
           upstream_release=v2.13.0
           upstream_published_at=2026-09-14T14:17:29Z
           EOF
@@ -228,6 +300,7 @@ jobs:
             backend/requirements.txt
             backend/pyproject.toml
             backend/requirements-hashes.txt
+            backend/requirements-agent.txt
             backend/uv.lock
             .resolver-evidence/generated.diff
             .resolver-evidence/sha256.txt
