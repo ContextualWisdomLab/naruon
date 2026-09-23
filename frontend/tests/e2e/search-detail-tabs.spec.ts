@@ -14,6 +14,7 @@ async function expectSelectedTab(page: Page, name: string, panelSuffix: string) 
   const tab = page.getByRole('tab', { name, exact: true });
   await expect(tab).toHaveAttribute('aria-selected', 'true');
   await expect(tab).toHaveAttribute('tabindex', '0');
+  await expect(tab).toHaveAttribute('aria-controls', `search-detail-panel-${panelSuffix}`);
   await expect(tab).toBeFocused();
   await expect(page.getByRole('tabpanel')).toHaveAttribute('id', `search-detail-panel-${panelSuffix}`);
   await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', `search-detail-tab-${panelSuffix}`);
@@ -64,6 +65,7 @@ test('keeps Search detail-tab selection usable at mobile width without overflow'
   const sourceTab = page.getByRole('tab', { name: '관계 원본', exact: true });
   await sourceTab.click();
   await expect(sourceTab).toHaveAttribute('aria-selected', 'true');
+  await expect(sourceTab).toHaveAttribute('aria-controls', 'search-detail-panel-source');
   await expect(page.getByRole('tabpanel')).toHaveAttribute('id', 'search-detail-panel-source');
 
   const overflow = await page.evaluate(
@@ -71,4 +73,40 @@ test('keeps Search detail-tab selection usable at mobile width without overflow'
   );
   expect(overflow).toBeLessThanOrEqual(1);
   await page.screenshot({ path: testInfo.outputPath('search-detail-tabs-mobile.png'), fullPage: false });
+});
+
+test.describe('touch-capable mobile Search detail tabs', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+
+  test('keeps tab semantics and touch targets usable with tap input', async ({ page }, testInfo) => {
+    await openSearch(page, 390, 844);
+
+    const sourceTab = page.getByRole('tab', { name: '관계 원본', exact: true });
+    const assistTab = page.getByRole('tab', { name: '판단 보조', exact: true });
+
+    for (const tab of [sourceTab, assistTab]) {
+      const box = await tab.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeGreaterThanOrEqual(24);
+      expect(box!.height).toBeGreaterThanOrEqual(24);
+    }
+
+    await sourceTab.tap();
+    await expect(sourceTab).toHaveAttribute('aria-selected', 'true');
+    await expect(sourceTab).toHaveAttribute('aria-controls', 'search-detail-panel-source');
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('id', 'search-detail-panel-source');
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'search-detail-tab-source');
+
+    await assistTab.tap();
+    await expect(assistTab).toHaveAttribute('aria-selected', 'true');
+    await expect(assistTab).toHaveAttribute('aria-controls', 'search-detail-panel-assist');
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('id', 'search-detail-panel-assist');
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'search-detail-tab-assist');
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath('search-detail-tabs-touch-mobile.png'), fullPage: false });
+  });
 });
