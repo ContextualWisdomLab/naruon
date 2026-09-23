@@ -37,8 +37,10 @@ jobs:
           set -e
           if [ "$merge_status" -ne 0 ]; then
             unresolved="$(git diff --name-only --diff-filter=U | sort)"
-            allowed="$(printf '%s\n' '.jules/palette.md' 'frontend/src/app/projects/page.test.tsx' 'frontend/src/components/ProjectsLayout.accessibility.test.tsx' 'frontend/src/components/ProjectsLayout.tsx' | sort)"
-            test "$unresolved" = "$allowed"
+            allowed="$(printf '%s\n' 'frontend/src/app/projects/page.test.tsx' 'frontend/src/components/ProjectsLayout.accessibility.test.tsx' 'frontend/src/components/ProjectsLayout.tsx' | sort)"
+            test -n "$unresolved"
+            unexpected="$(comm -23 <(printf '%s\n' "$unresolved") <(printf '%s\n' "$allowed"))"
+            test -z "$unexpected"
           fi
           git checkout "$CANONICAL_HEAD" -- \
             .jules/palette.md \
