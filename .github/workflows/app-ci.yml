@@ -151,6 +151,7 @@ jobs:
       contents: write
     env:
       OWNER_BRANCH: codex/starlette-testclient-dependency
+      EXPECTED_PARENT_HEAD: 4840458d7f2231fe08121d5de4730815e6bbfe49
       PRE_HELPER_HEAD: 29272251ca4ab3e38c3ce8a5b7de811d285ff366
       ARTIFACT_ID: "10724734967"
       UV_VERSION: "0.10.0"
@@ -175,7 +176,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EVENT_HEAD"
           remote_head="$(git ls-remote origin "refs/heads/${OWNER_BRANCH}" | cut -f1)"
           test "$remote_head" = "$EVENT_HEAD"
-          test "$(git rev-parse HEAD^)" = "$PRE_HELPER_HEAD"
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT_HEAD"
           git switch -C "$OWNER_BRANCH" "$EVENT_HEAD"
 
       - name: Download and verify exact resolver artifact
