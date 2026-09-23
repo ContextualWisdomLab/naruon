@@ -13,7 +13,7 @@ import { apiClient } from '@/lib/api-client';
 import { setMobileWorkspaceView, useMobileWorkspaceView } from '@/lib/mobile-workspace';
 import { toSafeReactText } from '@/lib/safe-text';
 import { setWorkspaceStartupView, useWorkspaceStartupView, type WorkspaceStartupView } from '@/lib/workspace-preferences';
-import { MobileCalendarPanel, MobileSearchPanel, MobileReplyReviewPanel, MobileSourceDrawerPanel, MobileScheduleConfirmationPanel } from '@/components/mobile-workspace-panels';
+import { MobileCalendarPanel, MobileSearchPanel } from '@/components/mobile-workspace-panels';
 const NetworkGraph = dynamic(() => import('@/components/NetworkGraph'), { ssr: false });
 
 type WorkspaceActionCommand = { id: number; action: string; target: 'desktop' | 'tablet'; modeVersion: number };
@@ -925,30 +925,6 @@ export function WorkspaceHome({
             className={`mobile-workspace-panel mobile-workspace-panel-calendar h-full ${effectiveMobileView === 'calendar' ? 'flex' : 'hidden'} flex-col overflow-y-auto bg-gradient-to-b from-primary/5 via-background to-card p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]`}
           >
             {effectiveMobileView === 'calendar' ? <MobileCalendarPanel /> : null}
-          </section>
-          <section
-            id="mobile-reply-review"
-            aria-label="모바일 답장 검토"
-            role="region"
-            className={`mobile-workspace-panel h-full ${effectiveMobileView === 'reply-review' ? 'flex' : 'hidden'} flex-col overflow-y-auto bg-gradient-to-b from-primary/5 via-background to-card p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]`}
-          >
-            {effectiveMobileView === 'reply-review' ? <MobileReplyReviewPanel /> : null}
-          </section>
-          <section
-            id="mobile-source-drawer"
-            aria-label="모바일 근거 원본"
-            role="region"
-            className={`mobile-workspace-panel h-full ${effectiveMobileView === 'source-drawer' ? 'flex' : 'hidden'} flex-col overflow-y-auto bg-gradient-to-b from-primary/5 via-background to-card p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]`}
-          >
-            {effectiveMobileView === 'source-drawer' ? <MobileSourceDrawerPanel /> : null}
-          </section>
-          <section
-            id="mobile-schedule-confirmation"
-            aria-label="모바일 일정 확정"
-            role="region"
-            className={`mobile-workspace-panel h-full ${effectiveMobileView === 'schedule-confirmation' ? 'flex' : 'hidden'} flex-col overflow-y-auto bg-gradient-to-b from-primary/5 via-background to-card p-4 pb-[calc(7rem+env(safe-area-inset-bottom))]`}
-          >
-            {effectiveMobileView === 'schedule-confirmation' ? <MobileScheduleConfirmationPanel /> : null}
           </section>
       </div>
     </>
