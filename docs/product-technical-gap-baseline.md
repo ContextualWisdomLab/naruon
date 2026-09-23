@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.84  
+**Baseline version:** 2.85  
 **Observed on:** 2026-09-23 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.83 remains audit-visible as blob `fa7130277fae5c6f3c253e8371eb4ea2062cb8eb`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.84 remains audit-visible as blob `e414652db5ad4df43f57b7dfaab8672a138de399`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.84 records two live evidence changes without claiming a protected release: #1691's exact-head checkout/artifact-provenance repair is now proven by an artifact whose identity is the exact PR head, while its Application CI is terminal RED on a canonical-database migration failure plus real Playwright product/E2E contract drift; and #1565's coherent five-file 2.13.0 graph remains verified evidence while one-shot ordinary adoption is still nonterminal. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.
+v2.85 records three live facts without claiming a protected release: #1691's exact-head checkout/artifact-provenance repair is proven while its Application CI remains terminal RED on canonical-database plus real Playwright product/E2E failures; #1565's coherent five-file 2.13.0 graph remains verified evidence while one-shot ordinary adoption is nonterminal; and generated Projects PR #1764 was found to overlap #1352's existing busy-state contract, so it was moved off direct `develop` ownership and converted to Draft on the #1352 owner branch. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -89,7 +89,9 @@ Required order is accepted #1565 → combined-security #1623 → final fresh-boo
 
 [#1725](https://github.com/ContextualWisdomLab/naruon/pull/1725) was likewise advanced through generated `6c74b5bf4379e1184157ae78aa8b093ae4c36463`, mixing broad exception-log changes with backend/frontend dependency and lock churn. Ordinary-forward corrective `b5690bf885f74fb3f7cd45caf7dfbd6fd27539a6` preserves that history and restores the exact protected tree; fresh compare is ahead-only with zero changed files. Exception confidentiality remains owned by #1612 plus #1698/#1700 and dependency/security by #1565/#1623 and dedicated dependency owners.
 
-These zero-delta provenance lanes remain Draft and are not independent merge candidates. Their old receipts do not transfer.
+Generated [#1764](https://github.com/ContextualWisdomLab/naruon/pull/1764) exact `ca780e3eeeade786718f3cc0097527beae797607` was created directly from `develop` for the Projects evidence-review busy state. Fresh comparison showed `aria-busy={correctionSubmitting}` already exists in canonical Projects owner #1352 exact `1b8497f33e1977ce7b963640b63f107510621973`. #1764 was therefore retargeted to `fix/aria-busy-clean-scope` and converted to Draft. Its potentially unique product delta is limited to the Loader2 spinner/presentation and matching test mocks; `.jules/palette.md` is generated provenance, not product authority. The retargeted PR is currently non-mergeable because it has not yet been ordinary-restacked onto the parent tree; do not merge or duplicate #1352's state-machine ownership.
+
+The zero-delta provenance lanes remain Draft and are not independent merge candidates. Generated dependent refinements remain Draft until ordinary/non-force reconciliation proves their unique delta against the canonical owner. Old receipts do not transfer.
 
 ## 4. Material UI owner graph and Delivery Gate
 
@@ -112,6 +114,12 @@ The #1691 exact-head artifact proves browser RED rather than a runner problem. P
 ### 4.3 OIDC settings
 
 [#1729](https://github.com/ContextualWisdomLab/naruon/pull/1729) exact `0065a7f4059823ec28573050e6cce9ec381b42d6` is the bounded OIDC pending-state owner. It retains the production pending-state repair, deferred-promise regression, Playwright keyboard/touch pending/error recovery and doctoring. **OIDC Delivery: FAIL** while accepted exact-head #1691 ancestry with product-owner repairs, exact-head required/browser evidence, AT, multilingual resource consumption and independent review remain incomplete.
+
+### 4.4 Projects
+
+[#1352](https://github.com/ContextualWisdomLab/naruon/pull/1352) exact `1b8497f33e1977ce7b963640b63f107510621973` remains the canonical Projects async/busy-state and smoke-supplier owner. It already scopes `aria-busy` for the evidence-review save action to `correctionSubmitting`, preserves `evidenceLoading` as a disabled prerequisite rather than busy identity, and owns the signed-session/task-timestamp/`/api/projects/candidates` fixture repair exposed by #1691 browser RED.
+
+Generated #1764 is a dependent visual refinement only after retargeting to #1352. Its unique candidate is the Loader2 spinner while `correctionSubmitting` is true. Because it is currently conflict/non-mergeable after retarget and has no qualifying independent review, **Projects Delivery remains FAIL**; the branch must ordinary/non-force restack onto #1352, remove generated `.jules` scope, prove spinner identity with focused regression and then reacquire exact-head browser/AT/current review evidence. It must not become a second Projects state-machine owner.
 
 ## 5. UI Localization Catalog
 
@@ -148,7 +156,7 @@ This baseline is complete only when all of the following are true on one current
 1. #1565 ordinary-adopts the verified five-file backend graph, removes temporary resolver/adopter code and reaches helper-free exact-head required/security/code GREEN plus independent review.
 2. #1623 ordinary-adopts accepted backend ancestry and reaches repository-wide current-database Security GREEN.
 3. #1694/#1691/#1503 converge onto one accepted migration/CI ancestry with fresh PostgreSQL, exact-head Playwright browser evidence and exact-head security/review evidence; current #1691 Application CI RED must be repaired through the canonical migration and product/E2E owners, not by suppressing tests.
-4. Utility and material UI owners reach their own exact-head terminal acceptance without receipt transfer or duplicate generated ownership.
+4. Utility and material UI owners, including #1352→#1764 if the spinner delta remains valid, reach their own exact-head terminal acceptance without receipt transfer or duplicate generated ownership.
 5. #1731/#1740 are followed by canonical normalized localization persistence/API/cache/publication and eight-locale Storybook/browser/a11y acceptance.
 6. Required external capabilities are consumed only through immutable released/versioned owner contracts.
 7. The exact integrated protected head has version/CHANGELOG/tag/package or canonical immutable publication, SBOM/provenance, reproducibility and rollback evidence.
