@@ -229,9 +229,7 @@ def merge_candidate_rows(
                 one_based_rank=zero_based_position + 1,
                 result_kind=row.result_kind,
                 matched_text=row.matched_text,
-                word_similarity_score=getattr(
-                    row, "word_similarity_score", None
-                ),
+                word_similarity_score=getattr(row, "word_similarity_score", None),
                 cosine_distance=getattr(row, "cosine_distance", None),
                 fusion_settings=fusion_settings,
             )
@@ -296,9 +294,7 @@ async def _resolve_query_embedding(
         organization_id=organization_id,
     )
     if runtime_provider is None:
-        logger.info(
-            "No LLM provider configured; hybrid search running lexical-only"
-        )
+        logger.info("No LLM provider configured; hybrid search running lexical-only")
         return None
     try:
         embeddings = await generate_embeddings(
@@ -456,8 +452,7 @@ async def hybrid_search(
                 )
             )
             reply_counts_by_thread_key = {
-                row.thread_key: row.reply_count
-                for row in reply_counts_result.all()
+                row.thread_key: row.reply_count for row in reply_counts_result.all()
             }
 
         search_results = build_search_result_items(
@@ -470,8 +465,8 @@ async def hybrid_search(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Search failed", exc_info=True)
-        raise HTTPException(status_code=500, detail="Search failed") from e
+        logger.error("Search failed: %s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="Search failed") from None
 
 
 @router.post("/search/answer", response_model=AnswerResponse)
@@ -555,5 +550,5 @@ async def grounded_answer(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Grounded answer failed", exc_info=True)
-        raise HTTPException(status_code=500, detail="Answer failed") from e
+        logger.error("Grounded answer failed: %s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="Answer failed") from None
