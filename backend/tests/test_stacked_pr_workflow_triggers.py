@@ -18,6 +18,7 @@ PR_VALIDATION_WORKFLOWS = (
 PLAYWRIGHT_UPLOAD_PIN = (
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
 )
+EXACT_HEAD_REF = "${{ github.event.pull_request.head.sha || github.sha }}"
 
 
 @pytest.mark.parametrize("workflow_path", PR_VALIDATION_WORKFLOWS)
@@ -54,10 +55,18 @@ def test_stacked_trigger_guard_rejects_any_base_filter(
         test_repo_local_pr_validation_accepts_every_base_branch("workflow.yml")
 
 
-def test_application_ci_executes_browser_acceptance_and_preserves_artifacts() -> None:
-    """Require exact-head Playwright execution instead of treating smoke as E2E proof."""
+def test_application_ci_executes_and_labels_exact_head_browser_acceptance() -> None:
+    """Require Playwright evidence to execute and identify the exact PR head."""
     workflow_path = REPO_ROOT / ".github/workflows/app-ci.yml"
     workflow = yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+
+    for job_name in ("backend", "frontend"):
+        job_steps = workflow["jobs"][job_name]["steps"]
+        steps_by_name = {step.get("name"): step for step in job_steps}
+        checkout_step = steps_by_name["Checkout repository"]
+        checkout_options = checkout_step.get("with") or {}
+        assert checkout_options.get("ref") == EXACT_HEAD_REF
+
     frontend_steps = workflow["jobs"]["frontend"]["steps"]
     steps_by_name = {step.get("name"): step for step in frontend_steps}
 
@@ -72,7 +81,7 @@ def test_application_ci_executes_browser_acceptance_and_preserves_artifacts() ->
     assert evidence_step["uses"] == PLAYWRIGHT_UPLOAD_PIN
     assert evidence_step["if"] == "${{ always() }}"
     evidence_name = evidence_step["with"]["name"]
-    assert "${{ github.sha }}" in evidence_name
+    assert EXACT_HEAD_REF in evidence_name
     evidence_paths = evidence_step["with"]["path"]
     assert "frontend/playwright-report/" in evidence_paths
     assert "frontend/test-results/" in evidence_paths
