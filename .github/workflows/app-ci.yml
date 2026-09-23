@@ -137,3 +137,138 @@ jobs:
           NARUON_FULL_PRODUCT_BASE_URL: "http://127.0.0.1:3001"
           NARUON_FULL_PRODUCT_SCREENSHOT_DIR: "/tmp/naruon-full-product-smoke"
         run: cd frontend && pnpm run full:smoke
+
+  adopt_httpx2_artifact:
+    name: adopt verified httpx2 artifact
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 1565 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/starlette-testclient-dependency'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      OWNER_BRANCH: codex/starlette-testclient-dependency
+      PRE_HELPER_HEAD: 29272251ca4ab3e38c3ce8a5b7de811d285ff366
+      ARTIFACT_ID: "10724734967"
+      UV_VERSION: "0.10.0"
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify single-writer head
+        env:
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EVENT_HEAD"
+          remote_head="$(git ls-remote origin "refs/heads/${OWNER_BRANCH}" | cut -f1)"
+          test "$remote_head" = "$EVENT_HEAD"
+          test "$(git rev-parse HEAD^)" = "$PRE_HELPER_HEAD"
+          git switch -C "$OWNER_BRANCH" "$EVENT_HEAD"
+
+      - name: Download and verify exact resolver artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/httpx2-resolution
+          curl --fail --location --silent --show-error \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            -o /tmp/httpx2-resolution.zip
+          unzip -q /tmp/httpx2-resolution.zip -d /tmp/httpx2-resolution
+          cat > /tmp/expected-sha256.txt <<'EOF'
+          a0bbed543860fe2dff63e1a7ddd96b9b843a12acd7c4838b123a21c97967a22d  backend/requirements.txt
+          58b89778097bc23f9bad06bdeb4a1207f7f304edd58bb168782600b5c8379fdb  backend/pyproject.toml
+          2870d4f4af934b41e9dcdb769be3ce373c11e7bb58473163277a00cd432cae19  backend/requirements-hashes.txt
+          d6a249e3a22a3e9130cee5992f31c5a3ecc13d38898dbfa11684fdfb0be467d5  backend/uv.lock
+          EOF
+          sed -i 's/^          //' /tmp/expected-sha256.txt
+          diff -u /tmp/expected-sha256.txt /tmp/httpx2-resolution/.resolver-evidence/sha256.txt
+          cd /tmp/httpx2-resolution
+          sha256sum --check .resolver-evidence/sha256.txt
+
+      - name: Adopt generated graph and matching owner contracts
+        run: |
+          set -euo pipefail
+          cp /tmp/httpx2-resolution/backend/requirements.txt backend/requirements.txt
+          cp /tmp/httpx2-resolution/backend/pyproject.toml backend/pyproject.toml
+          cp /tmp/httpx2-resolution/backend/requirements-hashes.txt backend/requirements-hashes.txt
+          cp /tmp/httpx2-resolution/backend/uv.lock backend/uv.lock
+          python - <<'PY'
+          from pathlib import Path
+
+          test_path = Path('backend/tests/test_container_dependency_pin_contract.py')
+          text = test_path.read_text()
+          replacements = {
+              'backend_pins["httpx2"] == "2.5.0"': 'backend_pins["httpx2"] == "2.12.0"',
+              '"httpx2==2.5.0"': '"httpx2==2.12.0"',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing expected TestClient assertion: {old}')
+              text = text.replace(old, new)
+          test_path.write_text(text)
+
+          changelog_path = Path('CHANGELOG.md')
+          changelog = changelog_path.read_text()
+          old = '- Starlette `TestClient`의 기존 `httpx2==2.5.0` pin을 core 개발·테스트 의존성으로 승격하고, deprecated `httpx` fallback 경고 억제를 제거했습니다.'
+          new = '- Starlette `TestClient`의 preferred transport를 `httpx2==2.12.0`으로 고정하고, resolver가 선택한 `httpcore2==2.12.0`과 hash/uv lock을 함께 갱신했습니다. deprecated `httpx` fallback 경고 억제는 제거된 상태를 유지합니다.'
+          if changelog.count(old) != 1:
+              raise SystemExit(f'expected exactly one CHANGELOG predecessor, found {changelog.count(old)}')
+          changelog_path.write_text(changelog.replace(old, new, 1))
+          PY
+          git show "${PRE_HELPER_HEAD}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml
+          git diff --check
+          printf '%s\n' \
+            CHANGELOG.md \
+            backend/pyproject.toml \
+            backend/requirements-hashes.txt \
+            backend/requirements.txt \
+            backend/tests/test_container_dependency_pin_contract.py \
+            backend/uv.lock | sort > /tmp/expected-paths.txt
+          git diff --name-only | sort > /tmp/actual-paths.txt
+          diff -u /tmp/expected-paths.txt /tmp/actual-paths.txt
+
+      - name: Verify adopted graph before push
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Run focused dependency acceptance
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "uv==${UV_VERSION}"
+          cd backend
+          uv lock --check
+          uv sync --frozen --group dev
+          uv run --frozen pytest -q -W error tests/test_container_dependency_pin_contract.py
+          uv run --frozen ruff check tests/test_container_dependency_pin_contract.py
+
+      - name: Commit and non-force push coherent owner delta
+        env:
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          remote_head="$(git ls-remote origin "refs/heads/${OWNER_BRANCH}" | cut -f1)"
+          test "$remote_head" = "$EVENT_HEAD"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md backend/pyproject.toml backend/requirements-hashes.txt backend/requirements.txt backend/tests/test_container_dependency_pin_contract.py backend/uv.lock .github/workflows/app-ci.yml
+          git diff --cached --check
+          git commit -m "fix(deps): adopt verified httpx2 2.12.0 graph"
+          git push origin "HEAD:refs/heads/${OWNER_BRANCH}"
