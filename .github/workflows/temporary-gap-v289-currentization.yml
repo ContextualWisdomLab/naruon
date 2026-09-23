@@ -1,0 +1,79 @@
+name: Temporary Gap v2.89 currentization
+
+on:
+  push:
+    branches:
+      - codex/visual-gap-evidence-successor
+
+permissions:
+  contents: write
+
+jobs:
+  currentize-gap:
+    if: github.repository == 'ContextualWisdomLab/naruon'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+
+      - name: Record terminal adopter RED and causal repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/product-technical-gap-baseline.md')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one baseline anchor, found {count}: {old[:100]!r}')
+              text = text.replace(old, new)
+
+          replace_once('**Baseline version:** 2.88  ', '**Baseline version:** 2.89  ')
+          replace_once(
+              'v2.87 remains audit-visible as blob `1eb9b18a7bcddb61c74e321a3759c787d6061391`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.',
+              'v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.',
+          )
+          replace_once(
+              'v2.88 records two current owner transitions. First, Search owner [#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) one-shot repair run `35873031852` completed **SUCCESS** and emitted helper-free exact `d65a34773540147f568fab7aeeaf28835071ede2`. Fresh compare from canonical parent #1623 is ahead 17 / behind 0 with exactly the five Search-owned files; `dashboard-branding.spec.ts` now uses the current `판단 보조 빠른 실행` / `판단 보조 빠른 실행 메뉴` accessible names and exact `맥락 검색` locators. That closes the source-contract finding, not acceptance: the exact helper-free head currently has no normal hosted workflow generation. Dependent [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) therefore has a self-removing ordinary/non-force restack staged at `34f21dc101d2ae5d5683c4c698545685c3bf1f5f`; run `35905102850` is nonterminal and final scope must return to exactly its three detail-tab files. Second, Projects #1764\'s first guarded restack `35873253807` remains a terminal transition RED caused by an over-constrained conflict-set guard; current causal-repair staging `af0adc1c440b160d747f7901b2b76f591ede9b32` and rerun `35904029197` remain nonterminal. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.',
+              'v2.89 records a terminal backend adoption RED plus the still-open UI restacks. #1565 Application CI `35860514971` completed **FAILURE** after backend, frontend and coherent resolver jobs succeeded. Adopter job `107243391436` independently recovered artifact `10748790356`, verified the archive digest, all five accepted SHA-256 values and upstream markers, then failed only when it tried to restore `.github/workflows/app-ci.yml` from protected `develop@042b0c70...`; that file does not exist on the protected base. No product child was committed. Current #1565 staging `65c16a5807e1f0b04bc2962cec03f00eafbe93a4` therefore repairs only this transition assumption with a self-removing base-aware cleanup; run `35911472325` is nonterminal. Search owner #1603 remains helper-free at `d65a34773540147f568fab7aeeaf28835071ede2`, while dependent #1760 restack `35905102850` remains nonterminal. Projects #1764 retains its terminal first-restack RED and bounded causal-repair staging `af0adc1c440b160d747f7901b2b76f591ede9b32`; rerun `35904029197` remains nonterminal. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.',
+          )
+          replace_once(
+              '[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) is the canonical bounded Starlette TestClient/httpx2 and backend coherent-lock owner. Current adoption staging is `4c5872ac29435f25034cd978a47e8cdcb185813a`, Draft/open. Effective product source still carries direct `httpx2==2.5.0` and resolved `httpcore2==2.5.0`, so Security RED remains live until an ordinary helper-free child adopts the verified graph.',
+              '[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) is the canonical bounded Starlette TestClient/httpx2 and backend coherent-lock owner. The first adoption staging `4c5872ac29435f25034cd978a47e8cdcb185813a` is terminal RED; current causal-repair staging is `65c16a5807e1f0b04bc2962cec03f00eafbe93a4`, Draft/open. Effective product source still carries direct `httpx2==2.5.0` and resolved `httpcore2==2.5.0`, so Security RED remains live until an ordinary helper-free child adopts the verified graph.',
+          )
+          replace_once(
+              'Current `4c5872ac...` is temporary one-shot adoption staging, not final product source. Application CI `35860514971` remains nonterminal; Bandit, Semgrep and Docker are GREEN, while Security/CodeQL and helper-free adoption are incomplete. Required order is helper-free five-file adoption → prove no temporary resolver/adopter and no residual 2.5.0 → normal exact-head frozen/core+agent/TestClient/Ruff GREEN → current Security/Trivy, CodeQL and all protected contexts → zero valid findings/threads → independent post-last-push review → protected integration. No stale 2.12 promotion, four-file-only adoption, hand-edited generated locks, source-neutral wake commit or scanner suppression is acceptable.',
+              'Application CI `35860514971` on first adoption staging `4c5872ac...` completed **FAILURE**. Backend, frontend and resolver jobs were GREEN. The adopter recovered and independently verified the exact resolver artifact, all five accepted file digests and upstream markers, copied the candidate files and updated the bounded test/CHANGELOG/doctoring content, then failed before commit because it assumed protected base `042b0c70...` contained `.github/workflows/app-ci.yml`. Git correctly reported that the path does not exist in that base. Current `65c16a58...` stages only a base-aware cleanup rule: restore `app-ci.yml` if the protected base contains it, otherwise remove the temporary file; its repair helper removes itself and uses remote-head equality plus normal non-force push. Run `35911472325` is nonterminal. Required order is helper-free causal-fix child → ordinary helper-free five-file product adoption → prove no temporary workflow and no residual 2.5.0 → normal exact-head frozen/core+agent/TestClient/Ruff GREEN → current Security/Trivy, CodeQL and all protected contexts → zero valid findings/threads → independent post-last-push review → protected integration. No stale 2.12 promotion, four-file-only adoption, hand-edited generated locks, source-neutral wake commit or scanner suppression is acceptable.',
+          )
+          path.write_text(text)
+          PY
+          rm .github/workflows/temporary-gap-v289-currentization.yml
+          git diff --check
+
+      - name: Ordinary non-force baseline push
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF_NAME}"
+          git fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/${branch}")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- docs/product-technical-gap-baseline.md .github/workflows/temporary-gap-v289-currentization.yml
+          git diff --cached --check
+          git commit -m "docs(gap): record httpx2 adopter RCA"
+          git push origin "HEAD:refs/heads/${branch}"
