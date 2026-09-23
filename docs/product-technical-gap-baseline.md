@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.81  
+**Baseline version:** 2.82  
 **Observed on:** 2026-09-23 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.80 remains audit-visible as blob `639befd20c28cf80ab779fd57f0781cbc47051bb`; v2.79 remains audit-visible as blob `c6dce4bbaffc2662b090972838cfec1e41e32a56`; v2.78 remains audit-visible as blob `dc77bf49739027c89562806c8034dfa70575882d`; v2.77 remains audit-visible as blob `8f932a5a9a2d9db62901a57d1e73c7a1d9300b83`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.81 remains audit-visible as blob `0346a6b046c314158b838506013dd737a7f29cf3`; v2.80 remains audit-visible as blob `639befd20c28cf80ab779fd57f0781cbc47051bb`; v2.79 remains audit-visible as blob `c6dce4bbaffc2662b090972838cfec1e41e32a56`; v2.78 remains audit-visible as blob `dc77bf49739027c89562806c8034dfa70575882d`; v2.77 remains audit-visible as blob `8f932a5a9a2d9db62901a57d1e73c7a1d9300b83`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.81 does not claim a new protected product release. It makes the source ledger current with two verified live findings that v2.80 only described in PR metadata: the backend dependency owner now requires a coherent **five-file** 2.13.0 graph because the optional Noema-agent lock participates in the same `--require-hashes` installation, and the repository-local browser owner has reproduced real Playwright failures while also proving that plain `github.sha` on `pull_request` produced synthetic-merge rather than exact-head evidence. Product merge, UI Delivery, Localization Delivery and commercial Release gates remain fail-closed.
+v2.82 does not claim a new protected product release. It keeps the v2.81 five-file backend dependency and exact-head browser-evidence findings, and records a new live single-writer repair: the canonical Tasks branch was advanced by an intervening generated commit that mixed dependency/Gap-ledger churn into the UI lane and deleted its Playwright acceptance. The generated commit remains in history; an ordinary non-force child restores the exact bounded Tasks tree and downstream provenance branches are restacked onto that repaired owner. Product merge, UI Delivery, Localization Delivery and commercial Release gates remain fail-closed.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -85,13 +85,15 @@ Repository-local browser execution is owned by #1691 rather than copied into eac
 
 ### 4.1 Tasks
 
-Canonical Tasks owner [#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) is exact `146a34411392e2b2bdf48d27cca0576275d5272e`, tree `11929d7e8675d9240e132efb495a62b31f616009`. It owns create/execute active-action identity while preserving mutual exclusion. Browser acceptance source holds WebDAV requests open, proves per-action `aria-busy`/spinner/copy identity and distinct request bodies, covers settlement, desktop screenshots and a 390×844 touch/overflow path.
+Canonical Tasks owner [#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) is exact `dd0a2cb55ea1c849a2962a246f6d91bd6ee798e8`, tree `11929d7e8675d9240e132efb495a62b31f616009`. It owns create/execute active-action identity while preserving mutual exclusion. Browser acceptance source holds WebDAV requests open, proves per-action `aria-busy`/spinner/copy identity and distinct request bodies, covers settlement, desktop screenshots and a 390×844 touch/overflow path.
 
-Application CI `35815976601` is terminal SUCCESS on this exact Tasks head; Bandit `35815976662`, Semgrep `35815976582` and Docker `35815976808` are also SUCCESS. However, that frontend job ran unit/lint/build and `pnpm run full:smoke` after installing Chromium; it did **not** invoke `pnpm run test:e2e`, so `tasks-pending-action.spec.ts` was not executed by that receipt. Security and CodeQL remain incomplete. This is the reproduced CI acceptance defect now owned by #1691.
+Intervening generated head `87e179d48c27e8e82453f08642947672e6ae55b4` was one commit ahead of the previously verified owner `146a34411392e2b2bdf48d27cca0576275d5272e` but crossed owner boundaries: backend/frontend dependency and lock changes, Gap-ledger churn, a Tasks source tweak, and deletion of `frontend/tests/e2e/tasks-pending-action.spec.ts`. Ordinary non-force corrective `dd0a2cb5...` preserves that generated commit as first-parent history and restores the exact verified canonical tree. Fresh comparison to `146a3441...` is ahead 2 / behind 0 / zero changed files.
 
-Generated #1735 and #1759 remain zero-effective-delta Draft provenance over the canonical Tasks owner and may not transfer receipts.
+Historical Application CI `35815976601` was terminal SUCCESS on predecessor `146a3441...`; Bandit `35815976662`, Semgrep `35815976582` and Docker `35815976808` were also SUCCESS. That frontend generation ran unit/lint/build and `pnpm run full:smoke` after installing Chromium but did not invoke `pnpm run test:e2e`, so it is not browser acceptance and no receipt transfers across the corrective commit.
 
-**Tasks Delivery: FAIL** until accepted exact-head #1691 browser-execution ancestry exists and the canonical unchanged Tasks head has inspectable exact-head Playwright artifacts, applicable terminal security/code evidence, AT evidence, zero valid review findings and an independent post-last-push approval.
+Generated provenance #1735 is ordinary-restacked onto repaired owner `dd0a2cb5...` at exact `e734e0e46bca5abaa991b9f6e52848ea80509007`; fresh compare is ahead 7 / behind 0 / zero changed files. Generated provenance #1759 is likewise restacked at exact `37e326c3c3ad64f46839588e9ec370bcf4cde80a`; compare is ahead 6 / behind 0 / zero changed files. Neither is a second product owner and neither may transfer receipts.
+
+**Tasks Delivery: FAIL** until accepted exact-head #1691 browser-execution ancestry exists and the repaired unchanged Tasks tree has inspectable exact-head Playwright artifacts, applicable terminal security/code evidence, AT evidence, zero valid review findings and an independent post-last-push approval.
 
 ### 4.2 Search
 
