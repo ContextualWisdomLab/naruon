@@ -1211,3 +1211,41 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler
+
+    res = await hash_generator_handler({"text": "hello", "algorithm": "sha256"})
+    assert res["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+    with pytest.raises(ValueError, match="Unsupported hash algorithm"):
+        await hash_generator_handler({"text": "hello", "algorithm": "invalid"})
+
+@pytest.mark.asyncio
+async def test_json_formatter_handler():
+    from api.tools import json_formatter_handler
+
+    res = await json_formatter_handler({"json_string": '{"a": 1}'})
+    assert res["formatted_json"] == '{\n  "a": 1\n}'
+
+    with pytest.raises(ValueError, match="Invalid JSON string"):
+        await json_formatter_handler({"json_string": 'invalid'})
+
+@pytest.mark.asyncio
+async def test_random_password_generator_handler():
+    from api.tools import random_password_generator_handler
+
+    res = await random_password_generator_handler({"length": 16, "include_numbers": True, "include_special": True})
+    assert len(res["password"]) == 16
+
+    res = await random_password_generator_handler({"length": 8, "include_numbers": False, "include_special": False})
+    assert len(res["password"]) == 8
+    assert res["password"].isalpha()
+
+    with pytest.raises(ValueError, match="Password length must be between 1 and 128"):
+        await random_password_generator_handler({"length": 0})
+
+    with pytest.raises(ValueError, match="Password length must be between 1 and 128"):
+        await random_password_generator_handler({"length": 129})

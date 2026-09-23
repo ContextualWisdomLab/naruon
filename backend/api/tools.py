@@ -1,4 +1,6 @@
 import base64
+import secrets
+import string
 import hashlib
 import inspect
 import json
@@ -768,6 +770,80 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256")
+    if algorithm not in ["md5", "sha1", "sha256", "sha512", "blake2b"]:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    hasher = hashlib.new(algorithm)
+    hasher.update(text.encode("utf-8"))
+    return {"hash": hasher.hexdigest()}
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="지정된 알고리즘을 사용하여 텍스트의 해시값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    json_string = params.get("json_string", "")
+    indent = params.get("indent", 2)
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=int(indent), ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except Exception as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 읽기 쉽게 포맷팅합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string", "indent": "number"},
+    ),
+    json_formatter_handler,
+)
+
+
+async def random_password_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    length = int(params.get("length", 12))
+    if length < 1 or length > 128:
+        raise ValueError("Password length must be between 1 and 128")
+
+    include_numbers = params.get("include_numbers", True)
+    include_special = params.get("include_special", True)
+
+    chars = string.ascii_letters
+    if include_numbers:
+        chars += string.digits
+    if include_special:
+        chars += string.punctuation
+
+    password = "".join(secrets.choice(chars) for _ in range(length))
+    return {"password": password}
+
+registry.register(
+    ToolInfo(
+        code="random_password_generator",
+        name="비밀번호 생성기 (Random Password Generator)",
+        description="지정된 길이와 조건을 만족하는 안전한 무작위 비밀번호를 생성합니다.",
+        category="유틸리티",
+        parameters={"length": "number", "include_numbers": "boolean", "include_special": "boolean"},
+    ),
+    random_password_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
