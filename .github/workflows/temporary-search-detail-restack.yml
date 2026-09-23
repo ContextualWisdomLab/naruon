@@ -29,6 +29,8 @@ jobs:
           PARENT_HEAD: d65a34773540147f568fab7aeeaf28835071ede2
         run: |
           set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin refs/heads/codex/search-customer-copy:refs/remotes/origin/codex/search-customer-copy
           test "$(git rev-parse refs/remotes/origin/codex/search-customer-copy)" = "$PARENT_HEAD"
           git merge --no-ff --no-commit "$PARENT_HEAD"
