@@ -1,0 +1,58 @@
+name: Temporary httpx2 adopter base-absence fix
+
+on:
+  push:
+    branches:
+      - codex/starlette-testclient-dependency
+
+permissions:
+  contents: write
+
+jobs:
+  repair-adopter:
+    if: github.repository == 'ContextualWisdomLab/naruon'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+
+      - name: Replace invalid base-file restore with base-aware removal
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/app-ci.yml')
+          text = path.read_text()
+          old = '''          # Remove the temporary resolver/adopter from the candidate itself.\n          git show "${{ github.event.pull_request.base.sha }}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml\n          git diff --check\n'''
+          new = '''          # Remove the temporary resolver/adopter from the candidate itself.\n          if git cat-file -e "${{ github.event.pull_request.base.sha }}:.github/workflows/app-ci.yml" 2>/dev/null; then\n            git show "${{ github.event.pull_request.base.sha }}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml\n          else\n            git rm .github/workflows/app-ci.yml\n          fi\n          git diff --check\n'''
+          if text.count(old) != 1:
+              raise SystemExit('unexpected app-ci adopter restore structure')
+          path.write_text(text.replace(old, new))
+          PY
+          rm .github/workflows/temporary-httpx2-adopter-base-absence-fix.yml
+          git diff --check
+
+      - name: Ordinary non-force repair push
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF_NAME}"
+          git fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/${branch}")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .github/workflows/app-ci.yml .github/workflows/temporary-httpx2-adopter-base-absence-fix.yml
+          git diff --cached --check
+          git commit -m "fix(ci): handle missing protected-base app-ci during adoption"
+          git push origin "HEAD:refs/heads/${branch}"
