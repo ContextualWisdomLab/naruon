@@ -15,6 +15,9 @@ PR_VALIDATION_WORKFLOWS = (
     ".github/workflows/dependency-review.yml",
     ".github/workflows/docker-publish.yml",
 )
+PLAYWRIGHT_UPLOAD_PIN = (
+    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+)
 
 
 @pytest.mark.parametrize("workflow_path", PR_VALIDATION_WORKFLOWS)
@@ -49,3 +52,27 @@ def test_stacked_trigger_guard_rejects_any_base_filter(
     monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
     with pytest.raises(AssertionError):
         test_repo_local_pr_validation_accepts_every_base_branch("workflow.yml")
+
+
+def test_application_ci_executes_browser_acceptance_and_preserves_artifacts() -> None:
+    """Require exact-head Playwright execution instead of treating smoke as E2E proof."""
+    workflow_path = REPO_ROOT / ".github/workflows/app-ci.yml"
+    workflow = yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    frontend_steps = workflow["jobs"]["frontend"]["steps"]
+    steps_by_name = {step.get("name"): step for step in frontend_steps}
+
+    browser_step = steps_by_name["Run Playwright browser acceptance"]
+    browser_command = browser_step["run"]
+    assert "pnpm run test:e2e" in browser_command
+    browser_env = browser_step.get("env") or {}
+    assert "LIVE_BASE_URL" not in browser_env
+    assert "RUN_LIVE_E2E" not in browser_env
+
+    evidence_step = steps_by_name["Upload Playwright browser evidence"]
+    assert evidence_step["uses"] == PLAYWRIGHT_UPLOAD_PIN
+    assert evidence_step["if"] == "${{ always() }}"
+    evidence_name = evidence_step["with"]["name"]
+    assert "${{ github.sha }}" in evidence_name
+    evidence_paths = evidence_step["with"]["path"]
+    assert "frontend/playwright-report/" in evidence_paths
+    assert "frontend/test-results/" in evidence_paths
