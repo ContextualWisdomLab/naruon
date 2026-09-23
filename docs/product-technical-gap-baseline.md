@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.79  
+**Baseline version:** 2.80  
 **Observed on:** 2026-09-23 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.78 remains audit-visible as blob `dc77bf49739027c89562806c8034dfa70575882d`; v2.77 remains audit-visible as blob `8f932a5a9a2d9db62901a57d1e73c7a1d9300b83`; older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.79 remains audit-visible as blob `c6dce4bbaffc2662b090972838cfec1e41e32a56`; v2.78 remains audit-visible as blob `dc77bf49739027c89562806c8034dfa70575882d`; v2.77 remains audit-visible as blob `8f932a5a9a2d9db62901a57d1e73c7a1d9300b83`; older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.79 does not claim a new protected product release. It preserves the v2.78 backend 2.13 read-only dependency-resolution authority and current Tasks provenance, and currentizes the Search refinement after adding a touch-capable mobile Playwright acceptance path plus explicit tab-to-panel ARIA linkage checks. Product merge, UI Delivery and commercial Release gates remain fail-closed because those cases have not yet produced terminal exact-head hosted/browser evidence and AT/independent-review acceptance is still incomplete.
+v2.80 does not claim a new protected product release. It currentizes the repository-local CI/browser-evidence owner after a reproduced acceptance defect: successful Application CI on Tasks #1463 installed Playwright but never executed the owner-specific Playwright suite. Canonical #1691 now carries the bounded TDD repair that runs `pnpm run test:e2e` and retains SHA/run-attempt-qualified browser artifacts. Product merge, UI Delivery and commercial Release gates remain fail-closed because the new CI owner generation is nonterminal, #1565 dependency Security RED remains live, and AT/independent-review acceptance is incomplete.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -55,11 +55,13 @@ Required order: current 2.13 resolver GREEN → exact artifact recovery/hash ver
 
 [#1694](https://github.com/ContextualWisdomLab/naruon/pull/1694) exact `10f046ee5ea004ec9236d59d3ccfeab3e1a417be` owns the bounded fresh-Alembic compatibility repair. Its historical PostgreSQL bootstrap evidence is useful but not final acceptance after dependency ancestry moves.
 
-[#1691](https://github.com/ContextualWisdomLab/naruon/pull/1691) exact `f985a00030028c9989637b3fafffac07d95e2de2` owns only Naruon-local stacked-PR validation. It must consume released central CI contracts rather than copy central workflow source. Historical failures are diagnostic; after accepted dependency/bootstrap prerequisites it must ordinary-adopt them and acquire a fresh exact-head generation.
+[#1691](https://github.com/ContextualWisdomLab/naruon/pull/1691) exact `7970f7e56bf96140a28b69e762b8d33509036408` owns Naruon-local stacked-PR validation and exact-head browser-evidence execution. Reality RED `eb8fe7d24e59f8aa8e69fd2854cc269e935af4ad` adds a parsed-workflow contract proving that Application CI must execute repository Playwright acceptance rather than treating `full:smoke` as owner-specific browser evidence. Exact current `7970f7e5...` adds `pnpm run test:e2e -- --reporter=line,html` after the existing frontend build/smoke path and uploads `frontend/playwright-report/` plus `frontend/test-results/` with pinned `actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` under a `${{ github.sha }}`/`${{ github.run_attempt }}`-qualified artifact identity. Its Application CI, Security, CodeQL, Semgrep, Bandit and Docker runs are registered but nonterminal, so browser GREEN is not claimed.
+
+#1691 must still consume released central CI contracts rather than copy central workflow source. After accepted dependency/bootstrap prerequisites it must ordinary-adopt them and reacquire stacked-trigger/database/browser/security/review evidence on one unchanged exact head.
 
 [#1503](https://github.com/ContextualWisdomLab/naruon/pull/1503) exact `9151c75568c582c8147cfee6757cd00a9b4d60b7` remains the canonical workspace registry/document migration owner. `workspace_id` is an opaque authenticated claim, never ownership evidence. Canonical migration lineage remains `0018_workspace_registry → 0019_email_read_state_repair → 0020_workspace_organization_binding → 0021_workspace_personal_owner_binding`.
 
-Do not restack #1503 merely to chase a moving prerequisite branch. Required order is accepted #1565 → combined-security #1623 → final fresh-bootstrap #1694 → fresh stacked-CI #1691 → ordinary/non-force #1503 restack onto one accepted Alembic head with fresh PostgreSQL migration/security/review evidence.
+Do not restack #1503 merely to chase a moving prerequisite branch. Required order is accepted #1565 → combined-security #1623 → final fresh-bootstrap #1694 → fresh stacked/browser-CI #1691 → ordinary/non-force #1503 restack onto one accepted Alembic head with fresh PostgreSQL migration/security/review evidence.
 
 ### 3.4 Utility tools
 
@@ -71,25 +73,29 @@ Do not restack #1503 merely to chase a moving prerequisite branch. Required orde
 
 UI acceptance is not inferred from source shape. Material UI requires normal/loading/empty/error/permission/responsive/interaction states, keyboard/focus/touch/accessibility evidence, appropriate screenshots/E2E and exact-head current evidence. shadcn/ui source usage is not Storybook acceptance.
 
+Repository-local browser execution is owned by #1691 rather than copied into each UI owner. An E2E source file, installed browser binary or passing `full:smoke` is not browser acceptance unless the owner-specific Playwright path actually ran and its exact-head artifacts are inspectable.
+
 ### 4.1 Tasks
 
 Canonical Tasks owner [#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) is exact `146a34411392e2b2bdf48d27cca0576275d5272e`, tree `11929d7e8675d9240e132efb495a62b31f616009`. It owns create/execute active-action identity while preserving mutual exclusion. Browser acceptance source holds WebDAV requests open, proves per-action `aria-busy`/spinner/copy identity and distinct request bodies, covers settlement, desktop screenshots and a 390×844 touch/overflow path.
 
+Application CI `35815976601` is terminal SUCCESS on this exact Tasks head; Bandit `35815976662`, Semgrep `35815976582` and Docker `35815976808` are also SUCCESS. However, the successful frontend job ran unit/lint/build and `pnpm run full:smoke` after installing Playwright Chromium; it did **not** invoke `pnpm run test:e2e`, so `tasks-pending-action.spec.ts` was not executed by that receipt. Security `35815976581` and CodeQL `35815976635` remain nonterminal. This is the reproduced CI acceptance defect now owned by #1691.
+
 Generated provenance [#1735](https://github.com/ContextualWisdomLab/naruon/pull/1735) was ordinary/non-force restacked to exact `0a46d13fcd8e88b616eedb2b944070ac45203872`; fresh compare to #1463 is ahead 6 / behind 0 / zero effective files. Generated provenance [#1759](https://github.com/ContextualWisdomLab/naruon/pull/1759) was likewise restacked to `32f41fc5674ea212431d9203f6bb30a0d4002520`; compare is ahead 5 / behind 0 / zero effective files. Neither is a second product owner and neither may transfer its receipts to #1463.
 
-**Tasks Delivery: FAIL** until canonical exact-head hosted/browser evidence is terminal, AT evidence is present, valid review findings are zero and an independent post-last-push approval exists.
+**Tasks Delivery: FAIL** until accepted #1691 browser-execution ancestry exists and the canonical unchanged Tasks head has inspectable exact-head Playwright artifacts, applicable terminal security/code evidence, AT evidence, zero valid review findings and an independent post-last-push approval.
 
 ### 4.2 Search
 
 [#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) exact `af2efcef6a6dfeedbd13a69865b5a8fdd7f1fd10` remains canonical Search owner. Bounded refinement [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) exact `3aaeb30f80048cf3690e924176ee85ba6fc80537` adds shared Button tab semantics plus real-browser keyboard/focus acceptance for Left/Right/Home/End/Up, wraparound, unhandled-key stability and active panel linkage. Its Playwright acceptance now also uses a touch-capable 390×844 browser context with `tap()` on multiple tabs, verifies `aria-controls`/`aria-labelledby` panel pairing, enforces at least 24×24 CSS-pixel touch targets, guards horizontal overflow and records a touch-mobile screenshot path.
 
-**Search Delivery: FAIL** pending terminal exact-head hosted/browser execution and inspected artifacts, assistive-technology acceptance and qualifying independent post-last-push review. Touch-specific acceptance source is now present but is not a GREEN receipt until executed on this exact head.
+**Search Delivery: FAIL** pending accepted #1691 browser-execution ancestry, terminal exact-head hosted/browser execution and inspected artifacts, assistive-technology acceptance and qualifying independent post-last-push review. Touch-specific acceptance source is present but is not a GREEN receipt until executed on the exact owner head.
 
 ### 4.3 OIDC settings
 
 [#1729](https://github.com/ContextualWisdomLab/naruon/pull/1729) exact `0065a7f4059823ec28573050e6cce9ec381b42d6` is the bounded OIDC pending-state owner. It keeps the production pending-state repair, rendered deferred-promise regression, Playwright logout pending/error acceptance and doctoring. Browser source covers desktop keyboard activation, tablet/mobile touch, one held DELETE, native disabled plus `aria-busy`/spinner identity, responsive overflow/screenshots and 503 recovery preserving signed-in state.
 
-**OIDC Delivery: FAIL** while exact-head required/browser evidence, AT, multilingual resource consumption and independent review remain incomplete.
+**OIDC Delivery: FAIL** while accepted #1691 browser-execution ancestry, exact-head required/browser evidence, AT, multilingual resource consumption and independent review remain incomplete.
 
 ## 5. UI Localization Catalog
 
@@ -99,7 +105,7 @@ UI translation authority remains separate from ontology/concept labels. Ubiquito
 
 Persistence must be normalized, versioned and complete rather than one JSON mega-row. Publishing one `resource_version` is the aggregate transaction boundary; missing translation or placeholder mismatch fails publication. Read API is screen-scoped with immutable version/ETag identity; browser cache key is `(screen_key, locale_code, resource_version)`. Do not fetch a whole catalog at login or create per-key waterfalls.
 
-Persistence must descend from the final accepted #1503 migration ancestry; no parallel Alembic head. Required UI acceptance covers all eight locales in Storybook plus real browser for normal/loading/empty/error/permission states, keyboard/focus/screen-reader/touch, CJK wrapping/font fallback, Vietnamese diacritics, DE/FR/ES text expansion, mobile/intermediate widths and no locale hydration flash.
+Persistence must descend from the final accepted #1503 migration ancestry; no parallel Alembic head. Required UI acceptance covers all eight locales in Storybook plus real browser for normal/loading/empty/error/permission states, keyboard/focus/screen-reader/touch, CJK wrapping/font fallback, Vietnamese diacritics, DE/FR/ES text expansion, mobile/intermediate widths and no locale hydration flash. Repository-local browser execution must come through accepted #1691 ancestry or its verified successor rather than per-UI workflow copies.
 
 **Localization Delivery: FAIL.** A DB/API-only implementation is not Delivery PASS.
 
@@ -125,7 +131,7 @@ This baseline is complete only when all of the following are true on one current
 
 1. #1565 resolves and adopts the current safe backend graph coherently, removes temporary resolver/source-fix workflow code and reaches exact-head GREEN plus independent review.
 2. #1623 ordinary-adopts accepted backend ancestry and reaches repository-wide current-database Security GREEN.
-3. #1694/#1691/#1503 converge onto one accepted migration/CI ancestry with fresh PostgreSQL and exact-head evidence.
+3. #1694/#1691/#1503 converge onto one accepted migration/CI ancestry with fresh PostgreSQL, Playwright browser evidence and exact-head security/review evidence.
 4. Utility and material UI owners reach their own exact-head terminal acceptance without receipt transfer.
 5. #1731/#1740 are followed by canonical normalized localization persistence/API/cache/publication and eight-locale Storybook/browser/a11y acceptance.
 6. Required external capabilities are consumed only through immutable released/versioned owner contracts.
