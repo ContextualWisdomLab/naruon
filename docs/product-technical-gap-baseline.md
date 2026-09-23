@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.85  
-**Observed on:** 2026-09-23 (Asia/Seoul)  
+**Baseline version:** 2.86  
+**Observed on:** 2026-09-24 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.84 remains audit-visible as blob `e414652db5ad4df43f57b7dfaab8672a138de399`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.85 remains audit-visible as blob `305f004c6025b2da15bbc771dfe8364f25ede322`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.85 records three live facts without claiming a protected release: #1691's exact-head checkout/artifact-provenance repair is proven while its Application CI remains terminal RED on canonical-database plus real Playwright product/E2E failures; #1565's coherent five-file 2.13.0 graph remains verified evidence while one-shot ordinary adoption is nonterminal; and generated Projects PR #1764 was found to overlap #1352's existing busy-state contract, so it was moved off direct `develop` ownership and converted to Draft on the #1352 owner branch. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.
+v2.86 closes the source-lag finding created after v2.85 by recording the durable mail/dashboard-flow E2E successor #1766 and the current guarded owner-repair graph without treating any temporary helper commit as accepted product ancestry. #1691 still proves exact-head browser execution and artifact provenance while product/database acceptance remains RED; #1565 still has a verified coherent five-file 2.13.0 candidate while helper-free product adoption is pending; Search, Projects and exception-redaction repairs remain guarded owner transitions. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -51,7 +51,7 @@ The accepted artifact contains one coherent five-file graph:
 
 It carries direct `httpx2==2.13.0`, resolved `httpcore2==2.13.0`, the Emscripten-only `httpx2-jsfetch==1.0` branch and identical `httpx2/httpcore2` hash records in core and optional-agent locks. No 2.5.0 TestClient record remains in the five generated files. `genai-prices==0.0.71` declares `httpx2>=2.0`, so 2.13.0 remains inside its consumer contract.
 
-Current `4c5872ac...` is a temporary one-shot staging generation in the already registered `Application CI`, not final product source. Its guarded adopter re-generates and re-verifies the exact hashes, downloads the same-run artifact through the GitHub API, verifies GitHub archive digest plus internal manifest, copies all five files together, updates the structural lock/runtime regression plus CHANGELOG/doctoring, restores `.github/workflows/app-ci.yml` from the protected base, runs `uv lock --check`, a real combined hash-locked core+agent install, warnings-as-errors focused TestClient regression and Ruff, checks the exact changed-path set and remote head, then performs only an ordinary non-force push. Current staging Application CI `35860514971` remains nonterminal.
+Current `4c5872ac...` is a temporary one-shot staging generation in the already registered `Application CI`, not final product source. Its guarded adopter re-generates and re-verifies the exact hashes, downloads the same-run artifact through the GitHub API, verifies GitHub archive digest plus internal manifest, copies all five files together, updates the structural lock/runtime regression plus CHANGELOG/doctoring, restores `.github/workflows/app-ci.yml` from the protected base, runs `uv lock --check`, a real combined hash-locked core+agent install, warnings-as-errors focused TestClient regression and Ruff, checks the exact changed-path set and remote head, then performs only an ordinary non-force push. Current staging Application CI `35860514971` remains nonterminal. Bandit, Semgrep and Docker have independently reached SUCCESS on this staging head, but those partial receipts do not constitute adoption or Security/CodeQL acceptance.
 
 Required order is: staged adoption produces a helper-free child → prove no temporary resolver/adopter source and no residual 2.5.0 → normal exact-head frozen/core+agent/TestClient/Ruff GREEN → fresh Security/Trivy, CodeQL and every protected required context → zero valid unresolved review findings/threads → qualifying independent post-last-push review → protected integration. No stale 2.12 promotion, four-file-only adoption, hand-edited generated lock/hash text, source-neutral wake commit or scanner suppression is acceptable.
 
@@ -69,13 +69,13 @@ Required order is: staged adoption produces a helper-free child → prove no tem
 
 The provenance repair itself is now verified. Artifact `10753295906` is named `playwright-browser-evidence-4bf3efd95b8c5002c281a4b47f93e78fc63730de-1`, its workflow metadata head is the exact PR head, and GitHub reports archive digest `sha256:2d067723be88e1c589febdda36da3a1576487504bf82cbb7cd7d33f6f41dc1df`. The former synthetic-merge-SHA defect is therefore closed at the artifact-identity boundary; browser/product acceptance remains RED.
 
-Artifact inspection routes the failures to canonical owners rather than to the CI lane. The exact #1691 ancestry still exercises stale Dashboard quick-action accessible names (`AI 빠른 실행` / `AI 빠른 실행 메뉴`) and a non-exact Search heading locator; current #1603 Search-owner source already narrows the API-backed Search heading to `exact: true` but still contains stale quick-action names and non-exact mobile Search-link locators, so #1603 must repair its own residual E2E contract and #1760 must restack afterward. The Projects normal-state failure is not a reason to weaken `ProjectsLayout`: #1352 exact `1b8497f33e1977ce7b963640b63f107510621973` already owns the missing signed-session/task-timestamp/`/api/projects/candidates` fixture repair and must arrive through normal ancestry. Mail/dashboard-flow stale assertions remain with their mail/E2E owner path. #1691 must not copy those product-owner changes or exclude failing specs.
+Artifact inspection routes the failures to canonical owners rather than to the CI lane. Search quick-action/mobile-link failures belong to #1603 and its dependent #1760; Projects normal-state readiness consumes #1352 and any valid #1764 refinement. Mail/dashboard-flow regression is now bounded by [#1766](https://github.com/ContextualWisdomLab/naruon/pull/1766) exact `705984a381e5ea999c17bae508d35e1bf820c31b`, a one-file successor from protected `develop`. It restores the previously merged #778 contract in `frontend/tests/e2e/dashboard-flows.spec.ts`: actual action-item labels instead of obsolete `2개 실행 항목`, current `답장 초안 생성`, exact `답장 초안` textbox, and current `메일 맥락 검색` / context-search action. #1691 must consume that product-owner repair later rather than copy it or exclude the spec.
 
 #1691 current review inventory has no valid unresolved inline thread, but the only surfaced formal review is a dismissed predecessor review and no qualifying independent post-last-push approval exists. Bandit, Semgrep and Docker on the exact head are GREEN; Security and CodeQL remain nonterminal. None of those partial receipts overrides the terminal Application CI RED.
 
 [#1503](https://github.com/ContextualWisdomLab/naruon/pull/1503) exact `9151c75568c582c8147cfee6757cd00a9b4d60b7` remains the canonical workspace registry/document migration owner. Canonical lineage remains `0018_workspace_registry → 0019_email_read_state_repair → 0020_workspace_organization_binding → 0021_workspace_personal_owner_binding`; `workspace_id` is authenticated context, not ownership evidence.
 
-Required order is accepted #1565 → combined-security #1623 → final fresh-bootstrap #1694 → #1691 ordinary-adopts accepted prerequisite and separately-owned E2E repairs → fresh exact-head stacked/database/browser/security/review evidence → ordinary/non-force #1503 restack onto one accepted Alembic head.
+Required order is accepted #1565 → combined-security #1623 → final fresh-bootstrap #1694 → canonical product/E2E owners (#1603→#1760, #1352→valid #1764, #1766) settle → #1691 ordinary-adopts accepted prerequisites and separately-owned E2E repairs → fresh exact-head stacked/database/browser/security/review evidence → ordinary/non-force #1503 restack onto one accepted Alembic head.
 
 ### 3.4 Utility tools
 
@@ -83,13 +83,15 @@ Required order is accepted #1565 → combined-security #1623 → final fresh-boo
 
 [#1758](https://github.com/ContextualWisdomLab/naruon/pull/1758) exact `634b2ad34db3d05aa4e00bc2aac0b3a6bcd3709f` preserves password-generator intent on top of #1718. Generated [#1763](https://github.com/ContextualWisdomLab/naruon/pull/1763) exact `4c05ee7c8651068b6240534ea977d2bbb69b0f94` duplicates #1718 hash/JSON and overlaps #1758 password semantics under a different registry/minimum-length/symbol contract. It remains Draft, retargeted onto #1758, until ordinary reconciliation proves a unique password delta or verified zero-delta provenance.
 
-### 3.5 Generated provenance containment
+### 3.5 Generated provenance containment and guarded reconciliation
 
 [#1738](https://github.com/ContextualWisdomLab/naruon/pull/1738) was advanced again by generated `5b949b5f48d591a924acc4acf72b2102593282d9`, which reintroduced `.jules/palette.md`, participant/attachment structures, a buyer-visible schedule-proposal CTA and copy-only mobile reply/source/schedule panels. Ordinary-forward corrective `58e5eae4b5b643861005dd848f3daaf08d32691d` preserves the generated commit in history and restores the exact protected `develop` tree. Fresh compare is ahead-only with zero changed files. Valid UI intent remains with canonical mail/thread/attachment/calendar/mobile owners; fabricated placeholder product surface is not retained.
 
 [#1725](https://github.com/ContextualWisdomLab/naruon/pull/1725) was likewise advanced through generated `6c74b5bf4379e1184157ae78aa8b093ae4c36463`, mixing broad exception-log changes with backend/frontend dependency and lock churn. Ordinary-forward corrective `b5690bf885f74fb3f7cd45caf7dfbd6fd27539a6` preserves that history and restores the exact protected tree; fresh compare is ahead-only with zero changed files. Exception confidentiality remains owned by #1612 plus #1698/#1700 and dependency/security by #1565/#1623 and dedicated dependency owners.
 
-Generated [#1764](https://github.com/ContextualWisdomLab/naruon/pull/1764) exact `ca780e3eeeade786718f3cc0097527beae797607` was created directly from `develop` for the Projects evidence-review busy state. Fresh comparison showed `aria-busy={correctionSubmitting}` already exists in canonical Projects owner #1352 exact `1b8497f33e1977ce7b963640b63f107510621973`. #1764 was therefore retargeted to `fix/aria-busy-clean-scope` and converted to Draft. Its potentially unique product delta is limited to the Loader2 spinner/presentation and matching test mocks; `.jules/palette.md` is generated provenance, not product authority. The retargeted PR is currently non-mergeable because it has not yet been ordinary-restacked onto the parent tree; do not merge or duplicate #1352's state-machine ownership.
+Generated [#1764](https://github.com/ContextualWisdomLab/naruon/pull/1764) was created directly from `develop` for the Projects evidence-review busy state even though #1352 already owns `aria-busy={correctionSubmitting}` and the loading-vs-save concurrency contract. It is now Draft and retargeted to #1352. Temporary staging `9780e2380790fee4ff6d33c70b133d41d6daa71c` uses a self-removing ordinary restack to preserve only Loader2 visual feedback and a pending/settled spinner regression; intended final #1352-relative scope is exactly `ProjectsLayout.tsx`, `ProjectsLayout.accessibility.test.tsx`, and `page.test.tsx`. The helper generation is not accepted source and must disappear from the helper-free child.
+
+Generated [#1765](https://github.com/ContextualWisdomLab/naruon/pull/1765) is likewise Draft and retargeted onto canonical exception-redaction owner #1612 exact `3da3ae8e60e1bb049f59ae86bfe82db12b7e3cc7`. Temporary staging `5a204f644523bb45a27d421565c42256259e4f73` ordinary-adopts #1612, removes duplicate email/Sentinel ownership and intends to retain only `backend/api/search.py` plus `backend/tests/test_search_exception_redaction_contract.py`, consuming canonical `redacted_exception_info` rather than raw exception values. The temporary restack workflow is not product scope or transferable evidence.
 
 The zero-delta provenance lanes remain Draft and are not independent merge candidates. Generated dependent refinements remain Draft until ordinary/non-force reconciliation proves their unique delta against the canonical owner. Old receipts do not transfer.
 
@@ -107,9 +109,11 @@ Historical Application CI `35815976601` on predecessor `146a3441...` was SUCCESS
 
 ### 4.2 Search
 
-[#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) exact `af2efcef6a6dfeedbd13a69865b5a8fdd7f1fd10` remains canonical Search owner. Bounded refinement [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) exact `3aaeb30f80048cf3690e924176ee85ba6fc80537` adds shared Button tab semantics and Playwright keyboard/focus/touch acceptance including tab/panel ARIA linkage, wraparound, a touch-capable 390×844 context, target sizing and overflow checks.
+[#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) last bounded product/E2E head `af2efcef6a6dfeedbd13a69865b5a8fdd7f1fd10` remains the canonical Search owner. Current temporary staging `6aa2dc50f7dd2830da04decd03c16e30a465dd8d` contains a branch-scoped self-removing source-fix helper for the real-browser RED: stale `AI 빠른 실행` / `AI 빠른 실행 메뉴` names and non-exact mobile `맥락 검색` links must align with the protected accessible contract. The helper must emit an ordinary child and disappear, returning effective scope to the same five Search-owned files before acceptance.
 
-The #1691 exact-head artifact proves browser RED rather than a runner problem. Protected `DashboardLayout` exposes `판단 보조 빠른 실행` / `판단 보조 빠른 실행 메뉴`; #1603's owned `dashboard-branding.spec.ts` still contains stale `AI 빠른 실행` / `AI 빠른 실행 메뉴` selectors at multiple mobile interaction points. Its API-backed Search heading assertion is already exact on #1603, while other mobile `맥락 검색` link locators remain non-exact. #1603 must minimally align its owned selectors with the protected accessible contract, then #1760 must ordinary/non-force restack while preserving its three-file detail-tab delta. **Search Delivery: FAIL** until that repair has exact-head hosted/browser evidence, inspected artifacts, applicable AT and independent review.
+Bounded refinement [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) exact `3aaeb30f80048cf3690e924176ee85ba6fc80537` adds shared Button tab semantics and Playwright keyboard/focus/touch acceptance including tab/panel ARIA linkage, wraparound, a touch-capable 390×844 context, target sizing and overflow checks. It must ordinary/non-force restack after the repaired #1603 parent while preserving only its three-file detail-tab delta.
+
+The #1691 exact-head artifact proves browser RED rather than a runner problem. **Search Delivery: FAIL** until #1603 produces a helper-free repaired owner, #1760 restacks on it, and the accepted ancestry has exact-head hosted/browser evidence, inspected artifacts, applicable AT and independent review.
 
 ### 4.3 OIDC settings
 
@@ -119,7 +123,13 @@ The #1691 exact-head artifact proves browser RED rather than a runner problem. P
 
 [#1352](https://github.com/ContextualWisdomLab/naruon/pull/1352) exact `1b8497f33e1977ce7b963640b63f107510621973` remains the canonical Projects async/busy-state and smoke-supplier owner. It already scopes `aria-busy` for the evidence-review save action to `correctionSubmitting`, preserves `evidenceLoading` as a disabled prerequisite rather than busy identity, and owns the signed-session/task-timestamp/`/api/projects/candidates` fixture repair exposed by #1691 browser RED.
 
-Generated #1764 is a dependent visual refinement only after retargeting to #1352. Its unique candidate is the Loader2 spinner while `correctionSubmitting` is true. Because it is currently conflict/non-mergeable after retarget and has no qualifying independent review, **Projects Delivery remains FAIL**; the branch must ordinary/non-force restack onto #1352, remove generated `.jules` scope, prove spinner identity with focused regression and then reacquire exact-head browser/AT/current review evidence. It must not become a second Projects state-machine owner.
+Generated #1764 is a dependent visual refinement only after canonical restack onto #1352. Its unique candidate is Loader2 feedback while `correctionSubmitting` is true, with focused pending/settled spinner evidence. **Projects Delivery: FAIL** until the helper-free three-file child exists and reacquires exact-head browser/touch/AT/current review evidence; it must not become a second Projects state-machine owner.
+
+### 4.5 Mail/dashboard flow
+
+[#1766](https://github.com/ContextualWisdomLab/naruon/pull/1766) exact `705984a381e5ea999c17bae508d35e1bf820c31b` is the bounded regression successor for `frontend/tests/e2e/dashboard-flows.spec.ts`. It changes no production source or fixture. The one-file delta restores current product contracts already present in the protected source and E2E helper: the two actual action-item labels, `답장 초안 생성`, exact `답장 초안` textbox semantics, and `메일 맥락 검색` / context-search action. Search, Projects, dependency and CI implementation remain outside this owner.
+
+The repair is source-level only. Its exact-head Application CI, Security, Semgrep, Bandit, CodeQL and Docker generation is registered but nonterminal, and no qualifying independent post-last-push approval exists. **Mail/dashboard-flow Delivery: FAIL** until real Playwright execution through accepted #1691 ancestry is GREEN on the unchanged owner source, applicable required/security/code contexts are terminal, and review evidence is current.
 
 ## 5. UI Localization Catalog
 
@@ -156,9 +166,10 @@ This baseline is complete only when all of the following are true on one current
 1. #1565 ordinary-adopts the verified five-file backend graph, removes temporary resolver/adopter code and reaches helper-free exact-head required/security/code GREEN plus independent review.
 2. #1623 ordinary-adopts accepted backend ancestry and reaches repository-wide current-database Security GREEN.
 3. #1694/#1691/#1503 converge onto one accepted migration/CI ancestry with fresh PostgreSQL, exact-head Playwright browser evidence and exact-head security/review evidence; current #1691 Application CI RED must be repaired through the canonical migration and product/E2E owners, not by suppressing tests.
-4. Utility and material UI owners, including #1352→#1764 if the spinner delta remains valid, reach their own exact-head terminal acceptance without receipt transfer or duplicate generated ownership.
-5. #1731/#1740 are followed by canonical normalized localization persistence/API/cache/publication and eight-locale Storybook/browser/a11y acceptance.
-6. Required external capabilities are consumed only through immutable released/versioned owner contracts.
-7. The exact integrated protected head has version/CHANGELOG/tag/package or canonical immutable publication, SBOM/provenance, reproducibility and rollback evidence.
+4. Material UI owners, including #1603→#1760 Search, #1352→valid #1764 Projects, #1766 mail/dashboard flow, Tasks and OIDC, reach their own exact-head terminal acceptance without receipt transfer or duplicate generated ownership.
+5. Security/generated reconciliation owners such as #1612→valid #1765 settle on bounded canonical scopes with current exact-head evidence.
+6. #1731/#1740 are followed by canonical normalized localization persistence/API/cache/publication and eight-locale Storybook/browser/a11y acceptance.
+7. Required external capabilities are consumed only through immutable released/versioned owner contracts.
+8. The exact integrated protected head has version/CHANGELOG/tag/package or canonical immutable publication, SBOM/provenance, reproducibility and rollback evidence.
 
 Until then: **Merge/Release Gate = FAIL; UI Delivery Gate = FAIL; Localization Delivery = FAIL.**
