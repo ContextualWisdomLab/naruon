@@ -1,0 +1,126 @@
+name: Temporary Projects spinner restack
+
+on:
+  push:
+    branches:
+      - palette-aria-busy-projects-layout-282500465634671225
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-projects-spinner-restack
+  cancel-in-progress: false
+
+jobs:
+  restack:
+    if: github.repository == 'ContextualWisdomLab/naruon' && github.ref == 'refs/heads/palette-aria-busy-projects-layout-282500465634671225'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact triggering head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Ordinary-adopt canonical Projects owner and retain only spinner refinement
+        shell: bash
+        env:
+          CANONICAL_HEAD: 1b8497f33e1977ce7b963640b63f107510621973
+        run: |
+          set -euo pipefail
+          git fetch origin refs/heads/fix/aria-busy-clean-scope:refs/remotes/origin/fix/aria-busy-clean-scope
+          test "$(git rev-parse refs/remotes/origin/fix/aria-busy-clean-scope)" = "$CANONICAL_HEAD"
+          set +e
+          git merge --no-ff --no-commit "$CANONICAL_HEAD"
+          merge_status=$?
+          set -e
+          if [ "$merge_status" -ne 0 ]; then
+            unresolved="$(git diff --name-only --diff-filter=U | sort)"
+            allowed="$(printf '%s\n' '.jules/palette.md' 'frontend/src/app/projects/page.test.tsx' 'frontend/src/components/ProjectsLayout.accessibility.test.tsx' 'frontend/src/components/ProjectsLayout.tsx' | sort)"
+            test "$unresolved" = "$allowed"
+          fi
+          git checkout "$CANONICAL_HEAD" -- \
+            .jules/palette.md \
+            frontend/src/app/projects/page.test.tsx \
+            frontend/src/components/ProjectsLayout.accessibility.test.tsx \
+            frontend/src/components/ProjectsLayout.tsx
+          git add \
+            .jules/palette.md \
+            frontend/src/app/projects/page.test.tsx \
+            frontend/src/components/ProjectsLayout.accessibility.test.tsx \
+            frontend/src/components/ProjectsLayout.tsx
+
+          python - <<'PY'
+          from pathlib import Path
+
+          source_path = Path('frontend/src/components/ProjectsLayout.tsx')
+          source = source_path.read_text(encoding='utf-8')
+          old_import = "import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, ListChecks, Network, Search, User } from 'lucide-react';"
+          new_import = "import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, ListChecks, Loader2, Network, Search, User } from 'lucide-react';"
+          if source.count(old_import) != 1:
+              raise SystemExit('canonical ProjectsLayout icon import changed')
+          source = source.replace(old_import, new_import)
+          old_class = 'className="mt-3 min-h-9 w-full rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"'
+          new_class = 'className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"'
+          if source.count(old_class) != 1:
+              raise SystemExit('canonical review-save button class changed')
+          source = source.replace(old_class, new_class)
+          label = "                              {correctionSubmitting ? '검토 저장 중' : '문단 근거 검토 저장'}"
+          spinner = "                              {correctionSubmitting && <Loader2 data-testid=\"project-evidence-save-spinner\" className=\"size-3.5 animate-spin\" aria-hidden=\"true\" />}\n" + label
+          if source.count(label) != 1:
+              raise SystemExit('canonical review-save label changed')
+          source = source.replace(label, spinner)
+          source_path.write_text(source, encoding='utf-8')
+
+          for test_path_text in (
+              'frontend/src/app/projects/page.test.tsx',
+              'frontend/src/components/ProjectsLayout.accessibility.test.tsx',
+          ):
+              test_path = Path(test_path_text)
+              test_source = test_path.read_text(encoding='utf-8')
+              mock_line = '  ListChecks: () => <svg aria-hidden="true" />,\n'
+              if test_source.count(mock_line) != 1:
+                  raise SystemExit(f'lucide mock anchor changed: {test_path}')
+              test_source = test_source.replace(
+                  mock_line,
+                  mock_line + '  Loader2: () => <svg data-testid="project-evidence-save-spinner" aria-hidden="true" />,\n',
+              )
+              test_path.write_text(test_source, encoding='utf-8')
+
+          a11y_path = Path('frontend/src/components/ProjectsLayout.accessibility.test.tsx')
+          a11y = a11y_path.read_text(encoding='utf-8')
+          pending_anchor = '    expect(saveButton?.getAttribute("aria-busy")).toBe("true");\n    expect(saveButton?.textContent).toBe("검토 저장 중");'
+          pending_replacement = '    expect(saveButton?.getAttribute("aria-busy")).toBe("true");\n    expect(saveButton?.querySelector(\'[data-testid="project-evidence-save-spinner"]\')).not.toBeNull();\n    expect(saveButton?.textContent).toBe("검토 저장 중");'
+          if a11y.count(pending_anchor) != 1:
+              raise SystemExit('pending-state regression anchor changed')
+          a11y = a11y.replace(pending_anchor, pending_replacement)
+          settled_anchor = '    expect(saveButton?.getAttribute("aria-busy")).toBe("false");\n    expect(saveButton?.textContent).toBe("문단 근거 검토 저장");\n    if (outcome === "failure")'
+          settled_replacement = '    expect(saveButton?.getAttribute("aria-busy")).toBe("false");\n    expect(saveButton?.querySelector(\'[data-testid="project-evidence-save-spinner"]\')).toBeNull();\n    expect(saveButton?.textContent).toBe("문단 근거 검토 저장");\n    if (outcome === "failure")'
+          if a11y.count(settled_anchor) != 1:
+              raise SystemExit('settled-state regression anchor changed')
+          a11y = a11y.replace(settled_anchor, settled_replacement)
+          a11y_path.write_text(a11y, encoding='utf-8')
+          PY
+
+          git add frontend/src/app/projects/page.test.tsx frontend/src/components/ProjectsLayout.accessibility.test.tsx frontend/src/components/ProjectsLayout.tsx
+          git diff --check
+
+      - name: Commit canonical restack and remove one-shot workflow
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+          CANONICAL_HEAD: 1b8497f33e1977ce7b963640b63f107510621973
+        run: |
+          set -euo pipefail
+          rm .github/workflows/temporary-projects-spinner-restack.yml
+          git add .github/workflows/temporary-projects-spinner-restack.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(projects): restack spinner feedback on canonical owner'
+          effective="$(git diff --name-only "$CANONICAL_HEAD"...HEAD | sort)"
+          expected="$(printf '%s\n' 'frontend/src/app/projects/page.test.tsx' 'frontend/src/components/ProjectsLayout.accessibility.test.tsx' 'frontend/src/components/ProjectsLayout.tsx' | sort)"
+          test "$effective" = "$expected"
+          remote_head="$(git ls-remote origin refs/heads/palette-aria-busy-projects-layout-282500465634671225 | cut -f1)"
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git push origin HEAD:palette-aria-busy-projects-layout-282500465634671225
