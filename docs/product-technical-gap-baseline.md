@@ -1,15 +1,15 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.78  
+**Baseline version:** 2.79  
 **Observed on:** 2026-09-23 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.77 remains audit-visible as blob `8f932a5a9a2d9db62901a57d1e73c7a1d9300b83`; older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
+v2.78 remains audit-visible as blob `dc77bf49739027c89562806c8034dfa70575882d`; v2.77 remains audit-visible as blob `8f932a5a9a2d9db62901a57d1e73c7a1d9300b83`; older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.
 
-v2.78 does not claim a new protected product release. It currentizes the live owner graph after two material authority changes: the backend TestClient dependency candidate advanced from the already-verified historical `httpx2/httpcore2 2.12.0` graph to a fresh read-only `2.13.0` resolution path, and Tasks generated provenance branches were ordinary/non-force restacked onto the current canonical browser/touch acceptance owner. Product merge, UI Delivery and commercial Release gates remain fail-closed.
+v2.79 does not claim a new protected product release. It preserves the v2.78 backend 2.13 read-only dependency-resolution authority and current Tasks provenance, and currentizes the Search refinement after adding a touch-capable mobile Playwright acceptance path plus explicit tab-to-panel ARIA linkage checks. Product merge, UI Delivery and commercial Release gates remain fail-closed because those cases have not yet produced terminal exact-head hosted/browser evidence and AT/independent-review acceptance is still incomplete.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -81,9 +81,9 @@ Generated provenance [#1735](https://github.com/ContextualWisdomLab/naruon/pull/
 
 ### 4.2 Search
 
-[#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) exact `af2efcef6a6dfeedbd13a69865b5a8fdd7f1fd10` remains canonical Search owner. Bounded refinement [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) exact `32e296c6e6c2b76291d22d1d27c6ae12d53fd7ac` adds shared Button tab semantics and real-browser keyboard/focus acceptance for Left/Right/Home/End/Up, wraparound, unhandled-key stability, active panel linkage, desktop screenshot and mobile-width overflow.
+[#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) exact `af2efcef6a6dfeedbd13a69865b5a8fdd7f1fd10` remains canonical Search owner. Bounded refinement [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) exact `3aaeb30f80048cf3690e924176ee85ba6fc80537` adds shared Button tab semantics plus real-browser keyboard/focus acceptance for Left/Right/Home/End/Up, wraparound, unhandled-key stability and active panel linkage. Its Playwright acceptance now also uses a touch-capable 390×844 browser context with `tap()` on multiple tabs, verifies `aria-controls`/`aria-labelledby` panel pairing, enforces at least 24×24 CSS-pixel touch targets, guards horizontal overflow and records a touch-mobile screenshot path.
 
-**Search Delivery: FAIL** pending terminal exact-head hosted/browser evidence, touch-specific/AT acceptance and independent review.
+**Search Delivery: FAIL** pending terminal exact-head hosted/browser execution and inspected artifacts, assistive-technology acceptance and qualifying independent post-last-push review. Touch-specific acceptance source is now present but is not a GREEN receipt until executed on this exact head.
 
 ### 4.3 OIDC settings
 
