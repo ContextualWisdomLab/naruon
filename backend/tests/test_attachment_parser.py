@@ -1,4 +1,6 @@
 import base64
+import io
+import zipfile
 
 import pytest
 
@@ -10,6 +12,29 @@ from services.attachment_parser import (
     get_attachment_parser_manifest,
     parse_email_attachment,
 )
+from services import attachment_parser as parser
+
+
+def _minimal_hwpx_bytes() -> bytes:
+    """Build a tiny HWPX-like XML package without decompressing fixtures."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("mimetype", "application/hwp+zip")
+        archive.writestr("version.xml", '<version app="Naruon" />')
+        archive.writestr("Contents/content.hpf", "<package />")
+        archive.writestr("Contents/section0.xml", "<section><p>계약 검토</p></section>")
+    return buffer.getvalue()
+
+
+def _minimal_hwp_bytes() -> bytes:
+    """Build a minimal OLE and HWP FileHeader signature fixture."""
+    return (
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+        + b"\x00" * 64
+        + b"HWP Document File"
+        + b"\x00" * 15
+        + b"HWP Binary Body"
+    )
 
 
 def test_html_attachment_preserves_parse_source_and_safe_display_text():
@@ -56,6 +81,8 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         "xml",
         "calendar",
         "pdf",
+        "hwpx",
+        "hwp",
         "unsupported_binary",
     } <= parser_keys
     markdown_descriptor = next(
@@ -73,6 +100,16 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
     )
     assert "text/calendar" in calendar_descriptor.content_types
     assert ".ics" in calendar_descriptor.extensions
+    hwpx_descriptor = next(
+        descriptor for descriptor in manifest if descriptor.parser_key == "hwpx"
+    )
+    assert "application/hwp+zip" in hwpx_descriptor.content_types
+    assert ".hwpx" in hwpx_descriptor.extensions
+    hwp_descriptor = next(
+        descriptor for descriptor in manifest if descriptor.parser_key == "hwp"
+    )
+    assert "application/x-hwp" in hwp_descriptor.content_types
+    assert ".hwp" in hwp_descriptor.extensions
 
 
 def test_generic_binary_content_type_can_fall_back_to_markdown_extension():
@@ -206,16 +243,23 @@ def test_invalid_pdf_payload_is_rejected_before_deferred_recognition():
     assert result.parse_error_code == "invalid_pdf_payload"
 
 
-def test_oversized_pdf_payload_is_not_retained():
+def test_oversized_pdf_payload_is_not_retained(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 8
+    )
     result = parse_email_attachment(
         filename="huge.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-" + b"A" * MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
+        raw_content=b"%PDF-" + b"A" * 8,
     )
 
     assert result.content == ""
     assert result.parse_status == "parse_size_limit_exceeded"
     assert result.parse_error_code == "parse_size_limit_exceeded"
+
+
+def test_deferred_attachment_source_limit_exceeds_twenty_megabytes():
+    assert MAX_ATTACHMENT_PARSE_SOURCE_BYTES > 20 * 1024 * 1024
 
 
 @pytest.mark.parametrize(
@@ -256,6 +300,183 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
     oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
     with pytest.raises(ValueError, match="size limit"):
         decode_deferred_attachment_payload(oversized)
+
+
+def test_hwpx_attachment_is_deferred_for_structured_xml_package():
+    raw = _minimal_hwpx_bytes()
+    result = parse_email_attachment(
+        filename="proposal.hwpx",
+        content_type="application/hwp+zip",
+        raw_content=raw,
+    )
+
+    assert result.filename == "proposal.hwpx"
+    assert result.content_type == "application/hwp+zip"
+    assert result.parse_content == ""
+    assert result.parse_content_type == "application/hwp+zip"
+    assert result.parser_key == "hwpx"
+    assert result.parse_status == "hwpx_xml_package_pending"
+    assert result.parse_error_code is None
+    assert (
+        decode_deferred_attachment_payload(
+            result.content,
+            "application/hwp+zip",
+        )
+        == raw
+    )
+
+
+@pytest.mark.parametrize("filename", ["proposal.hwpx", "proposal.owpml"])
+def test_hwpx_extension_with_generic_content_type_is_deferred_pending(filename):
+    raw = _minimal_hwpx_bytes()
+    result = parse_email_attachment(
+        filename=filename,
+        content_type="application/octet-stream",
+        raw_content=raw,
+    )
+
+    assert result.content_type == "application/octet-stream"
+    assert result.parse_content_type == "application/hwp+zip"
+    assert result.parser_key == "hwpx"
+    assert result.parse_status == "hwpx_xml_package_pending"
+
+
+def test_deferred_decoder_rejects_unsupported_content_type_before_decoding():
+    with pytest.raises(ValueError, match="not a deferred parser type"):
+        decode_deferred_attachment_payload("not base64!", "application/octet-stream")
+
+
+def test_invalid_hwpx_payload_is_rejected_before_xml_package_recognition():
+    result = parse_email_attachment(
+        filename="broken.hwpx",
+        content_type="application/hwp+zip",
+        raw_content=b"PK\x03\x04not really a package",
+    )
+
+    assert result.content == ""
+    assert result.parse_content_type == "application/hwp+zip"
+    assert result.parser_key == "hwpx"
+    assert result.parse_status == "invalid_hwpx_payload"
+    assert result.parse_error_code == "invalid_hwpx_payload"
+
+
+def test_deferred_hwpx_decoder_rejects_non_hwpx_payload():
+    not_hwpx = base64.b64encode(b"PK\x03\x04not a usable hwpx").decode("ascii")
+    with pytest.raises(ValueError, match="not a HWPX"):
+        decode_deferred_attachment_payload(not_hwpx, "application/hwp+zip")
+
+
+def test_hwp_attachment_is_deferred_for_sandboxed_conversion():
+    raw = _minimal_hwp_bytes()
+    result = parse_email_attachment(
+        filename="legacy.hwp",
+        content_type="application/x-hwp",
+        raw_content=raw,
+    )
+
+    assert result.filename == "legacy.hwp"
+    assert result.content_type == "application/x-hwp"
+    assert result.parse_content == ""
+    assert result.parse_content_type == "application/x-hwp"
+    assert result.parser_key == "hwp"
+    assert result.parse_status == "hwp_conversion_pending"
+    assert result.parse_error_code is None
+    assert (
+        decode_deferred_attachment_payload(
+            result.content,
+            "application/x-hwp",
+        )
+        == raw
+    )
+
+
+def test_hwp_extension_with_generic_content_type_is_deferred_pending():
+    result = parse_email_attachment(
+        filename="legacy.hwp",
+        content_type="application/octet-stream",
+        raw_content=_minimal_hwp_bytes(),
+    )
+
+    assert result.content_type == "application/octet-stream"
+    assert result.parse_content_type == "application/x-hwp"
+    assert result.parser_key == "hwp"
+    assert result.parse_status == "hwp_conversion_pending"
+
+
+def test_invalid_hwp_payload_is_rejected_before_sandboxed_conversion():
+    result = parse_email_attachment(
+        filename="not-hwp.hwp",
+        content_type="application/x-hwp",
+        raw_content=b"plain bytes",
+    )
+
+    assert result.content == ""
+    assert result.parse_content_type == "application/x-hwp"
+    assert result.parser_key == "hwp"
+    assert result.parse_status == "invalid_hwp_payload"
+    assert result.parse_error_code == "invalid_hwp_payload"
+
+
+def test_deferred_hwp_decoder_rejects_non_hwp_payload():
+    not_hwp = base64.b64encode(b"plain bytes").decode("ascii")
+    with pytest.raises(ValueError, match="not a HWP binary"):
+        decode_deferred_attachment_payload(not_hwp, "application/x-hwp")
+
+
+def test_parser_handles_unknown_parser_key_and_invalid_display_filename():
+    assert parser._parser_key_for("application/x-unknown", "parsed") == (
+        "unsupported_binary"
+    )
+
+    result = parse_email_attachment(
+        filename="\x00",
+        content_type="application/zip",
+        raw_content=b"opaque",
+    )
+
+    assert result.filename == "attachment"
+
+
+def test_deferred_decoder_rejects_invalid_base64():
+    with pytest.raises(ValueError, match="not valid base64"):
+        decode_deferred_attachment_payload("not base64!")
+
+
+@pytest.mark.parametrize("raw_content", [None, b"binary text", 12345])
+def test_text_parser_coerces_empty_bytes_and_other_values(raw_content):
+    result = parse_email_attachment(
+        filename="notes.txt",
+        content_type="text/plain",
+        raw_content=raw_content,
+    )
+
+    assert result.parse_status == "parsed"
+    expected_content = (
+        ""
+        if raw_content is None
+        else raw_content.decode("utf-8")
+        if isinstance(raw_content, bytes)
+        else str(raw_content)
+    )
+    assert result.parse_content == expected_content
+
+
+def test_hwpx_recognition_fails_closed_when_zip_reader_errors(monkeypatch):
+    payload = _minimal_hwpx_bytes()
+
+    def raise_os_error(*args, **kwargs):
+        raise OSError("zip reader unavailable")
+
+    monkeypatch.setattr(parser.zipfile, "ZipFile", raise_os_error)
+
+    result = parse_email_attachment(
+        filename="broken.hwpx",
+        content_type="application/hwp+zip",
+        raw_content=payload,
+    )
+
+    assert result.parse_status == "invalid_hwpx_payload"
+    assert result.parse_error_code == "invalid_hwpx_payload"
 
 
 def test_safe_filename_handles_windows_path_traversal():

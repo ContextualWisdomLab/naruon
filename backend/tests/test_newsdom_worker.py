@@ -8,6 +8,8 @@ failed) that keep a pending PDF from ever masquerading as parsed.
 
 import asyncio
 import base64
+import io
+import zipfile
 from types import SimpleNamespace
 
 import pytest
@@ -87,6 +89,30 @@ def _pending_document(document_id: str, *, organization_id: str = "org-1") -> Do
         document_content=base64.b64encode(b"%PDF-1.7 fake").decode("ascii"),
         document_status=PDF_DOM_RECOGNITION_PENDING_STATUS,
     )
+
+
+def _hwpx_payload(*, include_text: bool = True) -> bytes:
+    """Build a small real HWPX-shaped package for worker integration tests."""
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr(
+            "mimetype",
+            "application/hwp+zip",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        archive.writestr("version.xml", "<version/>")
+        archive.writestr("Contents/content.hpf", "<package/>")
+        text = (
+            "<hp:p><hp:t>보안 정책</hp:t></hp:p>"
+            "<hp:p><hp:t>원본 근거를 보존합니다.</hp:t></hp:p>"
+            if include_text
+            else ""
+        )
+        archive.writestr(
+            "Contents/section0.xml",
+            f"<hp:sec xmlns:hp='urn:hancom:hwpml'>{text}</hp:sec>",
+        )
+    return stream.getvalue()
 
 
 class _RowsResult:
@@ -367,6 +393,70 @@ def test_attachment_mapping_keeps_unmatched_segments_without_false_parent():
 
     assert attachment.content_segments[0].content_node is None
     assert email.content_segments[0] is attachment.content_segments[0]
+
+
+@pytest.mark.asyncio
+async def test_hwpx_pending_attachment_is_extracted_and_graph_landed():
+    email = Email()
+    email.organization_id = "org-1"
+    attachment = Attachment(
+        id=42,
+        filename="policy.hwpx",
+        content=base64.b64encode(_hwpx_payload()).decode("ascii"),
+        content_type="application/hwp+zip",
+        parse_content_type="application/hwp+zip",
+        parse_status="hwpx_xml_package_pending",
+    )
+    email.attachments.append(attachment)
+
+    result = await process_pending_attachment(
+        session=object(),
+        attachment=attachment,
+        config_resolver=await _resolver_with(None),
+    )
+
+    assert result == RESULT_RECOGNIZED
+    assert attachment.parse_status == "parsed"
+    assert attachment.parser_key == "hwpx"
+    assert attachment.content == "보안 정책\n\n원본 근거를 보존합니다."
+    assert len(attachment.content_nodes) == 4
+    assert len(attachment.content_segments) == 2
+    assert attachment.parse_error_code is None
+
+
+@pytest.mark.asyncio
+async def test_hwp_pending_attachment_stays_pending_without_a_converter():
+    attachment = _pending_attachment(b"ignored")
+    attachment.filename = "legacy.hwp"
+    attachment.parse_content_type = "application/x-hwp"
+    attachment.parse_status = "hwp_conversion_pending"
+
+    result = await process_pending_attachment(session=object(), attachment=attachment)
+
+    assert result == RESULT_PENDING
+    assert attachment.parse_status == "hwp_conversion_pending"
+
+
+@pytest.mark.asyncio
+async def test_hwpx_pending_attachment_records_safe_failure_for_empty_text():
+    email = Email()
+    attachment = Attachment(
+        id=43,
+        filename="empty.hwpx",
+        content=base64.b64encode(
+            _hwpx_payload(include_text=False)
+        ).decode("ascii"),
+        content_type="application/hwp+zip",
+        parse_content_type="application/hwp+zip",
+        parse_status="hwpx_xml_package_pending",
+    )
+    email.attachments.append(attachment)
+
+    result = await process_pending_attachment(session=object(), attachment=attachment)
+
+    assert result == RESULT_FAILED
+    assert attachment.parse_status == PDF_DOM_RECOGNITION_FAILED_STATUS
+    assert attachment.parse_error_code == "hwpx_recognition_failed"
 
 
 @pytest.mark.asyncio
