@@ -1,4 +1,10 @@
 ## [Unreleased]
+### 기능 추가 (Features)
+- `hash_generator`, `json_formatter`, `random_password_generator` 3종의 유틸리티 도구를 도구 레지스트리에 추가했습니다.
+  - `hash_generator`: 지정된 알고리즘(MD5, SHA1, SHA256, SHA512, BLAKE2b)을 사용하여 텍스트의 해시값을 생성합니다.
+  - `json_formatter`: JSON 문자열을 들여쓰기를 적용하여 읽기 쉽게 포맷팅합니다.
+  - `random_password_generator`: 지정된 길이와 조건(숫자 포함, 특수문자 포함)을 만족하는 무작위 비밀번호를 안전하게 생성합니다.
+- 추가된 도구들에 대해 100% 코드 커버리지를 보장하는 성공 및 예외 케이스 테스트 코드를 추가했습니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
