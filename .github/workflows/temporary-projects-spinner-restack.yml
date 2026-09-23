@@ -29,6 +29,8 @@ jobs:
           CANONICAL_HEAD: 1b8497f33e1977ce7b963640b63f107510621973
         run: |
           set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin refs/heads/fix/aria-busy-clean-scope:refs/remotes/origin/fix/aria-busy-clean-scope
           test "$(git rev-parse refs/remotes/origin/fix/aria-busy-clean-scope)" = "$CANONICAL_HEAD"
           set +e
