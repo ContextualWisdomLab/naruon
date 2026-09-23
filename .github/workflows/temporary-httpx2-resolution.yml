@@ -1,29 +1,23 @@
 name: Temporary httpx2 owner adoption
 
 on:
-  pull_request:
-    branches: [develop]
+  push:
+    branches:
+      - codex/starlette-testclient-dependency
 
 permissions:
   contents: write
 
-concurrency:
-  group: httpx2-owner-adoption-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
-
 jobs:
   adopt:
-    if: >-
-      github.head_ref == 'codex/starlette-testclient-dependency' &&
-      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact pushed owner head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -33,7 +27,7 @@ jobs:
       - name: Install pinned resolver
         run: python -m pip install --disable-pip-version-check 'uv==0.10.0'
 
-      - name: Reproduce and verify exact resolver output
+      - name: Reproduce and verify artifact-backed dependency graph
         shell: bash
         run: |
           set -euo pipefail
@@ -56,23 +50,22 @@ jobs:
             --python-platform x86_64-unknown-linux-gnu \
             --output-file backend/requirements-hashes.txt \
             backend/requirements.txt
-          mkdir -p .resolver-evidence
           sha256sum \
             backend/requirements.txt \
             backend/pyproject.toml \
             backend/requirements-hashes.txt \
             backend/uv.lock \
-            > .resolver-evidence/sha256.txt
-          cat > .resolver-evidence/expected-sha256.txt <<'EOF'
+            > /tmp/httpx2-sha256.txt
+          cat > /tmp/httpx2-expected-sha256.txt <<'EOF'
           a0bbed543860fe2dff63e1a7ddd96b9b843a12acd7c4838b123a21c97967a22d  backend/requirements.txt
           58b89778097bc23f9bad06bdeb4a1207f7f304edd58bb168782600b5c8379fdb  backend/pyproject.toml
           2870d4f4af934b41e9dcdb769be3ce373c11e7bb58473163277a00cd432cae19  backend/requirements-hashes.txt
           d6a249e3a22a3e9130cee5992f31c5a3ecc13d38898dbfa11684fdfb0be467d5  backend/uv.lock
           EOF
-          diff -u .resolver-evidence/expected-sha256.txt .resolver-evidence/sha256.txt
+          diff -u /tmp/httpx2-expected-sha256.txt /tmp/httpx2-sha256.txt
           git diff --check
 
-      - name: Update contract tests and traceability
+      - name: Update regression contract and traceability
         shell: bash
         run: |
           set -euo pipefail
@@ -167,7 +160,7 @@ https://github.com/pydantic/httpx2/tree/v2.12.0
           )
           PY
 
-      - name: Remove completed helper and validate bounded delta
+      - name: Remove completed helper and verify bounded delta
         shell: bash
         run: |
           set -euo pipefail
@@ -207,13 +200,13 @@ https://github.com/pydantic/httpx2/tree/v2.12.0
       - name: Commit exact owner repair without overwriting concurrent work
         shell: bash
         env:
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD: ${{ github.sha }}
         run: |
           set -euo pipefail
-          remote_head="$(git ls-remote origin "refs/heads/${GITHUB_HEAD_REF}" | cut -f1)"
+          remote_head="$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
           test "$remote_head" = "$EXPECTED_HEAD"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           git commit -m 'fix(deps): adopt verified httpx2 2.12.0 graph'
-          git push origin "HEAD:refs/heads/${GITHUB_HEAD_REF}"
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
