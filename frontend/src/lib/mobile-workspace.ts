@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-export type MobileWorkspaceView = 'inbox' | 'detail' | 'search' | 'actions' | 'calendar' | 'reply-review' | 'source-drawer' | 'schedule-confirmation';
+export type MobileWorkspaceView = 'inbox' | 'detail' | 'search' | 'actions' | 'calendar';
 
 type MobileWorkspaceStore = {
   view: MobileWorkspaceView;
@@ -37,8 +37,8 @@ function getHashMobileWorkspaceView(): MobileWorkspaceView | null {
   }
 
   const hashView = window.location.hash.replace(/^#mobile-/, '');
-  return hashView === 'inbox' || hashView === 'detail' || hashView === 'search' || hashView === 'actions' || hashView === 'calendar' || hashView === 'reply-review' || hashView === 'source-drawer' || hashView === 'schedule-confirmation'
-    ? (hashView as MobileWorkspaceView)
+  return hashView === 'inbox' || hashView === 'detail' || hashView === 'search' || hashView === 'actions' || hashView === 'calendar'
+    ? hashView
     : null;
 }
 

@@ -134,33 +134,3 @@ export function MobileSearchPanel() {
 export function MobileCalendarPanel() {
   return <MobileApiPanel copy={mobileCalendarCopy} />;
 }
-
-export function MobileReplyReviewPanel() {
-  return (
-    <div className="rounded-2xl border border-purple-500/15 bg-card p-4 shadow-sm">
-      <p className="text-xs font-bold text-purple-600">답장 초안 검토</p>
-      <h2 className="mt-2 text-lg font-black text-foreground">생성된 답장을 검토하세요</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">선택된 메시지를 기반으로 작성된 초안입니다.</p>
-    </div>
-  );
-}
-
-export function MobileSourceDrawerPanel() {
-  return (
-    <div className="rounded-2xl border border-primary/15 bg-card p-4 shadow-sm">
-      <p className="text-xs font-bold text-primary">근거 원본</p>
-      <h2 className="mt-2 text-lg font-black text-foreground">판단 근거를 확인하세요</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">맥락 종합에 사용된 원본 스레드와 파일입니다.</p>
-    </div>
-  );
-}
-
-export function MobileScheduleConfirmationPanel() {
-  return (
-    <div className="rounded-2xl border border-emerald-500/15 bg-card p-4 shadow-sm">
-      <p className="text-xs font-bold text-emerald-700">일정 확정</p>
-      <h2 className="mt-2 text-lg font-black text-foreground">조율된 일정을 확인하세요</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">참여 가능한 시간대로 확정 대기 중입니다.</p>
-    </div>
-  );
-}
