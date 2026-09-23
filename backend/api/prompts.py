@@ -113,10 +113,10 @@ async def execute_prompt_with_llm(
         )
         content = response.choices[0].message.content
         return {"result": content if content else ""}
-    except Exception:
+    except Exception as e:
         import logging
 
-        logging.getLogger(__name__).error("Prompt execution failed", exc_info=True)
+        logging.getLogger(__name__).error(f"Prompt execution failed: {e}")
         raise HTTPException(
             status_code=502,
             detail="Failed to execute prompt with AI provider. Check provider status.",
