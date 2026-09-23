@@ -30,7 +30,11 @@ vi.mock("lucide-react", () => ({
   X: () => <svg aria-hidden="true" />,
 }));
 
-import { SearchLayout } from "./SearchLayout";
+import {
+  customerFacingRelationshipReason,
+  customerFacingRelationshipText,
+  SearchLayout,
+} from "./SearchLayout";
 import {
   clearRecordedProductEvents,
   getRecordedProductEvents,
@@ -185,6 +189,12 @@ describe("SearchLayout product events", () => {
     ));
     await waitForCondition(() => getRecordedProductEvents().some((event) => event.name === "context_search_result_action_created"));
 
+    expect(container.textContent).toContain("발신자 맥락");
+    expect(container.textContent).toContain("다음 행동");
+    expect(container.textContent).not.toContain("sender_context");
+    expect(container.textContent).not.toContain("thread-contract");
+    expect(container.textContent).not.toContain("<contract-source@example.com>");
+
     expect(getRecordedProductEvents().some((event) =>
       event.name === "context_search_result_action_created" &&
       event.payload.result_id === 202 &&
@@ -192,5 +202,143 @@ describe("SearchLayout product events", () => {
       event.payload.source_backlink_present === true,
     )).toBe(true);
     expect(JSON.stringify(getRecordedProductEvents())).not.toContain("계약");
+  });
+
+  it("moves detail-tab focus with arrow keys and keeps tab selection semantics", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({ results: [{
+          id: 301,
+          source_message_id: "<keyboard-source@example.com>",
+          subject: "키보드 탐색 검증",
+          sender: "pm@example.com",
+          date: "2026-09-23T00:00:00Z",
+          snippet: "탭 키보드 탐색을 검증합니다.",
+          thread_id: "thread-keyboard",
+          reply_count: 1,
+          score: 0.91,
+        }] }));
+      }
+      if (url.endsWith("/api/search/answer")) {
+        return Promise.resolve(jsonResponse({ answer: null, citations: [], provenance: null }));
+      }
+      if (url.includes("/api/ontology/relationships?")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+    await waitForCondition(() => (container?.querySelectorAll<HTMLButtonElement>("[role='tab']").length ?? 0) === 3);
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>("[role='tab']"));
+    const pressTabKey = async (tab: HTMLButtonElement, key: string) => {
+      await act(async () => {
+        tab.dispatchEvent(new KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+    };
+    const expectSelectedTab = (selectedIndex: number) => {
+      tabs.forEach((tab, index) => {
+        expect(tab.getAttribute("aria-selected")).toBe(index === selectedIndex ? "true" : "false");
+        expect(tab.tabIndex).toBe(index === selectedIndex ? 0 : -1);
+      });
+      expect(document.activeElement).toBe(tabs[selectedIndex]);
+    };
+
+    expect(tabs).toHaveLength(3);
+    expect(tabs.every((tab) => tab.dataset.slot === "button")).toBe(true);
+    tabs[0].focus();
+    expectSelectedTab(0);
+
+    await pressTabKey(tabs[0], "ArrowRight");
+    expectSelectedTab(1);
+    await pressTabKey(tabs[1], "ArrowDown");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "ArrowRight");
+    expectSelectedTab(0);
+    await pressTabKey(tabs[0], "ArrowLeft");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "Home");
+    expectSelectedTab(0);
+    await pressTabKey(tabs[0], "End");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "ArrowUp");
+    expectSelectedTab(1);
+    await pressTabKey(tabs[1], "PageDown");
+    expectSelectedTab(1);
+  });
+
+  it.each([
+    ["summarize_then_archive", "요약 후 보관합니다."],
+    ["track_reply_and_tasks", "답장과 후속 작업을 확인합니다."],
+    ["prepare_response_draft", "답장 초안을 준비합니다."],
+    ["classify_sender", "발신자 관계를 확인합니다."],
+  ])("maps production relationship action %s to customer copy", (nextAction, expectedCopy) => {
+    expect(customerFacingRelationshipText(nextAction, "후속 작업을 확인합니다.")).toBe(
+      expectedCopy,
+    );
+  });
+
+  it.each(["reply.follow-up", "reply/follow_up", "reply follow_up", "회신_대기", ""])(
+    "fails closed for non-catalog relationship action %s",
+    (nextAction) => {
+    expect(customerFacingRelationshipText(nextAction, "후속 작업을 확인합니다.")).toBe(
+      "후속 작업을 확인합니다.",
+    );
+    },
+  );
+
+  it.each([
+    ["summarize_then_archive", "핵심 내용을 확인한 뒤 정리할 수 있습니다."],
+    ["track_reply_and_tasks", "답장 여부와 이어서 할 일을 놓치지 않도록 제안했습니다."],
+    ["prepare_response_draft", "대화를 이어갈 답장이 필요한 관계입니다."],
+    ["classify_sender", "알맞은 후속 행동을 정하려면 발신자 관계 확인이 필요합니다."],
+    ["unknown_action", "선택한 원본과 발신자 관계를 바탕으로 제안했습니다."],
+  ])("maps relationship reason for %s to customer copy", (nextAction, expectedCopy) => {
+    expect(customerFacingRelationshipReason(nextAction)).toBe(expectedCopy);
+  });
+
+  it("shows customer-facing copy when relationship loading fails", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({ results: [{
+          id: 1,
+          source_message_id: "source@example.com",
+          subject: "Search result",
+          sender: "pm@example.com",
+          date: "2026-05-20T09:00:00Z",
+          snippet: "Result",
+          thread_id: "thread-1",
+          reply_count: 0,
+          score: 0.9,
+        }] }));
+      }
+      if (url.includes("/api/ontology/relationships?")) {
+        return Promise.reject(new Error("relationship service unavailable"));
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+    await waitForCondition(() =>
+      container?.textContent?.includes("발신자 관계를 불러오지 못했습니다.") ?? false,
+    );
+    expect(container.textContent).not.toContain("DAG");
   });
 });

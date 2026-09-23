@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 
+import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import {
   bucketSearchRank,
@@ -57,7 +57,45 @@ const EVIDENCE_KIND_LABELS: Record<string, string> = {
 
 function evidenceKindLabel(kind: string | null | undefined) {
   if (!kind || kind === "email_body") return null;
-  return EVIDENCE_KIND_LABELS[kind] ?? kind;
+  return EVIDENCE_KIND_LABELS[kind] ?? "연결 근거";
+}
+
+const RELATIONSHIP_TYPE_LABELS: Record<string, string> = {
+  sender_context: "발신자 맥락",
+  colleague: "업무 관계",
+};
+
+function relationshipTypeLabel(relationshipType: string) {
+  return RELATIONSHIP_TYPE_LABELS[relationshipType.trim().toLowerCase()] ?? "연결 관계";
+}
+
+const CUSTOMER_FACING_RELATIONSHIP_ACTIONS: Record<string, string> = {
+  summarize_then_archive: "요약 후 보관합니다.",
+  track_reply_and_tasks: "답장과 후속 작업을 확인합니다.",
+  prepare_response_draft: "답장 초안을 준비합니다.",
+  classify_sender: "발신자 관계를 확인합니다.",
+  "계약 검토 담당자를 확인합니다.": "계약 검토 담당자를 확인합니다.",
+  "후속 작업을 확인합니다.": "후속 작업을 확인합니다.",
+};
+
+const CUSTOMER_FACING_RELATIONSHIP_REASONS: Record<string, string> = {
+  summarize_then_archive: "핵심 내용을 확인한 뒤 정리할 수 있습니다.",
+  track_reply_and_tasks: "답장 여부와 이어서 할 일을 놓치지 않도록 제안했습니다.",
+  prepare_response_draft: "대화를 이어갈 답장이 필요한 관계입니다.",
+  classify_sender: "알맞은 후속 행동을 정하려면 발신자 관계 확인이 필요합니다.",
+};
+
+export function customerFacingRelationshipText(
+  relationshipAction: string,
+  fallbackCopy: string,
+) {
+  const normalizedAction = relationshipAction.trim();
+  return CUSTOMER_FACING_RELATIONSHIP_ACTIONS[normalizedAction] ?? fallbackCopy;
+}
+
+export function customerFacingRelationshipReason(relationshipAction: string) {
+  return CUSTOMER_FACING_RELATIONSHIP_REASONS[relationshipAction.trim()] ??
+    "선택한 원본과 발신자 관계를 바탕으로 제안했습니다.";
 }
 
 type SearchResponse = {
@@ -113,6 +151,25 @@ const detailTabs: { key: DetailTab; label: string }[] = [
   { key: "source", label: "관계 원본" },
   { key: "assist", label: "판단 보조" },
 ];
+
+function nextDetailTabKey(currentTab: DetailTab, keyboardKey: string) {
+  const currentIndex = detailTabs.findIndex((tab) => tab.key === currentTab);
+  if (currentIndex < 0) return null;
+
+  if (keyboardKey === "Home") return detailTabs[0].key;
+  if (keyboardKey === "End") return detailTabs[detailTabs.length - 1].key;
+
+  const direction =
+    keyboardKey === "ArrowRight" || keyboardKey === "ArrowDown"
+      ? 1
+      : keyboardKey === "ArrowLeft" || keyboardKey === "ArrowUp"
+        ? -1
+        : 0;
+  if (direction === 0) return null;
+
+  const nextIndex = (currentIndex + direction + detailTabs.length) % detailTabs.length;
+  return detailTabs[nextIndex].key;
+}
 
 function formatResultDate(value: string) {
   const parsed = new Date(value);
@@ -190,7 +247,7 @@ function SenderDagPanel({
         aria-live="polite"
         className="rounded-lg border border-border bg-background p-4 text-sm font-semibold text-muted-foreground"
       >
-        발신자 DAG를 불러오는 중입니다.
+        발신자 관계를 불러오는 중입니다.
       </div>
     );
   }
@@ -213,21 +270,20 @@ function SenderDagPanel({
         {canCapture ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs">
-              원본 메일의 sender/thread 근거로 관계와 다음 액션을 캡처합니다.
+              선택한 원본 메일을 기준으로 관계와 다음 행동을 확인합니다.
             </p>
-            <Button
+            <button
               type="button"
               onClick={onCapture}
               disabled={captureStatus === "loading"}
               aria-busy={captureStatus === "loading"}
-              className="w-full sm:w-auto"
-              size="sm"
+              className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-wait disabled:opacity-60 sm:w-auto inline-flex items-center justify-center"
             >
               {captureStatus === "loading" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
               )}
               {captureStatus === "loading" ? "캡처 중" : "발신자 관계 캡처"}
-            </Button>
+            </button>
           </div>
         ) : null}
         {captureStatus === "error" ? (
@@ -257,28 +313,27 @@ function SenderDagPanel({
               </p>
             </div>
             <div className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-              {relationship.relationship_type} ·{" "}
+              {relationshipTypeLabel(relationship.relationship_type)} ·{" "}
               {(relationship.confidence_score * 100).toFixed(0)}%
             </div>
           </div>
           <div className="mt-4 grid gap-2 text-xs font-semibold text-muted-foreground sm:grid-cols-2">
             <div className="rounded border border-border bg-card px-3 py-2">
               <p className="break-all text-foreground">
-                {relationship.next_action}
+                {customerFacingRelationshipText(
+                  relationship.next_action,
+                  "후속 작업을 확인합니다.",
+                )}
               </p>
-              <p className="mt-1">Agent next action</p>
+              <p className="mt-1">다음 행동</p>
             </div>
             <div className="rounded border border-border bg-card px-3 py-2">
               <p className="break-words text-foreground">
-                {relationship.action_reason}
+                {customerFacingRelationshipReason(relationship.next_action)}
               </p>
               <p className="mt-1">판단 근거</p>
             </div>
           </div>
-          <p className="mt-3 break-words rounded bg-secondary/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
-            source={relationship.source_message_id ?? "global"} / thread=
-            {relationship.source_thread_id ?? "none"}
-          </p>
         </article>
       ))}
     </div>
@@ -533,7 +588,7 @@ export function SearchLayout() {
         setRelationshipState({
           sourceKey: activeOntologySourceKey,
           items: [],
-          error: "발신자 DAG를 불러오지 못했습니다.",
+          error: "발신자 관계를 불러오지 못했습니다.",
         });
       });
 
@@ -596,6 +651,18 @@ export function SearchLayout() {
           status: "error",
         });
       });
+  };
+
+  const handleDetailTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: DetailTab,
+  ) => {
+    const nextTab = nextDetailTabKey(currentTab, event.key);
+    if (!nextTab) return;
+
+    event.preventDefault();
+    setActiveDetailTab(nextTab);
+    document.getElementById(`search-detail-tab-${nextTab}`)?.focus();
   };
 
   // ⚡ Bolt: Wrap search results in useMemo to prevent O(N) re-renders when other state changes
@@ -663,30 +730,28 @@ export function SearchLayout() {
               className="h-12 w-full rounded-full border-2 border-primary/20 bg-background pl-12 pr-12 text-base shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 [&::-webkit-search-cancel-button]:hidden"
             />
             {query && (
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="icon-sm"
                 onClick={() => {
                   setQuery("");
                   searchInputRef.current?.focus();
                 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full hover:bg-transparent"
+                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                 aria-label="맥락 검색어 지우기"
               >
-                <X className="size-4 text-muted-foreground hover:text-foreground" aria-hidden="true" />
-              </Button>
+                <X className="size-4" aria-hidden="true" />
+              </button>
             )}
           </div>
-          <Button
+          <button
             type="submit"
             disabled={loading}
             aria-busy={loading}
-            className="h-12 shrink-0 px-4"
+            className="h-12 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait disabled:opacity-60 inline-flex items-center justify-center"
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
             {loading ? "맥락 검색 중" : "맥락 검색"}
-          </Button>
+          </button>
         </form>
       </header>
 
@@ -700,17 +765,19 @@ export function SearchLayout() {
           </div>
           <div className="flex gap-2 overflow-x-auto border-b border-border p-4">
             {resultFilters.map((filter) => (
-              <Button
+              <button
                 key={filter.key}
                 type="button"
-                variant={activeFilter === filter.key ? "default" : "secondary"}
-                size="sm"
                 aria-pressed={activeFilter === filter.key}
                 onClick={() => setActiveFilter(filter.key)}
-                className="rounded-full px-3 py-1 text-xs"
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
+                  activeFilter === filter.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                }`}
               >
                 {filter.label}
-              </Button>
+              </button>
             ))}
           </div>
           {resultList}
@@ -738,16 +805,14 @@ export function SearchLayout() {
                 {answerState.citations.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {answerState.citations.map((citation) => (
-                      <Button
+                      <button
                         key={citation.email_id}
                         type="button"
-                        variant="outline"
-                        size="sm"
                         onClick={() => setActiveResultId(citation.email_id)}
-                        className="rounded-full border-primary/30 text-primary hover:bg-primary/10 px-3 py-1 text-xs"
+                        className="rounded-full border border-primary/30 bg-card px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         근거: {citation.subject ?? `메일 #${citation.email_id}`}
-                      </Button>
+                      </button>
                     ))}
                   </div>
                 ) : null}
@@ -820,13 +885,12 @@ export function SearchLayout() {
                       <CalendarDays className="size-4" aria-hidden="true" />
                       일정 후보 보기
                     </Link>
-                    <Button
+                    <button
                       type="button"
                       onClick={captureSenderRelationship}
                       disabled={!canCaptureRelationship || captureStatus === "loading"}
                       aria-busy={captureStatus === "loading"}
-                      className="h-9"
-                      size="sm"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       {captureStatus === "loading" ? (
                         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -834,7 +898,7 @@ export function SearchLayout() {
                         <Network className="size-4" aria-hidden="true" />
                       )}
                       {captureStatus === "loading" ? "관계 캡처 중" : "관계 캡처"}
-                    </Button>
+                    </button>
                   </div>
 
                   <div className="rounded-2xl border border-border bg-background/80 p-2">
@@ -853,9 +917,14 @@ export function SearchLayout() {
                           aria-selected={activeDetailTab === tab.key}
                           tabIndex={activeDetailTab === tab.key ? 0 : -1}
                           onClick={() => setActiveDetailTab(tab.key)}
-                          className={activeDetailTab === tab.key ? "bg-card text-primary shadow-sm hover:bg-card hover:text-primary" : "text-muted-foreground hover:text-foreground hover:bg-transparent"}
-                          variant={activeDetailTab === tab.key ? "default" : "ghost"}
+                          onKeyDown={(event) => handleDetailTabKeyDown(event, tab.key)}
+                          variant="ghost"
                           size="sm"
+                          className={`w-full rounded-lg px-3 py-2 text-xs font-black transition-colors ${
+                            activeDetailTab === tab.key
+                              ? "bg-card text-primary shadow-sm hover:bg-card"
+                              : "text-muted-foreground hover:bg-transparent hover:text-foreground"
+                          }`}
                         >
                           {tab.label}
                         </Button>
@@ -896,10 +965,10 @@ export function SearchLayout() {
                           <div className="rounded-xl border border-border bg-card p-4">
                             <p className="text-xs font-black text-primary">증거 바인딩</p>
                             <p className="mt-2 font-semibold text-foreground">
-                              {activeResult.source_message_id ? "원본 메시지 필터로 관계 API를 조회합니다." : "원본 메시지 필터가 없는 결과입니다."}
+                              {activeResult.source_message_id ? "선택한 원본 메일을 기준으로 관계를 확인합니다." : "연결할 원본 메일이 없는 결과입니다."}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                              관계 조회는 선택된 맥락 검색 결과의 source/thread 범위 안에서만 수행됩니다.
+                              다른 메일의 관계가 섞이지 않도록 선택한 결과 안에서만 확인합니다.
                             </p>
                           </div>
                           <div className="rounded-xl border border-border bg-card p-4">
@@ -942,7 +1011,7 @@ export function SearchLayout() {
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-lg font-bold">관계 맥락과 타임라인</h2>
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                    source/thread API 연결
+                    원본 근거 연결
                   </span>
                 </div>
 
@@ -954,7 +1023,7 @@ export function SearchLayout() {
                         aria-hidden="true"
                       />
                       <h3 className="text-lg font-bold">
-                        발신자 DAG (Ontology)
+                        발신자 관계
                       </h3>
                     </div>
                     <SenderDagPanel
@@ -980,7 +1049,7 @@ export function SearchLayout() {
                         className="size-5 text-primary"
                         aria-hidden="true"
                       />
-                      <h3 className="text-lg font-bold">타임라인 (Timeline)</h3>
+                      <h3 className="text-lg font-bold">활동 흐름</h3>
                     </div>
                     <div className="relative ml-3 space-y-6 border-l-2 border-border">
                       <div className="relative pl-6">
@@ -1002,7 +1071,7 @@ export function SearchLayout() {
                         </h4>
                         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                           <CheckCircle2 className="size-3" aria-hidden="true" />
-                          thread reply_count={activeResult.reply_count ?? 1}
+                          답장 {activeResult.reply_count ?? 1}건
                         </p>
                       </div>
                       {activeResult.thread_id ? (
@@ -1016,7 +1085,7 @@ export function SearchLayout() {
                               className="size-4"
                               aria-hidden="true"
                             />
-                            {activeResult.thread_id}
+                            메일 흐름 연결됨
                           </h4>
                         </div>
                       ) : null}
