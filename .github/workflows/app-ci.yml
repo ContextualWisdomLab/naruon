@@ -235,6 +235,7 @@ jobs:
           git show "${PRE_HELPER_HEAD}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml
           git diff --check
           printf '%s\n' \
+            .github/workflows/app-ci.yml \
             CHANGELOG.md \
             backend/pyproject.toml \
             backend/requirements-hashes.txt \
