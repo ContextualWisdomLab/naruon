@@ -90,6 +90,22 @@ the authenticated-user query scope. Before claiming production multi-user
 safety, audit and backfill historical `emails.user_id` values against verified
 mailbox owners.
 
+## Performance benchmarks
+
+CPU-bound hot paths (email parsing, HTML stripping, threading references,
+dedupe fingerprints, hybrid retrieval fusion, calendar conflicts, and access
+policy decisions) are benchmarked with `pytest-codspeed` in
+`tests/benchmarks/`. The `CodSpeed Benchmarks` workflow runs them on every pull
+request and push to `develop`/`master`. To run them locally:
+
+```bash
+uv sync --group dev
+uv run pytest tests/benchmarks --codspeed
+```
+
+The benchmark module is skipped automatically when `pytest-codspeed` is not
+installed, so the regular `pytest -q` run is unaffected.
+
 ## Warning classification
 
 Backend evidence should be collected with warnings promoted to errors whenever
