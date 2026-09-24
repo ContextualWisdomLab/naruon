@@ -1,0 +1,138 @@
+name: Temporary text-reverser canonical restack
+
+on:
+  push:
+    branches:
+      - add-new-tools-5791100279588088428
+
+permissions:
+  contents: write
+
+jobs:
+  restack:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Check out staging branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Build and verify bounded canonical successor
+        shell: bash
+        env:
+          OWNER_SHA: 7fb5b9b2578f3a12ac757e1e1b9c5d490722bfd9
+          BRANCH_NAME: add-new-tools-5791100279588088428
+          WORKFLOW_PATH: .github/workflows/temporary-text-reverser-restack.yml
+        run: |
+          set -euo pipefail
+
+          staging_sha="$(git rev-parse HEAD)"
+          remote_head="$(git ls-remote origin "refs/heads/$BRANCH_NAME" | cut -f1)"
+          test "$remote_head" = "$staging_sha"
+
+          git fetch --no-tags origin "$OWNER_SHA"
+          owner_commit="$(git rev-parse FETCH_HEAD)"
+          test "$owner_commit" = "$OWNER_SHA"
+
+          work_root="$(mktemp -d)"
+          trap 'git worktree remove --force "$work_root/work" >/dev/null 2>&1 || true; rm -rf "$work_root"' EXIT
+          git worktree add --detach "$work_root/work" "$owner_commit"
+
+          cd "$work_root/work"
+          git config user.name "naruon-commercial-writer"
+          git config user.email "naruon-commercial-writer@users.noreply.github.com"
+
+          mkdir -p .github/workflows
+          git show "${staging_sha}:${WORKFLOW_PATH}" > "$WORKFLOW_PATH"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          tools_path = Path("backend/api/tools.py")
+          text = tools_path.read_text()
+          anchor = '\n\n@router.get("/tools", response_model=list[ToolInfo])\n'
+          if anchor not in text:
+              raise SystemExit("tools route anchor not found")
+          block = '''\n\nasync def text_reverser_handler(params: Dict[str, Any]) -> Dict[str, str]:\n    """Reverse bounded utility text by Unicode code-point order."""\n    text = params.get("text", "")\n    if len(text) > UTILITY_TEXT_MAX_CHARS:\n        raise ValueError(\n            f"Text reverse input must not exceed {UTILITY_TEXT_MAX_CHARS} characters"\n        )\n    return {"reversed_text": text[::-1]}\n\n\nregistry.register(\n    ToolInfo(\n        code="text_reverser",\n        name="텍스트 뒤집기 (Text Reverser)",\n        description=(\n            "입력 텍스트를 유니코드 코드 포인트 순서 기준으로 뒤집습니다. "\n            "작업 공간 유틸리티 입력 크기 제한을 동일하게 적용합니다."\n        ),\n        category="유틸리티",\n        parameters={"text": "string"},\n    ),\n    text_reverser_handler,\n)\n'''
+          tools_path.write_text(text.replace(anchor, block + anchor, 1))
+
+          contract_path = Path("backend/tests/test_utility_tools_contract.py")
+          contract = contract_path.read_text()
+          import_anchor = "    json_formatter_handler,\n    registry,\n)"
+          if import_anchor not in contract:
+              raise SystemExit("utility contract import anchor not found")
+          contract = contract.replace(
+              import_anchor,
+              "    json_formatter_handler,\n    registry,\n    text_reverser_handler,\n)",
+              1,
+          )
+          contract += '''\n\n@pytest.mark.asyncio\nasync def test_text_reverser_reuses_utility_resource_ceiling():\n    result = await text_reverser_handler({"text": "가나다"})\n    assert result == {"reversed_text": "다나가"}\n\n    with pytest.raises(ValueError, match="Text reverse input must not exceed"):\n        await text_reverser_handler({"text": "x" * (UTILITY_TEXT_MAX_CHARS + 1)})\n\n\n@pytest.mark.asyncio\nasync def test_text_reverser_registry_contract_requires_text():\n    result = await registry.invoke_tool("text_reverser", {"text": "hello"})\n    assert result == {"reversed_text": "olleh"}\n\n    with pytest.raises(ValueError, match="Missing required tool parameter"):\n        await registry.invoke_tool("text_reverser", {})\n'''
+          contract_path.write_text(contract)
+
+          changelog_path = Path("CHANGELOG.md")
+          changelog = changelog_path.read_text()
+          marker = "## [Unreleased]\n"
+          if marker not in changelog:
+              raise SystemExit("unreleased changelog anchor not found")
+          changelog_path.write_text(
+              changelog.replace(
+                  marker,
+                  marker + "- `text_reverser` 유틸리티를 canonical hash/JSON 도구 뒤에 추가하고 공통 100,000자 입력 제한을 적용했습니다.\n",
+                  1,
+              )
+          )
+
+          doctoring = Path("docs/doctoring/text-reverser-utility-contract.md")
+          doctoring.write_text('''# Text reverser utility contract\n\n## Problem\n\nGenerated PR #1770 introduced a useful `text_reverser` intent together with weaker duplicate implementations of the canonical `hash_generator` and `json_formatter`. The duplicates must not fork #1718 ownership.\n\n## Decision\n\nThe successor adopts #1718 as real commit ancestry and retains only `text_reverser`. The handler reuses `UTILITY_TEXT_MAX_CHARS` (100,000 characters), the registry parameter-validation contract, and the existing tool execution/error boundary. Reversal is explicitly defined as Python Unicode code-point order (`text[::-1]`); it is not advertised as grapheme-cluster transformation, cryptography, or identity/security functionality.\n\n## Rejected alternatives\n\n- Keeping #1770 hash/JSON implementations: rejected because they weaken the SHA-2-only/resource-limit/strict-JSON owner contract.\n- Metadata-only retargeting: rejected because it does not create canonical ancestry.\n- Unbounded input: rejected because utility handlers share the bounded resource contract.\n\n## Traceability\n\nOwner: #1718 `7fb5b9b2578f3a12ac757e1e1b9c5d490722bfd9`.\nGenerated finding: #1770.\nProduct code: `backend/api/tools.py::text_reverser_handler`.\nRegression: `backend/tests/test_utility_tools_contract.py`.\n''')
+          PY
+
+          python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+          python -m pip install --disable-pip-version-check pytest==9.1.1 pytest-asyncio==1.4.0
+          (
+            cd backend
+            python -m pytest -q tests/test_utility_tools_contract.py
+          )
+          python -m compileall -q backend/api/tools.py backend/tests/test_utility_tools_contract.py
+          git diff --check
+
+          git add \
+            "$WORKFLOW_PATH" \
+            CHANGELOG.md \
+            backend/api/tools.py \
+            backend/tests/test_utility_tools_contract.py \
+            docs/doctoring/text-reverser-utility-contract.md
+
+          expected="$(printf '%s\n' "$WORKFLOW_PATH" 'CHANGELOG.md' 'backend/api/tools.py' 'backend/tests/test_utility_tools_contract.py' 'docs/doctoring/text-reverser-utility-contract.md' | sort)"
+          actual="$(git diff --cached --name-only | sort)"
+          test "$actual" = "$expected"
+
+          export GIT_AUTHOR_NAME="CWL Naruon Automation"
+          export GIT_AUTHOR_EMAIL="actions@users.noreply.github.com"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+
+          tree_sha="$(git write-tree)"
+          product_sha="$(printf '%s\n\n%s\n' \
+            'fix(tools): restack text reverser on canonical utilities' \
+            'Adopt #1718 as real ancestry; retain only bounded text-reverser intent.' \
+            | git commit-tree "$tree_sha" -p "$staging_sha" -p "$owner_commit")"
+
+          git merge-base --is-ancestor "$staging_sha" "$product_sha"
+          git merge-base --is-ancestor "$owner_commit" "$product_sha"
+          test "$(git ls-remote origin "refs/heads/$BRANCH_NAME" | cut -f1)" = "$staging_sha"
+          git push origin "$product_sha:refs/heads/$BRANCH_NAME"
