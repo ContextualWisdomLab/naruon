@@ -745,6 +745,51 @@ const dataQualitySurface = {
   ],
 };
 
+const dataEvidenceSnapshot = {
+  snapshot_version: 'data_quality_evidence_snapshot.v1',
+  generated_at: '2026-05-28T05:47:00Z',
+  audit_event: 'data.quality_surface.evidence_snapshot.viewed',
+  scope_label: 'playwright_dashboard_fixture',
+  snapshot_digest: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  digest_algorithm: 'sha256',
+  canonical_payload_fields: [],
+  privacy_redaction_policy: {
+    raw_content_exposed: false,
+    stable_identifiers_exposed: false,
+    provider_credentials_exposed: false,
+    redacted_fields: [],
+    allowed_sample_fields: [],
+  },
+  validation_status: {
+    status_code: 'ready',
+    display_name: 'Ready',
+    detail_text: 'Playwright evidence snapshot is redacted and verifier-ready.',
+    provider_write_executed: false,
+  },
+  verification_handoff: {
+    handoff_text: 'Verify the copied Playwright snapshot JSON before sharing diligence materials.',
+    verifier_command: 'python scripts/verify_evidence_snapshot.py snapshot.json',
+    accepted_input: 'data_quality_evidence_snapshot.v1 JSON',
+    digest_algorithm: 'sha256',
+    excluded_digest_fields: ['snapshot_digest'],
+    success_exit_code: 0,
+    failure_exit_codes: { invalid_digest: 2 },
+    provider_write_executed: false,
+  },
+  parser_manifest_summary: [],
+  content_graph_evidence_samples: [],
+  knowledge_graph_evidence_samples: [],
+  evidence_packet_checklist: [],
+  data_room_package_manifest: [],
+  diligence_exception_register: [],
+  diligence_risk_matrix: [],
+  diligence_close_artifact_review_queue: [],
+  diligence_close_owner_handoff_queue: [],
+  diligence_close_traceability_map: [],
+  diligence_close_decision_summary: null,
+  diligence_close_proof_plan: [],
+};
+
 const accountConfig = {
   user_id: 'default',
   smtp_server: 'smtp.example.com',
@@ -873,6 +918,11 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
 
     if (path === '/api/data/quality-surface' && request.method() === 'GET') {
       await fulfillJson(route, dataQualitySurface);
+      return;
+    }
+
+    if (path === '/api/data/quality-surface/evidence-snapshot' && request.method() === 'GET') {
+      await fulfillJson(route, dataEvidenceSnapshot);
       return;
     }
 
