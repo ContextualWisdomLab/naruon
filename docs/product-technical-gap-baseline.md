@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.93  
+**Baseline version:** 2.94  
 **Observed on:** 2026-09-24 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.92 remains audit-visible as blob `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 remains audit-visible as blob `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. The attempted v2.89, v2.90 and first v2.91 workflow currentizers are audit-visible transition failures and did not create a durable baseline. The failed temporary currentizer has been removed; current revisions are ordinary documentation commits on the sole Gap-writer branch.
+v2.93 remains audit-visible as blob `c72cc29a647ffca6ffcd891755a9abc6c2a17553`; v2.92 remains audit-visible as blob `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 remains audit-visible as blob `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. The attempted v2.89, v2.90 and first v2.91 workflow currentizers are audit-visible transition failures and did not create a durable baseline. The failed temporary currentizer has been removed; current revisions are ordinary documentation commits on the sole Gap-writer branch.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -25,7 +25,15 @@ Naruon owns its domain truth, UI behavior, product contracts and migration linea
 
 Relevant optional foundations include `.github` for reusable CI/review/security/release contracts; contextual-orchestrator for LLM capability routing; Keyverse for identity; EgressWeave for outbound policy; OriginWeave for browser capability; quarantine-sandbox-runtime for hostile-workload isolation; appguardrail for SAST/SARIF; Wardnet for gateway/SOC; and the other canonical CWL owners defined by repository policy.
 
-Contextual-orchestrator protected `main` is an owner head, not a released Naruon contract. Its GitHub Release inventory remains empty, so Naruon stays fail-closed rather than consuming mutable CO source.
+Contextual-orchestrator protected `main` is currently `5665b0ad1e07ffb5e9f8c59e44b6b2a785298013`. It is an owner head, not a released Naruon contract. Its GitHub Release inventory remains exactly empty, so Naruon stays fail-closed rather than consuming mutable CO source.
+
+### 2.1 LLM governance source drift and released-owner handoff
+
+Protected Naruon governance is still internally inconsistent with the current CWL LLM boundary. Protected `AGENTS.md` still describes central Strix in provider/model-specific terms, including direct GitHub Models selection, named fallback models, manual Vertex modes and direct OpenAI modes. Protected `ARCHITECTURE.md` still describes direct OpenAI-compatible provider paths and fallback behavior that can be read as product authority outside a released contextual-orchestrator contract. Those protected statements are live source defects; they are not superseded merely by this ledger or a PR body.
+
+[#1549](https://github.com/ContextualWisdomLab/naruon/pull/1549) exact `9e47f25e256f52f13df267e0383bc3b036ac6f9e` remains the sole Naruon LLM-governance repair owner. Its effective six-file delta is `AGENTS.md`, `ARCHITECTURE.md`, `CLAUDE.md`, `backend/tests/test_agent_llm_authority_docs.py`, `backend/tests/test_release_governance.py`, and `opencode.jsonc`. The repaired contract requires model-backed Actions to request only logical `orchestrator/free` through the gateway credential, leaves provider/model/group discovery and fallback to contextual-orchestrator, forbids mutable owner source as a consumer contract, and separates user cancellation/provider termination/explicit administrative limits from elapsed-time truncation.
+
+#1549 is source-current for the intended repair but not delivery authority. It is intentionally stacked, has no exact-head GitHub Actions generation on `9e47f25e...`, and has no qualifying post-last-push approval. More importantly, contextual-orchestrator has no immutable GitHub Release carrying the required API/client/schema/provenance. Required order is immutable CO publication → legitimate stacked-PR admission through #1691 or accepted successor → #1549 exact-head checks/review → normal protected integration. Naruon must not copy `.github` or contextual-orchestrator source, pin a provider/model, or bind to CO `main` while waiting.
 
 ## 3. Product source-owner graph
 
@@ -107,7 +115,7 @@ Search exception-redaction is separately #1612→#1765 exact `821d193d807ae952c4
 
 Intervening commit `f111866d1f28e1dc52fc770834af08048003032a` then crossed owner boundaries by modifying backend and frontend dependency files inside the NetworkGraph lane. Ordinary-forward repair `157894a...` preserves that history while restoring `backend/uv.lock`, `frontend/package.json`, and `frontend/pnpm-lock.yaml` to the previous owner-neutral blobs. `209a0fc2...`→`157894a...` is ahead 2 / behind 0 with zero effective file delta, and the repaired tree is exactly `e41e825b0675d7d80c56e9756031c8994570cdb0` again.
 
-Fresh exact-current runs are Application CI `35965793616`, Security `35965793843`, CodeQL `35965793657`, Bandit `35965793743`, Semgrep `35965793668`, and Docker `35965794291`; all are nonterminal at this observation. Predecessor receipts do not transfer. The historical formal `CHANGES_REQUESTED` review also remains non-approval. No representative large-graph profiler/browser/k6 measurement exists; no p95/main-thread performance claim is accepted. Delivery remains FAIL.
+Fresh exact-current runs are Application CI `35965793616`, Security `35965793843`, CodeQL `35965793657`, Bandit `35965793743`, Semgrep `35965793668`, and Docker `35965794291`; all remain nonterminal at this observation. Predecessor receipts do not transfer. The historical formal `CHANGES_REQUESTED` review also remains non-approval. No representative large-graph profiler/browser/k6 measurement exists; no p95/main-thread performance claim is accepted. Delivery remains FAIL.
 
 ## 5. UI Localization Catalog
 
@@ -129,13 +137,15 @@ Applicable web/API buyer paths use async execution and realistic k6/E2E. A p95�
 
 ## 7. LLM and agent boundary
 
-Naruon LLM work consumes only released contextual-orchestrator API/client/schema through an Agent boundary. Provider/model/group hard-coding is not product authority. GitHub model-backed workflows use the released free orchestration contract or fail closed. Mutable contextual-orchestrator `main` is not a consumer release.
+Naruon LLM work consumes only released contextual-orchestrator API/client/schema through an Agent boundary. Provider/model/group hard-coding is not product authority. GitHub model-backed workflows request only `orchestrator/free` through the gateway credential; capability absence fails closed and is repaired in the contextual-orchestrator owner. Mutable contextual-orchestrator `main` is not a consumer release.
 
-Model timeout defaults do not truncate reasoning/streaming/tool use by elapsed time alone; user cancellation, provider termination and administrative timeout are distinct. Structured chat preserves responses/completions schema contracts; embedding preserves semantic unit, source position and provenance.
+The current protected guidance does not yet meet that contract. #1549 is the sole Naruon repair lane and already carries the provider-neutral source/test delta, but it cannot be treated as protected authority before immutable CO publication, legitimate exact-head hosted admission, independent review and normal integration. Until then, protected provider-specific AGENTS/ARCHITECTURE wording remains a commercial governance blocker rather than documentation noise.
+
+Model timeout defaults do not truncate reasoning/streaming/tool use by elapsed time alone; user cancellation, provider termination and an explicit audited administrative timeout are distinct. Structured chat preserves responses/completions schema contracts; embedding preserves semantic unit, source position and provenance.
 
 ## 8. Current release blockers
 
-Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence, including the Data evidence-snapshot fixture; downstream #1503 migration ancestry; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
+Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence, including the Data evidence-snapshot fixture; downstream #1503 migration ancestry; protected integration of the #1549 LLM-governance correction after an immutable contextual-orchestrator API/client/schema release; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
 
 The #1767 Trivy failure is evidence of these dependency blockers, not an exception that permits dependency source-copy into the NetworkGraph lane. Cross-owner lock/manifest changes must be ordinary-forward removed from product lanes and consumed later only through accepted canonical dependency ancestry.
 
