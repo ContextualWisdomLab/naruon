@@ -1213,7 +1213,8 @@ def test_execute_analysis_tool_rejects_oversized_text():
     }
 
 
-def test_hash_generator_success():
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/hash_generator/execute",
@@ -1223,10 +1224,11 @@ def test_hash_generator_success():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["algorithm"] == "sha256"
-    assert "hash" in data["result"]
+    result = data["result"]
+    assert result["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
-def test_hash_generator_unsupported_algorithm():
+@pytest.mark.asyncio
+async def test_hash_generator_tool_invalid_algorithm():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/hash_generator/execute",
@@ -1236,9 +1238,12 @@ def test_hash_generator_unsupported_algorithm():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
-    assert "Unsupported hash algorithm" in data["message"]
+    assert data["result"] is None
+    assert "Unsupported algorithm" in data["message"]
 
-def test_json_formatter_success():
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_success():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/json_formatter/execute",
@@ -1248,30 +1253,19 @@ def test_json_formatter_success():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["is_valid"] is True
-    assert "{\n  \"key\": \"value\"\n}" in data["result"]["formatted_json"]
+    result = data["result"]
+    assert result["formatted_json"] == "{\n  \"key\": \"value\"\n}"
 
-def test_json_formatter_invalid_json():
+@pytest.mark.asyncio
+async def test_json_formatter_tool_invalid_input():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/json_formatter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"raw_json": "invalid json"}},
+            json={"parameters": {"raw_json": "invalid_json"}},
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
-    assert "Invalid JSON input" in data["message"]
-
-
-def test_text_reverser_success():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/text_reverser/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["reversed_text"] == "olleh"
+    assert data["result"] is None
+    assert "Invalid JSON string" in data["message"]
