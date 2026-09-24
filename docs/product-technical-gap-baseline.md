@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.95  
+**Baseline version:** 2.96  
 **Observed on:** 2026-09-24 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.94 remains audit-visible as blob `e4643a58abf613bba9a2bec90964ad7d9b908ae8`; v2.93 as `c72cc29a647ffca6ffcd891755a9abc6c2a17553`; v2.92 as `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 as `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 as `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Attempted v2.89, v2.90 and the first v2.91 workflow currentizers remain transition-failure provenance only. The durable ledger is maintained by ordinary commits on the sole Gap-writer branch; self-modifying currentizers are not accepted as completion evidence.
+v2.95 remains audit-visible as blob `8bd1c3d8a057b4b8eea4f94880e4c3e0302bb632`; v2.94 as `e4643a58abf613bba9a2bec90964ad7d9b908ae8`; v2.93 as `c72cc29a647ffca6ffcd891755a9abc6c2a17553`; v2.92 as `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 as `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 as `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Attempted v2.89, v2.90 and the first v2.91 workflow currentizers remain transition-failure provenance only. The durable ledger is maintained by ordinary commits on the sole Gap-writer branch; self-modifying currentizers are not accepted as completion evidence.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -99,7 +99,15 @@ Material UI acceptance requires normal/loading/empty/error/permission/responsive
 
 ### 4.1 Tasks
 
-[#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) remains the Tasks active-action owner. Delivery remains FAIL pending accepted #1691 browser ancestry, current artifact inspection, applicable security/AT evidence and independent review.
+[#1463](https://github.com/ContextualWisdomLab/naruon/pull/1463) remains the sole Tasks active-action owner. Its bounded corrective owner `dd0a2cb55ea1c849a2962a246f6d91bd6ee798e8` uses tree `11929d7e8675d9240e132efb495a62b31f616009` and limits the effective product delta to five Tasks-owned files: `frontend/src/app/tasks/page.test.tsx`, `frontend/src/components/TasksLayout.knowledge-intent-pending.test.tsx`, `frontend/src/components/TasksLayout.test.tsx`, `frontend/src/components/TasksLayout.tsx`, and `frontend/tests/e2e/tasks-pending-action.spec.ts`.
+
+A later generated sequence `c85459c072b7546eaedbdc981c515b2797d556e5` → `6d50011e...` → `f4a5f5b34277c827abf6137be9876adbb8742620` crossed dependency and Gap ownership, altered the Tasks source/evidence set, deleted `frontend/tests/e2e/tasks-pending-action.spec.ts`, and removed **Strix Security Scan** from `.github/workflows/pr-governance.yml` to unblock CI. Scanner availability is evidence state, not authorization to weaken a required governance dependency; this was a verified gate-weakening finding.
+
+No history was rewritten. Ordinary-forward repair `f9346385b9d4affa57215d2c676e722a2b99d0eb` uses the live drift head as parent while restoring the exact bounded tree `11929d7e8675d9240e132efb495a62b31f616009`. Fresh `dd0a2cb5...→f9346385...` is ahead 4 / behind 0 with zero effective files. All current review threads are resolved/outdated, but there is no qualifying independent post-last-push approval.
+
+#1735 exact `1b0bace3a882c176f6f6b67636b0fb8d9a8dc978` and #1759 exact `33f553f47451fe6247168dd2aa335bdf62790e4e` are ordinary non-force provenance descendants of current #1463 with zero changed files. They are not independent product owners and their receipts do not transfer.
+
+Exact-current #1463 Application CI, Security, CodeQL, Bandit, Semgrep and Docker generations remain nonterminal at this observation. The bounded source/unit/browser contract is restored, but hosted browser/security/AT evidence and independent review remain incomplete. **Tasks UI Delivery: FAIL.**
 
 ### 4.2 Search
 
@@ -125,7 +133,7 @@ Search exception-redaction is separately #1612→#1765 exact `821d193d807ae952c4
 
 Intervening commit `f111866d1f28e1dc52fc770834af08048003032a` crossed owner boundaries by modifying backend and frontend dependency files inside the NetworkGraph lane. Ordinary-forward repair `157894a...` preserves that history while restoring `backend/uv.lock`, `frontend/package.json`, and `frontend/pnpm-lock.yaml` to the previous owner-neutral blobs. `209a0fc2...`→`157894a...` is ahead 2 / behind 0 with zero effective file delta, and the repaired tree is `e41e825b0675d7d80c56e9756031c8994570cdb0` again.
 
-Fresh exact-current runs Application CI `35965793616`, Security `35965793843`, CodeQL `35965793657`, Bandit `35965793743`, Semgrep `35965793668`, and Docker `35965794291` remain nonterminal at this observation. Predecessor receipts do not transfer. The historical formal `CHANGES_REQUESTED` review remains non-approval. No representative large-graph profiler/browser/k6 measurement exists, so no p95/main-thread performance claim is accepted. Delivery remains FAIL.
+Fresh exact-current Application CI `35965793616`, Bandit `35965793743`, Semgrep `35965793668`, and Docker `35965794291` are terminal GREEN. Security `35965793843` and CodeQL `35965793657` remain queued/nonterminal at this observation. Predecessor receipts do not transfer, and terminal success on the four settled workflows is not sufficient to claim protected acceptance. The historical formal `CHANGES_REQUESTED` review remains non-approval. No representative large-graph profiler/browser/k6 measurement exists, so no p95/main-thread performance claim is accepted. Delivery remains FAIL.
 
 ## 5. UI Localization Catalog
 
@@ -155,10 +163,6 @@ Model timeout defaults do not truncate reasoning/streaming/tool use by elapsed t
 
 ## 8. Current release blockers
 
-Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence including the Data evidence-snapshot fixture; downstream #1503 migration ancestry; protected integration of #1549 after an immutable contextual-orchestrator API/client/schema release; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
+Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence including the Data evidence-snapshot fixture; exact-current #1463 Tasks hosted browser/security/AT evidence and independent review after the gate-weakening repair; downstream #1503 migration ancestry; protected integration of #1549 after an immutable contextual-orchestrator API/client/schema release; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
 
 The #1565 and #1691 temporary adopters are transition mechanisms only. They must not become permanent product workflows. If they produce verified product commits, the temporary workflow must be removed by a subsequent ordinary non-force commit before exact-head acceptance evidence is evaluated. If they fail, the failure is RCA input rather than permission to weaken branch/security gates.
-
-The #1767 Trivy failure is evidence of dependency blockers, not an exception that permits dependency source-copy into the NetworkGraph lane. Cross-owner lock/manifest changes must be ordinary-forward removed from product lanes and consumed later only through accepted canonical dependency ancestry.
-
-No E2E exclusion/assertion weakening, duplicate owner, permanent source-fix workflow, predecessor receipt transfer, source-neutral wake commit, blind rerun, self-approval, force-push/destructive rebase, scanner suppression, mutable external-contract consumption or gate weakening is accepted.
