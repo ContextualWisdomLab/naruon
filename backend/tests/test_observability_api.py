@@ -152,12 +152,6 @@ def test_datetime_to_utc_iso_with_naive_datetime():
     assert iso_str == "2023-01-01T12:00:00Z"
 
 
-def test_endpoint_host_without_netloc():
-    from api.observability import _endpoint_host
-
-    assert _endpoint_host("invalid-url") is None
-
-
 def test_member_cannot_read_operational_signals(member_client):
     response = member_client.get("/api/observability/operational-signals")
 
@@ -284,8 +278,13 @@ def test_operational_signals_reflect_registered_connector_and_otel(
 ):
     previous_metrics = settings.ENABLE_PROMETHEUS_METRICS
     settings.ENABLE_PROMETHEUS_METRICS = True
-    monkeypatch.setenv("ENABLE_OTEL", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
+    monkeypatch.setattr(app.state, "naruon_telemetry_runtime", object(), raising=False)
+    monkeypatch.setattr(
+        app.state,
+        "naruon_telemetry_receiver_host",
+        "otel-collector.example:4318",
+        raising=False,
+    )
     mock_db.runner = WorkspaceRunnerConfig(
         organization_id="org-acme",
         workspace_id="workspace-org-acme",
@@ -307,7 +306,7 @@ def test_operational_signals_reflect_registered_connector_and_otel(
     data = response.json()
     assert data["telemetry"]["prometheus_metrics_enabled"] is True
     assert data["telemetry"]["otel_traces_enabled"] is True
-    assert data["telemetry"]["otel_endpoint_host"] == "otel-collector:4317"
+    assert data["telemetry"]["otel_endpoint_host"] == "otel-collector.example:4318"
     assert data["connector"]["registration_state"] == "registration_configured"
     assert data["connector"]["connection_state"] == "connected"
     assert data["connector"]["active_connection_count"] == 1

@@ -40,6 +40,11 @@ dependencies = [
   "defusedxml==0.7.1",
 ]
 
+[project.optional-dependencies]
+telemetry = [
+  "cwl-telemetry @ git+https://github.com/ContextualWisdomLab/cwl-telemetry.git@3c8382abd25ee4aed209085d822a294e68ce2080",
+]
+
 [dependency-groups]
 dev = [
   "coverage==7.15.1",

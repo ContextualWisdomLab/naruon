@@ -33,6 +33,17 @@ Prometheus `/metrics` is disabled by default. Set
 `ENABLE_PROMETHEUS_METRICS=true` only behind a trusted scrape path or reverse
 proxy access policy.
 
+OpenTelemetry now requires an explicit `cwl_telemetry.TelemetryConfig` passed to
+`core.telemetry.setup_telemetry(app, config)` before the first request. The
+configuration must carry the exact 40-character source revision and an HTTPS
+Collector origin with a scoped token; the SDK validates these before creating
+exporters. The backend no longer interprets `ENABLE_OTEL`,
+`OTEL_EXPORTER_OTLP_ENDPOINT`, or `OTEL_EXPORTER_OTLP_INSECURE`. A typed config
+has not yet been wired to a production credential registry or the image revision,
+so the default app remains uninstrumented. The draft `telemetry` extra pins the
+shared SDK commit for integration testing; the hashed Docker dependency set
+needs a reviewed released wheel and checksum before deployment.
+
 For local fixture imports, `OPENAI_API_KEY` is optional. When absent,
 `import_fixtures.py` uses zero-vector embeddings so the local threading proof
 path does not need network access.

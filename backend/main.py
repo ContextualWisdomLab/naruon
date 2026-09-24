@@ -33,7 +33,7 @@ from api.ai_hub import router as ai_hub_router
 from api.projects import router as projects_router
 from api.session import router as auth_session_router
 from core.config import canonical_origin, settings
-from core.telemetry import setup_telemetry
+from core.telemetry import setup_telemetry, shutdown_telemetry
 from core.version import get_release_version
 from services.imap_worker import ImapSyncWorker
 from services.newsdom_worker import NewsdomRecognitionWorker
@@ -71,6 +71,7 @@ async def lifespan(app: FastAPI):
         await reply_sla_scheduler.stop()
         await pop3_worker.stop()
         await imap_worker.stop()
+    shutdown_telemetry(app)
 
 
 app = FastAPI(

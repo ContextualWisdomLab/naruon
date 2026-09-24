@@ -1,5 +1,6 @@
-import logging
 from pathlib import Path
+
+import pytest
 
 ROOT_DIR = Path(__file__).parent.parent.parent
 
@@ -37,55 +38,92 @@ def test_open_telemetry_setup_is_centralized_and_opt_in_by_default():
 
     assert "setup_telemetry(app)" in main_source
     assert "FastAPIInstrumentor.instrument_app(app)" not in main_source
-    assert '_env_flag("ENABLE_OTEL")' in telemetry_source
-    assert 'os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")' in telemetry_source
-    assert '"http://localhost:4317"' not in telemetry_source
-    assert "OTEL_EXPORTER_OTLP_INSECURE" in telemetry_source
-    assert "insecure=otlp_insecure" in telemetry_source
+    assert "from cwl_telemetry import bootstrap" in telemetry_source
+    assert "runtime.tracer.start_as_current_span" in telemetry_source
+    assert "FastAPIInstrumentor" not in telemetry_source
+    assert "OTLPSpanExporter" not in telemetry_source
+    assert "TracerProvider(" not in telemetry_source
+    assert "OTEL_EXPORTER_OTLP_INSECURE" not in telemetry_source
     assert "except Exception" in telemetry_source
 
 
-def test_telemetry_does_not_instrument_without_explicit_endpoint(monkeypatch):
+def test_telemetry_does_not_instrument_without_explicit_config():
     from fastapi import FastAPI
     from core import telemetry
 
     app = FastAPI()
-    monkeypatch.delenv("ENABLE_OTEL", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-
     telemetry.setup_telemetry(app)
 
     assert getattr(app.state, "naruon_telemetry_configured", False) is False
 
 
-def test_otel_endpoint_hostname_validation_accepts_urls_and_hostports():
-    from core.telemetry import _otel_endpoint_has_hostname
-
-    assert _otel_endpoint_has_hostname("http://localhost:4317")
-    assert _otel_endpoint_has_hostname("https://collector.example.com")
-    assert _otel_endpoint_has_hostname("localhost:4317")
-    assert _otel_endpoint_has_hostname("collector.example.com")
-    assert not _otel_endpoint_has_hostname("")
-    assert not _otel_endpoint_has_hostname("http://")
-    assert not _otel_endpoint_has_hostname(":4317")
-
-
-def test_telemetry_logs_error_on_missing_hostname(monkeypatch, caplog):
+def test_fastapi_instrumentation_uses_shared_sdk_provider():
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient
     from core import telemetry
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    cwl_telemetry = pytest.importorskip("cwl_telemetry")
 
     app = FastAPI()
-    monkeypatch.setenv("ENABLE_OTEL", "1")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://")
-    caplog.set_level(logging.ERROR, logger=telemetry.logger.name)
+    app.add_api_route("/private/{item_id}", lambda item_id: {"ok": True})
 
-    telemetry.setup_telemetry(app)
+    def failing_handler(item_id):
+        raise RuntimeError("secret-exception-message")
 
-    telemetry_records = [
-        record for record in caplog.records if record.name == telemetry.logger.name
-    ]
-    assert getattr(app.state, "naruon_telemetry_configured", False) is False
-    assert [record.getMessage() for record in telemetry_records] == [
-        "Invalid OTEL exporter endpoint URL: missing hostname; continuing without tracing."
-    ]
-    assert telemetry_records[0].exc_info is None
+    app.add_api_route("/failure/{item_id}", failing_handler)
+    config = cwl_telemetry.TelemetryConfig(
+        service="naruon-backend",
+        version="0.14.4",
+        environment="test",
+        source_revision="a" * 40,
+        route_templates=frozenset({"/private/{item_id}", "/failure/{item_id}"}),
+    )
+
+    telemetry.setup_telemetry(app, config)
+    runtime = app.state.naruon_telemetry_runtime
+    exporter = InMemorySpanExporter()
+    runtime._providers[0].add_span_processor(SimpleSpanProcessor(exporter))
+    parent_trace_id = "1" * 32
+    parent_span_id = "2" * 16
+    with TestClient(app, raise_server_exceptions=False) as client:
+        assert client.get(
+            "/private/secret-id?token=secret-query",
+            headers={
+                "traceparent": f"00-{parent_trace_id}-{parent_span_id}-01",
+                "baggage": "credential=secret-baggage",
+            },
+        ).status_code == 200
+        assert client.get("/failure/secret-id?token=secret-query").status_code == 500
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 2
+    assert all(span.name == "http_request" for span in spans)
+    assert all("secret-id" not in str(span.attributes) for span in spans)
+    assert all("secret-query" not in str(span.attributes) for span in spans)
+    assert all("secret-exception-message" not in str(span.events) for span in spans)
+    assert all("secret-exception-message" not in str(span.status) for span in spans)
+    assert all("secret-baggage" not in str(span.attributes) for span in spans)
+    assert spans[0].context.trace_id == int(parent_trace_id, 16)
+    assert spans[0].parent.span_id == int(parent_span_id, 16)
+    assert spans[0].attributes["http_route"] == "/private/{item_id}"
+    assert getattr(app.state, "naruon_telemetry_configured", False)
+    telemetry.setup_telemetry(app, config)
+    assert app.state.naruon_telemetry_runtime is runtime
+    telemetry.shutdown_telemetry(app)
+    assert app.state.naruon_telemetry_runtime is None
+
+
+def test_sdk_rejects_plaintext_or_missing_revision_before_bootstrap():
+    cwl_telemetry = pytest.importorskip("cwl_telemetry")
+
+    base = dict(service="naruon-backend", version="0.14.4", environment="test")
+    with pytest.raises(ValueError, match="source_revision"):
+        cwl_telemetry.TelemetryConfig(**base, source_revision="unknown")
+    with pytest.raises(ValueError, match="receiver"):
+        cwl_telemetry.TelemetryConfig(
+            **base,
+            source_revision="a" * 40,
+            receiver="http://collector.example:4318",
+            token="scoped-token-123456",
+        )
