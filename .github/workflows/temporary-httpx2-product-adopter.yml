@@ -1,0 +1,244 @@
+name: Temporary httpx2 product adopter
+
+on:
+  push:
+    branches:
+      - codex/starlette-testclient-dependency
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  adopt:
+    if: github.repository == 'ContextualWisdomLab/naruon'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+
+      - name: Recover and verify frozen resolver artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: "10748790356"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          if grep -Fxq 'httpx2==2.13.0' backend/requirements.txt; then
+            echo 'httpx2 2.13.0 already adopted; nothing to mutate.'
+            touch /tmp/already-adopted
+            exit 0
+          fi
+          grep -Fx 'httpx2==2.5.0' backend/requirements.txt
+          curl --fail --silent --show-error --location \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            --output /tmp/httpx2-resolver.zip
+          rm -rf /tmp/httpx2-resolver
+          mkdir -p /tmp/httpx2-resolver
+          unzip -q /tmp/httpx2-resolver.zip -d /tmp/httpx2-resolver
+          cat > /tmp/httpx2-expected.sha256 <<'EOF'
+          87f603d06eb05fa234163003a2feda98f024b80751cc9eb919aedb261136482f  backend/requirements.txt
+          faab5edd236153c28a321e431dc1a6d5f99bcaa64f26f21c60222a1db2057365  backend/pyproject.toml
+          551f6aa4a6a8f1efb7f6259dc63777c40c09b2f520dea217575b94b12178f7d5  backend/requirements-hashes.txt
+          761ceb9f7042ffa9538c5a596ad113a3ee59f27381c4a44d34df82338e5b913a  backend/requirements-agent.txt
+          fa28138f637a2c2baddd528893cfb04be2d9064afcadd538fb7fa5000be7f82b  backend/uv.lock
+          EOF
+          sed -i 's/^          //' /tmp/httpx2-expected.sha256
+          (
+            cd /tmp/httpx2-resolver
+            sha256sum -c /tmp/httpx2-expected.sha256
+            grep -Fx 'candidate=httpx2==2.13.0' .resolver-evidence/upstream.txt
+            grep -Fx 'expected_httpcore2=httpcore2==2.13.0' .resolver-evidence/upstream.txt
+            grep -Fx 'optional_agent_consumer=genai-prices==0.0.71' .resolver-evidence/upstream.txt
+            grep -Fx 'optional_agent_requirement=httpx2>=2.0' .resolver-evidence/upstream.txt
+          )
+
+      - name: Adopt verified product graph
+        if: hashFiles('/tmp/already-adopted') == ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/httpx2-resolver/backend/requirements.txt backend/requirements.txt
+          cp /tmp/httpx2-resolver/backend/pyproject.toml backend/pyproject.toml
+          cp /tmp/httpx2-resolver/backend/requirements-hashes.txt backend/requirements-hashes.txt
+          cp /tmp/httpx2-resolver/backend/requirements-agent.txt backend/requirements-agent.txt
+          cp /tmp/httpx2-resolver/backend/uv.lock backend/uv.lock
+
+          python - <<'PY'
+          from pathlib import Path
+
+          test_path = Path('backend/tests/test_container_dependency_pin_contract.py')
+          test_text = test_path.read_text()
+          old_records = '''    backend_records = hashed_requirement_records(\n        read_repo_text("backend/requirements-hashes.txt")\n    )\n    strix_pins = exact_requirement_pins(read_repo_text("requirements-strix-ci.txt"))\n'''
+          new_records = '''    backend_records = hashed_requirement_records(\n        read_repo_text("backend/requirements-hashes.txt")\n    )\n    agent_records = hashed_requirement_records(\n        read_repo_text("backend/requirements-agent.txt")\n    )\n    strix_pins = exact_requirement_pins(read_repo_text("requirements-strix-ci.txt"))\n'''
+          if test_text.count(old_records) != 1:
+              raise SystemExit('unexpected backend lock-record test structure')
+          test_text = test_text.replace(old_records, new_records)
+          test_text = test_text.replace(
+              'assert backend_pins["httpx2"] == "2.5.0"',
+              'assert backend_pins["httpx2"] == "2.13.0"',
+          )
+          test_text = test_text.replace('"httpx2==2.5.0"', '"httpx2==2.13.0"')
+          old_anchor = '''    assert "protobuf==7.35.1" in backend_records\n    assert all(\n'''
+          new_anchor = '''    assert "protobuf==7.35.1" in backend_records\n    assert "httpcore2==2.13.0" in backend_records\n    assert agent_records["httpx2==2.13.0"] == backend_records["httpx2==2.13.0"]\n    assert agent_records["httpcore2==2.13.0"] == backend_records["httpcore2==2.13.0"]\n    assert all(\n'''
+          if test_text.count(old_anchor) != 1:
+              raise SystemExit('unexpected backend pin assertion structure')
+          test_text = test_text.replace(old_anchor, new_anchor)
+          tuple_anchor = '''            "httpx2==2.13.0",\n            "protobuf==7.35.1",\n'''
+          tuple_replacement = '''            "httpx2==2.13.0",\n            "httpcore2==2.13.0",\n            "protobuf==7.35.1",\n'''
+          if test_text.count(tuple_anchor) != 1:
+              raise SystemExit('unexpected backend digest tuple structure')
+          test_path.write_text(test_text.replace(tuple_anchor, tuple_replacement))
+
+          changelog_path = Path('CHANGELOG.md')
+          changelog = changelog_path.read_text()
+          old_line = '- Starlette `TestClient`의 기존 `httpx2==2.5.0` pin을 core 개발·테스트 의존성으로 승격하고, deprecated `httpx` fallback 경고 억제를 제거했습니다.'
+          new_line = '- Starlette `TestClient`의 preferred transport를 `httpx2==2.13.0` / `httpcore2==2.13.0`으로 고정하고 core와 Noema-agent hash lock을 동일한 의존성 그래프로 동기화했습니다. deprecated `httpx` fallback 경고 억제도 제거해 transport 회귀가 warnings-as-errors 테스트에서 드러나도록 했습니다.'
+          if changelog.count(old_line) != 1:
+              raise SystemExit('unexpected CHANGELOG TestClient entry')
+          changelog_path.write_text(changelog.replace(old_line, new_line))
+          PY
+
+          cat > docs/doctoring/starlette-httpx2-testclient-dependency.md <<'EOF'
+          # Starlette TestClient `httpx2` dependency
+
+          ## Observed failure
+
+          Protected `develop@042b0c70531b229af3acbd0421a2f23098d848b3` pins Starlette
+          1.3.1 but did not install Starlette's preferred `httpx2` TestClient transport.
+          Importing `starlette.testclient` therefore fell back to deprecated `httpx`, and
+          warnings-as-errors runs stopped during collection. Removing the warning filter
+          without installing the preferred transport would expose the defect without
+          repairing it.
+
+          ## Decision and dependency boundary
+
+          Pin `httpx2==2.13.0` and resolved `httpcore2==2.13.0` in the repository's
+          core development/test graph. The Noema-agent lock participates in the same
+          `pip --require-hashes` transaction as the core lock, so it carries the exact
+          same `httpx2`/`httpcore2` records and hash sets instead of retaining the old
+          2.5.0 graph. `genai-prices==0.0.71` requires `httpx2>=2.0`, so this coherent
+          pin stays within its declared consumer contract.
+
+          The generated `uv.lock` also records the 2.13.0 platform split: `httpcore2`
+          on non-Emscripten platforms and `httpx2-jsfetch==1.0` on Emscripten. Naruon's
+          application HTTP clients remain on their existing `httpx` path; this change is
+          the Starlette TestClient transport boundary, not an application-client rewrite.
+
+          The accepted five-file candidate was generated read-only with Python 3.14 and
+          `uv==0.10.0`, then checked as one core+agent hash-locked dry-run. Artifact
+          `10748790356` from Application CI `35844541085` has archive digest
+          `sha256:5355320323967e3cd58bdd8f05d1914c63d68790f28bf28b47bfba7fe019942b`.
+          Its independently verified file digests are:
+
+          - `requirements.txt`: `87f603d06eb05fa234163003a2feda98f024b80751cc9eb919aedb261136482f`;
+          - `pyproject.toml`: `faab5edd236153c28a321e431dc1a6d5f99bcaa64f26f21c60222a1db2057365`;
+          - `requirements-hashes.txt`: `551f6aa4a6a8f1efb7f6259dc63777c40c09b2f520dea217575b94b12178f7d5`;
+          - `requirements-agent.txt`: `761ceb9f7042ffa9538c5a596ad113a3ee59f27381c4a44d34df82338e5b913a`;
+          - `uv.lock`: `fa28138f637a2c2baddd528893cfb04be2d9064afcadd538fb7fa5000be7f82b`.
+
+          These digests establish the adopted bytes; they do not transfer merge or
+          release authority. Temporary adoption machinery is removed after the product
+          commit is verified so the normal exact-head gates evaluate only product source.
+
+          ## Verification and rollback
+
+          Run from the repository root:
+
+          ```bash
+          cd backend && uv lock --check
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r backend/requirements-hashes.txt -r backend/requirements-agent.txt
+          cd backend && python -m pytest -q -W error tests/test_container_dependency_pin_contract.py
+          cd backend && python -m ruff check tests/test_container_dependency_pin_contract.py
+          ```
+
+          The structural regression verifies the direct 2.13.0 pin, the core hash-lock
+          records, exact core/agent hash equality for `httpx2` and `httpcore2`, and the
+          runtime module selected by `starlette.testclient`. Full acceptance still
+          requires the normal helper-free current-head Application CI, Security, CodeQL,
+          required workflows and qualifying independent review.
+
+          Rollback removes the direct pin, both coherent lock records, runtime assertion,
+          and obsolete-warning-filter removal together. Do not restore only the warning
+          suppression or leave the core and optional-agent locks on different graphs.
+
+          ## References
+
+          Kludex. (2026). *Starlette release notes*. GitHub.
+          https://github.com/Kludex/starlette/blob/main/docs/release-notes.md
+
+          Python Packaging Authority. (2026). *httpx2 2.13.0 file details and provenance*.
+          PyPI. https://pypi.org/project/httpx2/2.13.0/
+
+          Pydantic. (2026). *HTTPX2 v2.13.0* [Source code]. GitHub.
+          https://github.com/pydantic/httpx2/tree/v2.13.0
+          EOF
+          sed -i 's/^          //' docs/doctoring/starlette-httpx2-testclient-dependency.md
+
+          git diff --check
+          ! grep -R -n -E 'httpx2==2\.5\.0|httpcore2==2\.5\.0' \
+            backend/requirements.txt backend/pyproject.toml backend/requirements-hashes.txt \
+            backend/requirements-agent.txt backend/uv.lock
+
+      - name: Verify coherent candidate
+        if: hashFiles('/tmp/already-adopted') == ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'uv==0.10.0'
+          (cd backend && uv lock --check)
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r backend/requirements-hashes.txt \
+            -r backend/requirements-agent.txt
+          (cd backend && python -m pytest -q -W error tests/test_container_dependency_pin_contract.py)
+          (cd backend && python -m ruff check tests/test_container_dependency_pin_contract.py)
+
+      - name: Commit and push product delta non-force
+        if: hashFiles('/tmp/already-adopted') == ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF_NAME}"
+          git fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/${branch}")"
+          git add -- \
+            CHANGELOG.md \
+            backend/pyproject.toml \
+            backend/requirements-agent.txt \
+            backend/requirements-hashes.txt \
+            backend/requirements.txt \
+            backend/tests/test_container_dependency_pin_contract.py \
+            backend/uv.lock \
+            docs/doctoring/starlette-httpx2-testclient-dependency.md
+          git diff --cached --check
+          git diff --cached --name-only | sort > /tmp/actual-paths
+          cat > /tmp/expected-paths <<'EOF'
+          CHANGELOG.md
+          backend/pyproject.toml
+          backend/requirements-agent.txt
+          backend/requirements-hashes.txt
+          backend/requirements.txt
+          backend/tests/test_container_dependency_pin_contract.py
+          backend/uv.lock
+          docs/doctoring/starlette-httpx2-testclient-dependency.md
+          EOF
+          sed -i 's/^          //' /tmp/expected-paths
+          sort -o /tmp/expected-paths /tmp/expected-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m 'fix(test): adopt coherent httpx2 2.13.0 dependency graph'
+          git push --verbose origin "HEAD:refs/heads/${branch}"
