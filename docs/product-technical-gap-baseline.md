@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.96  
+**Baseline version:** 2.97  
 **Observed on:** 2026-09-24 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.95 remains audit-visible as blob `8bd1c3d8a057b4b8eea4f94880e4c3e0302bb632`; v2.94 as `e4643a58abf613bba9a2bec90964ad7d9b908ae8`; v2.93 as `c72cc29a647ffca6ffcd891755a9abc6c2a17553`; v2.92 as `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 as `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 as `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Attempted v2.89, v2.90 and the first v2.91 workflow currentizers remain transition-failure provenance only. The durable ledger is maintained by ordinary commits on the sole Gap-writer branch; self-modifying currentizers are not accepted as completion evidence.
+v2.96 remains audit-visible as blob `2286b315a7d7152254aebc466f327da300561755`; v2.95 as `8bd1c3d8a057b4b8eea4f94880e4c3e0302bb632`; v2.94 as `e4643a58abf613bba9a2bec90964ad7d9b908ae8`; v2.93 as `c72cc29a647ffca6ffcd891755a9abc6c2a17553`; v2.92 as `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 as `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 as `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Attempted v2.89, v2.90 and the first v2.91 workflow currentizers remain transition-failure provenance only. The durable ledger is maintained by ordinary commits on the sole Gap-writer branch; self-modifying currentizers are not accepted as completion evidence.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -60,6 +60,16 @@ Ordinary-forward repair exact `4e5f8609f627c7d1bd24bf148fa11682ae67e503` restore
 The same #1767 Security run `35925494018` reported inherited Next.js findings `CVE-2026-75604`, `GHSA-2xp9-vwfh-vxw4` and Sharp `GHSA-rgj7-g3m4-5g8c` on the protected dependency state. Intervening #1767 commit `f111866d1f28e1dc52fc770834af08048003032a` attempted to repair dependency manifests/locks directly in the NetworkGraph lane. That was a canonical-owner violation, not an accepted dependency successor. #1767 ordinary-forward repair `157894a526165005e686f81c1f7b7a14c39f1973` preserves the history while restoring those dependency files to the owner-neutral blobs.
 
 #1623 ordinary-adopts accepted backend ancestry only after #1565 settles and must reacquire repository-wide dependency/security evidence on that resulting exact head. [#1752](https://github.com/ContextualWisdomLab/naruon/pull/1752) remains the Dependabot grouping/manifest-scan policy owner and must not absorb dependency repair.
+
+### 3.2.1 SMTP connector recipient mailbox boundary
+
+Protected API send requests already use Pydantic `EmailStr`, but protected `backend/runner/local_mail_adapters.py` accepts any non-empty SMTP `to` string. The downstream `EmailMessage` parser can reinterpret malformed address text instead of rejecting it; `user@example.com> AUTH=<attacker@example.com` is parsed as `user@example.com` by the current Python runtime. That means the connector can execute a recipient different from the literal caller input without returning `invalid_payload`. This is a product input/intent defect, not proof of direct SMTP command injection in the current transport.
+
+[#1769](https://github.com/ContextualWisdomLab/naruon/pull/1769) owns only this connector payload → canonical SMTP mailbox boundary. RED commit `822543bb37070a63437d60c190b01161503003ce` requires malformed recipient text to fail before `send_email` and a valid uppercase domain to normalize before provider use. Causal fix `e07ff4df5f5daa107daec4d331c70e7192163770` adds `_required_smtp_mailbox`, uses the already-pinned `email-validator==2.3.0` with `check_deliverability=False`, translates `EmailNotValidError` into the existing `invalid_payload` envelope and sends only the normalized mailbox downstream. Doctoring exact `f84c4fefa7586274c86a5032373d851a8c7f84d2` records the decision, rejected alternatives, reproduction boundary and references.
+
+The effective #1769 delta is three files and does not change dependencies, SMTP host/port controls, credentials, provider transport, throttling, workflows or DB. Exact-current Application CI `35989827882`, Security `35989827763`, CodeQL `35989827794`, Bandit `35989827796`, Semgrep `35989827833` and Docker `35989828169` are queued/pending at this observation; no qualifying post-last-push independent approval exists. Source contract is repaired, Delivery is not accepted.
+
+Protected source pins `aiosmtplib==5.1.2`. Upstream 5.1.3 addresses CVE-2026-90467 for ESMTP parameter injection in direct `mail`/`rcpt`/`vrfy`/`expn`/`sendmail` address handling. Current Naruon `_send_pinned_smtp_message` calls `SMTP.send_message(message)`, so this ledger does not claim CVE-2026-90467 is presently exploitable through Naruon's send path. Broad Dependabot #1749 mixes the 5.1.3 bump with 75 other backend updates; #1752's intended policy already identifies aiosmtplib as an independent update. Dependency adoption therefore remains separate owner work rather than source-copied into #1769.
 
 ### 3.3 Migration/workspace and repository CI/browser owner
 
@@ -163,6 +173,6 @@ Model timeout defaults do not truncate reasoning/streaming/tool use by elapsed t
 
 ## 8. Current release blockers
 
-Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence including the Data evidence-snapshot fixture; exact-current #1463 Tasks hosted browser/security/AT evidence and independent review after the gate-weakening repair; downstream #1503 migration ancestry; protected integration of #1549 after an immutable contextual-orchestrator API/client/schema release; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
+Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence including the Data evidence-snapshot fixture; #1769 connector SMTP mailbox validation exact-current hosted/security/review acceptance plus a separately owned independent aiosmtplib 5.1.3 adoption path rather than broad #1749 grouping; exact-current #1463 Tasks hosted browser/security/AT evidence and independent review after the gate-weakening repair; downstream #1503 migration ancestry; protected integration of #1549 after an immutable contextual-orchestrator API/client/schema release; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
 
 The #1565 and #1691 temporary adopters are transition mechanisms only. They must not become permanent product workflows. If they produce verified product commits, the temporary workflow must be removed by a subsequent ordinary non-force commit before exact-head acceptance evidence is evaluated. If they fail, the failure is RCA input rather than permission to weaken branch/security gates.
