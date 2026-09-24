@@ -1,4 +1,4 @@
-name: Temporary Gap v2.89 currentization
+name: Temporary Gap v2.90 currentization
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: true
 
-      - name: Record terminal adopter RED and causal repair
+      - name: Currentize durable Gap baseline without fragile paragraph anchors
         shell: bash
         run: |
           set -euo pipefail
@@ -39,26 +39,74 @@ jobs:
               global text
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f'expected one baseline anchor, found {count}: {old[:100]!r}')
+                  raise SystemExit(f'expected one anchor, found {count}: {old[:120]!r}')
               text = text.replace(old, new)
 
-          replace_once('**Baseline version:** 2.88  ', '**Baseline version:** 2.89  ')
+          def replace_between(start: str, end: str, new: str) -> None:
+              global text
+              if text.count(start) != 1 or text.count(end) < 1:
+                  raise SystemExit(f'non-unique section boundary: {start!r} -> {end!r}')
+              left = text.index(start)
+              right = text.index(end, left)
+              text = text[:left] + new + text[right:]
+
+          replace_once('**Baseline version:** 2.88  ', '**Baseline version:** 2.90  ')
           replace_once(
               'v2.87 remains audit-visible as blob `1eb9b18a7bcddb61c74e321a3759c787d6061391`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.',
-              'v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.',
+              'v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. The attempted v2.89 currentization run `35911751670` is audit-visible as a terminal transition failure and produced no baseline commit. Older snapshots remain reconstructable from Git history and `docs/product-technical-gap-history/`. Historical snapshots and predecessor workflow/review receipts are audit material, not current merge or release authority.',
           )
-          replace_once(
-              'v2.88 records two current owner transitions. First, Search owner [#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) one-shot repair run `35873031852` completed **SUCCESS** and emitted helper-free exact `d65a34773540147f568fab7aeeaf28835071ede2`. Fresh compare from canonical parent #1623 is ahead 17 / behind 0 with exactly the five Search-owned files; `dashboard-branding.spec.ts` now uses the current `판단 보조 빠른 실행` / `판단 보조 빠른 실행 메뉴` accessible names and exact `맥락 검색` locators. That closes the source-contract finding, not acceptance: the exact helper-free head currently has no normal hosted workflow generation. Dependent [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) therefore has a self-removing ordinary/non-force restack staged at `34f21dc101d2ae5d5683c4c698545685c3bf1f5f`; run `35905102850` is nonterminal and final scope must return to exactly its three detail-tab files. Second, Projects #1764\'s first guarded restack `35873253807` remains a terminal transition RED caused by an over-constrained conflict-set guard; current causal-repair staging `af0adc1c440b160d747f7901b2b76f591ede9b32` and rerun `35904029197` remain nonterminal. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.',
-              'v2.89 records a terminal backend adoption RED plus the still-open UI restacks. #1565 Application CI `35860514971` completed **FAILURE** after backend, frontend and coherent resolver jobs succeeded. Adopter job `107243391436` independently recovered artifact `10748790356`, verified the archive digest, all five accepted SHA-256 values and upstream markers, then failed only when it tried to restore `.github/workflows/app-ci.yml` from protected `develop@042b0c70...`; that file does not exist on the protected base. No product child was committed. Current #1565 staging `65c16a5807e1f0b04bc2962cec03f00eafbe93a4` therefore repairs only this transition assumption with a self-removing base-aware cleanup; run `35911472325` is nonterminal. Search owner #1603 remains helper-free at `d65a34773540147f568fab7aeeaf28835071ede2`, while dependent #1760 restack `35905102850` remains nonterminal. Projects #1764 retains its terminal first-restack RED and bounded causal-repair staging `af0adc1c440b160d747f7901b2b76f591ede9b32`; rerun `35904029197` remains nonterminal. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.',
+
+          replace_between(
+              'v2.88 records two current owner transitions.',
+              '\n\n## 1. Evidence hierarchy and commercial release posture',
+              '''v2.90 records the current owner graph after two newly terminal transition failures. Gap currentization run `35911751670` failed inside its exact-paragraph rewrite step before commit/push, so v2.89 never became durable source; this revision uses unique section boundaries instead of copying whole volatile paragraphs as anchors. Backend owner #1565 keeps the verified coherent `httpx2/httpcore2==2.13.0` five-file artifact, but first adoption `35860514971` and base-absence repair `35911472325` are both terminal RED. The second helper embedded the pull-request base expression inside a push-triggered workflow's Python search literal, so Actions resolved the unavailable pull-request context before Python ran and the exact app-ci search could not match. Current #1565 staging `45d7c96d9a45caab004dd7e57de2952e328e7623` repairs that transition source by constructing the literal expression inside Python; its fresh hosted generation is nonterminal. Search owner #1603 is helper-free at `d65a34773540147f568fab7aeeaf28835071ede2`; #1760 identity-fix staging `951c6fcd48591ae550efb525af56ffd6570c415a` / run `35925040222`, Projects #1764 `69faf51a9c1c039df7b916e13eee93107a975a7c` / run `35925411592`, and Search-redaction #1765 `4d7760cee3fdac7159df8d8f71e4021f9b5ac683` / run `35930078801` remain nonterminal. Utility #1758/#1763 still lack real #1718 commit ancestry and the generated password capability is not accepted until its identity/use-case boundary and Rust-first owner path are resolved. NetworkGraph #1767 keeps the cleaned React.memo plus parent-update render regression but exact-head hosted acceptance remains pending. Product merge, UI Delivery, Localization Delivery and commercial Release remain fail-closed.''',
           )
-          replace_once(
-              '[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) is the canonical bounded Starlette TestClient/httpx2 and backend coherent-lock owner. Current adoption staging is `4c5872ac29435f25034cd978a47e8cdcb185813a`, Draft/open. Effective product source still carries direct `httpx2==2.5.0` and resolved `httpcore2==2.5.0`, so Security RED remains live until an ordinary helper-free child adopts the verified graph.',
-              '[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) is the canonical bounded Starlette TestClient/httpx2 and backend coherent-lock owner. The first adoption staging `4c5872ac29435f25034cd978a47e8cdcb185813a` is terminal RED; current causal-repair staging is `65c16a5807e1f0b04bc2962cec03f00eafbe93a4`, Draft/open. Effective product source still carries direct `httpx2==2.5.0` and resolved `httpcore2==2.5.0`, so Security RED remains live until an ordinary helper-free child adopts the verified graph.',
+
+          replace_between(
+              '[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) is the canonical bounded Starlette TestClient/httpx2 and backend coherent-lock owner.',
+              '\n\nCoherent resolver exact',
+              '''[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) is the canonical bounded Starlette TestClient/httpx2 and backend coherent-lock owner. Coherent resolver exact `d166c9208b275ab88895e7711d999c4729a81025` remains the accepted generation source for the five-file 2.13.0 candidate. First product-adoption staging `4c5872ac29435f25034cd978a47e8cdcb185813a` is terminal RED after verifying the artifact and then assuming protected `develop` contained `.github/workflows/app-ci.yml`. The first causal repair `65c16a5807e1f0b04bc2962cec03f00eafbe93a4` is also terminal RED because its push-triggered helper let Actions pre-resolve a pull-request-only expression inside the Python search literal. Current staging `45d7c96d9a45caab004dd7e57de2952e328e7623` changes only that helper defect by constructing the literal expression inside Python; it is not product authority. Effective product source still carries direct `httpx2==2.5.0` and resolved `httpcore2==2.5.0`, so Security RED remains live until an ordinary helper-free child adopts the verified graph.''',
           )
-          replace_once(
-              'Current `4c5872ac...` is temporary one-shot adoption staging, not final product source. Application CI `35860514971` remains nonterminal; Bandit, Semgrep and Docker are GREEN, while Security/CodeQL and helper-free adoption are incomplete. Required order is helper-free five-file adoption → prove no temporary resolver/adopter and no residual 2.5.0 → normal exact-head frozen/core+agent/TestClient/Ruff GREEN → current Security/Trivy, CodeQL and all protected contexts → zero valid findings/threads → independent post-last-push review → protected integration. No stale 2.12 promotion, four-file-only adoption, hand-edited generated locks, source-neutral wake commit or scanner suppression is acceptable.',
-              'Application CI `35860514971` on first adoption staging `4c5872ac...` completed **FAILURE**. Backend, frontend and resolver jobs were GREEN. The adopter recovered and independently verified the exact resolver artifact, all five accepted file digests and upstream markers, copied the candidate files and updated the bounded test/CHANGELOG/doctoring content, then failed before commit because it assumed protected base `042b0c70...` contained `.github/workflows/app-ci.yml`. Git correctly reported that the path does not exist in that base. Current `65c16a58...` stages only a base-aware cleanup rule: restore `app-ci.yml` if the protected base contains it, otherwise remove the temporary file; its repair helper removes itself and uses remote-head equality plus normal non-force push. Run `35911472325` is nonterminal. Required order is helper-free causal-fix child → ordinary helper-free five-file product adoption → prove no temporary workflow and no residual 2.5.0 → normal exact-head frozen/core+agent/TestClient/Ruff GREEN → current Security/Trivy, CodeQL and all protected contexts → zero valid findings/threads → independent post-last-push review → protected integration. No stale 2.12 promotion, four-file-only adoption, hand-edited generated locks, source-neutral wake commit or scanner suppression is acceptable.',
+
+          replace_between(
+              'Current `4c5872ac...` is temporary one-shot adoption staging, not final product source.',
+              '\n\n### 3.2 Frontend dependency/security owner',
+              '''Current transition authority is `45d7c96d...`, not a helper-free product child. The coherent artifact bytes and hashes remain valid evidence, but neither failed transition receipt transfers to a later head. Required order is successful self-removal of the repair helper → ordinary helper-free five-file product adoption → prove no temporary workflow and no residual 2.5.0 → normal exact-head frozen/core+agent/TestClient/Ruff GREEN → current Security/Trivy, CodeQL and all protected contexts → zero valid findings/threads → independent post-last-push review → protected integration. No stale artifact promotion, hand-edited generated locks, source-neutral wake commit or scanner suppression is acceptable.''',
           )
+
+          replace_between(
+              '[#1758](https://github.com/ContextualWisdomLab/naruon/pull/1758)',
+              '\n\n### 3.5 Generated provenance containment and guarded reconciliation',
+              '''[#1758](https://github.com/ContextualWisdomLab/naruon/pull/1758) exact `634b2ad34db3d05aa4e00bc2aac0b3a6bcd3709f` preserves password-generator intent only; it is not an actual descendant of canonical #1718. Fresh graph verification found #1718→#1758 diverged (ahead 1 / behind 9, merge base protected `develop`) and #1758→#1763 diverged (ahead 1 / behind 1). Metadata retargets therefore do not establish owner ancestry. #1718 remains the sole hash/strict-JSON owner; weaker duplicate JSON source must not be adopted. The generated Python password primitive allowing length 4..128 is not accepted as a generic authentication contract. Its bounded context must distinguish single-factor password, MFA password, activation/testing secret or another use case, keep Keyverse as identity backend, and follow the security-runtime Rust-first owner rule before source adoption. NIST SP 800-63B-4 remains the primary password-policy authority. #1763 can settle only after #1758 has real canonical ancestry and a unique bounded delta or verified zero-delta provenance.''',
+          )
+
+          replace_between(
+              'Generated [#1764](https://github.com/ContextualWisdomLab/naruon/pull/1764)',
+              '\n\nGenerated [#1765](https://github.com/ContextualWisdomLab/naruon/pull/1765)',
+              '''Generated [#1764](https://github.com/ContextualWisdomLab/naruon/pull/1764) remains a dependent Projects visual refinement under #1352. Its first restack failed on an over-constrained conflict guard; the second run `35904029197` then independently failed before merge evaluation because Git committer identity was unset. Current staging `69faf51a9c1c039df7b916e13eee93107a975a7c` configures repository-local bot identity before merge while retaining exact #1352 pinning, fail-closed unexpected-conflict handling, canonical `.jules` restoration, Loader2-only spinner reapplication, helper self-removal, exact three-file scope, remote-head equality and non-force push. Run `35925411592` is nonterminal. Intended final #1352-relative scope remains exactly `ProjectsLayout.tsx`, `ProjectsLayout.accessibility.test.tsx`, and `page.test.tsx`.''',
+          )
+
+          replace_between(
+              'Generated [#1765](https://github.com/ContextualWisdomLab/naruon/pull/1765)',
+              '\n\nZero-delta provenance lanes remain Draft',
+              '''Generated [#1765](https://github.com/ContextualWisdomLab/naruon/pull/1765) remains Draft under canonical exception-redaction owner #1612 exact `3da3ae8e60e1bb049f59ae86bfe82db12b7e3cc7`. Its first restack `35874162557` is terminal RED; an intervening helper-removal commit failed to establish #1612 ancestry and reintroduced raw exception-string logging in the email boundary, so that state is not a successor. Current v2 staging `4d7760cee3fdac7159df8d8f71e4021f9b5ac683` exact-pins and ordinary-adopts #1612, fails closed on unexpected conflicts, restores canonical email/Sentinel/Search source, reapplies only the two Search exception boundaries through `redacted_exception_info(e)` plus a focused structural regression, requires #1612 ancestry and exactly two child files, self-removes and normal non-force pushes only if remote head equality holds. Run `35930078801` is nonterminal; no helper-free canonical child exists yet.''',
+          )
+
+          replace_between(
+              'Bounded refinement [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760)',
+              '\n\n**Search Delivery: FAIL**',
+              '''Bounded refinement [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) predecessor `3aaeb30f80048cf3690e924176ee85ba6fc80537` owns shared Button tab semantics and Playwright keyboard/focus/touch acceptance. First ordinary-restack run `35905102850` failed before merge evaluation because Git committer identity was unset. Current staging `951c6fcd48591ae550efb525af56ffd6570c415a` adds repository-local bot identity before the exact-parent merge while preserving fail-closed conflict handling, helper self-removal, exact three-file parent-relative scope verification, remote-head equality and ordinary non-force push. Run `35925040222` is nonterminal. The helper is not product scope.''',
+          )
+
+          replace_between(
+              'Generated #1764 remains only a dependent visual refinement.',
+              '\n\n### 4.5 Mail/dashboard flow',
+              '''Generated #1764 remains only a dependent visual refinement. After the original conflict-guard failure, rerun `35904029197` exposed the same missing Git committer identity defect seen in #1760. Current staging `69faf51a9c1c039df7b916e13eee93107a975a7c` preserves #1352 authority and the three-file Loader2 refinement while configuring identity before merge; run `35925411592` is nonterminal and no helper-free child exists. **Projects Delivery: FAIL** until bounded helper-free ancestry and current browser/touch/AT/review evidence exist.''',
+          )
+
+          network = '''\n\n### 4.6 Network graph\n\n[#1767](https://github.com/ContextualWisdomLab/naruon/pull/1767) retains the bounded `React.memo` optimization around prop-less `NetworkGraph` and a parent-update render-body regression. Existing vis-network construction is already dependency-bound, so unmeasured O(N) canvas-rebuild claims were removed with generated `.jules/bolt.md` churn. Intervening exact `209a0fc2c070fbe24f2abf8c9863ca47682a2ffa` has the same product tree as the cleaned repair and contributes no acceptance evidence; fresh exact-head hosted checks remain pending. **NetworkGraph Delivery: FAIL** until exact-head tests/review and, if a performance claim is retained, measured browser evidence exist.'''
+          replace_once('\n\n## 5. UI Localization Catalog', network + '\n\n## 5. UI Localization Catalog')
+
           path.write_text(text)
           PY
           rm .github/workflows/temporary-gap-v289-currentization.yml
@@ -75,5 +123,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- docs/product-technical-gap-baseline.md .github/workflows/temporary-gap-v289-currentization.yml
           git diff --cached --check
-          git commit -m "docs(gap): record httpx2 adopter RCA"
+          git commit -m "docs(gap): currentize owner graph to v2.90"
           git push origin "HEAD:refs/heads/${branch}"
