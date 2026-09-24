@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.91  
+**Baseline version:** 2.92  
 **Observed on:** 2026-09-24 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. The attempted v2.89, v2.90 and first v2.91 workflow currentizers are audit-visible transition failures and did not create a durable baseline. The failed temporary currentizer has been removed; this revision is an ordinary documentation commit on the sole Gap-writer branch.
+v2.91 remains audit-visible as blob `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. The attempted v2.89, v2.90 and first v2.91 workflow currentizers are audit-visible transition failures and did not create a durable baseline. The failed temporary currentizer has been removed; current revisions are ordinary documentation commits on the sole Gap-writer branch.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -33,7 +33,7 @@ Contextual-orchestrator protected `main` is an owner head, not a released Naruon
 
 [#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) remains the canonical Starlette TestClient/httpx2 and coherent backend-lock owner. Resolver exact `d166c9208b275ab88895e7711d999c4729a81025` produced a coherent five-file `httpx2/httpcore2==2.13.0` candidate. Artifact `10748790356` was re-downloaded and its five SHA-256 values still match the recorded `requirements.txt`, `pyproject.toml`, `requirements-hashes.txt`, `requirements-agent.txt`, and `uv.lock` evidence.
 
-Product adoption has not succeeded. Effective product source still carries `httpx2==2.5.0` / `httpcore2==2.5.0`. Run `35939616799` is terminal FAILURE: the base-aware source rewrite completed locally, then the compound ordinary-push step failed before any branch update. Current diagnostic staging `2267a7146dd37b8c2bacf133da20e0d97ccb3d2f` preserves the same causal repair but separates remote-head equality, exact staging, commit and non-force push into independent fail-closed steps. Run `35957638723` is nonterminal. No helper-free 2.13.0 product child exists, so Security remains RED and predecessor receipts do not transfer.
+Product adoption has not succeeded. Effective product source still carries `httpx2==2.5.0` / `httpcore2==2.5.0`. Run `35939616799` is terminal FAILURE: the base-aware source rewrite completed locally, then the compound ordinary-push step failed before any branch update. Current diagnostic staging `2267a7146dd37b8c2bacf133da20e0d97ccb3d2f` preserves the same causal repair but separates remote-head equality, exact staging, commit and non-force push into independent fail-closed steps. Run `35957638723` remains queued/nonterminal at this observation. No helper-free 2.13.0 product child exists, so Security remains RED and predecessor receipts do not transfer.
 
 ### 3.2 Frontend dependency/security owner
 
@@ -49,7 +49,7 @@ Product adoption has not succeeded. Effective product source still carries `http
 
 The repeated `/api/data/quality-surface/evidence-snapshot` 404 is verified as a shared Playwright fixture defect rather than a missing backend route. Protected backend source exposes that route, `DataLayout` requests it, and full-product smoke already carries the server-shaped `data_quality_evidence_snapshot.v1` fixture. Shared `mockDashboardApi` omitted the route and allowed mocked requests to fall through to 404.
 
-Current #1691 staging `966a4e1e0c1ee93b677ac36333e8e7c7b7070336` adds only a temporary self-removing repair workflow. It is bounded to the shared Playwright helper plus one focused Vitest regression, requires a redacted/verifier-ready 200 JSON snapshot, runs focused Vitest/ESLint, verifies remote-head equality, removes itself, and only then may normal non-force push. Run `35956903492` is nonterminal; the fixture repair is therefore staged, not accepted.
+Current #1691 staging `966a4e1e0c1ee93b677ac36333e8e7c7b7070336` adds only a temporary self-removing repair workflow. It is bounded to the shared Playwright helper plus one focused Vitest regression, requires a redacted/verifier-ready 200 JSON snapshot, runs focused Vitest/ESLint, verifies remote-head equality, removes itself, and only then may normal non-force push. Run `35956903492` remains queued/nonterminal at this observation; the fixture repair is therefore staged, not accepted.
 
 [#1503](https://github.com/ContextualWisdomLab/naruon/pull/1503) remains the canonical workspace registry/document migration owner. Required ancestry remains accepted #1565 → #1623 → #1694 clean bootstrap → canonical product repairs → #1691 integrated browser acceptance → #1503 ordinary restack.
 
@@ -63,11 +63,11 @@ Current #1691 staging `966a4e1e0c1ee93b677ac36333e8e7c7b7070336` adds only a tem
 
 Generated/provenance lanes do not bypass canonical owners. #1738 and #1725 remain ordinary-forward zero-delta corrections.
 
-Search detail-tabs #1760 is now helper-free at `6da4f4ddee65e80524546dc25b370f2568ab59ba`, a real descendant of helper-free #1603 `d65a34773540147f568fab7aeeaf28835071ede2`, with exactly three Search detail-tab files as the parent-relative delta.
+Search detail-tabs #1760 is helper-free at `6da4f4ddee65e80524546dc25b370f2568ab59ba`, a real descendant of helper-free #1603 `d65a34773540147f568fab7aeeaf28835071ede2`, with exactly three Search detail-tab files as the parent-relative delta.
 
-Projects #1764 is now helper-free at `1f462b65fed368bf1db36b9fbdf364cf5e37483b`, a real descendant of #1352 `1b8497f33e1977ce7b963640b63f107510621973`, with exactly three Projects files.
+Projects #1764 is helper-free at `1f462b65fed368bf1db36b9fbdf364cf5e37483b`, a real descendant of #1352 `1b8497f33e1977ce7b963640b63f107510621973`, with exactly three Projects files.
 
-Search exception-redaction #1765 is now helper-free at `4ff2e8fbe1f7494bbdeaa9f0e54aaa5fb72b6cf9`, a real descendant of canonical #1612 `3da3ae8e60e1bb049f59ae86bfe82db12b7e3cc7`, with exactly `backend/api/search.py` and its focused redaction-contract test. It consumes canonical `redacted_exception_info(e)`, raises fixed HTTP detail `from None`, and does not retain the intervening email-logging regression.
+Search exception-redaction #1765 is helper-free at `821d193d807ae952c4b2e96206008107e624177c`, a real descendant of canonical #1612 `3da3ae8e60e1bb049f59ae86bfe82db12b7e3cc7`. An intervening ordinary-forward commit `67b45d53873aac92d3f7cc5a477d0f53ae44cf57` had broadened the effective delta to 15 files, reintroduced raw exception-string logging, weakened `safe_logging`, and removed canonical regression tests. The repair preserves that history but restores the prior canonical tree by an ordinary non-force descendant commit. Fresh #1612→current comparison is ahead 8 / behind 0 with exactly `backend/api/search.py` and `backend/tests/test_search_exception_redaction_contract.py` as the effective delta. Search consumes canonical `redacted_exception_info(e)` and raises fixed HTTP details `from None`; the owner-boundary regression is no longer present in the effective tree.
 
 These are source-topology PASS results, not Delivery PASS. Current `app-ci.yml` filters normal pull-request execution to bases `develop`, `master`, and `release/**`, so valid stacked children can lack normal exact-head hosted Application CI. #1691 owns correction of that repository-CI topology; child branches do not copy CI workflow source or predecessor receipts.
 
@@ -83,7 +83,7 @@ Material UI acceptance requires normal/loading/empty/error/permission/responsive
 
 [#1603](https://github.com/ContextualWisdomLab/naruon/pull/1603) exact `d65a34773540147f568fab7aeeaf28835071ede2` is the helper-free canonical Search owner. [#1760](https://github.com/ContextualWisdomLab/naruon/pull/1760) exact `6da4f4ddee65e80524546dc25b370f2568ab59ba` is its real three-file detail-tab descendant. Source topology is PASS. Search Delivery remains FAIL because the stacked exact child lacks normal hosted browser/security evidence and qualifying independent post-last-push review.
 
-Search exception-redaction is separately #1612→#1765. Source/security topology is PASS; protected hosted/review acceptance remains FAIL.
+Search exception-redaction is separately #1612→#1765 exact `821d193d807ae952c4b2e96206008107e624177c`. Source/security topology is PASS after repairing the intervening broad regression; protected hosted/review acceptance remains FAIL because the stacked exact child has no normal GitHub Actions generation and no qualifying independent post-last-push review.
 
 ### 4.3 OIDC settings
 
