@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.92  
+**Baseline version:** 2.93  
 **Observed on:** 2026-09-24 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.91 remains audit-visible as blob `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. The attempted v2.89, v2.90 and first v2.91 workflow currentizers are audit-visible transition failures and did not create a durable baseline. The failed temporary currentizer has been removed; current revisions are ordinary documentation commits on the sole Gap-writer branch.
+v2.92 remains audit-visible as blob `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 remains audit-visible as blob `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 remains audit-visible as blob `1c708286ddcd3c8ab543043aac428889b4f53c4f`. The attempted v2.89, v2.90 and first v2.91 workflow currentizers are audit-visible transition failures and did not create a durable baseline. The failed temporary currentizer has been removed; current revisions are ordinary documentation commits on the sole Gap-writer branch.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -31,15 +31,19 @@ Contextual-orchestrator protected `main` is an owner head, not a released Naruon
 
 ### 3.1 Backend dependency/security owner
 
-[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) remains the canonical Starlette TestClient/httpx2 and coherent backend-lock owner. Resolver exact `d166c9208b275ab88895e7711d999c4729a81025` produced a coherent five-file `httpx2/httpcore2==2.13.0` candidate. Artifact `10748790356` was re-downloaded and its five SHA-256 values still match the recorded `requirements.txt`, `pyproject.toml`, `requirements-hashes.txt`, `requirements-agent.txt`, and `uv.lock` evidence.
+[#1565](https://github.com/ContextualWisdomLab/naruon/pull/1565) remains the canonical Starlette TestClient/httpx2 and coherent backend-lock owner. Resolver exact `d166c9208b275ab88895e7711d999c4729a81025` produced a coherent five-file `httpx2/httpcore2==2.13.0` candidate. Artifact `10748790356` was re-downloaded and its five SHA-256 values still match the recorded `requirements.txt`, `pyproject.toml`, `requirements-hashes.txt`, `requirements-agent.txt`, and `uv.lock` evidence. That candidate lock resolves AnyIO `4.14.2`.
 
-Product adoption has not succeeded. Effective product source still carries `httpx2==2.5.0` / `httpcore2==2.5.0`. Run `35939616799` is terminal FAILURE: the base-aware source rewrite completed locally, then the compound ordinary-push step failed before any branch update. Current diagnostic staging `2267a7146dd37b8c2bacf133da20e0d97ccb3d2f` preserves the same causal repair but separates remote-head equality, exact staging, commit and non-force push into independent fail-closed steps. Run `35957638723` remains queued/nonterminal at this observation. No helper-free 2.13.0 product child exists, so Security remains RED and predecessor receipts do not transfer.
+Product adoption has not succeeded. Effective protected/product source still carries the vulnerable dependency state. #1767 Security run `35925494018` scanned exact `209a0fc2c070fbe24f2abf8c9863ca47682a2ffa` and became terminal FAILURE in `trivy-fs`, reporting three inherited AnyIO findings: `CVE-2026-63374`, `CVE-2026-63349`, and `CVE-2026-64847`. This is current proof that backend dependency Security remains RED; it is not a NetworkGraph defect. The #1565 candidate version is within the upstream fixed floor for these newly disclosed AnyIO advisories, but acceptance still requires the ordinary helper-free product adoption and a fresh current-database Trivy run on that exact descendant.
+
+Run `35939616799` is terminal FAILURE: the base-aware source rewrite completed locally, then the compound ordinary-push step failed before any branch update. Current diagnostic staging `2267a7146dd37b8c2bacf133da20e0d97ccb3d2f` preserves the same causal repair but separates remote-head equality, exact staging, commit and non-force push into independent fail-closed steps. Run `35957638723` remains queued/nonterminal at this observation. No helper-free 2.13.0 product child exists, so Security remains RED and predecessor receipts do not transfer.
 
 ### 3.2 Frontend dependency/security owner
 
-[#1623](https://github.com/ContextualWisdomLab/naruon/pull/1623) exact `509be4c1d9b6c7ba239a108656e2382681a85341` remains the canonical frontend dependency-security owner. It ordinary-adopts accepted backend ancestry only after #1565 settles and must reacquire repository-wide dependency/security evidence on the resulting exact head.
+[#1623](https://github.com/ContextualWisdomLab/naruon/pull/1623) exact `509be4c1d9b6c7ba239a108656e2382681a85341` remains the canonical frontend dependency-security owner. It carries the reviewed frontend dependency floor (`next`/`eslint-config-next` `16.3.4`, resolved `sharp` `0.35.4`) and has a bounded current-database frontend PASS.
 
-[#1752](https://github.com/ContextualWisdomLab/naruon/pull/1752) remains the Dependabot grouping/manifest-scan policy owner and must not absorb dependency repair.
+The same #1767 Security run `35925494018` reported two inherited Next.js findings (`CVE-2026-75604`, `GHSA-2xp9-vwfh-vxw4`) and one Sharp finding (`GHSA-rgj7-g3m4-5g8c`) on protected-base dependency state. An intervening #1767 commit `f111866d1f28e1dc52fc770834af08048003032a` attempted to remediate those findings by changing `frontend/package.json`, `frontend/pnpm-lock.yaml`, and `backend/uv.lock` directly in the NetworkGraph lane. That was a canonical-owner violation, not an accepted dependency successor. #1767 ordinary-forward repair `157894a526165005e686f81c1f7b7a14c39f1973` restores all three dependency files to the owner-neutral prior blobs while preserving the intervening commit in history. Dependency repair remains exclusively #1565/#1623-owned.
+
+#1623 ordinary-adopts accepted backend ancestry only after #1565 settles and must reacquire repository-wide dependency/security evidence on the resulting exact head. [#1752](https://github.com/ContextualWisdomLab/naruon/pull/1752) remains the Dependabot grouping/manifest-scan policy owner and must not absorb dependency repair.
 
 ### 3.3 Migration/workspace and repository CI/browser owner
 
@@ -99,7 +103,11 @@ Search exception-redaction is separately #1612→#1765 exact `821d193d807ae952c4
 
 ### 4.6 Network graph
 
-[#1767](https://github.com/ContextualWisdomLab/naruon/pull/1767) exact `209a0fc2c070fbe24f2abf8c9863ca47682a2ffa` retains the bounded `React.memo` optimization and parent-update render-body regression. Exact Application CI `35925494000` is GREEN and the specific CodeRabbit parent-update thread is resolved. This proves the functional bailout contract, not a buyer-path performance improvement. Central Security/review evidence and representative large-graph browser/profiler measurement remain incomplete; no p95/main-thread improvement claim is accepted. Delivery remains FAIL.
+[#1767](https://github.com/ContextualWisdomLab/naruon/pull/1767) current exact `157894a526165005e686f81c1f7b7a14c39f1973` retains only the bounded `React.memo` optimization and parent-update render-body regression as its effective product/test delta. Historical exact `209a0fc2...` had Application CI `35925494000` GREEN and its focused CodeRabbit parent-update thread resolved, but Security `35925494018` later failed on six dependency findings inherited from the protected dependency state.
+
+Intervening commit `f111866d1f28e1dc52fc770834af08048003032a` then crossed owner boundaries by modifying backend and frontend dependency files inside the NetworkGraph lane. Ordinary-forward repair `157894a...` preserves that history while restoring `backend/uv.lock`, `frontend/package.json`, and `frontend/pnpm-lock.yaml` to the previous owner-neutral blobs. `209a0fc2...`→`157894a...` is ahead 2 / behind 0 with zero effective file delta, and the repaired tree is exactly `e41e825b0675d7d80c56e9756031c8994570cdb0` again.
+
+Fresh exact-current runs are Application CI `35965793616`, Security `35965793843`, CodeQL `35965793657`, Bandit `35965793743`, Semgrep `35965793668`, and Docker `35965794291`; all are nonterminal at this observation. Predecessor receipts do not transfer. The historical formal `CHANGES_REQUESTED` review also remains non-approval. No representative large-graph profiler/browser/k6 measurement exists; no p95/main-thread performance claim is accepted. Delivery remains FAIL.
 
 ## 5. UI Localization Catalog
 
@@ -127,6 +135,8 @@ Model timeout defaults do not truncate reasoning/streaming/tool use by elapsed t
 
 ## 8. Current release blockers
 
-Current commercial blockers are: helper-free #1565 2.13.0 product adoption and resulting security evidence; #1623 combined dependency security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence, including the Data evidence-snapshot fixture; downstream #1503 migration ancestry; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
+Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence, including the Data evidence-snapshot fixture; downstream #1503 migration ancestry; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
+
+The #1767 Trivy failure is evidence of these dependency blockers, not an exception that permits dependency source-copy into the NetworkGraph lane. Cross-owner lock/manifest changes must be ordinary-forward removed from product lanes and consumed later only through accepted canonical dependency ancestry.
 
 No E2E exclusion/assertion weakening, duplicate owner, permanent source-fix workflow, predecessor receipt transfer, source-neutral wake commit, blind rerun, self-approval, force-push/destructive rebase, scanner suppression, mutable external-contract consumption or gate weakening is accepted.
