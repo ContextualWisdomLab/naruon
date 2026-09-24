@@ -223,6 +223,103 @@ def test_operator_cli_does_not_expose_credentials_on_preflight_error():
     assert token not in result.stderr
 
 
+def test_product_request_exports_bounded_span_over_authenticated_https(tmp_path):
+    import ssl
+    import subprocess
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+
+    from core import telemetry
+
+    cwl_telemetry = pytest.importorskip("cwl_telemetry")
+    certificate = tmp_path / "receiver.crt"
+    private_key = tmp_path / "receiver.key"
+    subprocess.run(
+        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+         "-subj", "/CN=localhost", "-addext", "subjectAltName=IP:127.0.0.1",
+         "-keyout", str(private_key), "-out", str(certificate), "-days", "1"],
+        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    token = "synthetic-product-otlp-token-12345"
+    requests = []
+
+    class Receiver(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            if self.path == "/v1/traces":
+                requests.append((self.headers.get("Authorization") == f"Bearer {token}", body))
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    server = HTTPServer(("127.0.0.1", 0), Receiver)
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(str(certificate), str(private_key))
+    server.socket = tls.wrap_socket(server.socket, server_side=True)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        app = FastAPI()
+        app.add_api_route("/private/{item_id}", lambda item_id: {"ok": True})
+        telemetry.setup_telemetry(app, cwl_telemetry.TelemetryConfig(
+            service="naruon-backend", version="0.14.4", environment="test",
+            source_revision="a" * 40, receiver=f"https://127.0.0.1:{server.server_port}",
+            token=token, ca_file=str(certificate),
+            route_templates={"/private/{item_id}"},
+        ))
+        try:
+            with TestClient(app) as client:
+                assert client.get(
+                    "/private/secret-id?token=secret-query",
+                    headers={"baggage": "credential=secret-baggage"},
+                ).status_code == 200
+        finally:
+            telemetry.shutdown_telemetry(app)
+        assert requests and all(authenticated for authenticated, _ in requests)
+        payload = requests[0][1]
+        assert all(secret not in payload for secret in (b"secret-id", b"secret-query", b"secret-baggage", token.encode()))
+        exported = ExportTraceServiceRequest()
+        exported.ParseFromString(payload)
+        resource = exported.resource_spans[0].resource.attributes
+        assert any(item.key == "cwl.source_revision" and item.value.string_value == "a" * 40 for item in resource)
+        span = exported.resource_spans[0].scope_spans[0].spans[0]
+        assert span.name == "http_request"
+        assert any(item.key == "http_route" and item.value.string_value == "/private/{item_id}" for item in span.attributes)
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+
+def test_product_request_survives_unavailable_telemetry_receiver(caplog):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from core import telemetry
+
+    cwl_telemetry = pytest.importorskip("cwl_telemetry")
+    token = "synthetic-unavailable-otlp-token-12345"
+    app = FastAPI()
+    app.add_api_route("/ready", lambda: {"ok": True})
+    telemetry.setup_telemetry(app, cwl_telemetry.TelemetryConfig(
+        service="naruon-backend", version="0.14.4", environment="test",
+        source_revision="a" * 40, receiver="https://127.0.0.1:1", token=token,
+        route_templates={"/ready"},
+    ))
+    try:
+        with TestClient(app) as client:
+            assert client.get("/ready").status_code == 200
+    finally:
+        telemetry.shutdown_telemetry(app)
+    assert token not in caplog.text
+
+
 def test_sdk_rejects_plaintext_or_missing_revision_before_bootstrap():
     cwl_telemetry = pytest.importorskip("cwl_telemetry")
 
