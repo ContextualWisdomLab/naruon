@@ -1,13 +1,13 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 2.97  
+**Baseline version:** 2.98  
 **Observed on:** 2026-09-24 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
 **Canonical Gap-ledger writer:** [#1602](https://github.com/ContextualWisdomLab/naruon/pull/1602)
 
-v2.96 remains audit-visible as blob `2286b315a7d7152254aebc466f327da300561755`; v2.95 as `8bd1c3d8a057b4b8eea4f94880e4c3e0302bb632`; v2.94 as `e4643a58abf613bba9a2bec90964ad7d9b908ae8`; v2.93 as `c72cc29a647ffca6ffcd891755a9abc6c2a17553`; v2.92 as `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 as `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 as `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Attempted v2.89, v2.90 and the first v2.91 workflow currentizers remain transition-failure provenance only. The durable ledger is maintained by ordinary commits on the sole Gap-writer branch; self-modifying currentizers are not accepted as completion evidence.
+v2.97 remains audit-visible as blob `13d4d7c2c871d17e9dcbf85d58ecbd180b9be5db`; v2.96 as `2286b315a7d7152254aebc466f327da300561755`; v2.95 as `8bd1c3d8a057b4b8eea4f94880e4c3e0302bb632`; v2.94 as `e4643a58abf613bba9a2bec90964ad7d9b908ae8`; v2.93 as `c72cc29a647ffca6ffcd891755a9abc6c2a17553`; v2.92 as `40b6875cc84f58cf340df4215af2b62e6db19944`; v2.91 as `9fe2b4930c27cdb089e32105840ce194e2fa5e7c`; v2.88 as `1c708286ddcd3c8ab543043aac428889b4f53c4f`. Attempted v2.89, v2.90 and the first v2.91 workflow currentizers remain transition-failure provenance only. The durable ledger is maintained by ordinary commits on the sole Gap-writer branch; self-modifying currentizers are not accepted as completion evidence.
 
 ## 1. Evidence hierarchy and commercial release posture
 
@@ -87,9 +87,13 @@ Ordinary-forward repair exact `6b59cf471f91223c57d6a58fa02c6d6581d4b4e1` removes
 
 ### 3.4 Utility tools
 
-[#1718](https://github.com/ContextualWisdomLab/naruon/pull/1718) exact `7fb5b9b2578f3a12ac757e1e1b9c5d490722bfd9` remains the sole hash-generator and strict JSON-format owner. #1718→#1758 and #1758→#1763 are not actual canonical ancestry despite metadata retargets.
+[#1718](https://github.com/ContextualWisdomLab/naruon/pull/1718) exact `7fb5b9b2578f3a12ac757e1e1b9c5d490722bfd9` remains the sole hash-generator and strict JSON-format owner. Its canonical `hash_generator` is bounded to SHA-256/SHA-384/SHA-512 and the 100,000-character utility ceiling; its `json_formatter` owns the same ceiling, fail-closed non-standard numeric constant rejection and `allow_nan=False` output.
 
-#1758 preserves password-generator intent only. Its generated Python primitive permitting length 4..128 is not accepted as a generic authentication contract until the bounded context distinguishes single-factor password, MFA password, activation/testing secret or another use case, Keyverse remains the identity backend, and the security-runtime Rust-first owner boundary is resolved. Weaker duplicate JSON source must not be adopted. #1763 can settle only after real canonical ancestry exists and a unique bounded delta or verified zero-delta provenance is established.
+Generated [#1770](https://github.com/ContextualWisdomLab/naruon/pull/1770) exact `79f188c7d57b56a49837943060f6547411b217ec` was created directly from protected `develop` and reimplements `hash_generator` plus `json_formatter` together with a new `text_reverser`. It is a verified duplicate-owner/wrong-ancestry repair finding, not a canonical successor. Its hash code reintroduces MD5/SHA-1, has no utility input ceiling and changes the response contract; its JSON code omits the utility ceiling and strict non-standard-number behavior. #1770 has therefore been converted to Draft and kept open rather than merged or prematurely closed.
+
+The only potentially unique #1770 product intent is `text_reverser`. A valid successor must be a real ordinary non-force descendant of #1718, retain only a bounded text-reverser delta plus tests/docs, reuse the utility resource ceiling/error contract and reacquire exact-head hosted/security/review evidence. A metadata retarget alone is not ancestry. #1770 may close only after a verified successor completely inherits that valid unique delta.
+
+#1758 preserves password-generator intent only. Its generated Python primitive permitting length 4..128 is not accepted as a generic authentication contract until the bounded context distinguishes single-factor password, MFA password, activation/testing secret or another use case, Keyverse remains the identity backend, and the security-runtime Rust-first owner boundary is resolved. #1718→#1758 and #1758→#1763 are not actual canonical ancestry despite metadata retargets. #1763 can settle only after real canonical ancestry exists and a unique bounded delta or verified zero-delta provenance is established.
 
 ### 3.5 Generated provenance and canonical descendant repairs
 
@@ -173,6 +177,6 @@ Model timeout defaults do not truncate reasoning/streaming/tool use by elapsed t
 
 ## 8. Current release blockers
 
-Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence including the Data evidence-snapshot fixture; #1769 connector SMTP mailbox validation exact-current hosted/security/review acceptance plus a separately owned independent aiosmtplib 5.1.3 adoption path rather than broad #1749 grouping; exact-current #1463 Tasks hosted browser/security/AT evidence and independent review after the gate-weakening repair; downstream #1503 migration ancestry; protected integration of #1549 after an immutable contextual-orchestrator API/client/schema release; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
+Current commercial blockers are: helper-free #1565 2.13.0/AnyIO-fixed product adoption and fresh resulting security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 stacked-PR trigger plus integrated real-browser evidence including the Data evidence-snapshot fixture; #1769 connector SMTP mailbox validation exact-current hosted/security/review acceptance plus a separately owned independent aiosmtplib 5.1.3 adoption path rather than broad #1749 grouping; canonical repair of #1770 so only the unique bounded text-reverser intent descends from #1718 without reintroducing weak duplicate hash/JSON owners; exact-current #1463 Tasks hosted browser/security/AT evidence and independent review after the gate-weakening repair; downstream #1503 migration ancestry; protected integration of #1549 after an immutable contextual-orchestrator API/client/schema release; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
 
 The #1565 and #1691 temporary adopters are transition mechanisms only. They must not become permanent product workflows. If they produce verified product commits, the temporary workflow must be removed by a subsequent ordinary non-force commit before exact-head acceptance evidence is evaluated. If they fail, the failure is RCA input rather than permission to weaken branch/security gates.
