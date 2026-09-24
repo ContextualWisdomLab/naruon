@@ -80,7 +80,3 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
-
-## 2026-09-23 - Add Loader2 and aria-busy to evidence review button
-**Learning:** For asynchronous action buttons like "문단 근거 검토 저장" (Mark Evidence Reviewed) in deeply nested detail panels, `disabled` state alone is not enough feedback.
-**Action:** When adding or auditing buttons for async operations like '검토 저장 중', ensure `aria-busy={loadingVariable}` is added, and use a `Loader2` spinner along with dynamic text.
