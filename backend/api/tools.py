@@ -770,6 +770,68 @@ registry.register(
 
 
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Any:
+    text = params["text"]
+    algorithm = params["algorithm"]
+    allowed_algorithms = {"md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "blake2s"}
+    if algorithm not in allowed_algorithms:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}. Allowed algorithms are: {', '.join(sorted(allowed_algorithms))}")
+
+    import hashlib
+    h = hashlib.new(algorithm)
+    h.update(text.encode("utf-8"))
+    return {"hash": h.hexdigest(), "algorithm": algorithm}
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="입력된 텍스트를 지정된 해시 알고리즘(md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s)으로 해싱합니다. 지원되지 않는 알고리즘 입력 시 예외를 발생시킵니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Any:
+    raw_json = params["raw_json"]
+    try:
+        import json
+        parsed = json.loads(raw_json)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted, "is_valid": True}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON input: {e}")
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="유효한 JSON 문자열을 보기 좋게 들여쓰기(2칸)하여 포맷팅합니다. 유효하지 않은 JSON 입력 시 예외를 발생시킵니다.",
+        category="유틸리티",
+        parameters={"raw_json": "string"},
+    ),
+    json_formatter_handler,
+)
+
+
+
+async def text_reverser_handler(params: Dict[str, Any]) -> Any:
+    text = params["text"]
+    return {"reversed_text": text[::-1]}
+
+registry.register(
+    ToolInfo(
+        code="text_reverser",
+        name="텍스트 뒤집기 (Text Reverser)",
+        description="입력된 문자열을 거꾸로 뒤집어 반환합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    text_reverser_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
