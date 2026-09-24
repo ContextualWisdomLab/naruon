@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X , Loader2} from 'lucide-react';
+import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X, Loader2 } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { toSafeReactText } from '@/lib/safe-text';
@@ -524,7 +524,7 @@ export function TasksLayout() {
                 onClick={() => void handleReplySlaEscalation()}
                 className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
               >
-                {replySlaStatus === 'loading' ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Plus className="size-3.5" aria-hidden="true" />}
+                <Plus className="size-3.5" />
                 {replySlaStatus === 'loading' ? '확인 중' : '팔로업 작업 생성'}
               </button>
             </div>
