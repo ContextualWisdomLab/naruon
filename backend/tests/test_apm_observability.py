@@ -47,43 +47,14 @@ def test_open_telemetry_setup_is_centralized_and_opt_in_by_default():
     assert "except Exception" in telemetry_source
 
 
-def test_telemetry_does_not_instrument_without_explicit_config(monkeypatch):
+def test_telemetry_does_not_instrument_without_explicit_config():
     from fastapi import FastAPI
     from core import telemetry
 
-    monkeypatch.delenv("CWL_TELEMETRY_RECEIVER", raising=False)
     app = FastAPI()
     telemetry.setup_telemetry(app)
 
     assert getattr(app.state, "naruon_telemetry_configured", False) is False
-
-
-def test_environment_opt_in_binds_source_revision_and_secret_file(tmp_path, monkeypatch, caplog):
-    from fastapi import FastAPI
-    from core import telemetry
-
-    pytest.importorskip("cwl_telemetry")
-    token = "synthetic-scoped-token-12345"
-    token_file = tmp_path / "otlp-token"
-    token_file.write_text(token + "\n")
-    monkeypatch.setenv("CWL_TELEMETRY_RECEIVER", "https://collector.example:4318")
-    monkeypatch.setenv("CWL_TELEMETRY_TOKEN_FILE", str(token_file))
-    monkeypatch.setenv("CWL_SOURCE_REVISION", "b" * 40)
-    app = FastAPI(version="0.14.4")
-
-    telemetry.setup_telemetry(app)
-    runtime = app.state.naruon_telemetry_runtime
-    assert runtime._providers[0].resource.attributes["cwl.source_revision"] == "b" * 40
-    assert runtime._providers[0].resource.attributes["service.version"] == "0.14.4"
-    assert app.state.naruon_telemetry_receiver_host == "collector.example:4318"
-    assert token not in caplog.text
-    telemetry.shutdown_telemetry(app)
-
-    monkeypatch.delenv("CWL_SOURCE_REVISION")
-    unconfigured = FastAPI(version="0.14.4")
-    telemetry.setup_telemetry(unconfigured)
-    assert getattr(unconfigured.state, "naruon_telemetry_configured", False) is False
-    assert token not in caplog.text
 
 
 def test_fastapi_instrumentation_uses_shared_sdk_provider():

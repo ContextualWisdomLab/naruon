@@ -5,8 +5,6 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ARG OCI_IMAGE_REVISION=""
-ENV CWL_SOURCE_REVISION=${OCI_IMAGE_REVISION}
 
 # Install Backend dependencies
 COPY backend/requirements-hashes.txt /app/requirements-hashes.txt

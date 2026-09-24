@@ -2,10 +2,8 @@
 
 ## 확인된 사실 / Confirmed
 
-- `backend/main.py` leaves shared telemetry disabled until an explicit SDK
-  config or `CWL_TELEMETRY_RECEIVER` opt-in with a mounted token file and exact
-  source revision. The image build derives that revision from `OCI_IMAGE_REVISION`.
-  Prometheus `/metrics` is exposed only when
+- `backend/main.py` leaves shared telemetry disabled until explicit SDK
+  configuration and exposes Prometheus `/metrics` only when
   `ENABLE_PROMETHEUS_METRICS=true`.
 - `backend/api/observability.py` exposes signed-session
   `/api/observability/operational-signals` for organization admins. It reports
@@ -56,8 +54,8 @@
 ## Remaining gaps
 
 - Add queue depth beyond the in-process runner WebSocket manager.
-- Wire the reviewed SDK release to the hashed Docker dependency set, mount the
-  scoped token and CA, and validate deployed Collector delivery before
+- Wire the reviewed SDK release to the hashed Docker dependency set and an
+  operator credential registry; validate deployed Collector delivery before
   calling trace export active.
 - Add sync lag, writeback conflict, and AI action audit dashboards fed by
   source-backed connector/provider events.
