@@ -2,10 +2,6 @@ name: Application CI
 
 on:
   pull_request:
-    branches:
-      - develop
-      - master
-      - "release/**"
   push:
     branches:
       - develop
@@ -25,9 +21,24 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.14"]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       PYTHONWARNINGS: error
       DISABLE_BACKGROUND_WORKERS: "1"
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test_db
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -38,6 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -66,6 +78,23 @@ jobs:
           cd backend
           python -m ruff check .
 
+      - name: Generate ephemeral CI runtime secret
+        run: |
+          python - <<'PY'
+          import os
+          import secrets
+
+          value = "Ci9!" + secrets.token_urlsafe(48)
+          print(f"::add-mask::{value}")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"AUTH_SESSION_HMAC_SECRET={value}\n")
+          PY
+
+      - name: Run database migrations
+        run: |
+          cd backend
+          python scripts/migrate_db.py
+
       - name: Run backend tests
         run: |
           set -o pipefail
@@ -89,6 +118,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install pnpm
         run: corepack enable pnpm
@@ -137,3 +167,19 @@ jobs:
           NARUON_FULL_PRODUCT_BASE_URL: "http://127.0.0.1:3001"
           NARUON_FULL_PRODUCT_SCREENSHOT_DIR: "/tmp/naruon-full-product-smoke"
         run: cd frontend && pnpm run full:smoke
+
+      - name: Run Playwright browser acceptance
+        env:
+          PLAYWRIGHT_HTML_OPEN: "never"
+        run: cd frontend && pnpm run test:e2e -- --reporter=line,html
+
+      - name: Upload Playwright browser evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: playwright-browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: warn
+          retention-days: 14
