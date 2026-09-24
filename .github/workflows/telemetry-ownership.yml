@@ -1,0 +1,13 @@
+name: CWL telemetry ownership
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  ownership:
+    uses: ContextualWisdomLab/.github/.github/workflows/telemetry-ownership.yml@b9a88772d213f4ee42af55d45d0cf261556016fb
