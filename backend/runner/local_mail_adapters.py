@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from email_validator import EmailNotValidError, validate_email
+
 from db.models import TenantConfig
 from runner.utils.dispatch import dispatch_error
 from services.email_client import EmailMessageParams, SmtpConfig, send_email
@@ -50,7 +52,7 @@ class LocalMailAdapters:
 
         try:
             message_params = EmailMessageParams(
-                to_address=self._required_payload_text(payload, "to"),
+                to_address=self._required_smtp_mailbox(payload, "to"),
                 subject=self._required_payload_text(payload, "subject"),
                 body=self._required_payload_text(payload, "body"),
                 in_reply_to=self._optional_payload_text(payload, "in_reply_to"),
@@ -127,6 +129,15 @@ class LocalMailAdapters:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("invalid payload")
         return value
+
+    def _required_smtp_mailbox(self, payload: dict[str, Any], key: str) -> str:
+        """Validate and normalize an external SMTP mailbox before provider use."""
+        value = self._required_payload_text(payload, key)
+        try:
+            validated = validate_email(value, check_deliverability=False)
+        except EmailNotValidError as exc:
+            raise ValueError("invalid payload") from exc
+        return validated.normalized
 
     def _optional_payload_text(self, payload: dict[str, Any], key: str) -> str | None:
         value = payload.get(key)
