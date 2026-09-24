@@ -326,6 +326,25 @@ class NewsdomProvider(Base):
     )
 
 
+class TelemetryDeploymentConfig(Base):
+    """Operator-managed, encrypted credential for the app's OTLP receiver."""
+
+    __tablename__ = "telemetry_deployment_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    receiver: Mapped[str] = mapped_column(String(512), nullable=False)
+    bearer_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    environment: Mapped[str] = mapped_column(String(64), nullable=False)
+    ca_file: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
 class WorkspaceRunnerConfig(Base):
     __tablename__ = "workspace_runner_configs"
 

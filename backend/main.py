@@ -33,7 +33,7 @@ from api.ai_hub import router as ai_hub_router
 from api.projects import router as projects_router
 from api.session import router as auth_session_router
 from core.config import canonical_origin, settings
-from core.telemetry import setup_telemetry, shutdown_telemetry
+from core.telemetry import activate_deployment_telemetry, setup_telemetry, shutdown_telemetry
 from core.version import get_release_version
 from services.imap_worker import ImapSyncWorker
 from services.newsdom_worker import NewsdomRecognitionWorker
@@ -58,6 +58,7 @@ STATE_CHANGING_API_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE", "MKCOL
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     preload_oidc_jwks()
+    await activate_deployment_telemetry(app)
     if not DISABLE_WORKERS:
         await imap_worker.start()
         await pop3_worker.start()

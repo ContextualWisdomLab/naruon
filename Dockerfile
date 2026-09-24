@@ -5,6 +5,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+ARG OCI_IMAGE_REVISION=""
 
 # Install Backend dependencies
 COPY backend/requirements-hashes.txt /app/requirements-hashes.txt
@@ -14,6 +15,7 @@ RUN PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ONLY_BINARY=
 # Copy Backend
 COPY VERSION /app/VERSION
 COPY backend /app/
+RUN printf '%s' "$OCI_IMAGE_REVISION" > /app/.source-revision
 
 RUN groupadd --system --gid 10001 appuser \
     && useradd --system --create-home --home-dir /home/appuser --uid 10001 --gid appuser --shell /usr/sbin/nologin appuser \
