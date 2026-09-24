@@ -19,6 +19,7 @@ vi.mock("lucide-react", () => ({
   FolderOpen: () => <svg aria-hidden="true" />,
   GitBranch: () => <svg aria-hidden="true" />,
   ListChecks: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg data-testid="project-evidence-save-spinner" aria-hidden="true" />,
   Network: () => <svg aria-hidden="true" />,
   Search: () => <svg aria-hidden="true" />,
   User: () => <svg aria-hidden="true" />,
@@ -121,6 +122,7 @@ describe("ProjectsLayout accessibility", () => {
     await act(async () => { saveButton?.click(); });
     expect(saveButton?.disabled).toBe(true);
     expect(saveButton?.getAttribute("aria-busy")).toBe("true");
+    expect(saveButton?.querySelector('[data-testid="project-evidence-save-spinner"]')).not.toBeNull();
     expect(saveButton?.textContent).toBe("검토 저장 중");
     saveButton?.click();
     expect(apiClientMock.post).toHaveBeenCalledTimes(1);
@@ -136,6 +138,7 @@ describe("ProjectsLayout accessibility", () => {
     });
     expect(saveButton?.disabled).toBe(false);
     expect(saveButton?.getAttribute("aria-busy")).toBe("false");
+    expect(saveButton?.querySelector('[data-testid="project-evidence-save-spinner"]')).toBeNull();
     expect(saveButton?.textContent).toBe("문단 근거 검토 저장");
     if (outcome === "failure") expect(container.querySelector('[role="alert"]')?.textContent).toContain("저장하지 못했습니다");
   });

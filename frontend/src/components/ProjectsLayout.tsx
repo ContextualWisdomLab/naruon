@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, ListChecks, Network, Search, User } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, ListChecks, Loader2, Network, Search, User } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { toSafeReactText } from '@/lib/safe-text';
@@ -1021,8 +1021,9 @@ export function ProjectsLayout() {
                               onClick={handleMarkEvidenceReviewed}
                               disabled={correctionSubmitting || evidenceLoading}
                               aria-busy={correctionSubmitting}
-                              className="mt-3 min-h-9 w-full rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                              className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
                             >
+                              {correctionSubmitting && <Loader2 data-testid="project-evidence-save-spinner" className="size-3.5 animate-spin" aria-hidden="true" />}
                               {correctionSubmitting ? '검토 저장 중' : '문단 근거 검토 저장'}
                             </button>
                             {currentCorrection ? (
