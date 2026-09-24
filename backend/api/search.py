@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import Select, func, select
 from core.config import settings
+from core.safe_logging import redacted_exception_info
 from db.session import get_db, get_readonly_db
 from db.models import Email
 from services.embedding import (
@@ -470,8 +471,8 @@ async def hybrid_search(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Search failed", exc_info=True)
-        raise HTTPException(status_code=500, detail="Search failed") from e
+        logger.error("Search failed", exc_info=redacted_exception_info(e))
+        raise HTTPException(status_code=500, detail="Search failed") from None
 
 
 @router.post("/search/answer", response_model=AnswerResponse)
@@ -555,5 +556,5 @@ async def grounded_answer(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Grounded answer failed", exc_info=True)
-        raise HTTPException(status_code=500, detail="Answer failed") from e
+        logger.error("Grounded answer failed", exc_info=redacted_exception_info(e))
+        raise HTTPException(status_code=500, detail="Answer failed") from None
