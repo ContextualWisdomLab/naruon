@@ -1,0 +1,91 @@
+name: Temporary smoke fail-closed repair
+
+on:
+  push:
+    branches:
+      - codex/smoke-late-error-guard
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    name: Repair fail-open mocked API boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact staging head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Verify single-writer head
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_head="$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}" | awk '{print $1}')"
+          test "${remote_head}" = "${GITHUB_SHA}"
+
+      - name: Apply bounded source repair
+        run: python scripts/ci/temporary_smoke_fail_closed.py
+
+      - name: Verify bounded source delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --name-only | sort > /tmp/actual-paths
+          printf '%s\n' \
+            frontend/scripts/full-product-ui-smoke.mjs \
+            frontend/scripts/full-product-ui-smoke.test.mjs \
+            > /tmp/expected-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
+
+      - name: Install frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: Run focused regression and lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          pnpm exec vitest run scripts/full-product-ui-smoke.test.mjs
+          pnpm exec eslint scripts/full-product-ui-smoke.mjs scripts/full-product-ui-smoke.test.mjs --max-warnings 0
+
+      - name: Commit and push product delta non-force
+        shell: bash
+        env:
+          BRANCH_NAME: codex/smoke-late-error-guard
+        run: |
+          set -euo pipefail
+          remote_head="$(git ls-remote origin "refs/heads/${BRANCH_NAME}" | awk '{print $1}')"
+          if [[ "${remote_head}" != "${GITHUB_SHA}" ]]; then
+            echo "Remote head moved: expected ${GITHUB_SHA}, got ${remote_head}" >&2
+            exit 1
+          fi
+          git add -- frontend/scripts/full-product-ui-smoke.mjs frontend/scripts/full-product-ui-smoke.test.mjs
+          git diff --cached --check
+          git diff --cached --name-only | sort > /tmp/actual-staged-paths
+          printf '%s\n' \
+            frontend/scripts/full-product-ui-smoke.mjs \
+            frontend/scripts/full-product-ui-smoke.test.mjs \
+            > /tmp/expected-staged-paths
+          diff -u /tmp/expected-staged-paths /tmp/actual-staged-paths
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(smoke): fail closed on unregistered mocked APIs"
+          git push origin "HEAD:${BRANCH_NAME}"
