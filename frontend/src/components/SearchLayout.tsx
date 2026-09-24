@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -19,6 +19,7 @@ import {
 import dynamic from "next/dynamic";
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import {
   bucketSearchRank,
@@ -150,6 +151,25 @@ const detailTabs: { key: DetailTab; label: string }[] = [
   { key: "source", label: "관계 원본" },
   { key: "assist", label: "판단 보조" },
 ];
+
+function nextDetailTabKey(currentTab: DetailTab, keyboardKey: string) {
+  const currentIndex = detailTabs.findIndex((tab) => tab.key === currentTab);
+  if (currentIndex < 0) return null;
+
+  if (keyboardKey === "Home") return detailTabs[0].key;
+  if (keyboardKey === "End") return detailTabs[detailTabs.length - 1].key;
+
+  const direction =
+    keyboardKey === "ArrowRight" || keyboardKey === "ArrowDown"
+      ? 1
+      : keyboardKey === "ArrowLeft" || keyboardKey === "ArrowUp"
+        ? -1
+        : 0;
+  if (direction === 0) return null;
+
+  const nextIndex = (currentIndex + direction + detailTabs.length) % detailTabs.length;
+  return detailTabs[nextIndex].key;
+}
 
 function formatResultDate(value: string) {
   const parsed = new Date(value);
@@ -633,6 +653,18 @@ export function SearchLayout() {
       });
   };
 
+  const handleDetailTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: DetailTab,
+  ) => {
+    const nextTab = nextDetailTabKey(currentTab, event.key);
+    if (!nextTab) return;
+
+    event.preventDefault();
+    setActiveDetailTab(nextTab);
+    document.getElementById(`search-detail-tab-${nextTab}`)?.focus();
+  };
+
   // ⚡ Bolt: Wrap search results in useMemo to prevent O(N) re-renders when other state changes
   // 🎯 Why: Mapping over long lists of search results blocks the main thread during unrelated state updates.
   const resultList = useMemo(() => (
@@ -876,7 +908,7 @@ export function SearchLayout() {
                       className="grid gap-1 rounded-xl bg-secondary/50 p-1 sm:grid-cols-3"
                     >
                       {detailTabs.map((tab) => (
-                        <button
+                        <Button
                           key={tab.key}
                           type="button"
                           role="tab"
@@ -885,14 +917,17 @@ export function SearchLayout() {
                           aria-selected={activeDetailTab === tab.key}
                           tabIndex={activeDetailTab === tab.key ? 0 : -1}
                           onClick={() => setActiveDetailTab(tab.key)}
-                          className={`rounded-lg px-3 py-2 text-xs font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                          onKeyDown={(event) => handleDetailTabKeyDown(event, tab.key)}
+                          variant="ghost"
+                          size="sm"
+                          className={`w-full rounded-lg px-3 py-2 text-xs font-black transition-colors ${
                             activeDetailTab === tab.key
-                              ? "bg-card text-primary shadow-sm"
-                              : "text-muted-foreground hover:text-foreground"
+                              ? "bg-card text-primary shadow-sm hover:bg-card"
+                              : "text-muted-foreground hover:bg-transparent hover:text-foreground"
                           }`}
                         >
                           {tab.label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
 

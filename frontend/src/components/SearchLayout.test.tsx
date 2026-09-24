@@ -204,6 +204,80 @@ describe("SearchLayout product events", () => {
     expect(JSON.stringify(getRecordedProductEvents())).not.toContain("계약");
   });
 
+  it("moves detail-tab focus with arrow keys and keeps tab selection semantics", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({ results: [{
+          id: 301,
+          source_message_id: "<keyboard-source@example.com>",
+          subject: "키보드 탐색 검증",
+          sender: "pm@example.com",
+          date: "2026-09-23T00:00:00Z",
+          snippet: "탭 키보드 탐색을 검증합니다.",
+          thread_id: "thread-keyboard",
+          reply_count: 1,
+          score: 0.91,
+        }] }));
+      }
+      if (url.endsWith("/api/search/answer")) {
+        return Promise.resolve(jsonResponse({ answer: null, citations: [], provenance: null }));
+      }
+      if (url.includes("/api/ontology/relationships?")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+    await waitForCondition(() => (container?.querySelectorAll<HTMLButtonElement>("[role='tab']").length ?? 0) === 3);
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>("[role='tab']"));
+    const pressTabKey = async (tab: HTMLButtonElement, key: string) => {
+      await act(async () => {
+        tab.dispatchEvent(new KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+    };
+    const expectSelectedTab = (selectedIndex: number) => {
+      tabs.forEach((tab, index) => {
+        expect(tab.getAttribute("aria-selected")).toBe(index === selectedIndex ? "true" : "false");
+        expect(tab.tabIndex).toBe(index === selectedIndex ? 0 : -1);
+      });
+      expect(document.activeElement).toBe(tabs[selectedIndex]);
+    };
+
+    expect(tabs).toHaveLength(3);
+    expect(tabs.every((tab) => tab.dataset.slot === "button")).toBe(true);
+    tabs[0].focus();
+    expectSelectedTab(0);
+
+    await pressTabKey(tabs[0], "ArrowRight");
+    expectSelectedTab(1);
+    await pressTabKey(tabs[1], "ArrowDown");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "ArrowRight");
+    expectSelectedTab(0);
+    await pressTabKey(tabs[0], "ArrowLeft");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "Home");
+    expectSelectedTab(0);
+    await pressTabKey(tabs[0], "End");
+    expectSelectedTab(2);
+    await pressTabKey(tabs[2], "ArrowUp");
+    expectSelectedTab(1);
+    await pressTabKey(tabs[1], "PageDown");
+    expectSelectedTab(1);
+  });
+
   it.each([
     ["summarize_then_archive", "요약 후 보관합니다."],
     ["track_reply_and_tasks", "답장과 후속 작업을 확인합니다."],
