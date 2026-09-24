@@ -769,7 +769,7 @@ function routeJson(route, body, status = 200) {
   });
 }
 
-async function installRoutes(page) {
+async function installRoutes(page, unhandledApiRequests = new Set()) {
   let emailSendCount = 0;
   let savedAccountConfig = { ...accountConfig };
   let savedLlmProviders = [{ ...llmProvider }];
@@ -1072,7 +1072,8 @@ async function installRoutes(page) {
     if (endpoint.startsWith("/api/tools/")) return routeJson(route, { output: "ok", status: "success" });
     if (endpoint === "/api/runtime-config") return routeJson(route, {});
 
-    return routeJson(route, { ok: true });
+    unhandledApiRequests.add(`${request.method()} ${endpoint}`);
+    return route.abort("failed");
   });
 }
 
@@ -1550,6 +1551,7 @@ async function runAccessibilitySmoke(page, routeSpec) {
 export async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount, screenshotDir) {
   const page = await context.newPage();
   const consoleErrors = [];
+  const unhandledApiRequests = new Set();
   let screenshotArtifact;
   let interactionEvidence;
   let accessibilityEvidence;
@@ -1560,7 +1562,7 @@ export async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCo
       }
     });
     page.on("pageerror", (error) => consoleErrors.push(`pageerror: ${error.message}`));
-    await installRoutes(page);
+    await installRoutes(page, unhandledApiRequests);
     await page.goto(new URL(routeSpec.path, baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
     await page.locator("body").waitFor({ state: "visible", timeout: 20_000 });
@@ -1587,6 +1589,11 @@ export async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCo
     screenshotArtifact = await captureSmokeScreenshot(page, screenshotPath);
   } finally {
     await page.close();
+  }
+  if (unhandledApiRequests.size > 0) {
+    throw new Error(
+      `Route ${routeSpec.path} requested unregistered mocked APIs:\n${[...unhandledApiRequests].join("\n")}`,
+    );
   }
   if (consoleErrors.length > 0) {
     throw new Error(`Route ${routeSpec.path} emitted console errors:\n${consoleErrors.join("\n")}`);
