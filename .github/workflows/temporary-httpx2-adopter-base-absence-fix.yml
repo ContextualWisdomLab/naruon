@@ -34,8 +34,21 @@ jobs:
 
           path = Path('.github/workflows/app-ci.yml')
           text = path.read_text()
-          old = '''          # Remove the temporary resolver/adopter from the candidate itself.\n          git show "${{ github.event.pull_request.base.sha }}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml\n          git diff --check\n'''
-          new = '''          # Remove the temporary resolver/adopter from the candidate itself.\n          if git cat-file -e "${{ github.event.pull_request.base.sha }}:.github/workflows/app-ci.yml" 2>/dev/null; then\n            git show "${{ github.event.pull_request.base.sha }}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml\n          else\n            git rm .github/workflows/app-ci.yml\n          fi\n          git diff --check\n'''
+          expr = '$' + '{{ github.event.pull_request.base.sha }}'
+          old = (
+              '          # Remove the temporary resolver/adopter from the candidate itself.\n'
+              f'          git show "{expr}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml\n'
+              '          git diff --check\n'
+          )
+          new = (
+              '          # Remove the temporary resolver/adopter from the candidate itself.\n'
+              f'          if git cat-file -e "{expr}:.github/workflows/app-ci.yml" 2>/dev/null; then\n'
+              f'            git show "{expr}:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml\n'
+              '          else\n'
+              '            git rm .github/workflows/app-ci.yml\n'
+              '          fi\n'
+              '          git diff --check\n'
+          )
           if text.count(old) != 1:
               raise SystemExit('unexpected app-ci adopter restore structure')
           path.write_text(text.replace(old, new))
