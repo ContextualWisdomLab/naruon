@@ -1,4 +1,4 @@
-name: One-shot repair Data evidence fixture
+name: Temporary Data fixture product adopter
 
 on:
   push:
@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  repair:
-    name: Repair shared Playwright Data evidence fixture
+  adopt:
+    name: Adopt shared Playwright Data evidence fixture
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -28,10 +28,8 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Install pnpm
+      - name: Enable pnpm
         run: corepack enable pnpm
 
       - name: Apply bounded fixture repair and regression
@@ -121,14 +119,14 @@ jobs:
       - name: Install frontend dependencies
         run: cd frontend && pnpm install --frozen-lockfile
 
-      - name: Prove focused RED repair
+      - name: Prove focused repair
         run: |
           set -euo pipefail
           cd frontend
           pnpm exec vitest run src/lib/data-evidence-snapshot-e2e-fixture.test.ts
           pnpm exec eslint tests/e2e/helpers.ts src/lib/data-evidence-snapshot-e2e-fixture.test.ts --max-warnings 0
 
-      - name: Commit helper-free exact child
+      - name: Commit and push product delta non-force
         shell: bash
         env:
           BRANCH_NAME: fix/stacked-pr-trigger-foundation
@@ -141,22 +139,17 @@ jobs:
             exit 1
           fi
 
-          rm .github/workflows/one-shot-repair-data-evidence-fixture.yml
-
-          mapfile -t changed < <(git status --short | sed -E 's/^.. //' | sort)
-          expected_paths=(
-            ".github/workflows/one-shot-repair-data-evidence-fixture.yml"
-            "frontend/src/lib/data-evidence-snapshot-e2e-fixture.test.ts"
-            "frontend/tests/e2e/helpers.ts"
-          )
-          mapfile -t expected_sorted < <(printf '%s\n' "${expected_paths[@]}" | sort)
-          if [[ "$(printf '%s\n' "${changed[@]}")" != "$(printf '%s\n' "${expected_sorted[@]}")" ]]; then
-            printf 'Unexpected changed paths:\n%s\n' "${changed[*]}" >&2
-            exit 1
-          fi
+          git add -- frontend/tests/e2e/helpers.ts frontend/src/lib/data-evidence-snapshot-e2e-fixture.test.ts
+          git diff --cached --check
+          git diff --cached --name-only | sort > /tmp/actual-paths
+          cat > /tmp/expected-paths <<'EOF'
+          frontend/src/lib/data-evidence-snapshot-e2e-fixture.test.ts
+          frontend/tests/e2e/helpers.ts
+          EOF
+          sed -i 's/^          //' /tmp/expected-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
           git commit -m "test(ci): cover Data evidence snapshot fixture"
           git push origin "HEAD:${BRANCH_NAME}"
