@@ -1,6 +1,8 @@
 """Naruon's explicit opt-in to the shared CWL telemetry runtime."""
 
 import logging
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -22,8 +24,27 @@ def setup_telemetry(app: FastAPI, config: "TelemetryConfig | None" = None) -> No
         logger.debug("OpenTelemetry instrumentation is already configured.")
         return
     if config is None:
-        logger.info("OpenTelemetry is disabled.")
-        return
+        if "CWL_TELEMETRY_RECEIVER" not in os.environ:
+            logger.info("OpenTelemetry is disabled.")
+            return
+        try:
+            from core.config import settings
+            from cwl_telemetry import TelemetryConfig
+
+            config = TelemetryConfig(
+                service="naruon-backend", version=app.version,
+                environment=settings.RUNTIME_ENVIRONMENT,
+                source_revision=os.environ["CWL_SOURCE_REVISION"],
+                receiver=os.environ["CWL_TELEMETRY_RECEIVER"],
+                token=Path(os.environ["CWL_TELEMETRY_TOKEN_FILE"])
+                .read_text(encoding="utf-8")
+                .rstrip("\n"),
+                ca_file=os.environ.get("CWL_TELEMETRY_CA_FILE"),
+                operation_codes={"http_request"}, bounded_contexts={"backend"},
+            )
+        except Exception:
+            logger.exception("OpenTelemetry configuration rejected; continuing without tracing.")
+            return
 
     runtime = None
     try:
