@@ -18,7 +18,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _HASH_PATTERN = re.compile(r"--hash=sha256:([0-9a-f]{64})")
-_EXACT_PIN_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\\\s]+)")
+_EXACT_PIN_PATTERN = re.compile(
+    r"^([A-Za-z0-9_.-]+)(?:\[[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_.-]+)*\])?==([^\\\s]+)"
+)
 
 
 def read_repo_text(relative_path: str) -> str:
@@ -81,6 +83,17 @@ def importer_resolution(importer_section: dict[str, object], group: str, name: s
     assert isinstance(resolution.get("specifier"), str)
     assert isinstance(resolution.get("version"), str)
     return resolution
+
+
+def test_hash_lock_parser_accepts_pinned_requirements_with_extras() -> None:
+    """Keep PEP 508 extras attached to a package without orphaning its hashes."""
+    digest = "a" * 64
+    lock_text = f"package[extra]==1.2.3 \\\n    --hash=sha256:{digest}\n"
+
+    assert exact_requirement_pins(lock_text) == {"package": "1.2.3"}
+    assert hashed_requirement_records(lock_text) == {
+        "package==1.2.3": frozenset({digest})
+    }
 
 
 def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None:
