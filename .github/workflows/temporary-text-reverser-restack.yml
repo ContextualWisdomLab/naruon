@@ -103,7 +103,10 @@ jobs:
 
           python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
           python -m pip install --disable-pip-version-check pytest==9.1.1 pytest-asyncio==1.4.0
-          PYTHONPATH=backend python -m pytest -q backend/tests/test_utility_tools_contract.py
+          (
+            cd backend
+            python -m pytest -q tests/test_utility_tools_contract.py
+          )
           python -m compileall -q backend/api/tools.py backend/tests/test_utility_tools_contract.py
           git diff --check
 
