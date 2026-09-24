@@ -24,7 +24,7 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: true
 
-      - name: Replace invalid base-file restore with base-aware removal
+      - name: Apply base-aware adopter cleanup
         shell: bash
         run: |
           set -euo pipefail
@@ -56,16 +56,38 @@ jobs:
           rm .github/workflows/temporary-httpx2-adopter-base-absence-fix.yml
           git diff --check
 
-      - name: Ordinary non-force repair push
+      - name: Verify remote head equality
         shell: bash
         run: |
           set -euo pipefail
           branch="${GITHUB_REF_NAME}"
           git fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
           test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/${branch}")"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Stage exact repair delta
+        shell: bash
+        run: |
+          set -euo pipefail
           git add -- .github/workflows/app-ci.yml .github/workflows/temporary-httpx2-adopter-base-absence-fix.yml
           git diff --cached --check
+          git diff --cached --name-only | sort | tee /tmp/staged-paths
+          printf '%s\n' \
+            .github/workflows/app-ci.yml \
+            .github/workflows/temporary-httpx2-adopter-base-absence-fix.yml \
+            | sort > /tmp/expected-paths
+          diff -u /tmp/expected-paths /tmp/staged-paths
+
+      - name: Commit repair locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix(ci): handle missing protected-base app-ci during adoption"
-          git push origin "HEAD:refs/heads/${branch}"
+
+      - name: Push repair non-force
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF_NAME}"
+          git push --verbose origin "HEAD:refs/heads/${branch}"
