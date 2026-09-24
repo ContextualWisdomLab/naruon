@@ -102,6 +102,9 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     backend_records = hashed_requirement_records(
         read_repo_text("backend/requirements-hashes.txt")
     )
+    agent_records = hashed_requirement_records(
+        read_repo_text("backend/requirements-agent.txt")
+    )
     strix_pins = exact_requirement_pins(read_repo_text("requirements-strix-ci.txt"))
     strix_records = hashed_requirement_records(
         read_repo_text("requirements-strix-ci-hashes.txt")
@@ -110,16 +113,20 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
 
     assert backend_pins["cryptography"] == "50.0.0"
-    assert backend_pins["httpx2"] == "2.5.0"
+    assert backend_pins["httpx2"] == "2.13.0"
     assert backend_pins["protobuf"] == "7.35.1"
     assert "cryptography==50.0.0" in backend_records
-    assert "httpx2==2.5.0" in backend_records
+    assert "httpx2==2.13.0" in backend_records
     assert "protobuf==7.35.1" in backend_records
+    assert "httpcore2==2.13.0" in backend_records
+    assert agent_records["httpx2==2.13.0"] == backend_records["httpx2==2.13.0"]
+    assert agent_records["httpcore2==2.13.0"] == backend_records["httpcore2==2.13.0"]
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", digest)
         for pin in (
             "cryptography==50.0.0",
-            "httpx2==2.5.0",
+            "httpx2==2.13.0",
+            "httpcore2==2.13.0",
             "protobuf==7.35.1",
         )
         for digest in backend_records[pin]
