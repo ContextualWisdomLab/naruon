@@ -1,4 +1,3 @@
-from core.safe_logging import redacted_exception_info
 import asyncio
 import logging
 import poplib
@@ -48,9 +47,7 @@ class Pop3SyncWorker:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(
-                    "Error in Pop3SyncWorker loop", exc_info=redacted_exception_info(e)
-                )
+                logger.error(f"Error in Pop3SyncWorker loop: {e}", exc_info=True)
 
             if self._is_running:
                 try:
@@ -60,9 +57,7 @@ class Pop3SyncWorker:
 
     async def _sync(self):
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(TenantConfig).where(TenantConfig.pop3_server.isnot(None))
-            )
+            result = await session.execute(select(TenantConfig).where(TenantConfig.pop3_server.isnot(None)))
             configs = result.scalars().all()
 
         semaphore = asyncio.Semaphore(10)
@@ -200,5 +195,7 @@ class Pop3SyncWorker:
 
     def _bytes_line(self, line: bytes | str) -> bytes:
         return (
-            line if isinstance(line, bytes) else line.encode("utf-8", errors="replace")
+            line
+            if isinstance(line, bytes)
+            else line.encode("utf-8", errors="replace")
         )
