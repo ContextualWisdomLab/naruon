@@ -13,9 +13,12 @@
 - `backend/api/runner_ws.py` records self-hosted connector connect, heartbeat,
   and disconnect events as control-plane APM evidence. These events do not turn
   Naruon into an SMTP/IMAP mailbox server and do not execute provider writes.
-- The draft backend `telemetry` extra pins a reviewed shared SDK commit. The
+- The draft backend `telemetry` extra pins an exact shared SDK commit under review. The
   Docker image still uses its hashed dependency set and cannot enable the SDK
   until a released wheel is pinned there.
+- Opt-in request spans carry a declared route template, fixed HTTP action,
+  normalized status/result, bounded duration, and exact image source revision.
+  Tests check these fields over authenticated HTTPS without raw URLs or baggage.
 - `docker-compose.observability.yml`, `docker-compose.apm.yml`, and
   `docker-compose.infra.yml` document local Prometheus/APM stack entry points.
 - `docker-compose.live-e2e.yml` proves the image-based smoke path before any APM
@@ -26,9 +29,8 @@
 - The default open-source APM stack should be OpenTelemetry SDK + Collector,
   Prometheus for metrics, Grafana for dashboards, Loki for logs, and Tempo or
   Jaeger for traces.
-- Runtime instrumentation should start with request latency, status code,
-  dependency calls, and worker-loop spans, while redacting email body and secret
-  values.
+- Later instrumentation should add bounded dependency calls and worker-loop
+  spans while redacting email body and secret values.
 
 ## North-star telemetry targets
 
@@ -54,8 +56,8 @@
 ## Remaining gaps
 
 - Add queue depth beyond the in-process runner WebSocket manager.
-- Wire the reviewed SDK release to the hashed Docker dependency set and an
-  operator credential registry; validate deployed Collector delivery before
+- Wire the reviewed SDK release to the hashed Docker dependency set and
+  validate deployed Collector delivery before
   calling trace export active.
 - Add sync lag, writeback conflict, and AI action audit dashboards fed by
   source-backed connector/provider events.

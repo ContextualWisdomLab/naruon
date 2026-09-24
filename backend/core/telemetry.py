@@ -1,6 +1,7 @@
 """Naruon's explicit opt-in to the shared CWL telemetry runtime."""
 
 import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
@@ -17,6 +18,7 @@ _TELEMETRY_RUNTIME_KEY = "naruon_telemetry_runtime"
 _TELEMETRY_RECEIVER_HOST_KEY = "naruon_telemetry_receiver_host"
 _TELEMETRY_ROUTES_KEY = "naruon_telemetry_routes"
 _TELEMETRY_MIDDLEWARE_KEY = "naruon_telemetry_middleware_installed"
+_HTTP_ACTIONS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 
 
 def setup_telemetry(app: FastAPI, config: "TelemetryConfig | None" = None) -> None:
@@ -35,9 +37,18 @@ def setup_telemetry(app: FastAPI, config: "TelemetryConfig | None" = None) -> No
                     "http_request",
                     {"operation_code": "http_request", "bounded_context": "backend"},
                 ) as span:
+                    started = time.monotonic_ns()
+                    status_code = 500
                     try:
-                        return await call_next(request)
+                        response = await call_next(request)
+                        if type(response.status_code) is int and 100 <= response.status_code <= 599:
+                            status_code = response.status_code
+                        return response
                     finally:
+                        span.set_attribute("action", request.method.lower() if request.method in _HTTP_ACTIONS else "unknown")
+                        span.set_attribute("status", f"http_{status_code}")
+                        span.set_attribute("result", "success" if status_code < 400 else "failure")
+                        span.set_attribute("duration_ms", min(max((time.monotonic_ns() - started) / 1_000_000, 0), 1_000_000_000))
                         route = request.scope.get("route")
                         template = getattr(route, "path_format", None)
                         routes = getattr(request.app.state, _TELEMETRY_ROUTES_KEY, frozenset())

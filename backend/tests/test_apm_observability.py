@@ -107,6 +107,12 @@ def test_fastapi_instrumentation_uses_shared_sdk_provider():
     assert spans[0].context.trace_id == int(parent_trace_id, 16)
     assert spans[0].parent.span_id == int(parent_span_id, 16)
     assert spans[0].attributes["http_route"] == "/private/{item_id}"
+    assert spans[0].attributes["action"] == "get"
+    assert spans[0].attributes["status"] == "http_200"
+    assert spans[0].attributes["result"] == "success"
+    assert spans[1].attributes["status"] == "http_500"
+    assert spans[1].attributes["result"] == "failure"
+    assert all(0 <= span.attributes["duration_ms"] <= 1_000_000_000 for span in spans)
     assert getattr(app.state, "naruon_telemetry_configured", False)
     telemetry.setup_telemetry(app, config)
     assert app.state.naruon_telemetry_runtime is runtime
@@ -292,6 +298,9 @@ def test_product_request_exports_bounded_span_over_authenticated_https(tmp_path)
         span = exported.resource_spans[0].scope_spans[0].spans[0]
         assert span.name == "http_request"
         assert any(item.key == "http_route" and item.value.string_value == "/private/{item_id}" for item in span.attributes)
+        assert any(item.key == "status" and item.value.string_value == "http_200" for item in span.attributes)
+        assert any(item.key == "action" and item.value.string_value == "get" for item in span.attributes)
+        assert any(item.key == "duration_ms" and item.value.double_value >= 0 for item in span.attributes)
     finally:
         server.shutdown()
         server.server_close()
