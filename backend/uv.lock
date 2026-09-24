@@ -417,7 +417,7 @@ wheels = [
 [[package]]
 name = "cwl-telemetry"
 version = "0.1.0"
-source = { git = "https://github.com/ContextualWisdomLab/cwl-telemetry.git?rev=409df96630a19632e4845910777bff97b40609e1#409df96630a19632e4845910777bff97b40609e1" }
+source = { git = "https://github.com/ContextualWisdomLab/cwl-telemetry.git?rev=df1a27106111834f804ced8242ac7eff1d892843#df1a27106111834f804ced8242ac7eff1d892843" }
 dependencies = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -1046,7 +1046,7 @@ requires-dist = [
     { name = "alembic", specifier = "==1.18.5" },
     { name = "asyncpg", specifier = "==0.31.0" },
     { name = "cryptography", specifier = "==50.0.0" },
-    { name = "cwl-telemetry", marker = "extra == 'telemetry'", git = "https://github.com/ContextualWisdomLab/cwl-telemetry.git?rev=409df96630a19632e4845910777bff97b40609e1" },
+    { name = "cwl-telemetry", marker = "extra == 'telemetry'", git = "https://github.com/ContextualWisdomLab/cwl-telemetry.git?rev=df1a27106111834f804ced8242ac7eff1d892843" },
     { name = "defusedxml", specifier = "==0.7.1" },
     { name = "email-validator", specifier = "==2.3.0" },
     { name = "fastapi", specifier = "==0.139.0" },
