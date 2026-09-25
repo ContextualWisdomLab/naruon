@@ -26,3 +26,8 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+
+## 2026-09-15 - Rejected React.memo on NetworkGraph
+
+**Learning:** Wrapping heavy visualization components (like `NetworkGraph` using `vis-network`) in `React.memo()` without a proven, measurable performance bottleneck is considered a micro-optimization with no effective or measurable impact. The review and CI cost of such changes outweighs the theoretical benefits, leading to PR rejection.
+**Action:** Do not preemptively apply `React.memo()` or similar micro-optimizations without explicit evidence of a real performance bottleneck (e.g., from profiling). If an optimization cannot be proven to have a material end-to-end impact, skip it.
