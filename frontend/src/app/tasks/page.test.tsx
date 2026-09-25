@@ -13,7 +13,6 @@ vi.mock("lucide-react", () => ({
   CheckCircle2: () => <svg aria-hidden="true" />,
   Filter: () => <svg aria-hidden="true" />,
   Inbox: () => <svg aria-hidden="true" />,
-  Loader2: () => <svg aria-hidden="true" />,
   ListChecks: () => <svg aria-hidden="true" />,
   Search: () => <svg aria-hidden="true" />,
   ShieldCheck: () => <svg aria-hidden="true" />,
