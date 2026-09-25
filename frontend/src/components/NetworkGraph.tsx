@@ -278,27 +278,42 @@ export default function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    return nodes
-      .map((node) => String(node.label ?? node.id))
-      .filter(Boolean)
-      .slice(0, 5);
+    const result = [];
+    for (const node of nodes) {
+      if (result.length >= 5) break;
+      const label = String(node.label ?? node.id);
+      if (label) result.push(label);
+    }
+    return result;
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
-      edge,
-      id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
+    const result = [];
+    let index = 0;
+    for (const edge of edgeMap.values()) {
+      if (result.length >= 5) break;
+      result.push({
+        edge,
+        id: String(edge.id),
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+      });
+      index++;
+    }
+    return result;
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
-      id: String(node.id),
-      label: `노드: ${String(node.label ?? node.id)}`,
-      node,
-    }));
+    const result = [];
+    for (const node of nodeInstanceMap.values()) {
+      if (result.length >= 8) break;
+      result.push({
+        id: String(node.id),
+        label: `노드: ${String(node.label ?? node.id)}`,
+        node,
+      });
+    }
+    return result;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
