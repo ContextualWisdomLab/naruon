@@ -29,6 +29,8 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  participants?: { role: string; count: number }[];
+  attachments?: { name: string; type: string }[];
 };
 interface LlmData {
   summary: string;
@@ -634,6 +636,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             <div className="line-clamp-1 text-xs text-muted-foreground">
               답장 주소: {safeReplyTo}
             </div>
+            {email.participants && email.participants.length > 0 && (
+              <div className="line-clamp-1 text-xs text-muted-foreground mt-1">
+                참여자: {email.participants.reduce((acc, p) => acc + p.count, 0)}명 ({email.participants.map(p => `${p.role} ${p.count}`).join(', ')})
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -647,10 +654,37 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             )}
           </div>
         </div>
+        {email.attachments && email.attachments.length > 0 && (
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-6">
+            {email.attachments.map((attachment, idx) => (
+              <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground shadow-sm shrink-0">
+                <span aria-hidden="true">📎</span> {attachment.name}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <Separator />
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
+
+          {email.schedule_conflict && (
+            <DecisionPointCard
+              title="회의 제안"
+              icon={<span aria-hidden="true">📅</span>}
+              provenance="일정 충돌 기반"
+            >
+              <div className="flex items-center justify-between rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
+                <div>
+                  <p className="text-sm font-bold text-foreground">새로운 일정 제안</p>
+                  <p className="text-xs text-muted-foreground mt-1">참여자들의 가능한 시간을 기반으로 3개의 대안 일정이 있습니다.</p>
+                </div>
+                <Button size="sm" className="h-8 rounded-lg bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700">
+                  제안 확인
+                </Button>
+              </div>
+            </DecisionPointCard>
+          )}
 
           <DecisionPointCard
             title="맥락 종합"
