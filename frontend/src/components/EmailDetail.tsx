@@ -25,20 +25,10 @@ import {
   createProductEventId,
   recordProductEvent,
 } from "@/lib/product-events";
-import type {
-  CalendarWritebackIntentResponse,
-  CalendarWritebackSource,
-} from "@/components/calendar/types";
-import {
-  getApiErrorStatus,
-  isCustomerOwnedWritableSource,
-} from "@/components/calendar/helpers";
 
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
-  recipients?: string;
-  attachments?: string[];
 };
 interface LlmData {
   summary: string;
@@ -57,6 +47,19 @@ type LlmDataPayload = {
 
 interface CreateTasksFromEmailResponse {
   created: number;
+}
+
+interface CalendarWritebackIntentResponse {
+  target_source_id: string;
+  protocol: string;
+  provider_write_executed?: boolean;
+  status?: string;
+  runner_request_id?: string | null;
+  provider_status?: number | null;
+  error_code?: string | null;
+  provenance: {
+    source_provider?: string;
+  };
 }
 
 type EmailDetailActionCommand = {
@@ -78,11 +81,6 @@ function nowMs() {
 
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function getCalendarWritebackSourceLabel(source: CalendarWritebackSource): string {
-  const provider = source.provider.trim();
-  return `${provider || source.protocol.toUpperCase()} 원본`;
 }
 
 function normalizeLlmData(payload: unknown): LlmData {
@@ -131,46 +129,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{type: 'success' | 'error', message: string} | null>(null);
-  type CalendarSourceLoadStatus = 'idle' | 'loading' | 'ready' | 'error';
-  type CalendarSourceState = {
-    contextKey: string;
-    sources: CalendarWritebackSource[];
-    selectedSourceId: string;
-    status: CalendarSourceLoadStatus;
-  };
-  const actionItemCount = llmData?.action_items.length ?? 0;
-  const sourceContextIsActionable = email?.id === emailId && actionItemCount > 0;
-  const sourceContextKey = `${emailId ?? 'none'}:${email?.id ?? 'none'}:${sourceContextIsActionable ? 'actionable' : 'idle'}`;
-  const [loadedCalendarSourceState, setLoadedCalendarSourceState] = useState<CalendarSourceState>(() => ({
-    contextKey: sourceContextKey,
-    sources: [],
-    selectedSourceId: '',
-    status: sourceContextIsActionable ? 'loading' : 'idle',
-  }));
-  const calendarSourceState: CalendarSourceState = loadedCalendarSourceState.contextKey === sourceContextKey
-    ? loadedCalendarSourceState
-    : {
-        contextKey: sourceContextKey,
-        sources: [],
-        selectedSourceId: '',
-        status: sourceContextIsActionable ? 'loading' : 'idle',
-      };
-  const writebackSources = calendarSourceState.sources;
-  const selectedWritebackSourceId = calendarSourceState.selectedSourceId;
-  const sourceLoadStatus = calendarSourceState.status;
-  const setSelectedWritebackSourceId = useCallback((selectedSourceId: string) => {
-    setLoadedCalendarSourceState((current) => {
-      const activeState = current.contextKey === sourceContextKey
-        ? current
-        : {
-            contextKey: sourceContextKey,
-            sources: [],
-            selectedSourceId: '',
-            status: sourceContextIsActionable ? 'loading' as const : 'idle' as const,
-          };
-      return { ...activeState, selectedSourceId };
-    });
-  }, [sourceContextIsActionable, sourceContextKey]);
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
   const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
   const threadRequestIdRef = useRef(0);
@@ -186,39 +144,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   useEffect(() => {
     handledActionCommandIdRef.current = null;
   }, [emailId]);
-
-  useEffect(() => {
-    if (!sourceContextIsActionable) return;
-
-    let isMounted = true;
-    const requestedContextKey = sourceContextKey;
-    void apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources')
-      .then((sources) => {
-        if (!isMounted) return;
-        if (!Array.isArray(sources)) {
-          throw new Error('Invalid calendar source registry response');
-        }
-        setLoadedCalendarSourceState({
-          contextKey: requestedContextKey,
-          sources: sources.filter(isCustomerOwnedWritableSource),
-          selectedSourceId: '',
-          status: 'ready',
-        });
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setLoadedCalendarSourceState({
-          contextKey: requestedContextKey,
-          sources: [],
-          selectedSourceId: '',
-          status: 'error',
-        });
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [sourceContextIsActionable, sourceContextKey]);
 
   const fetchThread = useCallback(async (currentEmail: EmailData) => {
     const requestId = threadRequestIdRef.current + 1;
@@ -275,12 +200,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setIsSyncing(false);
       setIsCreatingTask(false);
       setSyncStatus(null);
-      setLoadedCalendarSourceState({
-        contextKey: '',
-        sources: [],
-        selectedSourceId: '',
-        status: 'idle',
-      });
       setTaskStatus(null);
       setSourceDrawerOpen(false);
       activeDraftReplyIdRef.current = null;
@@ -502,95 +421,53 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     const actionEmailId = emailId;
     const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
     const actionItems = llmData?.action_items ?? [];
-    const selectedSource = writebackSources.find(
-      (candidate) => candidate.source_id === selectedWritebackSourceId
-        && isCustomerOwnedWritableSource(candidate),
-    ) ?? null;
-
     if (!actionItems.length) {
       setSyncStatus({ type: 'error', message: '캘린더에 반영할 실행 항목이 없습니다.' });
       return;
     }
-    if (sourceLoadStatus !== 'ready' || selectedSource === null) {
-      setSyncStatus({ type: 'error', message: '일정 원본을 먼저 선택해 주세요.' });
-      return;
-    }
-
     setIsSyncing(true);
     setSyncStatus(null);
     const startedAt = nowMs();
-    const settledIntents = await Promise.allSettled(
-      actionItems.map((summary) =>
-        apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
-          action: 'create',
-          summary,
-          target_source_id: selectedSource.source_id,
-        }),
-      ),
-    );
-
     try {
-      if (!isCurrentEmail()) return;
-      const successfulIntents = settledIntents.flatMap((result) => {
-        if (result.status !== 'fulfilled') return [];
-        return result.value.target_source_id === selectedSource.source_id
-          ? [result.value]
-          : [];
-      });
-      const failedCount = settledIntents.length - successfulIntents.length;
-      const conflictDetected = settledIntents.some(
-        (result) => result.status === 'rejected' && getApiErrorStatus(result.reason) === 409,
+      const intents = await Promise.all(
+        actionItems.map((summary) =>
+          apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
+            action: 'create',
+            summary,
+          }),
+        ),
       );
-
-      if (conflictDetected) {
-        setSelectedWritebackSourceId('');
-        setSyncStatus({
-          type: 'error',
-          message: '원본 일정이 변경되었습니다. 일정 원본을 다시 선택해 주세요.',
-        });
-      } else if (failedCount === 0) {
-        setSyncStatus({
-          type: 'success',
-          message: `${successfulIntents.length}개 일정 반영 의도를 ${getCalendarWritebackSourceLabel(selectedSource)}에 요청했습니다.`,
-        });
-      } else if (successfulIntents.length > 0) {
-        setSyncStatus({
-          type: 'error',
-          message: `${successfulIntents.length}개 성공, ${failedCount}개 실패했습니다. 선택한 원본에는 성공한 의도만 기록했습니다.`,
-        });
-      } else {
-        setSyncStatus({ type: 'error', message: '일정 반영 의도 요청에 실패했습니다.' });
-      }
-
+      if (!isCurrentEmail()) return;
+      setSyncStatus({ type: 'success', message: `${intents.length}개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.` });
       recordProductEvent("calendar_reflected", {
         surface: "mail_detail",
         calendar_candidate_id: `mail-calendar:${actionEmailId ?? "unknown"}`,
-        calendar_event_id: null,
+        calendar_event_id: intents[0]?.target_source_id ?? null,
         thread_id: email ? getThreadEventId(email) : null,
-        conflict_state: conflictDetected ? "conflict" : failedCount > 0 ? "warning" : "none",
-        provider_write_executed: successfulIntents.some(
-          (intent) => Boolean(intent.provider_write_executed),
-        ),
+        conflict_state: "none",
+        provider_write_executed: intents.some((intent) => Boolean(intent.provider_write_executed)),
       });
       recordProductEvent("latency_guardrail_recorded", {
         surface: "mail_detail",
         request_trace_id: createProductEventId("calendar_trace"),
         operation: "calendar_reflection",
         duration_ms: Math.round(nowMs() - startedAt),
-        status: failedCount === 0 ? "success" : "error",
+        status: "success",
+      });
+    } catch {
+      if (!isCurrentEmail()) return;
+      setSyncStatus({ type: 'error', message: '일정 반영 의도 요청에 실패했습니다.' });
+      recordProductEvent("latency_guardrail_recorded", {
+        surface: "mail_detail",
+        request_trace_id: createProductEventId("calendar_trace"),
+        operation: "calendar_reflection",
+        duration_ms: Math.round(nowMs() - startedAt),
+        status: "error",
       });
     } finally {
       if (isCurrentEmail()) setIsSyncing(false);
     }
-  }, [
-    email,
-    emailId,
-    llmData,
-    selectedWritebackSourceId,
-    setSelectedWritebackSourceId,
-    sourceLoadStatus,
-    writebackSources,
-  ]);
+  }, [email, emailId, llmData]);
 
   const handleCreateTask = useCallback(async () => {
     const actionEmail = email;
@@ -693,62 +570,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeEmailSender = toMailDisplayText(email.sender, '보낸 사람');
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
-  const safeRecipients = toMailDisplayText(email.recipients || email.sender, '참여자 없음');
-  const safeParticipants = Array.from(new Set([safeEmailSender, safeRecipients])).join(', ');
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
-  const selectedWritebackSource = writebackSources.find(
-    (candidate) => candidate.source_id === selectedWritebackSourceId
-      && isCustomerOwnedWritableSource(candidate),
-  ) ?? null;
-  const isCalendarWritebackDisabled = isSyncing
-    || actionItems.length === 0
-    || sourceLoadStatus !== 'ready'
-    || selectedWritebackSource === null;
-  const calendarSourceSelectId = `email-calendar-source-${email.id}`;
-  const calendarSourceSelector = (
-    <div className="min-w-0 rounded-xl border border-emerald-500/20 bg-background/80 p-3">
-      <label
-        htmlFor={calendarSourceSelectId}
-        className="text-xs font-bold text-emerald-800 dark:text-emerald-200"
-      >
-        일정 원본
-      </label>
-      <select
-        id={calendarSourceSelectId}
-        aria-label="일정 원본 선택"
-        value={selectedWritebackSourceId}
-        onChange={(event) => {
-          setSelectedWritebackSourceId(event.target.value);
-          setSyncStatus(null);
-        }}
-        disabled={isSyncing || sourceLoadStatus !== 'ready' || writebackSources.length === 0}
-        className="mt-2 h-9 w-full rounded-lg border border-emerald-500/30 bg-card px-3 text-xs font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <option value="">일정 원본을 선택하세요</option>
-        {writebackSources.map((sourceOption) => (
-          <option key={sourceOption.source_id} value={sourceOption.source_id}>
-            {getCalendarWritebackSourceLabel(sourceOption)} · {sourceOption.protocol.toUpperCase()}
-          </option>
-        ))}
-      </select>
-      <p
-        role={sourceLoadStatus === 'error' ? 'alert' : 'status'}
-        aria-live="polite"
-        className="mt-2 text-[11px] text-muted-foreground"
-      >
-        {sourceLoadStatus === 'loading'
-          ? '서명 세션으로 일정 원본을 확인하는 중입니다.'
-          : sourceLoadStatus === 'error'
-            ? '일정 원본을 확인할 수 없어 외부 반영을 차단했습니다.'
-            : writebackSources.length === 0
-              ? '반영 가능한 고객 원본 일정이 없습니다.'
-              : selectedWritebackSource
-                ? `${getCalendarWritebackSourceLabel(selectedWritebackSource)}을(를) 명시적으로 선택했습니다.`
-                : '반영 전에 고객 원본 일정을 명시적으로 선택해야 합니다.'}
-      </p>
-    </div>
-  );
 
   const handleOpenSourceDrawer = () => {
     recordProductEvent("source_chip_opened", {
@@ -808,31 +631,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             <div className="line-clamp-1 text-xs">
               <span className="text-muted-foreground">{safeEmailSender}</span>
             </div>
-            <div className="line-clamp-1 text-xs text-muted-foreground sm:hidden">
+            <div className="line-clamp-1 text-xs text-muted-foreground">
               답장 주소: {safeReplyTo}
             </div>
-            <div className="text-xs text-muted-foreground">
-              <span className="mr-1 font-semibold">참여자:</span>
-              <span className="break-all">{safeParticipants}</span>
-            </div>
-            {email.attachments && email.attachments.length > 0 && (
-              <div
-                role="region"
-                aria-label="첨부파일"
-                className="mt-2 flex min-w-0 items-center gap-2 overflow-x-auto pb-1"
-              >
-                <span className="shrink-0 text-xs font-semibold text-muted-foreground">첨부파일:</span>
-                {email.attachments.map((file, idx) => (
-                  <Badge
-                    key={`${file}-${idx}`}
-                    variant="secondary"
-                    className="h-5 shrink-0 px-2 py-0 text-[10px]"
-                  >
-                    {toMailDisplayText(file, '첨부파일')}
-                  </Badge>
-                ))}
-              </div>
-            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -851,27 +652,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
-          {email.schedule_conflict && (
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-emerald-800 dark:text-emerald-200">회의 제안 확인</h3>
-                  <p className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">이메일에 포함된 회의 일정을 캘린더와 조율합니다.</p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={handleSyncCalendar}
-                  disabled={isCalendarWritebackDisabled}
-                  aria-busy={isSyncing}
-                  className="h-8 rounded-xl bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700"
-                >
-                  {isSyncing && <Loader2 className="mr-2 h-3 w-3 animate-spin" aria-hidden="true" />}
-                  {isSyncing ? "조율 중" : "일정 조율"}
-                </Button>
-              </div>
-              <div className="mt-3">{calendarSourceSelector}</div>
-            </div>
-          )}
           <DecisionPointCard
             title="맥락 종합"
             icon={<span aria-hidden="true">✦</span>}
@@ -913,7 +693,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                   <Button
                     size="sm"
                     onClick={handleSyncCalendar}
-                    disabled={isCalendarWritebackDisabled}
+                    disabled={isSyncing}
                     aria-busy={isSyncing}
                     className="h-9 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700"
                   >
@@ -935,11 +715,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                   </Button>
                 )}
                 {syncStatus && (
-                  <span
-                    role="status"
-                    aria-live="polite"
-                    className={`self-center text-xs ${syncStatus.type === 'success' ? 'text-green-600' : 'text-red-500'}`}
-                  >
+                  <span className={`self-center text-xs ${syncStatus.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
                     {syncStatus.message}
                   </span>
                 )}
@@ -951,9 +727,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
               </>
             ) : null}
           >
-            {!email.schedule_conflict && actionItems.length > 0 ? (
-              <div className="mb-3">{calendarSourceSelector}</div>
-            ) : null}
             {llmData ? (
               actionItems.length > 0 ? (
                 <ul className="list-none space-y-2 text-sm">
