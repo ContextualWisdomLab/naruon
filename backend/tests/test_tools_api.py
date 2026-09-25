@@ -1211,3 +1211,19 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_handler_success():
+    from api.tools import json_formatter_handler
+    params = {"json_string": '{"a": 1, "b": "hello"}'}
+    result = await json_formatter_handler(params)
+    assert "formatted_json" in result
+    assert "hello" in result["formatted_json"]
+
+@pytest.mark.asyncio
+async def test_json_formatter_handler_error():
+    from api.tools import json_formatter_handler
+    params = {"json_string": '{a: 1}'}
+    with pytest.raises(ValueError):
+        await json_formatter_handler(params)
