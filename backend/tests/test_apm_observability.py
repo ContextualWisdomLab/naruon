@@ -171,6 +171,7 @@ def test_deployment_credential_is_encrypted_at_rest(monkeypatch):
 
 
 def test_startup_loads_enabled_credential_without_exposing_token(monkeypatch, caplog):
+    pytest.importorskip("cwl_telemetry")
     import asyncio
     from types import SimpleNamespace
     from fastapi import FastAPI
@@ -267,6 +268,7 @@ def test_product_request_exports_bounded_span_over_authenticated_https(tmp_path)
 
     server = HTTPServer(("127.0.0.1", 0), Receiver)
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.minimum_version = ssl.TLSVersion.TLSv1_2
     tls.load_cert_chain(str(certificate), str(private_key))
     server.socket = tls.wrap_socket(server.socket, server_side=True)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
