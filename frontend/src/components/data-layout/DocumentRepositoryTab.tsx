@@ -375,43 +375,28 @@ return (
                         type="button"
                         onClick={() => void requestDocumentAction('reparse')}
                         disabled={isDocumentActionLoading}
-                        aria-busy={isDocumentActionLoading}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
-                        {isDocumentActionLoading ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <RefreshCw className="size-4" />
-                        )}
-                        {isDocumentActionLoading ? '실행 중' : '재파싱 실행'}
+                        <RefreshCw className="size-4" />
+                        재파싱 실행
                       </button>
                       <button
                         type="button"
                         onClick={() => void requestDocumentAction('embedding-regeneration-intent')}
                         disabled={isDocumentActionLoading}
-                        aria-busy={isDocumentActionLoading}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
-                        {isDocumentActionLoading ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Database className="size-4" />
-                        )}
-                        {isDocumentActionLoading ? '점검 중' : '임베딩 재생성 의도'}
+                        <Database className="size-4" />
+                        임베딩 재생성 의도
                       </button>
                       <button
                         type="button"
                         onClick={() => void requestDocumentAction('hwp-conversion-intent')}
                         disabled={isDocumentActionLoading}
-                        aria-busy={isDocumentActionLoading}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
-                        {isDocumentActionLoading ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <FileText className="size-4" />
-                        )}
-                        {isDocumentActionLoading ? '점검 중' : 'HWP 변환 의도'}
+                        <FileText className="size-4" />
+                        HWP 변환 의도
                       </button>
                       <button
                         type="button"
@@ -420,12 +405,8 @@ return (
                         aria-busy={isDocumentActionLoading}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isDocumentActionLoading ? (
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Server className="size-4" />
-                        )}
-                        {isDocumentActionLoading ? '요청 중' : 'WebDAV 문서 실행 요청'}
+                        <Server className="size-4" />
+                        WebDAV 문서 실행 요청
                       </button>
                     </div>
                   )}
@@ -471,12 +452,9 @@ return (
                     onClick={() => void requestWebdavWritebackIntent()}
                     disabled={isWritebackLoading || !canRequestWebdavWriteback}
                     aria-busy={isWebdavSourceLoading || isWritebackLoading}
-                    className="inline-flex items-center justify-center gap-2 w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    className="w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
-                    {isWritebackLoading && (
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    )}
-                    {isWritebackLoading ? '점검 중' : 'WebDAV 반영 의도 점검'}
+                    WebDAV 반영 의도 점검
                   </button>
                 </div>
 
@@ -540,13 +518,9 @@ return (
                     type="button"
                     onClick={() => void requestUniqueThreadIntent()}
                     disabled={isUniqueThreadLoading}
-                    aria-busy={isUniqueThreadLoading}
-                    className="inline-flex items-center justify-center gap-2 w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    className="w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
                   >
-                    {isUniqueThreadLoading && (
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    )}
-                    {isUniqueThreadLoading ? '점검 중' : '중복 메일 스레드 의도 점검'}
+                    중복 메일 스레드 의도 점검
                   </button>
                 </div>
 
