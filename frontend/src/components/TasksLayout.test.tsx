@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("lucide-react", () => ({
   Plus: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
   Search: () => <svg aria-hidden="true" />,
   Filter: () => <svg aria-hidden="true" />,
   User: () => <svg aria-hidden="true" />,
