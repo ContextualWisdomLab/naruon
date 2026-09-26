@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   ownership:
-    uses: ContextualWisdomLab/.github/.github/workflows/telemetry-ownership.yml@8c1f92164a0690ecba4ac9ddaf349ac8f82e38d8
+    uses: ContextualWisdomLab/.github/.github/workflows/telemetry-ownership.yml@d2aa215d29e4e735dc0e96b3cf94e91e88c87f64
