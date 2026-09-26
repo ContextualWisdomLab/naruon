@@ -109,7 +109,7 @@ describe("CalendarPage", () => {
     const tablist = container.querySelector<HTMLElement>('[role="tablist"][aria-label="일정 보기 방식"]');
     expect(tablist).not.toBeNull();
     const tabs = Array.from(tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["월간 캘린더", "주간 캘린더", "일정 상세", "회의 조율", "일정 후보"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["월간 캘린더", "주간 캘린더", "일정 상세", "회의 조율", "일정 후보", "일정 관계"]);
 
     const monthlyTab = tabs[0];
     expect(monthlyTab?.getAttribute("aria-selected")).toBe("true");
