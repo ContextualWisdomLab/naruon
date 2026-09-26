@@ -26,3 +26,11 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2024-11-09 - Memoizing inline array maps in Email List
+
+**Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render. During search typing, the rapid state changes cause frequent re-renders that can block the main thread and cause typing lag.
+**Action:** Wrap inline JSX elements that map over arrays (like email lists) in a `useMemo` hook with specific dependencies to prevent full VDOM recalculation on unrelated parent state updates.
+
+## 2026-09-26 - useMemo on email lists can be ineffective if dependencies update frequently
+**Learning:** A reviewer rejected the `useMemo` optimization for mapping email arrays because the dependencies (`emails` or `selectedEmailId`) invalidate during common operations (e.g., email selection), rendering the caching ineffective and preserving the O(N) rendering cost.
+**Action:** When a reviewer explicitly rejects an optimization like `useMemo` due to rapid dependency invalidation, log the failure and explore alternative architectural approaches like virtualization, rather than reapplying the rejected optimization.
