@@ -17,7 +17,7 @@ from pydantic import SecretStr
 from api import emails as emails_api
 from api.auth import get_auth_context as auth_get_auth_context
 from core.config import settings
-from db.models import Email, LLMProvider
+from db.models import Email, LLMProvider, TicketTask
 from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
@@ -96,6 +96,7 @@ class MockSession:
         llm_providers=None,
     ):
         self.items = items
+        self.tasks = []
         self.llm_providers = list(llm_providers or [])
         self.tenant_config = (
             MockTenantConfig()
@@ -121,6 +122,8 @@ class MockSession:
                 return self.rows[0] if self.rows else None
 
         query_text = compiled_query_text(query)
+        if "ticket_tasks" in query_text:
+            return MockResult(self.tasks)
         if "llm_providers" in query_text:
             return MockResult(self.llm_providers)
         if "tenant_configs" in query_text:
@@ -1672,6 +1675,48 @@ async def test_get_email_thread_returns_chronological_order(
 
 
 @pytest.mark.asyncio
+async def test_get_email_thread_includes_source_linked_tasks(
+    client: AsyncClient, db_session, sample_email: Email
+):
+    from db.session import get_db
+
+    session = QueryCapturingSession([sample_email])
+    session.tasks = [
+        TicketTask(
+            task_uid="source-task",
+            user_id="testuser",
+            organization_id="org-acme",
+            title="Review the decision",
+            status="open",
+            priority="normal",
+            source_type="email",
+            related_email_id=sample_email.id,
+            related_thread_id=sample_email.thread_id,
+            created_at=sample_email.date,
+        )
+    ]
+    app.dependency_overrides[get_db] = lambda: session
+
+    response = await client.get(f"/api/emails/thread/{sample_email.thread_id}")
+
+    assert response.status_code == 200
+    assert response.json()["tasks"] == [
+        {
+            "id": "source-task",
+            "title": "Review the decision",
+            "status": "open",
+            "created_at": sample_email.date.isoformat().replace("+00:00", "Z"),
+            "link_confidence": 1.0,
+            "related_thread_id": sample_email.thread_id,
+        }
+    ]
+    task_query = compiled_query_text(session.queries[-1]).lower()
+    assert "ticket_tasks.user_id" in task_query
+    assert "ticket_tasks.organization_id" in task_query
+    assert "ticket_tasks.email_id" in task_query
+
+
+@pytest.mark.asyncio
 async def test_get_email_thread_accepts_url_encoded_reserved_characters(
     client: AsyncClient, db_session, sample_email: Email
 ):
@@ -1764,7 +1809,10 @@ async def test_get_email_thread_query_is_scoped_to_current_user(
     )
 
     assert response.status_code == 200
-    assert_query_is_owner_scoped(session.queries[-1])
+    assert_query_is_owner_scoped(session.queries[-2])
+    task_query = compiled_query_text(session.queries[-1])
+    assert "ticket_tasks.user_id" in task_query
+    assert "ticket_tasks.organization_id" in task_query
 
 
 @patch("api.emails.send_email", return_value={"status": "simulated", "simulated": True})

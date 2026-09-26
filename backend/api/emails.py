@@ -2,9 +2,9 @@ from collections import defaultdict
 from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from db.session import get_db
-from db.models import Email
+from db.models import Email, TicketTask
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -211,6 +211,24 @@ class EmailDetailResponse(BaseModel):
     references: str | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
+
+
+class ThreadTaskItem(BaseModel):
+    """One task explicitly linked to an email or a stored thread key."""
+
+    id: str
+    title: str
+    status: str
+    created_at: datetime.datetime
+    link_confidence: float | None
+    related_thread_id: str | None
+
+
+class EmailThreadResponse(BaseModel):
+    """Owner-scoped email conversation and its linked tasks."""
+
+    thread: list[EmailDetailResponse]
+    tasks: list[ThreadTaskItem]
 
 
 class UniqueThreadCandidateRequest(BaseModel):
@@ -656,9 +674,7 @@ async def get_email(
     return _email_detail_response(email)
 
 
-@router.get(
-    "/thread/{thread_id:path}", response_model=dict[str, list[EmailDetailResponse]]
-)
+@router.get("/thread/{thread_id:path}", response_model=EmailThreadResponse)
 async def get_email_thread(
     thread_id: str,
     db: AsyncSession = Depends(get_db),
@@ -680,10 +696,45 @@ async def get_email_thread(
     if not emails:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    items = []
-    for email in emails:
-        items.append(_email_detail_response(email))
-    return {"thread": items}
+    email_ids = [email.id for email in emails]
+    email_id_set = set(email_ids)
+    organization_filter = (
+        TicketTask.organization_id == auth_context.organization_id
+        if auth_context.organization_id is not None
+        else TicketTask.organization_id.is_(None)
+    )
+    task_result = await db.execute(
+        select(TicketTask)
+        .where(
+            TicketTask.user_id == auth_context.user_id,
+            organization_filter,
+            or_(
+                TicketTask.related_email_id.in_(email_ids),
+                and_(
+                    TicketTask.related_email_id.is_(None),
+                    TicketTask.related_thread_id.in_(lookup_values),
+                ),
+            ),
+        )
+        .order_by(TicketTask.created_at.asc(), TicketTask.id.asc())
+    )
+    tasks = task_result.scalars().all()
+    return EmailThreadResponse(
+        thread=[_email_detail_response(email) for email in emails],
+        tasks=[
+            ThreadTaskItem(
+                id=task.task_uid,
+                title=_safe_email_body(task.title),
+                status=task.status,
+                created_at=task.created_at,
+                link_confidence=(
+                    1.0 if task.related_email_id in email_id_set else None
+                ),
+                related_thread_id=task.related_thread_id,
+            )
+            for task in tasks
+        ],
+    )
 
 
 class SendEmailRequest(BaseModel):

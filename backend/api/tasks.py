@@ -74,6 +74,7 @@ class UpdateTicketTaskRequest(BaseModel):
 
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
+    detach_thread_id: str | None = Field(default=None, min_length=1, max_length=512)
 
 
 def _normalize_execution_items(items: list[str]) -> list[str]:
@@ -205,7 +206,11 @@ async def update_ticket_task(
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(get_auth_context),
 ) -> TicketTaskResponse:
-    if request.status is None and request.priority is None:
+    if (
+        request.status is None
+        and request.priority is None
+        and request.detach_thread_id is None
+    ):
         raise HTTPException(
             status_code=422, detail="At least one ticket field is required"
         )
@@ -218,6 +223,13 @@ async def update_ticket_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     task, source_email_id = row
+    if request.detach_thread_id is not None:
+        if (
+            task.related_email_id is not None
+            or task.related_thread_id != request.detach_thread_id
+        ):
+            raise HTTPException(status_code=409, detail="Thread link changed")
+        task.related_thread_id = None
     if request.status is not None:
         task.status = request.status
     if request.priority is not None:
