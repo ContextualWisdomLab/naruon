@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -122,6 +122,29 @@ async def test_thread_tasks_stay_with_their_email_owner():
             group_ids=(),
             workspace_id="workspace-org-1",
         )
+        task_query = select(TicketTask).where(TicketTask.task_uid == "thread-task")
+        async with sessions() as stale_session:
+            stale_task = (await stale_session.execute(task_query)).scalar_one()
+            assert stale_task.related_thread_id == "shared-thread"
+            async with sessions() as writer:
+                changed_task = (await writer.execute(task_query)).scalar_one()
+                changed_task.related_thread_id = "changed-thread"
+                await writer.commit()
+            with pytest.raises(HTTPException) as error:
+                await update_ticket_task(
+                    "thread-task",
+                    UpdateTicketTaskRequest(detach_thread_id="shared-thread"),
+                    db=stale_session,
+                    auth_context=owner_auth,
+                )
+            assert error.value.status_code == 409
+
+        async with sessions() as writer:
+            changed_task = (await writer.execute(task_query)).scalar_one()
+            assert changed_task.related_thread_id == "changed-thread"
+            changed_task.related_thread_id = "shared-thread"
+            await writer.commit()
+
         async with sessions() as session:
             for task_uid, expected_status in (
                 ("foreign-task", 404),

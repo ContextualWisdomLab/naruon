@@ -217,7 +217,9 @@ async def update_ticket_task(
 
     query = _build_task_query(auth_context).where(TicketTask.task_uid == task_uid)
     if request.detach_thread_id is not None:
-        query = query.with_for_update(of=TicketTask)
+        query = query.with_for_update(of=TicketTask).execution_options(
+            populate_existing=True
+        )
     result = await db.execute(query)
     row = result.one_or_none()
     if row is None:
