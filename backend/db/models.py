@@ -1563,6 +1563,8 @@ class Workspace(Base):
     workspace_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"workspace_{uuid.uuid4().hex}")
     workspace_name: Mapped[str] = mapped_column(String, nullable=False)
     workspace_domain: Mapped[str | None] = mapped_column(String, nullable=True)
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
