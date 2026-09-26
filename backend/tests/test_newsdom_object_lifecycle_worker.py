@@ -136,3 +136,23 @@ async def test_pending_document_does_not_consume_retryable_source_object(monkeyp
     assert result == newsdom_worker_module.RESULT_PENDING
     assert document.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
     assert transitions == []
+
+
+@pytest.mark.asyncio
+async def test_storage_outage_keeps_document_pending(monkeypatch):
+    """A temporary object-store failure must not consume or fail the source."""
+    from services.document_object_storage import DocumentObjectUnavailableError
+
+    document = _pending_object_document("document-outage")
+
+    async def unavailable(_session, _document):
+        raise DocumentObjectUnavailableError("object store unavailable")
+
+    monkeypatch.setattr(
+        newsdom_worker_module, "load_pending_pdf_document_bytes", unavailable
+    )
+    result = await newsdom_worker_module.process_pending_document(
+        session=object(), document=document, config_resolver=_configured_resolver
+    )
+    assert result == newsdom_worker_module.RESULT_PENDING
+    assert document.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS

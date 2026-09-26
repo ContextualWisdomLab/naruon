@@ -35,6 +35,7 @@ from services.s3_object_storage import (
     S3ClientConfiguration,
     S3ObjectStorageBackend,
     S3ObjectStorageError,
+    S3ObjectStorageRequestError,
     S3StoredObject,
     build_document_object_key,
 )
@@ -46,6 +47,10 @@ PDF_UPLOAD_CHUNK_BYTES = 64 * 1024
 
 class DocumentObjectStorageError(RuntimeError):
     """Raised when a configured document backend cannot safely serve a payload."""
+
+
+class DocumentObjectUnavailableError(DocumentObjectStorageError):
+    """Raised when a pending object may become readable after provider recovery."""
 
 
 class DocumentUploadTooLargeError(ValueError):
@@ -85,8 +90,7 @@ class ValidatedPDFUpload:
         if self.content_length < 0:
             raise ValueError("Validated PDF length must not be negative")
         if len(self.checksum_sha256) != 64 or any(
-            character not in "0123456789abcdef"
-            for character in self.checksum_sha256
+            character not in "0123456789abcdef" for character in self.checksum_sha256
         ):
             raise ValueError("Validated PDF checksum must be lowercase SHA-256")
 
@@ -184,14 +188,14 @@ async def _resolve_s3_provider_runtime_config(
         )
     provider = await session.scalar(statement.limit(1))
     if provider is None:
-        raise DocumentObjectStorageError(
+        raise DocumentObjectUnavailableError(
             "No configured S3 document-storage provider is available"
         )
 
     try:
         configuration, allowed_hosts = _configuration_from_provider(provider)
     except (AttributeError, TypeError, ValueError) as exc:
-        raise DocumentObjectStorageError(
+        raise DocumentObjectUnavailableError(
             "Configured S3 document storage failed validation"
         ) from exc
     return DocumentStorageRuntimeConfig(
@@ -622,7 +626,9 @@ async def load_pending_pdf_document_bytes(session, document: Document) -> bytes:
     if record is None:
         raise DocumentObjectStorageError("Pending document payload is not available")
     if record.document_id != document.document_id:
-        raise DocumentObjectStorageError("Document object record does not match document")
+        raise DocumentObjectStorageError(
+            "Document object record does not match document"
+        )
     if record.storage_state != "active":
         raise DocumentObjectStorageError("Document object record is not active")
 
@@ -632,9 +638,18 @@ async def load_pending_pdf_document_bytes(session, document: Document) -> bytes:
         object_storage_provider_id=record.object_storage_provider_id,
     )
     stored_object = _stored_object_from_record(record)
-    backend = await _build_s3_backend(runtime_config)
+    try:
+        backend = await _build_s3_backend(runtime_config)
+    except DocumentObjectStorageError as exc:
+        raise DocumentObjectUnavailableError(
+            "Configured S3 document storage is unavailable"
+        ) from exc
     try:
         payload = await backend.get_object(stored_object)
+    except S3ObjectStorageRequestError as exc:
+        raise DocumentObjectUnavailableError(
+            "Configured S3 document storage could not load the payload"
+        ) from exc
     except (S3ObjectStorageError, ValueError) as exc:
         raise DocumentObjectStorageError(
             "Configured S3 document storage could not load the payload"

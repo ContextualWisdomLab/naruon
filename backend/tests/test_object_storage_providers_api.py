@@ -81,6 +81,7 @@ def _auth(*, role: str = "organization_admin", organization_id="organization-one
 def _provider(**overrides) -> ObjectStorageProvider:
     values = {
         "object_storage_provider_id": 7,
+        "provider_uid": "sop_00000000000000000000000000000007",
         "user_id": "admin-one",
         "organization_id": "organization-one",
         "provider_name": "primary-s3",
@@ -107,7 +108,8 @@ def test_provider_response_redacts_all_credentials() -> None:
     response = provider_api._provider_response(_provider())
     serialized = response.model_dump()
 
-    assert response.object_storage_provider_id == 7
+    assert response.provider_uid == "sop_00000000000000000000000000000007"
+    assert "object_storage_provider_id" not in serialized
     assert response.access_key_fingerprint is not None
     assert response.secret_access_key_configured is True
     assert response.session_token_configured is True
@@ -143,7 +145,9 @@ async def test_admin_and_organization_scope_are_required() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_provider_persists_encrypted_fields_but_returns_only_flags() -> None:
+async def test_create_provider_persists_encrypted_fields_but_returns_only_flags() -> (
+    None
+):
     session = _ProviderSession()
     response = await provider_api.create_object_storage_provider(
         provider_api.ObjectStorageProviderCreate(
@@ -167,6 +171,7 @@ async def test_create_provider_persists_encrypted_fields_but_returns_only_flags(
     assert provider.organization_id == "organization-one"
     assert provider.access_key_id == "access-key"
     assert provider.secret_access_key == "secret-key"
+    assert response.provider_uid == provider.provider_uid
     assert response.secret_access_key_configured is True
     assert response.session_token_configured is True
     assert "secret-key" not in str(response.model_dump())

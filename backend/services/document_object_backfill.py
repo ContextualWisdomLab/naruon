@@ -40,6 +40,7 @@ class DocumentObjectBackfillResult:
     selected_count: int
     migrated_count: int
     failed_count: int
+    last_document_id: str | None
 
 
 @dataclass(frozen=True)
@@ -75,14 +76,15 @@ async def backfill_legacy_document_payloads(
     session,
     *,
     batch_limit: int,
+    after_document_id: str | None = None,
 ) -> DocumentObjectBackfillResult:
     """Move a bounded batch of legacy pending PDF payloads into S3 safely.
 
     Only pending PDF rows with non-empty inline content are candidates. Each
     candidate is reloaded, resolves its organization provider, and is checked
     for pre-existing object metadata before any remote write. Successful
-    migrations commit independently so one corrupt row, missing provider, or
-    transient object-store failure cannot starve later documents.
+    migrations commit independently. A cursor lets later batches advance past
+    failed rows; a future run can retry those rows from the start.
     """
     if batch_limit <= 0:
         raise ValueError("Document object backfill batch_limit must be positive")
@@ -91,16 +93,16 @@ async def backfill_legacy_document_payloads(
             "Document object backfill requires the S3 backend"
         )
 
+    statement = select(Document.document_id).where(
+        Document.document_type == "pdf",
+        Document.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS,
+        Document.document_content.is_not(None),
+        Document.document_content != "",
+    )
+    if after_document_id is not None:
+        statement = statement.where(Document.document_id > after_document_id)
     result = await session.execute(
-        select(Document.document_id)
-        .where(
-            Document.document_type == "pdf",
-            Document.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS,
-            Document.document_content.is_not(None),
-            Document.document_content != "",
-        )
-        .order_by(Document.document_id)
-        .limit(batch_limit)
+        statement.order_by(Document.document_id).limit(batch_limit)
     )
     selected_ids = list(result.scalars().all())
     migrated_count = 0
@@ -177,6 +179,7 @@ async def backfill_legacy_document_payloads(
         selected_count=len(selected_ids),
         migrated_count=migrated_count,
         failed_count=failed_count,
+        last_document_id=selected_ids[-1] if selected_ids else None,
     )
 
 
@@ -192,7 +195,8 @@ async def run_document_object_backfill_batches(
     identity-map contents cannot leak across retries. The explicit batch budget
     prevents a persistently failing legacy row from creating an unbounded
     operator process. ``completed`` is true only after a subsequent empty batch
-    proves that no eligible inline payload remains at that instant.
+    proves that no eligible inline payload remains beyond the cursor, and no
+    selected row failed during this run.
     """
     if batch_limit <= 0:
         raise ValueError("Document object backfill batch_limit must be positive")
@@ -202,12 +206,14 @@ async def run_document_object_backfill_batches(
     selected_count = 0
     migrated_count = 0
     failed_count = 0
+    after_document_id: str | None = None
 
     for batch_count in range(1, max_batches + 1):
         async with session_factory() as session:
             batch_result = await backfill_legacy_document_payloads(
                 session,
                 batch_limit=batch_limit,
+                after_document_id=after_document_id,
             )
 
         selected_count += batch_result.selected_count
@@ -215,12 +221,13 @@ async def run_document_object_backfill_batches(
         failed_count += batch_result.failed_count
         if batch_result.selected_count == 0:
             return DocumentObjectBackfillRunResult(
-                completed=True,
+                completed=failed_count == 0,
                 batch_count=batch_count,
                 selected_count=selected_count,
                 migrated_count=migrated_count,
                 failed_count=failed_count,
             )
+        after_document_id = batch_result.last_document_id
 
     return DocumentObjectBackfillRunResult(
         completed=False,

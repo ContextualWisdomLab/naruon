@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import uuid
 
 from sqlalchemy import Boolean, DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -42,6 +43,12 @@ class ObjectStorageProvider(Base):
     object_storage_provider_id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
+    )
+    provider_uid: Mapped[str] = mapped_column(
+        String(36),
+        default=lambda: f"sop_{uuid.uuid4().hex}",
+        unique=True,
+        nullable=False,
     )
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     organization_id: Mapped[str] = mapped_column(String, index=True, nullable=False)

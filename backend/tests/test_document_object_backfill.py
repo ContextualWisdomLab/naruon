@@ -165,7 +165,9 @@ async def test_backfill_migrates_each_legacy_pending_pdf_atomically(monkeypatch)
     assert second.document_content is None
     assert session.commit_count == 2
     assert session.rollback_count == 0
-    records = [value for value in session.added if isinstance(value, DocumentObjectRecord)]
+    records = [
+        value for value in session.added if isinstance(value, DocumentObjectRecord)
+    ]
     assert [record.document_id for record in records] == ["doc-one", "doc-two"]
     assert all(record.object_storage_provider_id == 77 for record in records)
 
@@ -234,7 +236,9 @@ async def test_backfill_compensates_remote_object_after_commit_failure(monkeypat
         compensated.append(stored)
 
     monkeypatch.setattr(backfill_module, "store_configured_pdf_document", store_payload)
-    monkeypatch.setattr(backfill_module, "delete_configured_document_payload", compensate)
+    monkeypatch.setattr(
+        backfill_module, "delete_configured_document_payload", compensate
+    )
 
     result = await backfill_module.backfill_legacy_document_payloads(
         session,
@@ -279,7 +283,9 @@ async def test_backfill_refuses_non_s3_backend_and_split_brain_rows(monkeypatch)
         SimpleNamespace(OBJECT_STORAGE_BACKEND="s3"),
     )
 
-    result = await backfill_module.backfill_legacy_document_payloads(session, batch_limit=1)
+    result = await backfill_module.backfill_legacy_document_payloads(
+        session, batch_limit=1
+    )
     assert result.migrated_count == 0
     assert result.failed_count == 1
     assert document.document_content is not None
@@ -294,14 +300,14 @@ async def test_operator_backfill_runner_uses_fresh_sessions_and_stops_on_empty_b
     session_factory = _BackfillSessionFactory()
     results = iter(
         [
-            backfill_module.DocumentObjectBackfillResult(2, 2, 0),
-            backfill_module.DocumentObjectBackfillResult(0, 0, 0),
+            backfill_module.DocumentObjectBackfillResult(2, 2, 0, "doc-two"),
+            backfill_module.DocumentObjectBackfillResult(0, 0, 0, None),
         ]
     )
-    observed: list[tuple[object, int]] = []
+    observed: list[tuple[object, int, str | None]] = []
 
-    async def backfill(session, *, batch_limit):
-        observed.append((session, batch_limit))
+    async def backfill(session, *, batch_limit, after_document_id):
+        observed.append((session, batch_limit, after_document_id))
         return next(results)
 
     monkeypatch.setattr(backfill_module, "backfill_legacy_document_payloads", backfill)
@@ -318,7 +324,7 @@ async def test_operator_backfill_runner_uses_fresh_sessions_and_stops_on_empty_b
     assert result.migrated_count == 2
     assert result.failed_count == 0
     assert len(session_factory.sessions) == 2
-    assert [batch_limit for _, batch_limit in observed] == [2, 2]
+    assert [cursor for _, _, cursor in observed] == [None, "doc-two"]
     assert observed[0][0] is not observed[1][0]
 
 
@@ -327,9 +333,11 @@ async def test_operator_backfill_runner_fails_closed_at_batch_budget(monkeypatch
     """Stop at the explicit operator budget instead of retrying forever."""
     session_factory = _BackfillSessionFactory()
 
-    async def persistently_failing(_session, *, batch_limit):
+    async def persistently_failing(_session, *, batch_limit, after_document_id):
         assert batch_limit == 1
-        return backfill_module.DocumentObjectBackfillResult(1, 0, 1)
+        return backfill_module.DocumentObjectBackfillResult(
+            1, 0, 1, "doc-one" if after_document_id is None else "doc-two"
+        )
 
     monkeypatch.setattr(
         backfill_module,
@@ -349,6 +357,32 @@ async def test_operator_backfill_runner_fails_closed_at_batch_budget(monkeypatch
     assert result.migrated_count == 0
     assert result.failed_count == 2
     assert len(session_factory.sessions) == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_row_does_not_starve_later_batch(monkeypatch):
+    results = iter(
+        [
+            backfill_module.DocumentObjectBackfillResult(1, 0, 1, "doc-one"),
+            backfill_module.DocumentObjectBackfillResult(1, 1, 0, "doc-two"),
+            backfill_module.DocumentObjectBackfillResult(0, 0, 0, None),
+        ]
+    )
+    cursors = []
+
+    async def backfill(_session, *, batch_limit, after_document_id):
+        assert batch_limit == 1
+        cursors.append(after_document_id)
+        return next(results)
+
+    monkeypatch.setattr(backfill_module, "backfill_legacy_document_payloads", backfill)
+    result = await backfill_module.run_document_object_backfill_batches(
+        batch_limit=1, max_batches=3, session_factory=_BackfillSessionFactory()
+    )
+    assert cursors == [None, "doc-one", "doc-two"]
+    assert result.migrated_count == 1
+    assert result.failed_count == 1
+    assert result.completed is False
 
 
 @pytest.mark.asyncio

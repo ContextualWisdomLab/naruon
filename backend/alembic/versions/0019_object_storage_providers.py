@@ -22,6 +22,7 @@ def upgrade() -> None:
     op.create_table(
         "object_storage_providers",
         sa.Column("object_storage_provider_id", sa.Integer(), primary_key=True),
+        sa.Column("provider_uid", sa.String(length=36), nullable=False),
         sa.Column("user_id", sa.String(), nullable=False),
         sa.Column("organization_id", sa.String(), nullable=False),
         sa.Column("provider_name", sa.String(), nullable=False),
@@ -56,6 +57,7 @@ def upgrade() -> None:
             "provider_name",
             name="uq_object_storage_providers_org_name",
         ),
+        sa.UniqueConstraint("provider_uid", name="uq_object_storage_providers_uid"),
     )
     op.create_index(
         "ix_object_storage_providers_user_id",

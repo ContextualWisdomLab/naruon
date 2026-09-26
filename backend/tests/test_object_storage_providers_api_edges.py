@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 from fastapi import HTTPException
@@ -50,6 +51,7 @@ class _Session:
         self.commit_count = 0
         self.rollback_count = 0
         self.refresh_count = 0
+        self.no_autoflush = nullcontext()
 
     async def execute(self, _statement):
         self.execute_count += 1
@@ -94,6 +96,7 @@ def _provider(**overrides) -> ObjectStorageProvider:
     now = datetime.datetime.now(datetime.timezone.utc)
     values = {
         "object_storage_provider_id": 21,
+        "provider_uid": "sop_00000000000000000000000000000021",
         "user_id": "admin-one",
         "organization_id": "organization-one",
         "provider_name": "primary-s3",
@@ -172,7 +175,10 @@ def test_provider_input_models_reject_unknown_and_locator_mutation_fields() -> N
 @pytest.mark.asyncio
 async def test_admin_access_success_and_provider_list() -> None:
     auth_context = _auth()
-    assert await provider_api.check_object_storage_admin_access(auth_context) is auth_context
+    assert (
+        await provider_api.check_object_storage_admin_access(auth_context)
+        is auth_context
+    )
     provider = _provider()
     session = _Session([_Rows([provider])])
 
@@ -181,7 +187,9 @@ async def test_admin_access_success_and_provider_list() -> None:
         auth_context=auth_context,
     )
 
-    assert [item.object_storage_provider_id for item in responses] == [21]
+    assert [item.provider_uid for item in responses] == [
+        "sop_00000000000000000000000000000021"
+    ]
     assert session.execute_count == 1
 
 
@@ -205,12 +213,14 @@ async def test_create_integrity_conflict_rolls_back(failure_stage: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_rotates_credentials_and_write_policy_without_moving_provider() -> None:
+async def test_update_rotates_credentials_and_write_policy_without_moving_provider() -> (
+    None
+):
     provider = _provider()
     session = _Session([_Rows([provider]), _Rows()])
 
     response = await provider_api.update_object_storage_provider(
-        21,
+        "sop_00000000000000000000000000000021",
         provider_api.ObjectStorageProviderUpdate(
             provider_name=" replacement-s3 ",
             access_key_id="rotated-access",
@@ -243,7 +253,9 @@ async def test_update_rotates_credentials_and_write_policy_without_moving_provid
 
 
 @pytest.mark.asyncio
-async def test_update_can_clear_rotatable_optional_values_without_moving_provider() -> None:
+async def test_update_can_clear_rotatable_optional_values_without_moving_provider() -> (
+    None
+):
     provider = _provider(
         session_token="temporary",
         kms_key_id="key-reference",
@@ -251,7 +263,7 @@ async def test_update_can_clear_rotatable_optional_values_without_moving_provide
     session = _Session([_Rows([provider])])
 
     response = await provider_api.update_object_storage_provider(
-        21,
+        "sop_00000000000000000000000000000021",
         provider_api.ObjectStorageProviderUpdate(
             session_token="",
             kms_key_id="",
@@ -276,7 +288,7 @@ async def test_update_invalid_rotatable_configuration_rolls_back() -> None:
 
     with pytest.raises(HTTPException) as error:
         await provider_api.update_object_storage_provider(
-            21,
+            "sop_00000000000000000000000000000021",
             provider_api.ObjectStorageProviderUpdate(
                 server_side_encryption="aws:kms",
                 kms_key_id="",
@@ -295,7 +307,7 @@ async def test_update_missing_provider_and_commit_conflict() -> None:
     missing_session = _Session([_Rows()])
     with pytest.raises(HTTPException) as missing:
         await provider_api.update_object_storage_provider(
-            21,
+            "sop_00000000000000000000000000000021",
             provider_api.ObjectStorageProviderUpdate(is_active=False),
             db=missing_session,
             auth_context=_auth(),
@@ -306,7 +318,7 @@ async def test_update_missing_provider_and_commit_conflict() -> None:
     conflict_session = _Session([_Rows([provider])], commit_error=True)
     with pytest.raises(HTTPException) as conflict:
         await provider_api.update_object_storage_provider(
-            21,
+            "sop_00000000000000000000000000000021",
             provider_api.ObjectStorageProviderUpdate(provider_name="renamed"),
             db=conflict_session,
             auth_context=_auth(),
@@ -321,7 +333,7 @@ async def test_delete_requires_inactive_provider_and_handles_retained_lineage() 
     active_session = _Session([_Rows([active])])
     with pytest.raises(HTTPException) as active_error:
         await provider_api.delete_object_storage_provider(
-            21,
+            "sop_00000000000000000000000000000021",
             db=active_session,
             auth_context=_auth(),
         )
@@ -332,7 +344,7 @@ async def test_delete_requires_inactive_provider_and_handles_retained_lineage() 
     success_session = _Session([_Rows([inactive])])
     assert (
         await provider_api.delete_object_storage_provider(
-            21,
+            "sop_00000000000000000000000000000021",
             db=success_session,
             auth_context=_auth(),
         )
@@ -345,7 +357,7 @@ async def test_delete_requires_inactive_provider_and_handles_retained_lineage() 
     retained_session = _Session([_Rows([retained])], commit_error=True)
     with pytest.raises(HTTPException) as retained_error:
         await provider_api.delete_object_storage_provider(
-            21,
+            "sop_00000000000000000000000000000021",
             db=retained_session,
             auth_context=_auth(),
         )

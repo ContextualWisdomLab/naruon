@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -68,7 +69,7 @@ class ObjectStorageProviderUpdate(BaseModel):
 class ObjectStorageProviderResponse(BaseModel):
     """Redacted provider metadata safe for organization administration UI."""
 
-    object_storage_provider_id: int
+    provider_uid: str
     provider_name: str
     provider_type: str
     bucket_name: str
@@ -112,7 +113,7 @@ def _provider_response(
     provider: ObjectStorageProvider,
 ) -> ObjectStorageProviderResponse:
     return ObjectStorageProviderResponse(
-        object_storage_provider_id=provider.object_storage_provider_id,
+        provider_uid=provider.provider_uid,
         provider_name=provider.provider_name,
         provider_type=provider.provider_type,
         bucket_name=provider.bucket_name,
@@ -228,6 +229,7 @@ async def create_object_storage_provider(
     organization_id = _required_organization(auth_context)
     now = datetime.datetime.now(datetime.timezone.utc)
     provider = ObjectStorageProvider(
+        provider_uid=f"sop_{uuid.uuid4().hex}",
         user_id=auth_context.user_id,
         organization_id=organization_id,
         provider_name=_stripped_required(data.provider_name, "provider_name"),
@@ -302,11 +304,11 @@ async def create_object_storage_provider(
 async def _scoped_provider(
     db: AsyncSession,
     auth_context: AuthContext,
-    provider_id: int,
+    provider_uid: str,
 ) -> ObjectStorageProvider:
     result = await db.execute(
         select(ObjectStorageProvider).where(
-            ObjectStorageProvider.object_storage_provider_id == provider_id,
+            ObjectStorageProvider.provider_uid == provider_uid,
             _provider_scope_filter(auth_context),
         )
     )
@@ -316,15 +318,15 @@ async def _scoped_provider(
     return provider
 
 
-@router.put("/{provider_id}", response_model=ObjectStorageProviderResponse)
+@router.put("/{provider_uid}", response_model=ObjectStorageProviderResponse)
 async def update_object_storage_provider(
-    provider_id: int,
+    provider_uid: str,
     data: ObjectStorageProviderUpdate,
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(check_object_storage_admin_access),
 ) -> ObjectStorageProviderResponse:
     """Rotate credentials/write policy without changing retained object location."""
-    provider = await _scoped_provider(db, auth_context, provider_id)
+    provider = await _scoped_provider(db, auth_context, provider_uid)
     fields = data.model_fields_set
     text_updates = {
         "provider_name": data.provider_name,
@@ -341,8 +343,6 @@ async def update_object_storage_provider(
     }.items():
         if field_name in fields:
             setattr(provider, field_name, _stripped_optional(value))
-    if "is_active" in fields and data.is_active is not None:
-        provider.is_active = data.is_active
     provider.updated_at = datetime.datetime.now(datetime.timezone.utc)
     try:
         _validate_provider(provider)
@@ -350,12 +350,22 @@ async def update_object_storage_provider(
         await db.rollback()
         raise
 
-    if provider.is_active:
-        await _deactivate_other_providers(
-            db,
-            organization_id=provider.organization_id,
-            provider_id=provider.object_storage_provider_id,
-        )
+    if data.is_active is True:
+        try:
+            with db.no_autoflush:
+                await _deactivate_other_providers(
+                    db,
+                    organization_id=provider.organization_id,
+                    provider_id=provider.object_storage_provider_id,
+                )
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Object-storage provider update conflicts with retained metadata",
+            ) from exc
+    if "is_active" in fields and data.is_active is not None:
+        provider.is_active = data.is_active
     db.add(
         AuditLog(
             user_id=auth_context.user_id,
@@ -384,14 +394,14 @@ async def update_object_storage_provider(
     return _provider_response(provider)
 
 
-@router.delete("/{provider_id}", status_code=204)
+@router.delete("/{provider_uid}", status_code=204)
 async def delete_object_storage_provider(
-    provider_id: int,
+    provider_uid: str,
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(check_object_storage_admin_access),
 ) -> None:
     """Delete an inactive unreferenced provider while retaining object lineage."""
-    provider = await _scoped_provider(db, auth_context, provider_id)
+    provider = await _scoped_provider(db, auth_context, provider_uid)
     if provider.is_active:
         raise HTTPException(
             status_code=409,

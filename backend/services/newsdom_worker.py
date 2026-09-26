@@ -33,6 +33,7 @@ from services.attachment_parser import decode_deferred_attachment_payload
 from services.content_graph import ParseResult
 from services.document_object_storage import (
     DocumentObjectStorageError,
+    DocumentObjectUnavailableError,
     load_pending_pdf_document_bytes,
     mark_document_payload_consumed,
 )
@@ -285,6 +286,12 @@ async def process_pending_document(
     source_uses_object_storage = not bool(document.document_content)
     try:
         pdf_bytes = await load_pending_pdf_document_bytes(session, document)
+    except DocumentObjectUnavailableError:
+        logger.warning(
+            "NewsDOM document %s remains pending: object storage is unavailable",
+            getattr(document, "document_id", "?"),
+        )
+        return RESULT_PENDING
     except (ValueError, DocumentObjectStorageError) as exc:
         document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         logger.warning(

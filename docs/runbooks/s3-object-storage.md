@@ -52,11 +52,12 @@ organization-scoped API:
 ```text
 GET    /api/object-storage-providers
 POST   /api/object-storage-providers
-PUT    /api/object-storage-providers/{provider_id}
-DELETE /api/object-storage-providers/{provider_id}
+PUT    /api/object-storage-providers/{provider_uid}
+DELETE /api/object-storage-providers/{provider_uid}
 ```
 
-The API never returns stored credential values. Responses expose only redacted
+Use the `provider_uid` returned by GET or POST for PUT and DELETE. The API never
+returns stored credential values. Responses expose only redacted
 configuration state such as an access-key fingerprint and booleans indicating
 whether secret/session/KMS material is configured. Only one provider is active
 per organization; object metadata retains the provider that created each object

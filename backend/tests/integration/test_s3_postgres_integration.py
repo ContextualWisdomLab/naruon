@@ -14,6 +14,7 @@ import asyncio
 from collections.abc import AsyncIterator
 import hashlib
 import os
+from types import SimpleNamespace
 
 from alembic import command
 import asyncpg
@@ -23,8 +24,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from db.document_object_record import DocumentObjectRecord
-from db.models import Document
+from db.models import AuditLog, Document, SecurityAuditEvent
 from db.object_storage_provider import ObjectStorageProvider
+from api.object_storage_providers import (
+    ObjectStorageProviderUpdate,
+    update_object_storage_provider,
+)
 from scripts.migrate_db import alembic_config
 from services.document_object_storage import (
     StoredDocumentPayload,
@@ -128,7 +133,9 @@ def _integration_configuration() -> S3ClientConfiguration:
     )
 
 
-async def _payload_stream(payload: bytes, *, chunk_size: int = 8192) -> AsyncIterator[bytes]:
+async def _payload_stream(
+    payload: bytes, *, chunk_size: int = 8192
+) -> AsyncIterator[bytes]:
     for offset in range(0, len(payload), chunk_size):
         yield payload[offset : offset + chunk_size]
 
@@ -207,7 +214,10 @@ async def _exercise_postgres_and_s3() -> None:
                 )
             )
             assert persisted is not None
-            assert persisted.object_storage_provider_id == provider.object_storage_provider_id
+            assert (
+                persisted.object_storage_provider_id
+                == provider.object_storage_provider_id
+            )
             assert persisted.checksum_sha256 == hashlib.sha256(payload).hexdigest()
 
             await backend.delete_object(stored)
@@ -305,8 +315,62 @@ async def _exercise_timeout_mapping() -> None:
         await backend.aclose()
 
 
+async def _exercise_provider_activation() -> None:
+    """Switch an active provider under PostgreSQL's partial unique index."""
+    engine = create_async_engine(_async_database_url(), pool_pre_ping=True)
+    async with engine.begin() as connection:
+        await connection.run_sync(
+            lambda sync: AuditLog.__table__.create(sync, checkfirst=True)
+        )
+        await connection.run_sync(
+            lambda sync: SecurityAuditEvent.__table__.create(sync, checkfirst=True)
+        )
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        prior = await session.scalar(
+            select(ObjectStorageProvider).where(
+                ObjectStorageProvider.object_storage_provider_id == _PROVIDER_ID
+            )
+        )
+        assert prior is not None and prior.is_active
+        replacement = ObjectStorageProvider(
+            user_id="integration-admin",
+            organization_id="organization-one",
+            provider_name="replacement-s3",
+            provider_type="s3",
+            bucket_name=_BUCKET_NAME,
+            region_name="us-east-1",
+            endpoint_url=None,
+            addressing_style="virtual",
+            access_key_id=_ACCESS_KEY,
+            secret_access_key=_SECRET_KEY,
+            server_side_encryption="AES256",
+            is_active=False,
+        )
+        session.add(replacement)
+        await session.commit()
+        await session.refresh(replacement)
+        response = await update_object_storage_provider(
+            provider_uid=replacement.provider_uid,
+            data=ObjectStorageProviderUpdate(is_active=True),
+            db=session,
+            auth_context=SimpleNamespace(
+                user_id="integration-admin",
+                role="organization_admin",
+                organization_id="organization-one",
+                workspace_id="workspace-one",
+            ),
+        )
+        await session.refresh(prior)
+        assert response.provider_uid == replacement.provider_uid
+        assert response.is_active is True
+        assert prior.is_active is False
+    await engine.dispose()
+
+
 def test_storage_migrations_and_real_s3_lifecycle() -> None:
     asyncio.run(_prepare_pre_migration_schema())
     _apply_storage_migrations()
     asyncio.run(_exercise_postgres_and_s3())
+    asyncio.run(_exercise_provider_activation())
     asyncio.run(_exercise_timeout_mapping())

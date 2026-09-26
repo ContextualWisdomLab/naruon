@@ -11,7 +11,7 @@ from db.document_object_record import DocumentObjectRecord
 from db.models import Document
 from db.object_storage_provider import ObjectStorageProvider
 import services.document_object_storage as storage_module
-from services.s3_object_storage import S3StoredObject
+from services.s3_object_storage import S3ObjectStorageRequestError, S3StoredObject
 
 
 PDF_BYTES = b"%PDF-1.7 naruon document"
@@ -129,7 +129,9 @@ def _document(*, content: str | None = None) -> Document:
     )
 
 
-def test_database_payload_preserves_legacy_inline_contract_without_object_record() -> None:
+def test_database_payload_preserves_legacy_inline_contract_without_object_record() -> (
+    None
+):
     stored = storage_module.StoredDocumentPayload.for_database(PDF_BYTES)
 
     assert stored.storage_backend == "database"
@@ -194,7 +196,9 @@ async def test_store_configured_database_payload_uses_no_s3_client(monkeypatch) 
     )
 
     assert stored.storage_backend == "database"
-    assert storage_module.decode_legacy_pdf_payload(stored.document_content) == PDF_BYTES
+    assert (
+        storage_module.decode_legacy_pdf_payload(stored.document_content) == PDF_BYTES
+    )
 
 
 @pytest.mark.asyncio
@@ -205,7 +209,9 @@ async def test_store_and_delete_configured_s3_payload(monkeypatch) -> None:
     async def build_backend():
         return backend
 
-    monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", build_backend)
+    monkeypatch.setattr(
+        storage_module, "_build_s3_backend_from_settings", build_backend
+    )
     stored = await storage_module.store_configured_pdf_document(
         payload=PDF_BYTES,
         document_id="doc-1",
@@ -246,7 +252,9 @@ async def test_delete_database_payload_is_a_noop(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_loader_prefers_legacy_inline_payload_without_querying_object_record() -> None:
+async def test_loader_prefers_legacy_inline_payload_without_querying_object_record() -> (
+    None
+):
     session = ScalarSession(_s3_record())
     document = _document(content=base64.b64encode(PDF_BYTES).decode("ascii"))
 
@@ -277,8 +285,30 @@ async def test_loader_reads_s3_record_and_closes_backend(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_loader_marks_s3_request_failure_retryable(monkeypatch) -> None:
+    backend = FakeS3Backend()
+
+    async def unavailable(_stored_object):
+        raise S3ObjectStorageRequestError("request failed")
+
+    async def build_backend(_runtime_config):
+        return backend
+
+    backend.get_object = unavailable
+    monkeypatch.setattr(storage_module, "_build_s3_backend", build_backend)
+    with pytest.raises(storage_module.DocumentObjectUnavailableError):
+        await storage_module.load_pending_pdf_document_bytes(
+            ScalarSession(_s3_record(), _s3_provider()),
+            _document(content=None),
+        )
+    assert backend.closed is True
+
+
+@pytest.mark.asyncio
 async def test_loader_rejects_missing_or_inactive_object_record() -> None:
-    with pytest.raises(storage_module.DocumentObjectStorageError, match="not available"):
+    with pytest.raises(
+        storage_module.DocumentObjectStorageError, match="not available"
+    ):
         await storage_module.load_pending_pdf_document_bytes(
             ScalarSession(None),
             _document(content=None),
@@ -297,7 +327,9 @@ async def test_loader_rejects_missing_or_inactive_object_record() -> None:
 async def test_loader_rejects_wrong_document_and_corrupt_download(monkeypatch) -> None:
     record = _s3_record()
     record.document_id = "other-document"
-    with pytest.raises(storage_module.DocumentObjectStorageError, match="does not match"):
+    with pytest.raises(
+        storage_module.DocumentObjectStorageError, match="does not match"
+    ):
         await storage_module.load_pending_pdf_document_bytes(
             ScalarSession(record),
             _document(content=None),
