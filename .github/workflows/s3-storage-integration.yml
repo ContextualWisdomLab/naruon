@@ -27,7 +27,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: s3-storage-integration-${{ github.event.pull_request.number || github.ref }}
+  group: s3-storage-integration-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
