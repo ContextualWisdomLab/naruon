@@ -29,6 +29,7 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  is_personal_reference?: boolean;
 };
 interface LlmData {
   summary: string;
@@ -152,7 +153,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
     setThreadError(null);
 
-    if (!currentEmail.thread_id) {
+    if (!currentEmail.thread_id || currentEmail.is_personal_reference) {
       if (isLatestThreadRequest()) {
         setThreadLoading(false);
         setThreadEmails([currentEmail]);
@@ -308,7 +309,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   }, [email]);
 
   const handleDraftReply = useCallback(async () => {
-    if (!email) return;
+    if (!email || email.is_personal_reference) return;
     const actionEmailId = email.id;
     const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
     const startedAt = nowMs();
@@ -370,7 +371,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   }, [email, instruction]);
 
   const handleSendReply = async () => {
-    if (!email || !draft) return;
+    if (!email || email.is_personal_reference || !draft) return;
     const startedAt = nowMs();
     const draftReplyId = activeDraftReplyIdRef.current || createProductEventId("draft_reply");
     activeDraftReplyIdRef.current = draftReplyId;
@@ -631,9 +632,13 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             <div className="line-clamp-1 text-xs">
               <span className="text-muted-foreground">{safeEmailSender}</span>
             </div>
-            <div className="line-clamp-1 text-xs text-muted-foreground">
-              답장 주소: {safeReplyTo}
-            </div>
+            {email.is_personal_reference ? (
+              <Badge variant="secondary" className="w-fit text-xs">개인 자료</Badge>
+            ) : (
+              <div className="line-clamp-1 text-xs text-muted-foreground">
+                답장 주소: {safeReplyTo}
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -747,15 +752,15 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold flex items-center gap-2">
-                  <MessagesSquare className="w-4 h-4 text-primary" /> 스레드 전체
+                  <MessagesSquare className="w-4 h-4 text-primary" /> {email.is_personal_reference ? '개인 자료' : '스레드 전체'}
                 </h3>
                 <Badge variant="secondary" className="text-[10px] flex items-center gap-1 border border-primary/10 bg-primary/10 text-primary">
                   <MessagesSquare className="w-3 h-3" />
-                  {conversationMessages.length}개 메시지
+                  {conversationMessages.length}개 {email.is_personal_reference ? '자료' : '메시지'}
                 </Badge>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">오래된 메시지부터 최신 메시지 순서로 보여줍니다. 답장은 선택된 메시지를 기준으로 작성됩니다.</p>
+            <p className="text-xs text-muted-foreground">{email.is_personal_reference ? '보관한 메일 원문입니다.' : '오래된 메시지부터 최신 메시지 순서로 보여줍니다. 답장은 선택된 메시지를 기준으로 작성됩니다.'}</p>
             {threadLoading && <p role="status" aria-live="polite" className="text-sm text-muted-foreground">대화 흐름을 불러오는 중입니다...</p>}
             {threadError && (
               <div role="alert" className="flex items-center gap-3 text-sm text-red-500">
@@ -772,7 +777,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                       <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
                     </div>
                   </div>
-                  {msg.id === email.id && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">선택된 메시지</Badge>}
+                  {msg.id === email.id && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">{email.is_personal_reference ? '선택된 자료' : '선택된 메시지'}</Badge>}
                   {msg.id === email.id && translationError && (
                     <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
                       {translationError}
@@ -792,7 +797,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
           <Separator />
 
-          <DecisionPointCard title="답장 초안" provenance="사용자 확인 필요">
+          {!email.is_personal_reference && <DecisionPointCard title="답장 초안" provenance="사용자 확인 필요">
             <div className="flex flex-col sm:flex-row sm:items-end gap-2 justify-between">
               <div className="space-y-1.5 flex-1 max-w-sm">
                 <label htmlFor="reply-instruction" className="sr-only">답장 초안 지시</label>
@@ -861,7 +866,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 </Button>
               </div>
             </div>
-          </DecisionPointCard>
+          </DecisionPointCard>}
         </div>
       </ScrollArea>
       <SourceDrawer
@@ -870,7 +875,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         sourceLabel={safeEmailSubject}
         sourceType="mail"
         sourceId={getMessageEventId(email)}
-        summary={llmData?.summary || "선택한 메일 원문과 스레드를 근거로 맥락 종합을 생성합니다."}
+        summary={llmData?.summary || (email.is_personal_reference ? "선택한 개인 자료를 근거로 맥락 종합을 생성합니다." : "선택한 메일 원문과 스레드를 근거로 맥락 종합을 생성합니다.")}
         provenance={llmData?.provenance || "판단 보조 생성"}
         confidence={confidencePercent}
         onClose={() => setSourceDrawerOpen(false)}

@@ -177,6 +177,7 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
         thread_id=canonical_thread_key(email),
         in_reply_to=email.in_reply_to,
         references=email.references,
+        is_personal_reference=email.is_personal_reference is True,
     )
 
 
@@ -208,6 +209,7 @@ class EmailDetailResponse(BaseModel):
     body: str
     in_reply_to: str | None = None
     references: str | None = None
+    is_personal_reference: bool = False
     requires_reply: bool = False
     schedule_conflict: bool = False
 

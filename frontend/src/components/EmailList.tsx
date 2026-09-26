@@ -101,7 +101,7 @@ const EmailListItemComponent = memo(function EmailListItemComponent({
         <div className="flex items-center gap-2 flex-wrap">
           {(email.unread || email.is_read === false) && <Badge variant="default" className="bg-emerald-500 text-[10px] text-white">안 읽음</Badge>}
           {email.has_draft && <Badge variant="secondary" className="border-blue-500/20 bg-blue-500/10 text-[10px] text-blue-700">답장 초안</Badge>}
-          {email.is_self_sent && <Badge variant="secondary" className="border-purple-500/20 bg-purple-500/10 text-[10px] text-purple-700">지식 정리</Badge>}
+          {email.is_self_sent && <Badge variant="secondary" className="border-purple-500/20 bg-purple-500/10 text-[10px] text-purple-700">개인 자료</Badge>}
           {email.requires_reply && <Badge variant="outline" className="border-primary/30 text-[10px] text-primary bg-primary/5">응답 대기 중</Badge>}
           {email.schedule_conflict && <Badge variant="outline" className="border-emerald-500/30 text-[10px] text-emerald-700 bg-emerald-500/5">일정 충돌 조율</Badge>}
         </div>
@@ -153,11 +153,11 @@ export function EmailList({
   const folderCopy = folder === 'sent'
     ? {
         title: '보낸 메일',
-        description: '답변 대기, 회신 완료, 나에게 보낸 지식 정리 후보를 추적합니다.',
+        description: '답변 대기, 회신 완료, 개인 자료를 함께 확인합니다.',
         primaryBadge: '답변 추적',
-        secondaryBadge: '지식 정리',
+        secondaryBadge: '개인 자료',
         focusLabel: '보낸 메일 추적',
-        focusText: '응답 대기 스레드와 self-sent 지식 후보를 표시합니다',
+        focusText: '응답 대기 대화와 개인 자료를 표시합니다',
         emptyTitle: '보낸 메일이 없습니다',
         emptyBody: 'SMTP/IMAP 동기화 후 보낸 스레드와 답변 대기 상태가 표시됩니다.',
       }

@@ -1604,6 +1604,12 @@ async def test_get_email_by_id(client: AsyncClient, db_session, sample_email: Em
     assert response.status_code == 200
     assert response.json()["id"] == sample_email.id
     assert response.json()["reply_to"] == "reply@example.com"
+    assert response.json()["is_personal_reference"] is False
+
+    sample_email.is_personal_reference = True
+    personal_response = await client.get(f"/api/emails/{sample_email.id}")
+    assert personal_response.status_code == 200
+    assert personal_response.json()["is_personal_reference"] is True
 
 
 @pytest.mark.asyncio
