@@ -951,3 +951,75 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
     assert audit_uid not in response.text
     assert "account_id" not in response.text
     assert "security-smoke@example.com" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_permission_audit_survives_unavailable_telemetry_receiver():
+    from core import telemetry
+
+    cwl_telemetry = pytest.importorskip("cwl_telemetry")
+    user_id = f"telemetry_audit_{uuid.uuid4().hex}"
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_real_db():
+        async with session_factory() as session:
+            yield session
+
+    def override_auth_context() -> AuthContext:
+        return AuthContext(
+            user_id=user_id, role="tenant_admin", organization_id="org-acme",
+            group_ids=(), workspace_id="workspace-org-acme",
+        )
+
+    original_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_db] = override_real_db
+    app.dependency_overrides[get_auth_context] = override_auth_context
+    app.dependency_overrides.pop(get_current_user, None)
+    try:
+        telemetry.setup_telemetry(app, cwl_telemetry.TelemetryConfig(
+            service="naruon-backend", version="0.14.4", environment="test",
+            source_revision="a" * 40, receiver="https://127.0.0.1:1",
+            token="synthetic-unavailable-otlp-token-12345",
+            operation_codes={"http_request"}, bounded_contexts={"backend"},
+            route_templates={"/api/security/permission-change-intent"},
+        ))
+        assert app.state.naruon_telemetry_configured is True
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/api/security/permission-change-intent",
+                json={"decision": "deny_external_write", "resource_type": "provider_secret"},
+            )
+        assert response.status_code == 200, response.text
+        async with session_factory() as session:
+            audit_rows = (await session.execute(text(
+                "SELECT event_action, resource_type FROM security_audit_events "
+                "WHERE actor_user_id = :user_id"
+            ), {"user_id": user_id})).all()
+        assert audit_rows == [("permission_change_intent", "provider_secret")]
+    finally:
+        telemetry.shutdown_telemetry(app)
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(original_overrides)
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM security_audit_events WHERE actor_user_id = :user_id"),
+                {"user_id": user_id},
+            )
+        await engine.dispose()
