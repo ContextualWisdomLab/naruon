@@ -93,6 +93,17 @@ def test_thread_reply_candidate_ignores_self_sent_knowledge_messages():
     assert thread_reply_candidate([self_sent], USER_ADDRESSES) is None
 
 
+def test_thread_reply_candidate_keeps_mixed_recipient_message():
+    sent = make_email(
+        "self_and_client",
+        sender="me@example.com",
+        recipients="me@example.com, client@example.com",
+        minutes=0,
+    )
+
+    assert thread_reply_candidate([sent], USER_ADDRESSES) is sent
+
+
 def test_thread_reply_candidate_preserves_strict_later_reply_boundary():
     sent_message = make_email(
         "sent_same_time",
@@ -120,6 +131,24 @@ def test_configured_email_addresses_handles_none():
     from services.reply_tracking_service import configured_email_addresses
 
     assert configured_email_addresses(None) == set()
+
+
+def test_configured_email_addresses_includes_pop3_alias():
+    from db.models import TenantConfig
+    from services.reply_tracking_service import configured_email_addresses
+
+    config = TenantConfig(
+        user_id="owner",
+        smtp_username="sent@example.com",
+        imap_username="inbox@example.com",
+        pop3_username="archive@example.com",
+    )
+
+    assert configured_email_addresses(config) == {
+        "sent@example.com",
+        "inbox@example.com",
+        "archive@example.com",
+    }
 
 
 def test_thread_reply_candidate_returns_none_when_no_user_addresses():

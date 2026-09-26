@@ -113,13 +113,23 @@ class TestEmailService:
 
         assert process_self_to_self(email_data, "user@example.com") is True
 
-    def test_process_self_to_self_multiple_recipients(self):
+    def test_process_self_to_self_with_external_recipient(self):
         email_data = {
             "sender": "user@example.com",
             "recipients": ["other@example.com", "user@example.com"],
         }
 
-        assert process_self_to_self(email_data, "user@example.com") is True
+        assert process_self_to_self(email_data, "user@example.com") is False
+
+    def test_process_self_to_self_owner_aliases(self):
+        email_data = {
+            "sender": "user@example.com",
+            "recipients": ["alias@example.com", "user@example.com"],
+        }
+
+        assert process_self_to_self(
+            email_data, ["user@example.com", "alias@example.com"]
+        ) is True
 
     def test_process_self_to_self_not_self(self):
         email_data = {

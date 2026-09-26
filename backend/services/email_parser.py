@@ -206,7 +206,12 @@ def _message_to_email_data(msg: Message) -> EmailData:
             if msg.get("Reply-To")
             else None
         ),
-        "recipients": _sanitize_address_display_text(msg.get("To", "")),
+        "recipients": ", ".join(
+            _sanitize_address_display_text(str(value))
+            for header in ("To", "Cc", "Bcc")
+            for value in msg.get_all(header, [])
+            if value
+        ),
         "subject": _sanitize_display_text(msg.get("Subject", "")),
         "in_reply_to": (
             _sanitize_nul(msg.get("In-Reply-To", ""))

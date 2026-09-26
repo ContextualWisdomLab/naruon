@@ -190,9 +190,7 @@ class OntologyService:
         owner_address_list = _owner_address_list(owner_addresses)
         if not owner_address_list and "@" in str(user_id):
             owner_address_list = [str(user_id)]
-        is_owner_self_sent = any(
-            process_self_to_self(email_data, address) for address in owner_address_list
-        )
+        is_owner_self_sent = process_self_to_self(email_data, owner_address_list)
         if not is_owner_self_sent:
             return None
         if source_email is None:
