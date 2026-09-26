@@ -1,3 +1,6 @@
+import json
+from types import SimpleNamespace
+
 import pytest
 from unittest.mock import AsyncMock
 
@@ -88,7 +91,9 @@ def test_thread_judgment_rejects_uncited_claims_and_one_message_tensions():
 
 
 @pytest.mark.asyncio
-async def test_thread_judgment_closes_transport_when_sdk_construction_fails(monkeypatch):
+async def test_thread_judgment_closes_transport_when_sdk_construction_fails(
+    monkeypatch,
+):
     http_client = AsyncMock()
 
     async def build_client(_base_url):
@@ -114,3 +119,71 @@ async def test_thread_judgment_closes_transport_when_sdk_construction_fails(monk
         await synthesize_thread_judgment([], [], [], provider)
 
     http_client.aclose.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_thread_judgment_keeps_earlier_citations_across_batches(monkeypatch):
+    earlier = JudgmentSegment(uid="earlier", message_id="first", text="Monday")
+    later = JudgmentSegment(uid="later", message_id="second", text="Tuesday")
+    previous = ThreadJudgmentDraft(
+        current_state=CitedStatement(text="Monday", evidence_segment_uids=["earlier"]),
+        judgment_point=None,
+        recommended_action=None,
+        blocking_dependencies=[],
+        unresolved_commitments=[],
+        tensions=[],
+    )
+    combined = previous.model_copy(
+        update={
+            "tensions": [
+                UnresolvedTension(
+                    description="The dates conflict",
+                    first_evidence_segment_uids=["earlier"],
+                    second_evidence_segment_uids=["later"],
+                )
+            ]
+        }
+    )
+    parse = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(parsed=combined))]
+        )
+    )
+    client = SimpleNamespace(
+        beta=SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(parse=parse))
+        ),
+        close=AsyncMock(),
+    )
+
+    async def build_client(_base_url):
+        return None, AsyncMock()
+
+    monkeypatch.setattr(
+        "services.thread_judgment.build_llm_provider_http_client", build_client
+    )
+    monkeypatch.setattr("services.thread_judgment.AsyncOpenAI", lambda **_: client)
+    provider = RuntimeLLMProvider(
+        api_key="test",
+        base_url=None,
+        chat_model="test-model",
+        embedding_model="test-embedding",
+        provider_name="test",
+        provider_source="tenant_config",
+    )
+
+    result = await synthesize_thread_judgment(
+        [later], [], [], provider, previous=previous, known_segments=[earlier, later]
+    )
+
+    assert result == combined
+    payload = json.loads(
+        parse.await_args.kwargs["messages"][1]["content"].removeprefix(
+            "THREAD_EVIDENCE_JSON "
+        )
+    )
+    assert [segment["uid"] for segment in payload["segments"]] == ["later"]
+    assert payload["earlier_judgment"]["current_state"]["evidence_segment_uids"] == [
+        "earlier"
+    ]
+    client.close.assert_awaited_once_with()
