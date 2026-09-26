@@ -49,6 +49,9 @@ importers:
       react-resizable-panels:
         specifier: ^4.12.2
         version: 4.12.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@26.1.2)
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.6.0
@@ -101,10 +104,6 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1)(vite@8.1.4(@types/node@26.1.2)(jiti@2.7.0))
-    optionalDependencies:
-      sharp:
-        specifier: 0.35.4
-        version: 0.35.4(@types/node@26.1.2)
 
 packages:
 
@@ -3392,8 +3391,7 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@img/colour@1.1.0':
-    optional: true
+  '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.35.0':
     optionalDependencies:
@@ -3567,7 +3565,7 @@ snapshots:
 
   '@img/sharp-wasm32@0.35.0':
     dependencies:
-      '@emnapi/runtime': 1.11.1
+      '@emnapi/runtime': 1.11.3
     optional: true
 
   '@img/sharp-wasm32@0.35.4':
@@ -5700,7 +5698,6 @@ snapshots:
       '@img/sharp-win32-ia32': 0.35.4
       '@img/sharp-win32-x64': 0.35.4
       '@types/node': 26.1.2
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:
