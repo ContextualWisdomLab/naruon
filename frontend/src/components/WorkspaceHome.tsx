@@ -629,11 +629,13 @@ function StartupCalendar({ onOpenView }: { onOpenView: (view: WorkspaceStartupVi
 export function WorkspaceHome({
   forcedStartupView,
   mailFolder = 'inbox',
+  initialEmailId = null,
 }: {
   forcedStartupView?: WorkspaceStartupView;
   mailFolder?: MailFolder;
+  initialEmailId?: number | null;
 } = {}) {
-  const [selectedEmail, setSelectedEmail] = useState<number | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<number | null>(initialEmailId);
   const [workspaceActionNotice, setWorkspaceActionNotice] = useState<string | null>(null);
   const [desktopDetailActionCommand, setDesktopDetailActionCommand] = useState<WorkspaceActionCommand | null>(null);
   const [mobileDetailActionCommand, setMobileDetailActionCommand] = useState<MobileActionCommand | null>(null);
@@ -721,9 +723,9 @@ export function WorkspaceHome({
       setMobileWorkspaceView('calendar', { updateHash: false });
     }
     if (startupView === 'email') {
-      setMobileWorkspaceView('inbox', { updateHash: false });
+      setMobileWorkspaceView(initialEmailId === null ? 'inbox' : 'detail', { updateHash: false });
     }
-  }, [startupView]);
+  }, [initialEmailId, startupView]);
 
   useEffect(() => {
     const clearStartupOverride = () => setStartupViewOverride(null);

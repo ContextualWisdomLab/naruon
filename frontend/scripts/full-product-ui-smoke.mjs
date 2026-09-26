@@ -1233,7 +1233,17 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("직접 수정함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "왼쪽 일정이 오른쪽 일정에 도움", exact: true }).click();
     await page.getByText("워크숍 준비 → 워크숍", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("heading", { name: "일정 관계" }).click();
+    const sourceHref = await page.getByRole("link", { name: "원본 메일 보기", exact: true }).getAttribute("href");
+    if (sourceHref !== "/mail?id=23") throw new Error("Calendar relation source link did not target the cited mail");
+    const sourcePage = await page.context().newPage();
+    try {
+      await installRoutes(sourcePage);
+      await sourcePage.goto(new URL(sourceHref, baseUrl).href, { waitUntil: "domcontentloaded" });
+      await sourcePage.getByRole("region", { name: viewportSpec.name === "mobile" ? "모바일 메일 상세" : "데스크톱 메일 작업공간" })
+        .getByText(sourceEmail.body, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    } finally {
+      await sourcePage.close();
+    }
     return [
       evidence("calendar:create-writeback-intent"),
       evidence("calendar:verify-etag-update-intent"),
@@ -1242,6 +1252,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("calendar:verify-provider-no-retry-state"),
       evidence("calendar:inspect-cited-relation"),
       evidence("calendar:correct-relation"),
+      evidence("calendar:open-cited-mail"),
     ];
   }
 
