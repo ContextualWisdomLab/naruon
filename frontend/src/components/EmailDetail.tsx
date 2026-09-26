@@ -791,7 +791,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             emptyMessage="이 대화에는 판단 카드를 만들 근거가 부족합니다.">
             <div className="space-y-3">
               {!threadJudgment && <Button type="button" size="sm" variant="outline" onClick={() => void handleCreateThreadJudgment()}>대화 판단 카드 만들기</Button>}
-              {threadJudgment?.evidence_limited && <p className="text-xs text-amber-700">일부 근거만 살펴본 결과입니다. 전체 대화 내용을 확인해 주세요.</p>}
+              {threadJudgment?.evidence_limited && <p className="text-xs text-amber-700">긴 대화나 일부 자료는 요약해 살펴봤습니다. 중요한 내용은 원문에서 확인해 주세요.</p>}
               {threadJudgment?.judgment && (
                 <div className="space-y-3">
                   {renderClaim('현재 상태', threadJudgment.judgment.current_state)}

@@ -104,6 +104,23 @@ async def test_thread_judgment_uses_only_owner_segments():
                         extractor_version="1",
                     )
                 )
+                if owner == "owner-a":
+                    for index in range(1, 41):
+                        session.add(
+                            ContentSegmentRecord(
+                                content_segment_uid=f"owned-segment-{index}",
+                                email_id=email.id,
+                                content_node_id=node.content_node_id,
+                                source_kind="email_body",
+                                source_record_uid=message_id,
+                                segment_kind="paragraph",
+                                segment_path=f"body/{index + 1}",
+                                ordinal_index=index,
+                                safe_text_content=f"Later update {index}",
+                                content_hash=f"hash-{owner}-{index}",
+                                word_count=3,
+                            )
+                        )
             await session.commit()
 
         provider = RuntimeLLMProvider(
@@ -142,6 +159,11 @@ async def test_thread_judgment_uses_only_owner_segments():
             patch("api.emails.synthesize_thread_judgment", synthesize),
         ):
             async with sessions() as session:
+                async def synthesize_after_read(*_args, **_kwargs):
+                    assert not session.in_transaction()
+                    return judgment
+
+                synthesize.side_effect = synthesize_after_read
                 result = await create_thread_judgment(
                     ThreadJudgmentRequest(thread_id="shared-thread"),
                     db=session,
@@ -151,11 +173,17 @@ async def test_thread_judgment_uses_only_owner_segments():
             assert result.source_count == 1
             assert result.evidence_limited is True
             assert [item.uid for item in result.evidence] == ["owned-segment"]
-            assert [item.uid for item in synthesize.await_args.args[0]] == [
-                "owned-segment"
+            assert synthesize.await_count == 2
+            assert [item.uid for item in synthesize.await_args_list[0].args[0]] == [
+                "owned-segment", *[f"owned-segment-{index}" for index in range(1, 40)]
             ]
-            assert synthesize.await_args.args[1] == []
-            assert [item.uid for item in synthesize.await_args.args[2]] == [
+            assert [item.uid for item in synthesize.await_args_list[1].args[0]] == [
+                "owned-segment-40"
+            ]
+            assert synthesize.await_args_list[1].kwargs["previous"] == judgment
+            assert len(synthesize.await_args_list[1].kwargs["known_segments"]) == 41
+            assert synthesize.await_args_list[0].args[1] == []
+            assert [item.uid for item in synthesize.await_args_list[0].args[2]] == [
                 "object-owner-a"
             ]
             assert [item.uid for item in result.objects] == ["object-owner-a"]
@@ -174,7 +202,7 @@ async def test_thread_judgment_uses_only_owner_segments():
                         ),
                     )
             assert error.value.status_code == 404
-            assert synthesize.await_count == 1
+            assert synthesize.await_count == 2
     finally:
         await scoped_engine.dispose()
         async with root_engine.begin() as connection:

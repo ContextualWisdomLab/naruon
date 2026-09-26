@@ -792,24 +792,35 @@ async def create_thread_judgment(
 ):
     thread = await get_email_thread(request.thread_id, db=db, auth_context=auth_context)
     email_ids = [email.id for email in thread.thread]
-    # ponytail: cap model input at 40 segments; a visible limited-evidence
-    # state covers longer threads until complete-history batching is needed.
     result = await db.execute(
-        select(ContentSegmentRecord, Email.message_id, Email.date)
+        select(
+            ContentSegmentRecord.content_segment_id,
+            ContentSegmentRecord.content_segment_uid,
+            ContentSegmentRecord.email_id,
+            func.substr(ContentSegmentRecord.safe_text_content, 1, 2000),
+            func.length(ContentSegmentRecord.safe_text_content),
+            Email.message_id,
+            Email.date,
+        )
         .join(Email, ContentSegmentRecord.email_id == Email.id)
         .where(
             Email.id.in_(email_ids),
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             func.length(func.trim(ContentSegmentRecord.safe_text_content)) > 0,
         )
-        .order_by(Email.date.desc(), ContentSegmentRecord.ordinal_index.asc())
-        .limit(41)
+        .order_by(
+            Email.date.asc(),
+            Email.id.asc(),
+            ContentSegmentRecord.ordinal_index.asc(),
+            ContentSegmentRecord.content_segment_id.asc(),
+        )
     )
-    selected_rows = result.all()
-    evidence_limited = len(selected_rows) > 40 or any(
-        len(row[0].safe_text_content) > 2000 for row in selected_rows[:40]
+    # ponytail: one thread's bounded excerpts are held in memory; page them if
+    # segment counts make this O(n) footprint material.
+    rows = result.all()
+    evidence_limited = len(rows) > 40 or any(
+        text_length > 2000 for _, _, _, _, text_length, _, _ in rows
     )
-    rows = selected_rows[:40]
     if not rows:
         return ThreadJudgmentResponse(
             status="insufficient_evidence",
@@ -820,12 +831,12 @@ async def create_thread_judgment(
 
     segments = [
         JudgmentSegment(
-            uid=segment.content_segment_uid,
+            uid=segment_uid,
             message_id=message_id,
-            text=segment.safe_text_content,
+            text=segment_text,
             observed_at=date.isoformat(),
         )
-        for segment, message_id, date in rows
+        for _, segment_uid, _, segment_text, _, message_id, date in rows
     ]
     tasks = [
         JudgmentTask(uid=task.id, title=task.title, status=task.status)
@@ -836,20 +847,18 @@ async def create_thread_judgment(
         .where(
             ProjectGraphObjectRecord.email_id.in_(email_ids),
             ProjectGraphObjectRecord.primary_content_segment_id.in_(
-                [segment.content_segment_id for segment, _, _ in rows]
+                [segment_id for segment_id, *_ in rows]
             ),
             ProjectGraphObjectRecord.user_id == auth_context.user_id,
             ProjectGraphObjectRecord.organization_id == auth_context.organization_id,
             ProjectGraphObjectRecord.workspace_id == auth_context.workspace_id,
         )
         .order_by(ProjectGraphObjectRecord.project_graph_object_id.asc())
-        .limit(41)
     )
     object_rows = object_result.scalars().all()
-    evidence_limited = evidence_limited or len(object_rows) > 40
     evidence_uid_by_id = {
-        segment.content_segment_id: segment.content_segment_uid
-        for segment, _, _ in rows
+        segment_id: segment_uid
+        for segment_id, segment_uid, *_ in rows
     }
     objects = [
         JudgmentObject(
@@ -858,8 +867,18 @@ async def create_thread_judgment(
             object_type=item.object_type,
             evidence_segment_uid=evidence_uid_by_id[item.primary_content_segment_id],
         )
-        for item in object_rows[:40]
+        for item in object_rows
     ]
+    evidence = [
+        ThreadJudgmentEvidence(
+            uid=segment_uid,
+            email_id=email_id,
+            message_id=message_id,
+            excerpt=segment_text[:240],
+        )
+        for _, segment_uid, email_id, segment_text, _, message_id, _ in rows
+    ]
+    del rows, object_rows
     provider = None
     provider_failed = False
     try:
@@ -874,11 +893,33 @@ async def create_thread_judgment(
         raise HTTPException(status_code=502, detail="Judgment card unavailable")
     if provider is None:
         raise HTTPException(status_code=503, detail="Judgment card unavailable")
+    await db.rollback()
 
     judgment = None
+    known_segments: list[JudgmentSegment] = []
+    known_objects: list[JudgmentObject] = []
     model_failed = False
     try:
-        judgment = await synthesize_thread_judgment(segments, tasks, objects, provider)
+        for offset in range(0, len(segments), 40):
+            chunk = segments[offset : offset + 40]
+            chunk_uids = {segment.uid for segment in chunk}
+            chunk_objects = [
+                item for item in objects if item.evidence_segment_uid in chunk_uids
+            ]
+            if len(chunk_objects) > 40:
+                evidence_limited = True
+                chunk_objects = chunk_objects[:40]
+            known_segments.extend(chunk)
+            known_objects.extend(chunk_objects)
+            judgment = await synthesize_thread_judgment(
+                chunk,
+                tasks,
+                chunk_objects,
+                provider,
+                previous=judgment,
+                known_segments=known_segments,
+                known_objects=known_objects,
+            )
     except Exception:
         model_failed = True
     if model_failed or judgment is None:
@@ -902,18 +943,27 @@ async def create_thread_judgment(
             evidence_limited=evidence_limited,
         )
 
+    claims = [
+        claim
+        for claim in (
+            judgment.current_state,
+            judgment.judgment_point,
+            judgment.recommended_action,
+            *judgment.blocking_dependencies,
+            *judgment.unresolved_commitments,
+        )
+        if claim is not None
+    ]
+    cited_uids = {uid for claim in claims for uid in claim.evidence_segment_uids}
+    for tension in judgment.tensions:
+        cited_uids.update(tension.first_evidence_segment_uids)
+        cited_uids.update(tension.second_evidence_segment_uids)
+    linked_object_uids = {uid for claim in claims for uid in claim.linked_object_uids}
+
     return ThreadJudgmentResponse(
         status="ready",
         judgment=judgment,
-        evidence=[
-            ThreadJudgmentEvidence(
-                uid=segment.content_segment_uid,
-                email_id=segment.email_id,
-                message_id=message_id,
-                excerpt=segment.safe_text_content[:240],
-            )
-            for segment, message_id, _ in rows
-        ],
+        evidence=[item for item in evidence if item.uid in cited_uids],
         objects=[
             ThreadJudgmentObject(
                 uid=item.uid,
@@ -922,6 +972,7 @@ async def create_thread_judgment(
                 evidence_segment_uid=item.evidence_segment_uid,
             )
             for item in objects
+            if item.uid in linked_object_uids
         ],
         source_count=len(thread.thread),
         evidence_limited=evidence_limited,

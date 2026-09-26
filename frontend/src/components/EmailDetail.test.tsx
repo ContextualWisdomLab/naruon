@@ -508,7 +508,7 @@ describe("EmailDetail", () => {
     await waitForCondition(() => card?.textContent?.includes("Dates conflict") ?? false);
     expect(card?.textContent).toContain("엇갈리는 내용");
     expect(card?.textContent).toContain("연결 정보: Delivery issue");
-    expect(card?.textContent).toContain("일부 근거만");
+    expect(card?.textContent).toContain("중요한 내용은 원문에서 확인해 주세요");
     expect(card?.querySelectorAll('button[aria-label^="근거 보기:"]')).toHaveLength(4);
   });
 
