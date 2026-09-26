@@ -1,0 +1,476 @@
+"""Regression tests for retryable cleanup of consumed NewsDOM source objects.
+
+Recognition commits parsed text and the ``consumed`` lifecycle marker before any
+remote delete. These tests require a later cleanup sweep to respect a bounded
+reprocessing-retention window, resolve each retained provider, delete eligible
+consumed objects, and keep failed deletes retryable without starving later rows.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import pytest
+
+from db.document_object_record import DocumentObjectRecord
+from db.models import Document
+import services.document_object_cleanup as cleanup_module
+
+
+class _ScalarRows:
+    """Return a deterministic scalar list from a fake SQLAlchemy result."""
+
+    def __init__(self, values):
+        self._values = values
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return list(self._values)
+
+
+class _CleanupSession:
+    """Minimal session that survives per-object rollback boundaries."""
+
+    def __init__(self, records: list[DocumentObjectRecord]) -> None:
+        self.records = {record.document_object_record_id: record for record in records}
+        self.documents = {
+            record.document_id: Document(
+                document_id=record.document_id,
+                workspace_id="workspace-one",
+                organization_id="organization-one",
+                document_name=f"{record.document_id}.pdf",
+                document_type="pdf",
+                document_content=None,
+                document_status="parsed",
+            )
+            for record in records
+        }
+        self.provider = SimpleNamespace(
+            object_storage_provider_id=77,
+            provider_name="primary-s3",
+            provider_type="s3",
+            bucket_name="naruon-documents",
+            region_name="us-east-1",
+            endpoint_url=None,
+            addressing_style="virtual",
+            access_key_id="access-key",
+            secret_access_key="secret-key",
+            session_token=None,
+            server_side_encryption="AES256",
+            kms_key_id=None,
+            expected_bucket_owner=None,
+            is_active=False,
+        )
+        self.commits = 0
+        self.rollbacks = 0
+        self.execute_calls = 0
+        self.statements = []
+        self.get_calls: list[int] = []
+        self.document_get_calls: list[str] = []
+        self.scalar_calls = 0
+
+    async def execute(self, statement):
+        self.execute_calls += 1
+        self.statements.append(statement)
+        return _ScalarRows(sorted(self.records))
+
+    async def get(self, model, record_id):
+        if model is DocumentObjectRecord:
+            self.get_calls.append(record_id)
+            return self.records.get(record_id)
+        if model is Document:
+            self.document_get_calls.append(record_id)
+            return self.documents.get(record_id)
+        raise AssertionError("unexpected cleanup model")
+
+    async def scalar(self, _statement):
+        self.scalar_calls += 1
+        return self.provider
+
+    async def commit(self):
+        self.commits += 1
+
+    async def rollback(self):
+        self.rollbacks += 1
+
+
+class _CleanupSessionContext:
+    """Expose one fake session through an async context-manager boundary."""
+
+    def __init__(self, session: _CleanupSession) -> None:
+        self.session = session
+
+    async def __aenter__(self) -> _CleanupSession:
+        return self.session
+
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
+        return None
+
+
+class _CleanupSessionFactory:
+    """Record worker session-factory use without a live database."""
+
+    def __init__(self, session: _CleanupSession) -> None:
+        self.session = session
+        self.calls = 0
+
+    def __call__(self) -> _CleanupSessionContext:
+        self.calls += 1
+        return _CleanupSessionContext(self.session)
+
+
+class _CancelledTask:
+    """Task substitute whose await path raises cancellation after cancel()."""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def __await__(self):
+        async def cancelled_wait():
+            raise asyncio.CancelledError
+
+        return cancelled_wait().__await__()
+
+
+def _now_utc() -> datetime:
+    """Return an aware timestamp for fake persisted lifecycle records."""
+    return datetime.now(timezone.utc)
+
+
+def _consumed_record(record_id: int) -> DocumentObjectRecord:
+    """Build one persisted-looking consumed object record."""
+    record = DocumentObjectRecord(
+        document_object_record_id=record_id,
+        document_id=f"document-{record_id}",
+        object_storage_provider_id=77,
+        storage_backend="s3",
+        bucket_name="naruon-documents",
+        object_key=f"workspace-documents/scope/document-{record_id}/source.pdf",
+        content_type="application/pdf",
+        content_length=16,
+        checksum_sha256="0" * 64,
+        storage_state="consumed",
+    )
+    record.consumed_at = _now_utc()
+    return record
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_commits_each_remote_delete(monkeypatch):
+    """Persist each successful delete so a later crash cannot replay it."""
+    first = _consumed_record(1)
+    second = _consumed_record(2)
+    session = _CleanupSession([first, second])
+    deleted_ids: list[int] = []
+
+    async def delete_consumed(record: DocumentObjectRecord, **_kwargs) -> None:
+        deleted_ids.append(record.document_object_record_id)
+        record.storage_state = "deleted"
+        record.deleted_at = _now_utc()
+
+    monkeypatch.setattr(
+        cleanup_module,
+        "delete_consumed_document_payload",
+        delete_consumed,
+    )
+
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+        retention_seconds=0,
+    )
+
+    assert result == cleanup_module.DocumentObjectCleanupResult(
+        selected_count=2,
+        deleted_count=2,
+        failed_count=0,
+    )
+    assert deleted_ids == [1, 2]
+    assert session.get_calls == [1, 2]
+    assert session.document_get_calls == ["document-1", "document-2"]
+    assert session.scalar_calls == 2
+    assert session.commits == 2
+    assert session.rollbacks == 0
+    assert first.storage_state == "deleted"
+    assert second.storage_state == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_failure_remains_retryable_and_does_not_starve(
+    monkeypatch,
+):
+    """Rollback a failed delete and continue to later consumed object records."""
+    first = _consumed_record(1)
+    second = _consumed_record(2)
+    session = _CleanupSession([first, second])
+    attempts: list[int] = []
+
+    async def delete_consumed(record: DocumentObjectRecord, **_kwargs) -> None:
+        attempts.append(record.document_object_record_id)
+        if record.document_object_record_id == 1:
+            raise cleanup_module.DocumentObjectStorageError(
+                "temporary object-store outage"
+            )
+        record.storage_state = "deleted"
+        record.deleted_at = _now_utc()
+
+    monkeypatch.setattr(
+        cleanup_module,
+        "delete_consumed_document_payload",
+        delete_consumed,
+    )
+
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+        retention_seconds=0,
+    )
+
+    assert result == cleanup_module.DocumentObjectCleanupResult(
+        selected_count=2,
+        deleted_count=1,
+        failed_count=1,
+    )
+    assert attempts == [1, 2]
+    assert session.rollbacks == 1
+    assert session.commits == 1
+    assert first.storage_state == "consumed"
+    assert first.deleted_at is None
+    assert second.storage_state == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_rechecks_state_after_selection(monkeypatch):
+    """Skip a row that another safe actor completed after ID selection."""
+    record = _consumed_record(1)
+    session = _CleanupSession([record])
+    record.storage_state = "deleted"
+    record.deleted_at = _now_utc()
+    calls = 0
+
+    async def forbidden_delete(_record: DocumentObjectRecord, **_kwargs) -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(
+        cleanup_module,
+        "delete_consumed_document_payload",
+        forbidden_delete,
+    )
+
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+        retention_seconds=0,
+    )
+
+    assert result == cleanup_module.DocumentObjectCleanupResult(
+        selected_count=1,
+        deleted_count=0,
+        failed_count=0,
+    )
+    assert calls == 0
+    assert session.commits == 0
+    assert session.rollbacks == 0
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_query_enforces_reprocessing_retention() -> None:
+    """Select only records whose consumed timestamp is older than the retention window."""
+    session = _CleanupSession([])
+    before = _now_utc()
+
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+        retention_seconds=3600,
+    )
+
+    after = _now_utc()
+    assert result == cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+    compiled = session.statements[0].compile()
+    sql_text = str(compiled)
+    assert "document_object_records.consumed_at <=" in sql_text
+    timestamp_values = [
+        value for value in compiled.params.values() if isinstance(value, datetime)
+    ]
+    assert len(timestamp_values) == 1
+    cutoff = timestamp_values[0]
+    assert 3599 <= (before - cutoff).total_seconds() <= 3601
+    assert 3599 <= (after - cutoff).total_seconds() <= 3601
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("batch_limit", "retention_seconds", "message"),
+    [
+        (0, 0, "batch_limit must be positive"),
+        (-1, 0, "batch_limit must be positive"),
+        (5, -1, "retention_seconds must not be negative"),
+    ],
+)
+async def test_consumed_object_cleanup_rejects_unbounded_query_configuration(
+    batch_limit,
+    retention_seconds,
+    message,
+):
+    """Reject values that could invalidate the bounded retention query."""
+    session = _CleanupSession([])
+
+    with pytest.raises(ValueError, match=message):
+        await cleanup_module.sweep_consumed_document_objects(
+            session,
+            batch_limit=batch_limit,
+            retention_seconds=retention_seconds,
+        )
+
+    assert session.execute_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("interval_seconds", "batch_limit", "retention_seconds", "message"),
+    [
+        (0.0, 25, 86400, "interval_seconds must be positive"),
+        (60.0, 0, 86400, "batch_limit must be positive"),
+        (60.0, 25, -1, "retention_seconds must not be negative"),
+    ],
+)
+def test_consumed_object_cleanup_worker_rejects_unbounded_runtime_configuration(
+    interval_seconds,
+    batch_limit,
+    retention_seconds,
+    message,
+):
+    """Refuse worker settings that can spin or bypass the retention boundary."""
+    session_factory = _CleanupSessionFactory(_CleanupSession([]))
+
+    with pytest.raises(ValueError, match=message):
+        cleanup_module.DocumentObjectCleanupWorker(
+            interval_seconds=interval_seconds,
+            batch_limit=batch_limit,
+            retention_seconds=retention_seconds,
+            session_factory=session_factory,
+        )
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_sync_uses_bounded_session_factory(
+    monkeypatch,
+):
+    """Run one cleanup sweep with the configured batch and retention bounds."""
+    session = _CleanupSession([])
+    session_factory = _CleanupSessionFactory(session)
+    observed: list[tuple[object, int, int]] = []
+    expected = cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+
+    async def sweep(candidate_session, *, batch_limit, retention_seconds):
+        observed.append((candidate_session, batch_limit, retention_seconds))
+        return expected
+
+    monkeypatch.setattr(cleanup_module, "sweep_consumed_document_objects", sweep)
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=7,
+        retention_seconds=7200,
+        session_factory=session_factory,
+    )
+
+    result = await worker._sync()
+
+    assert result == expected
+    assert observed == [(session, 7, 7200)]
+    assert session_factory.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_start_stop_is_idempotent(monkeypatch):
+    """Start one background loop and shut it down without spawning duplicates."""
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        retention_seconds=0,
+        session_factory=_CleanupSessionFactory(_CleanupSession([])),
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_sync():
+        entered.set()
+        await release.wait()
+        return cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+
+    monkeypatch.setattr(worker, "_sync", blocking_sync)
+
+    await worker.start()
+    first_task = worker._task
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await worker.start()
+
+    assert worker._task is first_task
+    assert worker._is_running is True
+
+    release.set()
+    await asyncio.sleep(0)
+    await worker.stop()
+    await worker.stop()
+
+    assert worker._is_running is False
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_recovers_after_one_sync_failure(
+    monkeypatch,
+):
+    """Log one transient sweep failure and continue to the next scheduled sweep."""
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        retention_seconds=0,
+        session_factory=_CleanupSessionFactory(_CleanupSession([])),
+    )
+    calls = 0
+
+    async def flaky_sync():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("temporary database outage")
+        worker._is_running = False
+        return cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+
+    async def immediate_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(worker, "_sync", flaky_sync)
+    monkeypatch.setattr(cleanup_module.asyncio, "sleep", immediate_sleep)
+    worker._is_running = True
+
+    await worker._run_loop()
+
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_stop_handles_cancelled_task() -> None:
+    """Treat task cancellation during shutdown as the expected control path."""
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        retention_seconds=0,
+        session_factory=_CleanupSessionFactory(_CleanupSession([])),
+    )
+    task = _CancelledTask()
+    worker._is_running = True
+    worker._task = task
+
+    await worker.stop()
+
+    assert task.cancelled is True
+    assert worker._is_running is False
