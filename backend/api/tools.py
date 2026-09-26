@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,61 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    json_string = params.get("json_string", "")
+    indent = params.get("indent", 4)
+    # The ToolRegistry checks the types but we might want to cast indent just in case
+    if isinstance(indent, float):
+        indent = int(indent)
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=indent, ensure_ascii=False)
+        return {"formatted_json": formatted}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 읽기 쉽게 포맷팅합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string", "indent": "number"},
+    ),
+    json_formatter_handler,
+)
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    allowed_algorithms = {"md5", "sha1", "sha256", "sha512", "blake2b"}
+    if algorithm not in allowed_algorithms:
+        raise ValueError(
+            f"Unsupported hash algorithm: {algorithm}. Allowed: {', '.join(sorted(allowed_algorithms))}"
+        )
+
+    try:
+        h = hashlib.new(algorithm)
+        h.update(text.encode("utf-8"))
+        return {"hash": h.hexdigest()}
+    except Exception as e:
+        raise ValueError(f"Hash generation failed: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="주어진 텍스트의 해시값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
