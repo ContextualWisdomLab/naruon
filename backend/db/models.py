@@ -822,6 +822,9 @@ class Email(Base):
     knowledge_graph_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
         back_populates="email", cascade="all, delete-orphan"
     )
+    source_events: Mapped[list["SourceEventRecord"]] = relationship(
+        back_populates="email", cascade="all, delete-orphan"
+    )
     ticket_tasks: Mapped[list["TicketTask"]] = relationship(
         back_populates="related_email", cascade="all, delete-orphan"
     )
@@ -1104,6 +1107,51 @@ class KnowledgeGraphEdgeRecord(Base):
         back_populates="incoming_edges",
         foreign_keys=[target_segment_id],
     )
+
+
+class SourceEventRecord(Base):
+    __tablename__ = "source_events"
+    __table_args__ = (
+        Index(
+            "ix_source_events_scope_time",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "starts_at",
+        ),
+        Index("ix_source_events_source", "source_kind", "source_record_uid"),
+    )
+
+    event_uid: Mapped[str] = mapped_column(String(40), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    source_event_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    email_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_records.id", ondelete="CASCADE"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    status_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    starts_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ends_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    location_text: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email | None"] = relationship(back_populates="source_events")
 
 
 class ProjectGraphObjectRecord(Base):

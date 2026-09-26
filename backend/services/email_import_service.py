@@ -3,6 +3,7 @@ import datetime
 from collections import defaultdict
 from email import policy as email_policy
 import hashlib
+import json
 import logging
 import mailbox
 import os
@@ -24,12 +25,15 @@ from db.models import (
     ContentSegmentRecord,
     Email,
     KnowledgeGraphEdgeRecord,
+    SourceEventRecord,
 )
 from services.archive import extract_backup_async
 from services.batch_embedding_service import (
     BatchEmbeddingPartial,
     try_batch_import_embeddings,
 )
+from services.calendar_conflict_ics import parse_calendar_source_events_from_ics
+from services.calendar_conflict_policy import CalendarPolicyValidationError
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
@@ -428,8 +432,87 @@ def _build_email_object(
         attachment_payloads=attachment_payloads,
     )
     _append_knowledge_graph_edges(email_obj)
+    _append_calendar_source_events(email_obj, attachment_payloads)
 
     return email_obj, attachment_count
+
+
+def _append_calendar_source_events(
+    email_obj: Email, attachment_payloads: list[dict]
+) -> None:
+    for attachment, payload in zip(email_obj.attachments, attachment_payloads):
+        if (
+            attachment.parser_key != "calendar"
+            or attachment.parse_status != "parsed"
+            or attachment.parse_content_type != "text/calendar"
+        ):
+            continue
+        raw_ics = payload.get("parse_content")
+        if not isinstance(raw_ics, str):
+            continue
+        try:
+            # ponytail: timed, non-recurring VEVENTs only; admit all-day,
+            # recurrence, and cancellations when update identity is modeled.
+            events = parse_calendar_source_events_from_ics(raw_ics)
+        except (
+            CalendarPolicyValidationError,
+            UnicodeDecodeError,
+            ValueError,
+            TypeError,
+        ):
+            logger.info("Calendar event projection skipped for invalid attachment")
+            continue
+        if not attachment.content_segments:
+            continue
+        source_uid = attachment.content_segments[0].source_record_uid
+        for index, event in enumerate(events, start=1):
+            event_path = f"/vevent[{index}]/"
+            cited_properties = [
+                (segment.safe_text_content.partition(":")[0], segment.content_segment_uid)
+                for segment in attachment.content_segments
+                if event_path in segment.segment_path
+            ]
+            property_names = {name for name, _ in cited_properties}
+            if not {"UID", "DTSTART"} <= property_names or not (
+                {"DTEND", "DURATION"} & property_names
+            ):
+                continue
+            citations = [
+                uid
+                for name, uid in cited_properties
+                if name in {"UID", "DTSTART", "DTEND", "DURATION", "SUMMARY", "LOCATION", "STATUS"}
+            ]
+            identity = json.dumps(
+                [source_uid, event.commitment.commitment_id], ensure_ascii=False
+            )
+            event_uid = "event_" + hashlib.sha256(identity.encode()).hexdigest()[:32]
+            email_obj.source_events.append(
+                SourceEventRecord(
+                    event_uid=event_uid,
+                    user_id=email_obj.user_id,
+                    organization_id=email_obj.organization_id,
+                    workspace_id=(
+                        f"workspace-{email_obj.organization_id}"
+                        if email_obj.organization_id
+                        else f"workspace-{email_obj.user_id}"
+                    ),
+                    visibility_scope=(
+                        "organization"
+                        if email_obj.is_personal_reference is False
+                        else "personal"
+                    ),
+                    source_kind="email_calendar_attachment",
+                    source_record_uid=source_uid,
+                    source_event_key=event.commitment.commitment_id,
+                    event_type="calendar_event",
+                    title=event.title,
+                    status_code=event.commitment.status,
+                    starts_at=event.commitment.start_at,
+                    ends_at=event.commitment.end_at,
+                    location_text=event.location,
+                    source_segment_uids=citations,
+                )
+            )
 
 
 def _fallback_attachment_parser_key(

@@ -9,6 +9,7 @@ import pytest
 from services.calendar_conflict_ics import (
     evaluate_calendar_conflicts_from_ics,
     parse_calendar_commitments_from_ics,
+    parse_calendar_source_events_from_ics,
 )
 from services.calendar_conflict_policy import CalendarPolicyValidationError
 
@@ -18,6 +19,21 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "calendar"
 def _ics(name: str) -> str:
     """Load one synthetic iCalendar/ICS VEVENT fixture."""
     return (FIXTURE_DIR / name).read_text(encoding="utf-8")
+
+
+def test_source_events_reject_ambiguous_update_identity() -> None:
+    valid = _ics("proposed-confirmed-1000z.ics")
+    with pytest.raises(CalendarPolicyValidationError, match="update contract"):
+        parse_calendar_source_events_from_ics(
+            valid.replace("BEGIN:VCALENDAR", "BEGIN:VCALENDAR\nMETHOD:CANCEL")
+        )
+
+    component = valid.split("BEGIN:VEVENT", 1)[1].split("END:VEVENT", 1)[0]
+    duplicate = valid.replace(
+        "END:VCALENDAR", f"BEGIN:VEVENT{component}END:VEVENT\nEND:VCALENDAR"
+    )
+    with pytest.raises(CalendarPolicyValidationError, match="distinct"):
+        parse_calendar_source_events_from_ics(duplicate)
 
 
 @pytest.mark.parametrize(

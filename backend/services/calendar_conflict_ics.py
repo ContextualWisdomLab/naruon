@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import dataclass
 from typing import Any
 
 from icalendar import Calendar
@@ -15,6 +16,7 @@ from services.calendar_conflict_policy import (
     PolicyValidationCode,
     evaluate_calendar_conflicts,
 )
+from services.text_safety import strip_html_markup
 
 _ICS_STATUS_MAP: dict[str, CommitmentStatus] = {
     "CONFIRMED": "confirmed",
@@ -25,6 +27,65 @@ _MAX_EXISTING_ICS_COMMITMENTS = 500
 _MAX_CONVERTED_VEVENTS = _MAX_EXISTING_ICS_COMMITMENTS + 1
 _MAX_ICS_DOCUMENT_BYTES = 262_144
 _RECURRENCE_PROPERTY_NAMES = ("RRULE", "RDATE", "EXDATE")
+
+
+@dataclass(frozen=True, slots=True)
+class CalendarSourceEvent:
+    commitment: CalendarCommitment
+    title: str
+    location: str | None
+
+
+def parse_calendar_source_events_from_ics(
+    ics_text: str,
+) -> tuple[CalendarSourceEvent, ...]:
+    """Admit bounded, distinct VEVENTs for source-backed event storage."""
+    calendar = _parse_calendar(ics_text)
+    if str(calendar.get("METHOD", "")).strip().upper() == "CANCEL":
+        raise CalendarPolicyValidationError(
+            "calendar_ics_invalid",
+            "Cancellation messages require an event-update contract",
+        )
+    events: list[CalendarSourceEvent] = []
+    seen_uids: set[str] = set()
+    for component in calendar.walk("VEVENT"):
+        if len(events) >= _MAX_EXISTING_ICS_COMMITMENTS:
+            raise CalendarPolicyValidationError(
+                "calendar_existing_batch_exceeded", "Too many VEVENTs in one source"
+            )
+        if "RECURRENCE-ID" in component:
+            raise CalendarPolicyValidationError(
+                "calendar_ics_recurrence_unsupported",
+                "Recurring VEVENT instances require a separate source contract",
+            )
+        commitment = _commitment_from_vevent(component)
+        if len(commitment.commitment_id) > 256 or commitment.commitment_id in seen_uids:
+            raise CalendarPolicyValidationError(
+                "calendar_ics_invalid", "VEVENT UIDs must be distinct and bounded"
+            )
+        seen_uids.add(commitment.commitment_id)
+        title = (
+            " ".join(
+                strip_html_markup(_text_property(component, "SUMMARY") or "")
+                .replace("\x00", "")
+                .split()
+            )[:240]
+            or "Calendar event"
+        )
+        location = (
+            " ".join(
+                strip_html_markup(_text_property(component, "LOCATION") or "")
+                .replace("\x00", "")
+                .split()
+            )[:512]
+            or None
+        )
+        events.append(CalendarSourceEvent(commitment, title, location))
+    if not events:
+        raise CalendarPolicyValidationError(
+            "calendar_ics_vevent_required", "iCalendar evidence must include a VEVENT"
+        )
+    return tuple(events)
 
 
 def parse_calendar_commitments_from_ics(ics_text: str) -> tuple[CalendarCommitment, ...]:
