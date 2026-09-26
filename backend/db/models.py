@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Float,
@@ -1152,6 +1153,78 @@ class SourceEventRecord(Base):
     )
 
     email: Mapped["Email | None"] = relationship(back_populates="source_events")
+
+
+class EventRelationRecord(Base):
+    __tablename__ = "event_relations"
+    __table_args__ = (
+        CheckConstraint(
+            "source_event_uid < target_event_uid", name="ck_event_relations_order"
+        ),
+        CheckConstraint(
+            "relation_type IN ('enables', 'conflicts', 'unrelated')",
+            name="ck_event_relations_type",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1", name="ck_event_relations_confidence"
+        ),
+        UniqueConstraint(
+            "source_event_uid", "target_event_uid", name="uq_event_relations_pair"
+        ),
+        Index(
+            "ix_event_relations_scope",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+        ),
+    )
+
+    relation_uid: Mapped[str] = mapped_column(String(40), primary_key=True)
+    source_event_uid: Mapped[str] = mapped_column(
+        ForeignKey("source_events.event_uid", ondelete="CASCADE"), nullable=False
+    )
+    target_event_uid: Mapped[str] = mapped_column(
+        ForeignKey("source_events.event_uid", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    relation_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    evidence_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    corrected_by_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    corrected_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
+class EventRelationCorrectionRecord(Base):
+    __tablename__ = "event_relation_corrections"
+    __table_args__ = (Index("ix_event_relation_corrections_relation", "relation_uid"),)
+
+    correction_uid: Mapped[str] = mapped_column(
+        String(40), primary_key=True, default=lambda: f"erc_{uuid.uuid4().hex}"
+    )
+    relation_uid: Mapped[str] = mapped_column(
+        ForeignKey("event_relations.relation_uid", ondelete="CASCADE"), nullable=False
+    )
+    actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    before_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    after_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
 
 
 class ProjectGraphObjectRecord(Base):

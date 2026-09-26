@@ -4,13 +4,24 @@ import datetime
 import uuid
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
 from api.auth import AuthContext
-from api.events import list_event_conflicts
-from db.models import Base, SourceEventRecord
+from api.events import (
+    EventRelationCorrectionRequest,
+    correct_event_relation,
+    list_event_conflicts,
+    reconcile_event_relations,
+)
+from db.models import (
+    Base,
+    EventRelationCorrectionRecord,
+    EventRelationRecord,
+    SourceEventRecord,
+)
 from services.email_import_service import _build_email_object
 
 
@@ -131,7 +142,16 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 visibility="organization",
                 workspace="workspace-other",
             )
-            session.add_all([same_owner, other_owner, personal, other_workspace])
+            uncited = peer(
+                "event_uncited",
+                owner="owner-a",
+                visibility="organization",
+                workspace="workspace-org-1",
+            )
+            uncited.source_segment_uids = []
+            session.add_all(
+                [same_owner, other_owner, personal, other_workspace, uncited]
+            )
             await session.commit()
             auth = AuthContext(
                 user_id="owner-a",
@@ -160,12 +180,73 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 == []
             )
 
+            relations = await reconcile_event_relations(
+                visibility_scope="organization", auth_context=auth, db=session
+            )
+            assert len(relations) == 1
+            assert relations[0].relation_type == "conflicts"
+            assert relations[0].evidence_code == "occupied_interval_overlap"
+            assert owned.source_segment_uids[0] in relations[0].source_segment_uids
+            assert (
+                len(
+                    await reconcile_event_relations(
+                        visibility_scope="organization", auth_context=auth, db=session
+                    )
+                )
+                == 1
+            )
+            other_auth = AuthContext(
+                user_id="owner-b",
+                organization_id="org-1",
+                workspace_id="workspace-org-1",
+                role="member",
+                group_ids=(),
+            )
+            with pytest.raises(HTTPException) as denied:
+                await correct_event_relation(
+                    relation_uid=relations[0].relation_uid,
+                    request=EventRelationCorrectionRequest(relation_type="unrelated"),
+                    visibility_scope="organization",
+                    auth_context=other_auth,
+                    db=session,
+                )
+            assert denied.value.status_code == 404
+            corrected = await correct_event_relation(
+                relation_uid=relations[0].relation_uid,
+                request=EventRelationCorrectionRequest(relation_type="unrelated"),
+                visibility_scope="organization",
+                auth_context=auth,
+                db=session,
+            )
+            assert corrected.relation_type == "unrelated"
+            assert corrected.corrected is True
+            assert (
+                await reconcile_event_relations(
+                    visibility_scope="organization", auth_context=auth, db=session
+                )
+            )[0].relation_type == "unrelated"
+            correction = (
+                await session.execute(select(EventRelationCorrectionRecord))
+            ).scalar_one()
+            assert (
+                correction.actor_user_id,
+                correction.before_type,
+                correction.after_type,
+            ) == ("owner-a", "conflicts", "unrelated")
+            assert correction.source_segment_uids == corrected.source_segment_uids
+
             await session.delete(email)
-            for event in (same_owner, other_owner, personal, other_workspace):
+            for event in (same_owner, other_owner, personal, other_workspace, uncited):
                 await session.delete(event)
             await session.commit()
             assert (
                 await session.execute(select(SourceEventRecord))
+            ).scalar_one_or_none() is None
+            assert (
+                await session.execute(select(EventRelationRecord))
+            ).scalar_one_or_none() is None
+            assert (
+                await session.execute(select(EventRelationCorrectionRecord))
             ).scalar_one_or_none() is None
     finally:
         await scoped_engine.dispose()
