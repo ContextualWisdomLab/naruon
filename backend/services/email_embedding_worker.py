@@ -20,10 +20,12 @@ ZERO_VECTOR = [0.0] * EMBEDDING_DIMENSION
 
 
 def _pending_vector(value) -> bool:
+    """Treat absent and historical zero vectors as unfinished work."""
     return value is None or not any(value)
 
 
 def _pending_email_statement(after_id: int | None):
+    """Find one pending email after the cursor, including parsed attachments."""
     # ponytail: primary-key scan stays simple; add a pending-work index or queue
     # when the measured mailbox volume makes empty sweeps costly.
     email_pending = and_(
@@ -51,7 +53,10 @@ def _pending_email_statement(after_id: int | None):
 
 
 class EmailEmbeddingWorker:
+    """Sweep committed mail in bounded batches and retry missing embeddings."""
+
     def __init__(self, *, interval_seconds: int = 60, batch_limit: int = 10):
+        """Keep the sweep cadence, batch limit, and cursor for this process."""
         self.interval_seconds = interval_seconds
         self.batch_limit = batch_limit
         self._task: asyncio.Task | None = None
@@ -59,12 +64,14 @@ class EmailEmbeddingWorker:
         self._cursor: int | None = None
 
     async def start(self) -> None:
+        """Start one background loop if it is not already running."""
         if self._running:
             return
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
 
     async def stop(self) -> None:
+        """Cancel the loop so pending rows remain available after restart."""
         self._running = False
         if self._task:
             self._task.cancel()
@@ -74,6 +81,7 @@ class EmailEmbeddingWorker:
                 pass
 
     async def _run_loop(self) -> None:
+        """Retry sweeps until shutdown without masking cancellation."""
         while self._running:
             try:
                 await self._sweep()
@@ -88,6 +96,7 @@ class EmailEmbeddingWorker:
                     break
 
     async def _sweep(self) -> None:
+        """Generate outside DB sessions and conditionally persist completed vectors."""
         for _ in range(self.batch_limit):
             email_id = None
             try:

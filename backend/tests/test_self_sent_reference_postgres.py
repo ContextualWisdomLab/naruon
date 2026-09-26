@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from types import SimpleNamespace
 
@@ -19,7 +20,7 @@ from services.hybrid_retrieval.retrieval_channels import (
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_self_note_rollback_and_same_message_across_owners(monkeypatch):
+async def test_self_note_rollback_and_same_message_across_owners(monkeypatch, caplog):
     schema = f"e1_reference_{uuid.uuid4().hex[:12]}"
     root_engine = create_async_engine(settings.DATABASE_URL)
     scoped_engine = create_async_engine(
@@ -135,7 +136,11 @@ async def test_self_note_rollback_and_same_message_across_owners(monkeypatch):
         async def embed(parsed, embedding_provider, batch_context=None):
             nonlocal embed_calls
             assert scoped_engine.pool.checkedout() == 0
-            if embed_calls == 0:
+            call = embed_calls
+            embed_calls += 1
+            if call == 0:
+                raise RuntimeError("retry this source")
+            if call == 2:
                 async with sessions() as concurrent_session:
                     await concurrent_session.execute(
                         update(Email)
@@ -143,18 +148,34 @@ async def test_self_note_rollback_and_same_message_across_owners(monkeypatch):
                         .values(embedding=[2.0] * 1536)
                     )
                     await concurrent_session.commit()
-            embed_calls += 1
-            return parsed["attachments"], [
-                [1.0] * 1536 for _ in range(1 + len(parsed["attachments"]))
-            ]
+            vectors = [[1.0] * 1536 for _ in range(1 + len(parsed["attachments"]))]
+            if call == 2:
+                vectors[-1] = ZERO_VECTOR
+            return parsed["attachments"], vectors
 
         monkeypatch.setattr(
             "services.email_embedding_worker.resolve_runtime_llm_provider", provider
         )
+
+        async def cancel_embed(parsed, embedding_provider, batch_context=None):
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(
+            "services.email_embedding_worker._extract_and_generate_embeddings",
+            cancel_embed,
+        )
+        with pytest.raises(asyncio.CancelledError):
+            await EmailEmbeddingWorker(batch_limit=10)._sweep()
+        assert scoped_engine.pool.checkedout() == 0
+
         monkeypatch.setattr(
             "services.email_embedding_worker._extract_and_generate_embeddings", embed
         )
         await EmailEmbeddingWorker(batch_limit=10)._sweep()
+        await EmailEmbeddingWorker(batch_limit=10)._sweep()
+        await EmailEmbeddingWorker(batch_limit=10)._sweep()
+        assert embed_calls == 4
+        assert "reason=RuntimeError" in caplog.text
 
         async with sessions() as session:
             completed = (
