@@ -38,6 +38,29 @@ type ThreadTaskData = {
   link_confidence: number | null;
   related_thread_id: string | null;
 };
+type JudgmentClaim = {
+  text: string;
+  evidence_segment_uids: string[];
+  linked_task_uids: string[];
+};
+type ThreadJudgment = {
+  current_state: JudgmentClaim | null;
+  judgment_point: JudgmentClaim | null;
+  recommended_action: JudgmentClaim | null;
+  blocking_dependencies: JudgmentClaim[];
+  unresolved_commitments: JudgmentClaim[];
+  tensions: {
+    description: string;
+    first_evidence_segment_uids: string[];
+    second_evidence_segment_uids: string[];
+  }[];
+};
+type ThreadJudgmentResponse = {
+  status: 'ready' | 'insufficient_evidence';
+  judgment: ThreadJudgment | null;
+  evidence: { uid: string; email_id: number; excerpt: string }[];
+  evidence_limited: boolean;
+};
 interface LlmData {
   summary: string;
   action_items: string[];
@@ -125,6 +148,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [detailError, setDetailError] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [threadJudgment, setThreadJudgment] = useState<ThreadJudgmentResponse | null>(null);
+  const [judgmentLoading, setJudgmentLoading] = useState(false);
+  const [judgmentError, setJudgmentError] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<string>('');
   const [translation, setTranslation] = useState<string | null>(null);
@@ -205,6 +231,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setDetachingTaskId(null);
       setDetachError(null);
       setThreadError(null);
+      setThreadJudgment(null);
+      setJudgmentLoading(false);
+      setJudgmentError(null);
       setDetailError(null);
       setLlmData(null);
       setLlmError(null);
@@ -599,6 +628,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       if (currentEmailIdRef.current !== email.id) return;
       if (updated.id !== task.id) throw new Error('Task update mismatch');
       setThreadTasks((current) => current.filter((item) => item.id !== task.id));
+      setThreadJudgment(null);
     } catch {
       if (requestId === threadRequestIdRef.current && currentEmailIdRef.current === email.id) {
         setDetachError('작업을 이 대화에서 제외하지 못했습니다. 다시 시도해 주세요.');
@@ -639,6 +669,50 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     document.getElementById(`msg-${email.id}`)?.scrollIntoView?.({ block: "center" });
     setSourceDrawerOpen(false);
   };
+
+  const handleCreateThreadJudgment = async () => {
+    if (!email || judgmentLoading) return;
+    const selectedEmailId = email.id;
+    setJudgmentLoading(true);
+    setJudgmentError(null);
+    try {
+      const result = await apiClient.post<ThreadJudgmentResponse>('/api/emails/thread-judgment', {
+        thread_id: getThreadEventId(email),
+      });
+      if (currentEmailIdRef.current === selectedEmailId) setThreadJudgment(result);
+    } catch {
+      if (currentEmailIdRef.current === selectedEmailId) setJudgmentError('판단 카드를 만들지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      if (currentEmailIdRef.current === selectedEmailId) setJudgmentLoading(false);
+    }
+  };
+
+  const renderEvidenceLinks = (uids: string[]) => uids.map((uid) => {
+    const source = threadJudgment?.evidence.find((item) => item.uid === uid);
+    if (!source) return null;
+    return (
+      <button key={uid} type="button" onClick={() => document.getElementById(`msg-${source.email_id}`)?.scrollIntoView?.({ block: 'center' })}
+        className="rounded border border-primary/20 px-2 py-1 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`근거 보기: ${source.excerpt}`}>
+        근거 보기
+      </button>
+    );
+  });
+
+  const renderClaim = (label: string, claim: JudgmentClaim | null) => claim && (
+    <div key={label} className="space-y-1 border-b border-border/50 pb-3 last:border-0">
+      <h4 className="text-xs font-bold text-muted-foreground">{label}</h4>
+      <p className="whitespace-pre-wrap">{claim.text}</p>
+      <div className="flex flex-wrap gap-1">{renderEvidenceLinks(claim.evidence_segment_uids)}</div>
+      {claim.linked_task_uids.map((uid) => {
+        const task = threadTasks.find((item) => item.id === uid);
+        return task && <button key={uid} type="button" className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => document.getElementById(`task-${uid}`)?.scrollIntoView?.({ block: 'center' })}>
+          연결된 작업: {task.title}
+        </button>;
+      })}
+    </div>
+  );
 
   const handleDraftChange = (nextDraft: string) => {
     if (!draft && nextDraft && !activeDraftReplyIdRef.current) {
@@ -701,6 +775,32 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       <Separator />
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
+
+          <DecisionPointCard title="판단 카드" provenance="AI 초안 · 근거 확인 필요" loading={judgmentLoading} error={judgmentError} onRetry={() => void handleCreateThreadJudgment()}
+            empty={threadJudgment?.status === 'insufficient_evidence'}
+            emptyMessage="이 대화에는 판단 카드를 만들 근거가 부족합니다.">
+            <div className="space-y-3">
+              {!threadJudgment && <Button type="button" size="sm" variant="outline" onClick={() => void handleCreateThreadJudgment()}>대화 판단 카드 만들기</Button>}
+              {threadJudgment?.evidence_limited && <p className="text-xs text-amber-700">일부 근거만 살펴본 결과입니다. 전체 대화 내용을 확인해 주세요.</p>}
+              {threadJudgment?.judgment && (
+                <div className="space-y-3">
+                  {renderClaim('현재 상태', threadJudgment.judgment.current_state)}
+                  {renderClaim('판단할 점', threadJudgment.judgment.judgment_point)}
+                  {renderClaim('다음 행동', threadJudgment.judgment.recommended_action)}
+                  {threadJudgment.judgment.blocking_dependencies.map((claim, index) => <React.Fragment key={`block-${index}`}>{renderClaim('막힌 일', claim)}</React.Fragment>)}
+                  {threadJudgment.judgment.unresolved_commitments.map((claim, index) => <React.Fragment key={`commit-${index}`}>{renderClaim('남은 약속', claim)}</React.Fragment>)}
+                  {threadJudgment.judgment.tensions.map((tension, index) => (
+                    <div key={`tension-${index}`} className="space-y-2 border-l-2 border-amber-500 pl-3">
+                      <h4 className="text-xs font-bold text-amber-700">엇갈리는 내용</h4>
+                      <p>{tension.description}</p>
+                      <div className="flex flex-wrap gap-1">{renderEvidenceLinks(tension.first_evidence_segment_uids)}</div>
+                      <div className="flex flex-wrap gap-1">{renderEvidenceLinks(tension.second_evidence_segment_uids)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </DecisionPointCard>
 
           <DecisionPointCard
             title="맥락 종합"
@@ -819,7 +919,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 if (item.kind === 'task') {
                   const confidence = toConfidencePercent(item.task.link_confidence ?? undefined);
                   return (
-                    <div key={`task-${item.task.id}`} className="rounded-2xl border border-border bg-background/60 p-4 text-card-foreground">
+                    <div id={`task-${item.task.id}`} key={`task-${item.task.id}`} className="rounded-2xl border border-border bg-background/60 p-4 text-card-foreground">
                       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                         <span>연결된 작업</span>
                         <span>{formatEmailDate(item.task.created_at)}</span>

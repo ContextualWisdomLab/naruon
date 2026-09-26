@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, func, or_, select
 from db.session import get_db
-from db.models import Email, TicketTask, TicketTaskThreadDismissal
+from db.models import ContentSegmentRecord, Email, TicketTask, TicketTaskThreadDismissal
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -23,6 +23,12 @@ from services.reply_tracking_service import (
     thread_requires_reply,
 )
 from services.threading_service import normalize_message_id
+from services.thread_judgment import (
+    JudgmentSegment,
+    JudgmentTask,
+    ThreadJudgmentDraft,
+    synthesize_thread_judgment,
+)
 from services.email_dedupe_service import (
     EmailDedupeCandidate,
     candidate_message_lookup_values,
@@ -229,6 +235,25 @@ class EmailThreadResponse(BaseModel):
 
     thread: list[EmailDetailResponse]
     tasks: list[ThreadTaskItem]
+
+
+class ThreadJudgmentRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=512)
+
+
+class ThreadJudgmentEvidence(BaseModel):
+    uid: str
+    email_id: int
+    message_id: str
+    excerpt: str
+
+
+class ThreadJudgmentResponse(BaseModel):
+    status: Literal["ready", "insufficient_evidence"]
+    judgment: ThreadJudgmentDraft | None
+    evidence: list[ThreadJudgmentEvidence]
+    source_count: int
+    evidence_limited: bool = False
 
 
 class UniqueThreadCandidateRequest(BaseModel):
@@ -741,6 +766,112 @@ async def get_email_thread(
             )
             for task in tasks
         ],
+    )
+
+
+@router.post("/thread-judgment", response_model=ThreadJudgmentResponse)
+async def create_thread_judgment(
+    request: ThreadJudgmentRequest,
+    db: AsyncSession = Depends(get_db),
+    auth_context: AuthContext = Depends(get_auth_context),
+):
+    thread = await get_email_thread(request.thread_id, db=db, auth_context=auth_context)
+    email_ids = [email.id for email in thread.thread]
+    # ponytail: cap model input at 40 segments; a visible limited-evidence
+    # state covers longer threads until complete-history batching is needed.
+    result = await db.execute(
+        select(ContentSegmentRecord, Email.message_id, Email.date)
+        .join(Email, ContentSegmentRecord.email_id == Email.id)
+        .where(
+            Email.id.in_(email_ids),
+            *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
+            func.length(func.trim(ContentSegmentRecord.safe_text_content)) > 0,
+        )
+        .order_by(Email.date.desc(), ContentSegmentRecord.ordinal_index.asc())
+        .limit(41)
+    )
+    selected_rows = result.all()
+    evidence_limited = len(selected_rows) > 40 or any(
+        len(row[0].safe_text_content) > 2000 for row in selected_rows[:40]
+    )
+    rows = selected_rows[:40]
+    if not rows:
+        return ThreadJudgmentResponse(
+            status="insufficient_evidence",
+            judgment=None,
+            evidence=[],
+            source_count=len(thread.thread),
+        )
+
+    segments = [
+        JudgmentSegment(
+            uid=segment.content_segment_uid,
+            message_id=message_id,
+            text=segment.safe_text_content,
+            observed_at=date.isoformat(),
+        )
+        for segment, message_id, date in rows
+    ]
+    tasks = [
+        JudgmentTask(uid=task.id, title=task.title, status=task.status)
+        for task in thread.tasks
+    ]
+    provider = None
+    provider_failed = False
+    try:
+        provider = await resolve_runtime_llm_provider(
+            db,
+            user_id=auth_context.user_id,
+            organization_id=auth_context.organization_id,
+        )
+    except Exception:
+        provider_failed = True
+    if provider_failed:
+        raise HTTPException(status_code=502, detail="Judgment card unavailable")
+    if provider is None:
+        raise HTTPException(status_code=503, detail="Judgment card unavailable")
+
+    judgment = None
+    model_failed = False
+    try:
+        judgment = await synthesize_thread_judgment(segments, tasks, provider)
+    except Exception:
+        model_failed = True
+    if model_failed or judgment is None:
+        raise HTTPException(status_code=502, detail="Judgment card unavailable")
+
+    if not any(
+        (
+            judgment.current_state,
+            judgment.judgment_point,
+            judgment.recommended_action,
+            judgment.blocking_dependencies,
+            judgment.unresolved_commitments,
+            judgment.tensions,
+        )
+    ):
+        return ThreadJudgmentResponse(
+            status="insufficient_evidence",
+            judgment=None,
+            evidence=[],
+            source_count=len(thread.thread),
+            evidence_limited=evidence_limited,
+        )
+
+    return ThreadJudgmentResponse(
+        status="ready",
+        judgment=judgment,
+        evidence=[
+            ThreadJudgmentEvidence(
+                uid=segment.content_segment_uid,
+                email_id=segment.email_id,
+                message_id=message_id,
+                excerpt=segment.safe_text_content[:240],
+            )
+            for segment, message_id, _ in rows
+        ],
+        source_count=len(thread.thread),
+        evidence_limited=evidence_limited,
     )
 
 
