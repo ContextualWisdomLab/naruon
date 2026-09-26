@@ -207,20 +207,24 @@ export function CalendarLayout() {
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto p-4 pb-[calc(7rem+env(safe-area-inset-bottom))] md:p-6 lg:pb-6">
-          <p className="sr-only">원본 계정 일정 반영 흐름</p>
-          <CalendarWritebackSection
-            requestWritebackIntent={requestWritebackIntent}
-            isWritebackActionDisabled={isWritebackActionDisabled}
-            pendingWritebackAction={pendingWritebackAction}
-            isProviderExecutionDisabled={isProviderExecutionDisabled}
-            writebackSources={writebackSources}
-            selectedWritebackSource={selectedWritebackSource}
-            setSelectedSourceId={setSelectedSourceId}
-            isCustomerOwnedWritableSource={isCustomerOwnedWritableSource}
-            sourceLoadStatus={sourceLoadStatus}
-            writebackStatus={writebackStatus}
-            writebackResult={writebackResult}
-          />
+          {viewMode !== '일정 관계' && (
+            <>
+              <p className="sr-only">원본 계정 일정 반영 흐름</p>
+              <CalendarWritebackSection
+                requestWritebackIntent={requestWritebackIntent}
+                isWritebackActionDisabled={isWritebackActionDisabled}
+                pendingWritebackAction={pendingWritebackAction}
+                isProviderExecutionDisabled={isProviderExecutionDisabled}
+                writebackSources={writebackSources}
+                selectedWritebackSource={selectedWritebackSource}
+                setSelectedSourceId={setSelectedSourceId}
+                isCustomerOwnedWritableSource={isCustomerOwnedWritableSource}
+                sourceLoadStatus={sourceLoadStatus}
+                writebackStatus={writebackStatus}
+                writebackResult={writebackResult}
+              />
+            </>
+          )}
 
           <div id="calendar-view-panel" role="tabpanel" aria-labelledby={calendarViewTabId(viewMode)}>
             {viewMode === '월간 캘린더' && <CalendarMonthView visibleMonthEvents={visibleMonthEvents} />}
@@ -241,7 +245,7 @@ export function CalendarLayout() {
       </main>
 
       {/* Right Sidebar - Event Detail */}
-      <CalendarSidebarRight selectedDetailEvent={selectedDetailEvent} />
+      {viewMode !== '일정 관계' && <CalendarSidebarRight selectedDetailEvent={selectedDetailEvent} />}
     </div>
   );
 }

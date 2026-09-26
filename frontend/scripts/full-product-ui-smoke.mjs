@@ -394,6 +394,34 @@ const calendarWritebackSource = {
   etag: "calendar-etag-20b",
 };
 
+const calendarRelation = {
+  relation_uid: "erel_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  source_event_uid: "event_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  target_event_uid: "event_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  enabler_event_uid: "event_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  relation_type: "enables",
+  confidence: 1,
+  corrected: false,
+  source: {
+    event_uid: "event_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    title: "워크숍 준비",
+    starts_at: "2026-09-27T09:00:00Z",
+    ends_at: "2026-09-27T10:00:00Z",
+    email_id: 23,
+    document_id: null,
+    citations: [{ segment_uid: "segment_a", label: "시작", excerpt: "20260927T090000Z" }],
+  },
+  target: {
+    event_uid: "event_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    title: "워크숍",
+    starts_at: "2026-09-27T11:00:00Z",
+    ends_at: "2026-09-27T12:00:00Z",
+    email_id: null,
+    document_id: "caldoc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    citations: [{ segment_uid: "segment_b", label: "선행 일정", excerpt: "워크숍 준비" }],
+  },
+};
+
 const projectFolder = {
   folder_uid: "project-20b",
   project_name: "Naruon 20B Readiness",
@@ -779,6 +807,7 @@ function routeJson(route, body, status = 200) {
 
 async function installRoutes(page) {
   let emailSendCount = 0;
+  let savedCalendarRelation = { ...calendarRelation };
   let savedAccountConfig = { ...accountConfig };
   let savedLlmProviders = [{ ...llmProvider }];
 
@@ -836,6 +865,18 @@ async function installRoutes(page) {
       return routeJson(route, { ...targetTask, status: "done" });
     }
     if (endpoint === "/api/calendar/writeback-sources") return routeJson(route, [calendarWritebackSource]);
+    if (endpoint === "/api/events/sources") return routeJson(route, { items: [], next_cursor: null });
+    if (endpoint === "/api/events/relations/reconcile") return routeJson(route, { processed_conflicts: 0, processed_dependencies: 1, next_cursor: null });
+    if (endpoint === "/api/events/relations") {
+      return routeJson(route, {
+        items: new URL(request.url()).searchParams.get("visibility_scope") === "organization" ? [savedCalendarRelation] : [],
+        next_cursor: null,
+      });
+    }
+    if (endpoint === `/api/events/relations/${calendarRelation.relation_uid}` && request.method() === "PATCH") {
+      savedCalendarRelation = { ...savedCalendarRelation, ...request.postDataJSON(), corrected: true };
+      return routeJson(route, savedCalendarRelation);
+    }
     if (endpoint === "/api/calendar/writeback-intent") {
       let requestBody = {};
       try {
@@ -1186,12 +1227,21 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByRole("button", { name: "ETag 실행 요청", exact: true }).click();
     await page.getByText("외부 원본 쓰기 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("재시도 없음", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("tab", { name: "일정 관계" }).click();
+    await page.getByText("워크숍 준비 → 워크숍", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "별개 일정", exact: true }).click();
+    await page.getByText("직접 수정함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "왼쪽 일정이 오른쪽 일정에 도움", exact: true }).click();
+    await page.getByText("워크숍 준비 → 워크숍", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("heading", { name: "일정 관계" }).click();
     return [
       evidence("calendar:create-writeback-intent"),
       evidence("calendar:verify-etag-update-intent"),
       evidence("calendar:request-provider-write"),
       evidence("calendar:verify-provider-completion-state"),
       evidence("calendar:verify-provider-no-retry-state"),
+      evidence("calendar:inspect-cited-relation"),
+      evidence("calendar:correct-relation"),
     ];
   }
 
@@ -1601,6 +1651,11 @@ async function main() {
   let serverProcess = null;
   let browser = null;
   try {
+    const selectedRoute = process.env.NARUON_FULL_PRODUCT_ROUTE;
+    const routeSpecs = selectedRoute
+      ? FULL_PRODUCT_ROUTES.filter((route) => route.name === selectedRoute)
+      : FULL_PRODUCT_ROUTES;
+    if (routeSpecs.length === 0) throw new Error("Unknown full-product route");
     const screenshotDir = await createFullProductArtifactDirectory(requestedScreenshotProfile);
     serverProcess = await startServerIfNeeded();
     browser = await launchBrowser();
@@ -1613,7 +1668,7 @@ async function main() {
         viewport: { width: viewportSpec.width, height: viewportSpec.height },
         isMobile: Boolean(viewportSpec.isMobile),
       });
-      for (const routeSpec of FULL_PRODUCT_ROUTES) {
+      for (const routeSpec of routeSpecs) {
         const result = await runRouteSmoke(context, routeSpec, viewportSpec, viewportSpecs.length, screenshotDir);
         screenshots.push(result.screenshotPath);
         interactions.push(...result.interactionEvidence);
@@ -1622,7 +1677,7 @@ async function main() {
       await context.close();
     }
     log("Naruon full-product route smoke passed.");
-    log(`Routes: ${FULL_PRODUCT_ROUTES.map((route) => route.path).join(", ")}`);
+    log(`Routes: ${routeSpecs.map((route) => route.path).join(", ")}`);
     log(`Viewports: ${viewportSpecs.map((viewport) => `${viewport.name}(${viewport.width}x${viewport.height})`).join(", ")}`);
     if (interactions.length > 0) {
       log(`Critical interactions: ${interactions.join(", ")}`);

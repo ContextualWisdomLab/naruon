@@ -80,6 +80,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
     { relation_type: 'enables', enabler_event_uid: 'event_2' },
   );
   expect(container.textContent).toContain('회의 → 워크숍');
+  expect(direction?.getAttribute('aria-pressed')).toBe('true');
 });
 
 it('imports an iCalendar file into personal events and refreshes relations', async () => {

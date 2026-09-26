@@ -242,7 +242,7 @@ export function EventRelationsSection() {
   return (
     <section aria-labelledby="event-relations-heading" className="border border-border bg-card p-4 text-sm">
       <h2 id="event-relations-heading" className="text-base font-bold">일정 관계</h2>
-      <p className="mt-1 text-muted-foreground">초대장과 일정 파일에 적힌 시간을 비교했습니다. 연결이 틀리면 아래에서 바로 고칠 수 있습니다.</p>
+      <p className="mt-1 text-muted-foreground">초대장과 일정 파일에서 일정의 시간과 선행 관계를 확인했습니다. 연결이 틀리면 아래에서 바로 고칠 수 있습니다.</p>
       <label className="mt-3 block text-sm font-semibold">
         내 일정 파일 가져오기 (.ics)
         <input
@@ -305,9 +305,9 @@ export function EventRelationsSection() {
                 key={type}
                 type="button"
                 aria-pressed={relation.relation_type === type}
-                disabled={savingUid !== null || relation.relation_type === type}
+                disabled={savingUid !== null}
                 onClick={() => void correct(relation, type)}
-                className="border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                className={`border px-3 py-1.5 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${relation.relation_type === type ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-secondary'}`}
               >
                 {labels[type]}
               </button>
@@ -317,9 +317,9 @@ export function EventRelationsSection() {
                 key={event.event_uid}
                 type="button"
                 aria-pressed={relation.relation_type === 'enables' && relation.enabler_event_uid === event.event_uid}
-                disabled={savingUid !== null || (relation.relation_type === 'enables' && relation.enabler_event_uid === event.event_uid)}
+                disabled={savingUid !== null}
                 onClick={() => void correct(relation, 'enables', event.event_uid)}
-                className="border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                className={`border px-3 py-1.5 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${relation.relation_type === 'enables' && relation.enabler_event_uid === event.event_uid ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-secondary'}`}
               >
                 {index === 0 ? '왼쪽 일정이 오른쪽 일정에 도움' : '오른쪽 일정이 왼쪽 일정에 도움'}
               </button>
