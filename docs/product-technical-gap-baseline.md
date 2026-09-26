@@ -191,3 +191,23 @@ Model timeout defaults do not truncate reasoning/streaming/tool use by elapsed t
 Current commercial blockers are: ordinary removal of #1565's purpose-complete temporary adopter after successful product commit `42e7bc51...`, followed by fresh helper-free dependency/security evidence; #1623 accepted frontend dependency-security ancestry and combined repository-wide Security; #1694 fresh PostgreSQL bootstrap on accepted ancestry; #1691 integrated real-browser evidence on its current helper-free Data-fixture exact; #1769 connector SMTP mailbox validation exact-current hosted/security/review acceptance plus a separately owned independent aiosmtplib 5.1.3 adoption path rather than broad #1749 grouping; canonical repair of #1770 so only the unique bounded text-reverser intent descends from #1718 without reintroducing weak duplicate hash/JSON owners; exact-current #1463 Tasks hosted browser/security/AT evidence and independent review after the gate-weakening repair; downstream #1503 migration ancestry; protected integration of #1549 after an immutable contextual-orchestrator API/client/schema release; immutable `cwl-telemetry` owner publication followed by replacement of #1772's direct Git-SHA dependency with the released package/checksum contract; full eight-locale persistence/publication/browser acceptance; central required security/review contexts; representative performance evidence where claimed; and one immutable Naruon release with SBOM/provenance/reproducibility/rollback.
 
 #1565's product adopter has completed successfully and produced `42e7bc51...`; the temporary workflow remains present and is now a cleanup blocker rather than a transition dependency. It must be removed by an ordinary non-force commit before any exact-head acceptance claim. #1691's Data adopter completed successfully and was ordinary-forward removed; its helper-free exact is now the only eligible head for subsequent acceptance evidence. Any future transition helper must likewise be removed by a subsequent ordinary non-force commit before exact-head acceptance evidence is evaluated. Failure is RCA input, never permission to weaken branch/security gates.
+
+
+## Cited thread judgment card — naruon#1787
+
+Canonical product writer [naruon#1787](https://github.com/ContextualWisdomLab/naruon/pull/1787) is Draft/Proposed at exact head `8b65d9d10eb12e3a7de8d9cf594a75785ecb2e69`, stacked on #1786. Owner-scoped content-segment citations, task/object identity validation, contradictory-message separation, limited-evidence disclosure, and CTA→`POST /api/emails/thread-judgment` are preserved in the product branch; presentation state does not replace stored mail, task, or graph-object truth.
+
+A focused RED contract at `f8431b0e…` models judgment generation completing after a linked task is detached. Production `8b65d9d1…` adds a judgment request generation and invalidates it on email changes and successful task detach, so the late response cannot resurrect stale task-linked claims.
+
+| Concern | Exact-head evidence | Status |
+|---|---|---|
+| Determinism / domain truth | Unknown segment, task and object IDs fail closed; object links require cited evidence | Source contract PASS |
+| Mutation race / recovery | Deferred judgment after task detach is ignored; fresh regeneration remains available | Component contract PASS; hosted run pending |
+| Semantics / exact alternative | Structured state, judgment, action, blockers, commitments, tensions and cited excerpts are rendered | Partial PASS |
+| CTA→API | Explicit user action invokes the owner-scoped endpoint; loading, insufficient-evidence, error and retry states exist | Component PASS |
+| Accessibility / interaction | Focus transfer to exact timeline message/task is component-tested | Real Chromium/Firefox/WebKit, AT, touch and reduced-motion evidence FAIL |
+| Responsive / locales | 320/768/desktop and ko/en/ja/zh/vi/es/de/fr expansion/CJK/fallback evidence | FAIL |
+| Large data / lifecycle | 40-segment batching and evidence-limited disclosure exist | Realistic median/p95, cancel/abort and long-thread complete-history acceptance FAIL |
+| Stack / hosted admission | #1786 dependency, exact-head Checks and current independent approval | Pending |
+
+Do not merge until the applicable FAIL rows, stacked-base integration, exact-head hosted Checks, and current-head independent review are satisfied.
