@@ -375,12 +375,11 @@ def _build_email_object(
         references=parsed.get("references"),
         date=persisted_date,
         body=parsed.get("body", ""),
-        embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
+        embedding=fitted_embeddings[0] if fitted_embeddings else None,
     )
     email_obj.is_personal_reference = (
         is_self_sent_email(email_obj, owner_addresses)
-        if owner_addresses
-        and not parsed.get("is_automated_or_list", False)
+        if owner_addresses and not parsed.get("is_automated_or_list", False)
         else None
     )
 
@@ -416,7 +415,7 @@ def _build_email_object(
                 embedding=(
                     fitted_embeddings[attachment_index]
                     if attachment_index < len(fitted_embeddings)
-                    else _zero_embedding()
+                    else None
                 ),
             )
         )
