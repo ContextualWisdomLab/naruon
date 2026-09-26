@@ -9,7 +9,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -781,7 +781,65 @@ async def _reconcile_event_dependencies(
         )
         for target in targets:
             matches.setdefault(target.source_event_key, []).append(target)
+    ambiguous_source_keys = {
+        (evidence["target_uid"], dependent.source_kind, dependent.source_record_uid)
+        for dependent in page
+        for evidence in dependent.dependency_evidence
+        if len(matches.get(evidence["target_uid"], [])) > 1
+    }
     same_source_matches: dict[tuple[str, str, str], list[SourceEventRecord]] = {}
+    source_key_columns = tuple_(
+        SourceEventRecord.source_event_key,
+        SourceEventRecord.source_kind,
+        SourceEventRecord.source_record_uid,
+    )
+    source_keys = sorted(ambiguous_source_keys)
+    for offset in range(0, len(source_keys), 200):
+        ranked_same_source = (
+            select(
+                SourceEventRecord.event_uid.label("event_uid"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        SourceEventRecord.source_event_key,
+                        SourceEventRecord.source_kind,
+                        SourceEventRecord.source_record_uid,
+                    ),
+                    order_by=SourceEventRecord.event_uid,
+                )
+                .label("candidate_rank"),
+            )
+            .where(
+                *_source_event_scope(SourceEventRecord, auth_context, visibility_scope),
+                SourceEventRecord.event_type == "calendar_event",
+                SourceEventRecord.status_code.in_(
+                    ("confirmed", "tentative", "desired")
+                ),
+                source_key_columns.in_(source_keys[offset : offset + 200]),
+            )
+            .subquery()
+        )
+        same_source_targets = (
+            (
+                await db.execute(
+                    select(SourceEventRecord)
+                    .join(
+                        ranked_same_source,
+                        SourceEventRecord.event_uid == ranked_same_source.c.event_uid,
+                    )
+                    .where(ranked_same_source.c.candidate_rank <= 2)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for target in same_source_targets:
+            source_key = (
+                target.source_event_key,
+                target.source_kind,
+                target.source_record_uid,
+            )
+            same_source_matches.setdefault(source_key, []).append(target)
     processed = 0
     for dependent in page:
         for evidence in dependent.dependency_evidence:
@@ -792,38 +850,7 @@ async def _reconcile_event_dependencies(
                     dependent.source_kind,
                     dependent.source_record_uid,
                 )
-                if source_key not in same_source_matches:
-                    # ponytail: only ambiguous UIDs need this indexed lookup;
-                    # batch by source if ambiguity volume becomes material.
-                    same_source_matches[source_key] = list(
-                        (
-                            await db.execute(
-                                select(SourceEventRecord)
-                                .where(
-                                    *_source_event_scope(
-                                        SourceEventRecord,
-                                        auth_context,
-                                        visibility_scope,
-                                    ),
-                                    SourceEventRecord.event_type == "calendar_event",
-                                    SourceEventRecord.status_code.in_(
-                                        ("confirmed", "tentative", "desired")
-                                    ),
-                                    SourceEventRecord.source_event_key
-                                    == evidence["target_uid"],
-                                    SourceEventRecord.source_kind
-                                    == dependent.source_kind,
-                                    SourceEventRecord.source_record_uid
-                                    == dependent.source_record_uid,
-                                )
-                                .order_by(SourceEventRecord.event_uid)
-                                .limit(2)
-                            )
-                        )
-                        .scalars()
-                        .all()
-                    )
-                if same_source_matches[source_key]:
+                if same_source_matches.get(source_key):
                     candidates = same_source_matches[source_key]
             if len(candidates) != 1:
                 continue

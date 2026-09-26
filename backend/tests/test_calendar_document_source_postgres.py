@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import event as sqlalchemy_event, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.auth import AuthContext
@@ -329,6 +329,18 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                     owner,
                     session,
                 )
+                await upload_calendar_source(
+                    CalendarSourceUploadRequest(
+                        ics_text=ics(
+                            "shared-second@example.com",
+                            f"20260929T{index + 8:02d}0000Z",
+                            f"20260929T{index + 9:02d}0000Z",
+                        ),
+                        visibility_scope="personal",
+                    ),
+                    owner,
+                    session,
+                )
             await upload_calendar_source(
                 CalendarSourceUploadRequest(
                     ics_text=(
@@ -350,9 +362,27 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 CalendarSourceUploadRequest(
                     ics_text=(
                         "BEGIN:VCALENDAR\nVERSION:2.0\n"
+                        "BEGIN:VEVENT\nUID:shared-second@example.com\n"
+                        "DTSTART:20260929T100000Z\nDTEND:20260929T110000Z\n"
+                        "SUMMARY:Second same-source start\nEND:VEVENT\n"
+                        "BEGIN:VEVENT\nUID:second-follower@example.com\n"
+                        "DTSTART:20260929T120000Z\nDTEND:20260929T130000Z\n"
+                        "RELATED-TO;RELTYPE=DEPENDS-ON:shared-second@example.com\n"
+                        "SUMMARY:Second same-source follower\nEND:VEVENT\nEND:VCALENDAR"
+                    ),
+                    visibility_scope="personal",
+                ),
+                owner,
+                session,
+            )
+            await upload_calendar_source(
+                CalendarSourceUploadRequest(
+                    ics_text=(
+                        "BEGIN:VCALENDAR\nVERSION:2.0\n"
                         "BEGIN:VEVENT\nUID:ambiguous-follower@example.com\n"
                         "DTSTART:20260929T140000Z\nDTEND:20260929T150000Z\n"
                         "RELATED-TO;RELTYPE=DEPENDS-ON:shared@example.com\n"
+                        "RELATED-TO;RELTYPE=DEPENDS-ON:shared-second@example.com\n"
                         "SUMMARY:Ambiguous follower\nEND:VEVENT\nEND:VCALENDAR"
                     ),
                     visibility_scope="personal",
@@ -360,9 +390,34 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 owner,
                 session,
             )
-            await reconcile_event_relations(
-                "personal", owner, session, mode="dependencies"
+            same_source_queries = 0
+
+            def count_same_source_query(
+                _connection, _cursor, statement, _parameters, _context, _executemany
+            ):
+                nonlocal same_source_queries
+                if (
+                    "PARTITION BY source_events.source_event_key, source_events.source_kind"
+                    in statement
+                ):
+                    same_source_queries += 1
+
+            sqlalchemy_event.listen(
+                scoped_engine.sync_engine,
+                "before_cursor_execute",
+                count_same_source_query,
             )
+            try:
+                await reconcile_event_relations(
+                    "personal", owner, session, mode="dependencies"
+                )
+            finally:
+                sqlalchemy_event.remove(
+                    scoped_engine.sync_engine,
+                    "before_cursor_execute",
+                    count_same_source_query,
+                )
+            assert same_source_queries == 1
             relation_pairs = {
                 frozenset((item.source.title, item.target.title))
                 for item in (
@@ -371,6 +426,10 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             }
             assert (
                 frozenset(("Same-source start", "Same-source follower"))
+                in relation_pairs
+            )
+            assert (
+                frozenset(("Second same-source start", "Second same-source follower"))
                 in relation_pairs
             )
             assert all("Ambiguous follower" not in pair for pair in relation_pairs)
