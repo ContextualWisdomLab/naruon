@@ -470,8 +470,8 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
 def test_calendar_attachment_creates_owner_scoped_cited_source_event():
     ics = (
         "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n"
-        "UID:planning@example.com\nDTSTART:20260927T100000Z\n"
-        "DTEND:20260927T110000Z\nSUMMARY:Planning\nLOCATION:Seoul\n"
+        "UID:planning@example.com\nDTSTART;TZID=Asia/Seoul:20260927T100000\n"
+        "DTEND;TZID=Asia/Seoul:20260927T110000\nSUMMARY:Planning\nLOCATION:Seoul\n"
         "END:VEVENT\nBEGIN:VEVENT\nUID:review@example.com\n"
         "DTSTART:20260927T120000Z\nDTEND:20260927T130000Z\n"
         "SUMMARY:Review\nEND:VEVENT\nEND:VCALENDAR"
@@ -504,13 +504,14 @@ def test_calendar_attachment_creates_owner_scoped_cited_source_event():
             attachment_payloads=[attachment],
             fitted_embeddings=[],
             owner_addresses=["owner@example.com"],
-        )[0].source_events
+        )[0]
 
-    work_event, second_event = build("owner-1", "sender@example.com")
-    personal_event = build("owner-1", "owner@example.com")[0]
-    other_owner_event = build("owner-2", "sender@example.com")[0]
+    work_email = build("owner-1", "sender@example.com")
+    work_event, second_event = work_email.source_events
+    personal_event = build("owner-1", "owner@example.com").source_events[0]
+    other_owner_event = build("owner-2", "sender@example.com").source_events[0]
 
-    assert work_event.event_uid == build("owner-1", "sender@example.com")[0].event_uid
+    assert work_event.event_uid == build("owner-1", "sender@example.com").source_events[0].event_uid
     assert work_event.event_uid != other_owner_event.event_uid
     assert work_event.visibility_scope == "organization"
     assert personal_event.visibility_scope == "personal"
@@ -518,10 +519,15 @@ def test_calendar_attachment_creates_owner_scoped_cited_source_event():
     assert work_event.title == "Planning"
     assert work_event.location_text == "Seoul"
     assert work_event.starts_at == datetime.datetime(
-        2026, 9, 27, 10, tzinfo=datetime.timezone.utc
+        2026, 9, 27, 1, tzinfo=datetime.timezone.utc
     )
     assert work_event.ends_at == datetime.datetime(
-        2026, 9, 27, 11, tzinfo=datetime.timezone.utc
+        2026, 9, 27, 2, tzinfo=datetime.timezone.utc
+    )
+    assert any(
+        "DTSTART;TZID=Asia/Seoul:" in segment.safe_text_content
+        and segment.content_segment_uid in work_event.source_segment_uids
+        for segment in work_email.attachments[0].content_segments
     )
     assert len(work_event.source_segment_uids) >= 5
     assert second_event.title == "Review"

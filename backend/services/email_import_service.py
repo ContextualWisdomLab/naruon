@@ -468,7 +468,10 @@ def _append_calendar_source_events(
         for index, event in enumerate(events, start=1):
             event_path = f"/vevent[{index}]/"
             cited_properties = [
-                (segment.safe_text_content.partition(":")[0], segment.content_segment_uid)
+                (
+                    segment.safe_text_content.partition(":")[0].split(";", 1)[0],
+                    segment.content_segment_uid,
+                )
                 for segment in attachment.content_segments
                 if event_path in segment.segment_path
             ]

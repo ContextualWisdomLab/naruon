@@ -800,7 +800,7 @@ def _parse_calendar(
             node_path=f"{parent_path}/property[{property_index}]",
             ordinal_index=property_index,
             display_label=property_name,
-            safe_text_content=f"{property_name}: {safe_value}",
+            safe_text_content=f"{_safe_text(property_name_with_params)}: {safe_value}",
         )
         context.add_segment(
             content_node_uid=property_node.content_node_uid,
