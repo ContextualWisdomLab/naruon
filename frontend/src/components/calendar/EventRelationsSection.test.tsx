@@ -52,7 +52,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
   expect(post).toHaveBeenCalledTimes(2);
   expect(container.querySelectorAll('a[href^="/mail?id="]')).toHaveLength(2);
   expect(container.textContent).toContain('20260927T100000Z');
-  expect(container.textContent).toContain('자동 판단 80%');
+  expect(container.textContent).toContain('초대장 시간 기준');
 
   const correction = [...container.querySelectorAll('button')].find(
     (button) => button.textContent === '별개 일정',

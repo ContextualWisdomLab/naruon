@@ -127,7 +127,7 @@ export function EventRelationsSection() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">{relation.scope === 'personal' ? '개인' : '조직'}</span>
             <span className="font-semibold">{labels[relation.relation_type]}</span>
-            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : `자동 판단 ${Math.round(relation.confidence * 100)}%`}</span>
+            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : '초대장 시간 기준'}</span>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <EventEvidence event={relation.source} />
