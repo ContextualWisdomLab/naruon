@@ -13,11 +13,11 @@ from services.email_client import validate_imap_destination
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.exceptions import EmailParseError
+from services.email_import_service import _build_email_object
 from services.knowledge_extractor import (
     extract_knowledge_from_self_sent,
-    is_self_sent_email,
 )
-from services.reply_tracking_service import configured_email_addresses
+from services.reply_tracking_service import personal_reference_addresses
 from services.threading_service import assign_thread_id, generate_email_fingerprint
 
 
@@ -78,23 +78,22 @@ async def process_fetched_email(
         session, email_data, user_id=user_id, organization_id=organization_id
     )
 
-    new_email = Email(
+    new_email, _attachment_count = _build_email_object(
+        parsed={**email_data, "recipients": recipients},
         user_id=user_id,
-        organization_id=organization_id or None,
+        organization_id=organization_id,
         message_id=email_data.get("message_id", ""),
         thread_id=thread_id,
         fingerprint=fingerprint,
-        sender=sender,
-        recipients=recipients,
-        subject=subject,
-        date=persisted_date,
-        body=email_data.get("body", ""),
-        is_read=is_read,
-        embedding=[0.0] * 1536,
+        persisted_date=persisted_date,
+        attachment_payloads=email_data.get("attachments", []),
+        fitted_embeddings=[],
+        owner_addresses=owner_addresses,
     )
+    new_email.is_read = is_read
 
     session.add(new_email)
-    if is_self_sent_email(new_email, owner_addresses):
+    if new_email.is_personal_reference:
         await session.flush()
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)
     return new_email
@@ -130,6 +129,7 @@ class ImapSyncConfig:
     imap_password: str | None
     smtp_username: str | None
     pop3_username: str | None
+    personal_reference_address: str | None = None
 
 
 class ImapSyncWorker:
@@ -187,6 +187,7 @@ class ImapSyncWorker:
                     TenantConfig.imap_password,
                     TenantConfig.smtp_username,
                     TenantConfig.pop3_username,
+                    TenantConfig.personal_reference_address,
                 ).where(
                     TenantConfig.imap_server.isnot(None),
                     TenantConfig.imap_port.isnot(None),
@@ -202,6 +203,7 @@ class ImapSyncWorker:
                     imap_password=row.imap_password,
                     smtp_username=row.smtp_username,
                     pop3_username=row.pop3_username,
+                    personal_reference_address=row.personal_reference_address,
                 )
                 for row in result
             ]
@@ -322,7 +324,7 @@ class ImapSyncWorker:
             return 0
 
         imported_count = 0
-        owner_addresses = configured_email_addresses(config)
+        owner_addresses = personal_reference_addresses(config)
         async with AsyncSessionLocal() as session:
             try:
                 for raw_message, is_read in messages:

@@ -571,6 +571,44 @@ async def test_project_graph_api_enforces_member_scope_and_allows_org_admin(
 
 
 @pytest.mark.asyncio
+async def test_project_graph_admin_cannot_read_other_users_personal_reference(
+    dev_auth_dependency_overrides,
+    project_graph_api_db_override,
+    project_graph_api_sessionmaker,
+):
+    owner_id = f"project-personal-owner-{uuid.uuid4().hex}"
+    admin_id = f"project-personal-admin-{uuid.uuid4().hex}"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
+    async with project_graph_api_sessionmaker() as session:
+        personal = await _seed_projection(
+            session, user_id=owner_id, organization_id=organization_id
+        )
+        email = await session.scalar(select(Email).where(Email.user_id == owner_id))
+        assert email is not None
+        email.is_personal_reference = True
+        await session.commit()
+
+    async with _client(user_id=owner_id, organization_id=organization_id) as client:
+        response = await client.get("/api/projects/candidates")
+        assert response.status_code == 200
+        assert [item["project_uid"] for item in response.json()["candidates"]] == [
+            personal["candidate_uid"]
+        ]
+
+    async with _client(
+        user_id=admin_id, organization_id=organization_id,
+        role="organization_admin",
+    ) as client:
+        response = await client.get("/api/projects/candidates")
+        assert response.status_code == 200
+        assert response.json()["candidates"] == []
+        response = await client.get(
+            f"/api/projects/{personal['candidate_uid']}/traceability"
+        )
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_project_graph_api_returns_404_when_evidence_segment_is_stale(
     dev_auth_dependency_overrides,
     project_graph_api_db_override,
@@ -1251,6 +1289,7 @@ async def _seed_source_segment(
         subject="Project Alpha checkout launch",
         date=now,
         body="요구사항 본문",
+        is_personal_reference=False,
     )
     session.add(email)
     await session.flush()

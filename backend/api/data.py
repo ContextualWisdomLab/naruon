@@ -2465,7 +2465,16 @@ def _owner_scope_statement(model, auth_context: AuthContext):
 def _email_scope_filter(auth_context: AuthContext) -> EmailScopeFilter:
     if _can_read_org_scope(auth_context):
         organization_filter = Email.organization_id == auth_context.organization_id
-        return (organization_filter, organization_filter)
+        return (
+            organization_filter,
+            and_(
+                organization_filter,
+                or_(
+                    Email.user_id == auth_context.user_id,
+                    Email.is_personal_reference.is_(False),
+                ),
+            ),
+        )
     organization_filter = (
         Email.organization_id == auth_context.organization_id
         if auth_context.organization_id is not None

@@ -68,6 +68,7 @@ async def test_self_to_self_triggers_knowledge_extraction():
         recipients="user@test.com",
         subject="Note to self",
         body="Remember to buy milk",
+        is_personal_reference=True,
     )
     execute_result = MagicMock()
     execute_result.scalar_one_or_none.return_value = None
@@ -82,5 +83,13 @@ async def test_self_to_self_triggers_knowledge_extraction():
         source_email=source_email,
     )
     assert knowledge_task is not None
+    assert await ontology_service.process_knowledge_node(
+        session_mock,
+        {**email_data, "is_automated_or_list": True},
+        user_id="user_1",
+        organization_id="org_1",
+        owner_addresses=["user@test.com"],
+        source_email=source_email,
+    ) is None
     assert knowledge_task.source_type == "self_sent_knowledge"
     assert knowledge_task.related_email_id == 44

@@ -173,6 +173,56 @@ def test_build_email_object_attaches_content_graph_records():
     }
 
 
+def test_same_message_graph_ids_are_scoped_to_owner():
+    parsed = {
+        "sender": "owner@example.com",
+        "recipients": "owner@example.com",
+        "subject": "Private note",
+        "body": "Remember this",
+        "attachments": [],
+    }
+    args = dict(
+        parsed=parsed,
+        organization_id="org-1",
+        message_id="<same-message@example.com>",
+        thread_id=None,
+        fingerprint="same-fingerprint",
+        persisted_date=datetime.datetime(2026, 9, 27, tzinfo=datetime.timezone.utc),
+        attachment_payloads=[],
+        fitted_embeddings=[],
+        owner_addresses={"owner@example.com"},
+    )
+    first, _ = email_import_module._build_email_object(user_id="owner-1", **args)
+    second, _ = email_import_module._build_email_object(user_id="owner-2", **args)
+
+    assert first.is_personal_reference is True
+    assert second.is_personal_reference is True
+    assert first.content_nodes[0].node_kind == "personal_reference"
+    assert first.content_nodes[0].content_node_uid != second.content_nodes[0].content_node_uid
+
+
+def test_self_mail_without_personal_address_remains_unclassified():
+    email_obj, _ = email_import_module._build_email_object(
+        parsed={
+            "sender": "shared@example.com",
+            "recipients": "shared@example.com",
+            "subject": "Team loopback",
+            "body": "Shared mailbox message",
+        },
+        user_id="shared@example.com",
+        organization_id="org-1",
+        message_id="<shared@example.com>",
+        thread_id=None,
+        fingerprint="shared-fingerprint",
+        persisted_date=datetime.datetime(2026, 9, 27, tzinfo=datetime.timezone.utc),
+        attachment_payloads=[],
+        fitted_embeddings=[],
+    )
+
+    assert email_obj.is_personal_reference is None
+    assert email_obj.content_nodes[0].node_kind != "personal_reference"
+
+
 def test_build_email_object_attaches_knowledge_graph_edges():
     parsed = {
         "message_id": "<graph@example.com>",

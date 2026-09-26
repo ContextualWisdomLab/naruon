@@ -64,6 +64,7 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
         imap_username="imap-user@example.com",
         imap_password="imap-secret",
         smtp_username="alias@example.com",
+        personal_reference_address="imap-user@example.com",
     )
     raw_message = (
         b"Message-ID: <imap-1@example.com>\r\n"
@@ -126,10 +127,7 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     # No \Seen in the FLAGS envelope above -> imported as unread.
     assert kwargs["is_read"] is False
     assert args[3] == "org-imap"
-    assert kwargs["owner_addresses"] == {
-        "imap-user@example.com",
-        "alias@example.com",
-    }
+    assert kwargs["owner_addresses"] == {"imap-user@example.com"}
 
     session.commit.assert_awaited_once()
     session.rollback.assert_not_awaited()

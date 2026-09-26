@@ -42,6 +42,7 @@ type SearchResultItem = {
   snippet: string;
   thread_id: string | null;
   reply_count?: number;
+  is_personal_reference?: boolean;
   score?: number;
   result_kind?: string | null;
   evidence_kinds?: string[];
@@ -320,15 +321,21 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-border/50 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
               <FileText className="size-3" aria-hidden="true" />
-              {result.thread_id ? "메일 스레드" : "메일"}
+              {result.is_personal_reference
+                ? "개인 자료"
+                : result.thread_id
+                  ? "메일 스레드"
+                  : "메일"}
             </span>
             <span className="text-[10px] text-muted-foreground">
               <Clock className="mr-0.5 inline size-3" aria-hidden="true" />
               {formatResultDate(result.date)}
             </span>
-            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-              답장 {result.reply_count ?? 1}건
-            </span>
+            {!result.is_personal_reference ? (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                답장 {result.reply_count ?? 1}건
+              </span>
+            ) : null}
             {evidenceKindLabel(result.result_kind) ? (
               <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
                 근거: {evidenceKindLabel(result.result_kind)}
@@ -456,9 +463,9 @@ export function SearchLayout() {
 
   const filteredResults = useMemo(() => {
     if (activeFilter === "thread")
-      return results.filter((result) => (result.reply_count ?? 1) > 1);
+      return results.filter((result) => !result.is_personal_reference && (result.reply_count ?? 1) > 1);
     if (activeFilter === "single")
-      return results.filter((result) => (result.reply_count ?? 1) <= 1);
+      return results.filter((result) => result.is_personal_reference || (result.reply_count ?? 1) <= 1);
     return results;
   }, [activeFilter, results]);
 
@@ -770,7 +777,7 @@ export function SearchLayout() {
                       </div>
                       <div className="min-w-0">
                         <span className="mb-2 inline-block rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                          메일 스레드
+                          {activeResult.is_personal_reference ? "개인 자료" : activeResult.thread_id ? "메일 스레드" : "메일"}
                         </span>
                         <h2 className="text-xl font-bold md:text-2xl">
                           {resultTitle(activeResult)}
@@ -780,19 +787,23 @@ export function SearchLayout() {
                         </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold text-muted-foreground">
-                      <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <p className="text-foreground">
-                          {activeResult.thread_id ? "연결됨" : "없음"}
-                        </p>
-                        <p className="mt-1">스레드 근거</p>
-                      </div>
-                      <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <p className="text-foreground">
-                          {activeResult.reply_count ?? 1}건
-                        </p>
-                        <p className="mt-1">답장 추적</p>
-                      </div>
+                    <div className={`grid gap-2 text-center text-xs font-bold text-muted-foreground ${activeResult.is_personal_reference ? "grid-cols-1" : "grid-cols-3"}`}>
+                      {!activeResult.is_personal_reference ? (
+                        <>
+                          <div className="rounded-lg border border-border bg-background px-3 py-2">
+                            <p className="text-foreground">
+                              {activeResult.thread_id ? "연결됨" : "없음"}
+                            </p>
+                            <p className="mt-1">스레드 근거</p>
+                          </div>
+                          <div className="rounded-lg border border-border bg-background px-3 py-2">
+                            <p className="text-foreground">
+                              {activeResult.reply_count ?? 1}건
+                            </p>
+                            <p className="mt-1">답장 추적</p>
+                          </div>
+                        </>
+                      ) : null}
                       <div className="rounded-lg border border-border bg-background px-3 py-2">
                         <p className="text-foreground">
                           {activeConfidence === null ? "미제공" : `${activeConfidence}%`}
@@ -874,11 +885,11 @@ export function SearchLayout() {
                           <div className="flex flex-wrap gap-2 text-xs font-bold">
                             <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">
                               <FileText className="size-3.5" aria-hidden="true" />
-                              메일 원본
+                              {activeResult.is_personal_reference ? "개인 자료 원본" : "메일 원본"}
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700">
                               <CornerDownRight className="size-3.5" aria-hidden="true" />
-                              {activeResult.thread_id ? "스레드 근거 연결" : "단일 메일"}
+                              {activeResult.is_personal_reference ? "개인 자료" : activeResult.thread_id ? "스레드 근거 연결" : "단일 메일"}
                             </span>
                             <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${confidenceTone(activeConfidence)}`}>
                               <CheckCircle2 className="size-3.5" aria-hidden="true" />
@@ -893,10 +904,10 @@ export function SearchLayout() {
                           <div className="rounded-xl border border-border bg-card p-4">
                             <p className="text-xs font-black text-primary">증거 바인딩</p>
                             <p className="mt-2 font-semibold text-foreground">
-                              {activeResult.source_message_id ? "원본 메시지 필터로 관계 API를 조회합니다." : "원본 메시지 필터가 없는 결과입니다."}
+                              {activeResult.source_message_id ? "이 자료의 원본을 기준으로 관계를 확인합니다." : "연결된 원본 정보를 확인할 수 없습니다."}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                              관계 조회는 선택된 맥락 검색 결과의 source/thread 범위 안에서만 수행됩니다.
+                              관계 조회는 선택한 결과의 원본 범위 안에서만 수행됩니다.
                             </p>
                           </div>
                           <div className="rounded-xl border border-border bg-card p-4">
@@ -999,10 +1010,10 @@ export function SearchLayout() {
                         </h4>
                         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                           <CheckCircle2 className="size-3" aria-hidden="true" />
-                          thread reply_count={activeResult.reply_count ?? 1}
+                          {activeResult.is_personal_reference ? "개인 자료 원본" : `답장 ${activeResult.reply_count ?? 1}건`}
                         </p>
                       </div>
-                      {activeResult.thread_id ? (
+                      {!activeResult.is_personal_reference && activeResult.thread_id ? (
                         <div className="relative pl-6">
                           <div className="absolute -left-[9px] top-1 size-4 rounded-full border-2 border-card bg-border" />
                           <p className="mb-1 text-xs font-bold text-muted-foreground">

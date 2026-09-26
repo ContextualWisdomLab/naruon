@@ -18,15 +18,13 @@ def _single_line_plain_text(value: str | None) -> str:
     return " ".join(text.split())
 
 
-def _normalized_owner_addresses(email: Email, owner_addresses: Iterable[str] | None):
+def _normalized_owner_addresses(owner_addresses: Iterable[str] | None):
     if owner_addresses is None:
         candidates: list[str] = []
     elif isinstance(owner_addresses, str):
         candidates = [owner_addresses]
     else:
         candidates = list(owner_addresses)
-    if "@" in str(email.user_id):
-        candidates.append(str(email.user_id))
     return {
         address.strip().lower()
         for _, address in email_utils.getaddresses(candidates)
@@ -37,7 +35,7 @@ def _normalized_owner_addresses(email: Email, owner_addresses: Iterable[str] | N
 def is_self_sent_email(
     email: Email, owner_addresses: Iterable[str] | None = None
 ) -> bool:
-    tenant_addresses = _normalized_owner_addresses(email, owner_addresses)
+    tenant_addresses = _normalized_owner_addresses(owner_addresses)
     return process_self_to_self(
         {
             "sender": email.sender,
@@ -86,7 +84,11 @@ async def extract_knowledge_from_self_sent(
     has_note_content = bool(
         _single_line_plain_text(email.subject) or _single_line_plain_text(email.body)
     )
-    if not has_note_content or not is_self_sent_email(email, owner_addresses):
+    if (
+        not has_note_content
+        or email.is_personal_reference is not True
+        or not is_self_sent_email(email, owner_addresses)
+    ):
         return None
 
     existing_task = await _existing_knowledge_task(db, email)
@@ -109,5 +111,5 @@ async def extract_knowledge_from_self_sent(
         related_thread_id=email.thread_id,
     )
     db.add(task)
-    await db.commit()
+    await db.flush()
     return task
