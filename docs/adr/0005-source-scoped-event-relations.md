@@ -77,8 +77,31 @@ and lodging evidence or retain a user's correction.
   that Story 1.4 is implemented; its acceptance requires the source adapters,
   stored relations, correction path, and user-visible evidence to work together.
 
+## Implementation state (2026-09-27)
+
+Draft [#1788](https://github.com/ContextualWisdomLab/naruon/pull/1788) admits
+owner-private iCalendar uploads and parsed mail attachments into the event
+ledger. It stores cited time-overlap conflicts and, for an explicit
+`RELATED-TO;RELTYPE=DEPENDS-ON` UID, a directional `enables` relation when the
+referenced event is unambiguous in the owner-visible scope and ends before the
+dependent event starts. The correction audit records direction changes.
+RFC 9253 defines `DEPENDS-ON` as a dependency in some manner; it does not alone
+prove a finish-to-start schedule, so the implementation requires that additional
+chronology before classifying the pair. The draft does not supply authenticated
+CalDAV inbound sync, lodging or approval adapters, shared-entity classification,
+or evaluated automatic `unrelated` verdicts. The existing CalDAV account sync
+function still reports skipped work; the writeback registry is not inbound
+source evidence. These remain Story 1.4 acceptance work, not merge evidence.
+The independent [CalendarWeave core issue](https://github.com/ContextualWisdomLab/CalendarWeave/issues/2)
+owns the reusable calendar resource contract. Its candidate core, store,
+authorization, and standards work lives in an open draft PR stack while
+CalendarWeave `main` still contains only the seed README. Naruon must consume a
+released contract after verified parity; neither a draft branch nor the
+writeback registry is a substitute for authenticated inbound source evidence.
+
 ## References
 
+- Douglass, M. (2022). [*Support for iCalendar relationships* (RFC 9253)](https://www.rfc-editor.org/rfc/rfc9253.html). RFC Editor. https://doi.org/10.17487/RFC9253
 - Li, R., Wang, Z., & Du, X. (2025). [Efficient document-level event relation
   extraction](https://aclanthology.org/2025.repl4nlp-1.7/). *Proceedings of
   RepL4NLP 2025*, 92–99. Candidate retrieval before classification addresses
