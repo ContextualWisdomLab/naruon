@@ -129,7 +129,15 @@ async def test_email_pipeline_triggers_self_sent_knowledge_extraction():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "header",
-    ["Auto-Submitted: auto-generated", "List-Id: <team.example.com>"],
+    [
+        "Auto-Submitted: auto-generated",
+        "Auto-Submitted: no\nAuto-Submitted: auto-generated",
+        "Precedence: normal\nPrecedence: list",
+        "List-Id: <team.example.com>",
+        "List-Id:",
+        "List-Unsubscribe:",
+        "X-Loop:",
+    ],
 )
 async def test_automated_self_addressed_mail_is_not_a_personal_note(header):
     from services.email_parser import parse_eml_bytes

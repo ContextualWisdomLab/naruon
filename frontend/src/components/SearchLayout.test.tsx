@@ -207,7 +207,7 @@ describe("SearchLayout product events", () => {
             date: "2026-09-27T00:00:00Z",
             snippet: "예약 확인 정보",
             thread_id: "self-thread",
-            reply_count: 1,
+            reply_count: 2,
             is_personal_reference: true,
             score: 0.9,
           }],
@@ -230,6 +230,15 @@ describe("SearchLayout product events", () => {
     );
     expect(result?.textContent).toContain("개인 자료");
     expect(result?.textContent).not.toContain("메일 스레드");
-    expect(result?.textContent).not.toContain("답장 1건");
+    expect(result?.textContent).not.toContain("답장 2건");
+
+    await act(async () => result?.click());
+    const detail = container.querySelector('[aria-label="맥락 검색 결과 상세"]');
+    expect(detail?.textContent).toContain("개인 자료");
+    expect(detail?.textContent).not.toContain("메일 스레드");
+    expect(detail?.textContent).not.toContain("답장 추적");
+    expect(detail?.textContent).not.toContain("스레드 근거");
+    expect(container.textContent).not.toContain("스레드 기준");
+    expect(container.textContent).not.toContain("thread reply_count");
   });
 });
