@@ -14,6 +14,7 @@ from api.events import (
     EventRelationCorrectionRequest,
     correct_event_relation,
     list_event_conflicts,
+    list_event_relations,
     reconcile_event_relations,
 )
 from db.models import (
@@ -201,10 +202,12 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 role="member",
                 group_ids=(),
             )
-            conflicts = await list_event_conflicts(
+            conflicts_page = await list_event_conflicts(
                 visibility_scope="organization", auth_context=auth, db=session
             )
+            conflicts = conflicts_page.items
             assert len(conflicts) == 1
+            assert conflicts_page.next_cursor is None
             assert conflicts[0].reason_code == "occupied_interval_overlap"
             assert {conflicts[0].source_event_uid, conflicts[0].target_event_uid} == {
                 owned.event_uid,
@@ -218,12 +221,17 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 await list_event_conflicts(
                     visibility_scope="personal", auth_context=auth, db=session
                 )
-                == []
-            )
+            ).items == []
 
-            relations = await reconcile_event_relations(
+            progress = await reconcile_event_relations(
                 visibility_scope="organization", auth_context=auth, db=session
             )
+            assert progress.processed_conflicts == 1
+            relations = (
+                await list_event_relations(
+                    visibility_scope="organization", auth_context=auth, db=session
+                )
+            ).items
             assert len(relations) == 1
             assert relations[0].relation_type == "conflicts"
             assert relations[0].evidence_code == "occupied_interval_overlap"
@@ -246,13 +254,10 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 for citation in cited_source.citations
             )
             assert (
-                len(
-                    await reconcile_event_relations(
-                        visibility_scope="organization", auth_context=auth, db=session
-                    )
+                await reconcile_event_relations(
+                    visibility_scope="organization", auth_context=auth, db=session
                 )
-                == 1
-            )
+            ).processed_conflicts == 1
             other_auth = AuthContext(
                 user_id="owner-b",
                 organization_id="org-1",
@@ -278,11 +283,14 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
             )
             assert corrected.relation_type == "unrelated"
             assert corrected.corrected is True
+            await reconcile_event_relations(
+                visibility_scope="organization", auth_context=auth, db=session
+            )
             assert (
-                await reconcile_event_relations(
+                await list_event_relations(
                     visibility_scope="organization", auth_context=auth, db=session
                 )
-            )[0].relation_type == "unrelated"
+            ).items[0].relation_type == "unrelated"
             correction = (
                 await session.execute(select(EventRelationCorrectionRecord))
             ).scalar_one()

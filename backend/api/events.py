@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -32,6 +33,9 @@ from services.calendar_conflict_ics import parse_calendar_source_events_from_ics
 from services.content_graph import parse_content
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+_PAGE_SIZE = 100
+_PAIR_CURSOR = re.compile(r"event_[0-9a-f]{32}:event_[0-9a-f]{32}\Z")
+_RELATION_CURSOR = re.compile(r"erel_[0-9a-f]{32}\Z")
 
 
 class EventConflictResponse(BaseModel):
@@ -40,6 +44,11 @@ class EventConflictResponse(BaseModel):
     reason_code: Literal["occupied_interval_overlap"]
     source_segment_uids: list[str]
     target_segment_uids: list[str]
+
+
+class EventConflictPageResponse(BaseModel):
+    items: list[EventConflictResponse]
+    next_cursor: str | None
 
 
 RelationType = Literal["enables", "conflicts", "unrelated"]
@@ -73,6 +82,16 @@ class EventRelationResponse(BaseModel):
     corrected: bool
     source: EventSourceResponse
     target: EventSourceResponse
+
+
+class EventRelationPageResponse(BaseModel):
+    items: list[EventRelationResponse]
+    next_cursor: str | None
+
+
+class EventReconcilePageResponse(BaseModel):
+    processed_conflicts: int
+    next_cursor: str | None
 
 
 class EventRelationCorrectionRequest(BaseModel):
@@ -340,57 +359,74 @@ async def delete_calendar_source(
     return Response(status_code=204)
 
 
-@router.get("/overlaps", response_model=list[EventConflictResponse])
+@router.get("/overlaps", response_model=EventConflictPageResponse)
 async def list_event_conflicts(
     visibility_scope: Literal["personal", "organization"] = Query(),
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
-) -> list[EventConflictResponse]:
-    # ponytail: compare only the 100 newest owner-visible events; use an
-    # indexed time-window candidate query when the event ledger grows.
-    events = (
-        (
-            await db.execute(
-                select(SourceEventRecord)
-                .where(
-                    *_source_event_scope(
-                        SourceEventRecord, auth_context, visibility_scope
-                    ),
-                    SourceEventRecord.event_type == "calendar_event",
-                    SourceEventRecord.status_code.in_(
-                        ("confirmed", "tentative", "desired")
-                    ),
-                )
-                .order_by(
-                    SourceEventRecord.starts_at.desc(), SourceEventRecord.event_uid
-                )
-                .limit(100)
+    after: str | None = None,
+) -> EventConflictPageResponse:
+    if after is not None and _PAIR_CURSOR.fullmatch(after) is None:
+        raise HTTPException(status_code=422, detail="Invalid overlap cursor")
+    source = aliased(SourceEventRecord)
+    target = aliased(SourceEventRecord)
+    # ponytail: btree scope/time indexes serve bounded pages; use a range
+    # index if dense calendars make this join scan too many candidates.
+    statement = (
+        select(source, target)
+        .join(
+            target,
+            and_(
+                source.event_uid < target.event_uid,
+                source.starts_at < target.ends_at,
+                target.starts_at < source.ends_at,
+                source.source_event_key != target.source_event_key,
+            ),
+        )
+        .where(
+            *_source_event_scope(source, auth_context, visibility_scope),
+            *_source_event_scope(target, auth_context, visibility_scope),
+            source.event_type == "calendar_event",
+            target.event_type == "calendar_event",
+            source.status_code.in_(("confirmed", "tentative", "desired")),
+            target.status_code.in_(("confirmed", "tentative", "desired")),
+            func.json_array_length(source.source_segment_uids) > 0,
+            func.json_array_length(target.source_segment_uids) > 0,
+        )
+    )
+    if after is not None:
+        source_uid, target_uid = after.split(":", 1)
+        statement = statement.where(
+            or_(
+                source.event_uid > source_uid,
+                and_(source.event_uid == source_uid, target.event_uid > target_uid),
             )
         )
-        .scalars()
-        .all()
-    )
+    pairs = (
+        await db.execute(
+            statement.order_by(source.event_uid, target.event_uid).limit(_PAGE_SIZE + 1)
+        )
+    ).all()
     conflicts: list[EventConflictResponse] = []
-    for index, source in enumerate(events):
-        for target in events[index + 1 :]:
-            if not source.source_segment_uids or not target.source_segment_uids:
-                continue
-            if source.source_event_key == target.source_event_key:
-                continue
-            decision = evaluate_calendar_conflicts(
-                _commitment(source), [_commitment(target)]
-            )
-            if decision.conflicts:
-                conflicts.append(
-                    EventConflictResponse(
-                        source_event_uid=source.event_uid,
-                        target_event_uid=target.event_uid,
-                        reason_code="occupied_interval_overlap",
-                        source_segment_uids=source.source_segment_uids,
-                        target_segment_uids=target.source_segment_uids,
-                    )
+    for source_event, target_event in pairs[:_PAGE_SIZE]:
+        decision = evaluate_calendar_conflicts(
+            _commitment(source_event), [_commitment(target_event)]
+        )
+        if decision.conflicts:
+            conflicts.append(
+                EventConflictResponse(
+                    source_event_uid=source_event.event_uid,
+                    target_event_uid=target_event.event_uid,
+                    reason_code="occupied_interval_overlap",
+                    source_segment_uids=source_event.source_segment_uids,
+                    target_segment_uids=target_event.source_segment_uids,
                 )
-    return conflicts
+            )
+    last = pairs[_PAGE_SIZE - 1] if len(pairs) > _PAGE_SIZE else None
+    return EventConflictPageResponse(
+        items=conflicts,
+        next_cursor=f"{last[0].event_uid}:{last[1].event_uid}" if last else None,
+    )
 
 
 def _relation_response(
@@ -555,6 +591,7 @@ async def _scoped_relations(
     relation_uid: str | None = None,
     *,
     for_update: bool = False,
+    after: str | None = None,
 ) -> list[tuple[EventRelationRecord, SourceEventRecord, SourceEventRecord]]:
     source = aliased(SourceEventRecord)
     target = aliased(SourceEventRecord)
@@ -573,32 +610,44 @@ async def _scoped_relations(
     if for_update:
         statement = statement.with_for_update(of=EventRelationRecord)
     else:
-        statement = statement.order_by(EventRelationRecord.relation_uid).limit(100)
+        if after is not None:
+            statement = statement.where(EventRelationRecord.relation_uid > after)
+        statement = statement.order_by(EventRelationRecord.relation_uid).limit(
+            _PAGE_SIZE + 1
+        )
     return list((await db.execute(statement)).all())
 
 
-@router.get("/relations", response_model=list[EventRelationResponse])
+@router.get("/relations", response_model=EventRelationPageResponse)
 async def list_event_relations(
     visibility_scope: Literal["personal", "organization"] = Query(),
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
-) -> list[EventRelationResponse]:
-    relations = await _scoped_relations(db, auth_context, visibility_scope)
-    citations = await _citation_map(db, relations, auth_context)
-    return [
-        _relation_response(relation, source, target, citations)
-        for relation, source, target in relations
-    ]
+    after: str | None = None,
+) -> EventRelationPageResponse:
+    if after is not None and _RELATION_CURSOR.fullmatch(after) is None:
+        raise HTTPException(status_code=422, detail="Invalid relation cursor")
+    relations = await _scoped_relations(db, auth_context, visibility_scope, after=after)
+    page = relations[:_PAGE_SIZE]
+    citations = await _citation_map(db, page, auth_context)
+    return EventRelationPageResponse(
+        items=[
+            _relation_response(relation, source, target, citations)
+            for relation, source, target in page
+        ],
+        next_cursor=page[-1][0].relation_uid if len(relations) > _PAGE_SIZE else None,
+    )
 
 
-@router.post("/relations/reconcile", response_model=list[EventRelationResponse])
+@router.post("/relations/reconcile", response_model=EventReconcilePageResponse)
 async def reconcile_event_relations(
     visibility_scope: Literal["personal", "organization"] = Query(),
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
-) -> list[EventRelationResponse]:
-    overlaps = await list_event_conflicts(visibility_scope, auth_context, db)
-    for overlap in overlaps:
+    after: str | None = None,
+) -> EventReconcilePageResponse:
+    overlaps = await list_event_conflicts(visibility_scope, auth_context, db, after)
+    for overlap in overlaps.items:
         source_uid, target_uid = sorted(
             (overlap.source_event_uid, overlap.target_event_uid)
         )
@@ -630,7 +679,9 @@ async def reconcile_event_relations(
             .on_conflict_do_nothing()
         )
     await db.commit()
-    return await list_event_relations(visibility_scope, auth_context, db)
+    return EventReconcilePageResponse(
+        processed_conflicts=len(overlaps.items), next_cursor=overlaps.next_cursor
+    )
 
 
 @router.patch("/relations/{relation_uid}", response_model=EventRelationResponse)

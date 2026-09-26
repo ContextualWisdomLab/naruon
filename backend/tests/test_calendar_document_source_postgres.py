@@ -1,5 +1,6 @@
 """Exercise authenticated calendar files as independent event evidence."""
 
+import datetime
 import uuid
 
 import pytest
@@ -16,6 +17,7 @@ from api.events import (
     download_calendar_source,
     list_calendar_sources,
     list_event_conflicts,
+    list_event_relations,
     reconcile_event_relations,
     upload_calendar_source,
 )
@@ -105,7 +107,11 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             assert source.body.decode() == first_ics
             assert source.headers["cache-control"] == "private, no-store"
 
-            relations = await reconcile_event_relations("organization", owner, session)
+            progress = await reconcile_event_relations("organization", owner, session)
+            assert progress.processed_conflicts == 1
+            relations = (
+                await list_event_relations("organization", owner, session)
+            ).items
             assert len(relations) == 1
             assert {
                 relations[0].source.document_id,
@@ -125,8 +131,8 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 session,
             )
             assert (
-                await list_event_conflicts("organization", other_owner, session) == []
-            )
+                await list_event_conflicts("organization", other_owner, session)
+            ).items == []
             with pytest.raises(HTTPException) as denied:
                 await download_calendar_source(
                     first[0].document_id, other_owner, session
@@ -204,6 +210,78 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             )
             assert len(second_page.items) == 1
             assert second_page.next_cursor is None
+
+            start = datetime.datetime(2026, 10, 1, 10, tzinfo=datetime.timezone.utc)
+
+            def vevent(
+                uid: str, begins: datetime.datetime, ends: datetime.datetime
+            ) -> str:
+                return (
+                    "BEGIN:VEVENT\n"
+                    f"UID:{uid}\nDTSTART:{begins:%Y%m%dT%H%M%SZ}\n"
+                    f"DTEND:{ends:%Y%m%dT%H%M%SZ}\nSUMMARY:{uid}\nEND:VEVENT\n"
+                )
+
+            bulk_ics = (
+                "BEGIN:VCALENDAR\nVERSION:2.0\n"
+                + vevent("long@example.com", start, start + datetime.timedelta(hours=2))
+                + "".join(
+                    vevent(
+                        f"short-{index}@example.com",
+                        start + datetime.timedelta(minutes=index),
+                        start + datetime.timedelta(minutes=index + 1),
+                    )
+                    for index in range(101)
+                )
+                + "END:VCALENDAR"
+            )
+            await upload_calendar_source(
+                CalendarSourceUploadRequest(
+                    ics_text=bulk_ics, visibility_scope="organization"
+                ),
+                owner,
+                session,
+            )
+            overlaps_one = await list_event_conflicts("organization", owner, session)
+            assert len(overlaps_one.items) == 100
+            assert overlaps_one.next_cursor is not None
+            overlaps_two = await list_event_conflicts(
+                "organization", owner, session, overlaps_one.next_cursor
+            )
+            assert len(overlaps_two.items) == 1
+            assert overlaps_two.next_cursor is None
+            with pytest.raises(HTTPException) as invalid_cursor:
+                await list_event_conflicts("organization", owner, session, "bad")
+            assert invalid_cursor.value.status_code == 422
+            assert (
+                len(
+                    {
+                        (item.source_event_uid, item.target_event_uid)
+                        for item in (*overlaps_one.items, *overlaps_two.items)
+                    }
+                )
+                == 101
+            )
+            progress_one = await reconcile_event_relations(
+                "organization", owner, session
+            )
+            progress_two = await reconcile_event_relations(
+                "organization", owner, session, progress_one.next_cursor
+            )
+            assert (
+                progress_one.processed_conflicts,
+                progress_two.processed_conflicts,
+            ) == (100, 1)
+            assert progress_two.next_cursor is None
+            relations_one = await list_event_relations("organization", owner, session)
+            relations_two = await list_event_relations(
+                "organization", owner, session, relations_one.next_cursor
+            )
+            assert (len(relations_one.items), len(relations_two.items)) == (100, 1)
+            assert relations_two.next_cursor is None
+            with pytest.raises(HTTPException) as invalid_cursor:
+                await list_event_relations("organization", owner, session, "bad")
+            assert invalid_cursor.value.status_code == 422
     finally:
         await scoped_engine.dispose()
         async with root_engine.begin() as connection:

@@ -35,10 +35,12 @@ it('shows cited source links and saves a relation correction in one click', asyn
       citations: [{ segment_uid: 'segment_2', label: '시작', excerpt: '20260927T103000Z' }],
     },
   };
-  const post = vi.spyOn(apiClient, 'post').mockImplementation(async (path) => (
-    path.includes('visibility_scope=organization') ? [relation] : []
+  const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ next_cursor: null });
+  vi.spyOn(apiClient, 'get').mockImplementation(async (path) => (
+    path.includes('visibility_scope=organization')
+      ? { items: [relation], next_cursor: null }
+      : { items: [], next_cursor: null }
   ));
-  vi.spyOn(apiClient, 'get').mockResolvedValue({ items: [], next_cursor: null });
   const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
     ...relation, relation_type: 'unrelated', confidence: 1, corrected: true,
   });
@@ -72,12 +74,13 @@ it('shows cited source links and saves a relation correction in one click', asyn
 it('imports an iCalendar file into personal events and refreshes relations', async () => {
   const ics = 'BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR';
   const post = vi.spyOn(apiClient, 'post').mockImplementation(async (path) => (
-    path === '/api/events/sources/ics' ? [{ event_uid: 'event_1' }] : []
+    path === '/api/events/sources/ics' ? [{ event_uid: 'event_1' }] : { next_cursor: null }
   ));
-  vi.spyOn(apiClient, 'get').mockResolvedValue({
-    items: [{ document_id: 'caldoc_1', visibility_scope: 'personal', created_at: '2026-09-27T10:00:00Z' }],
-    next_cursor: null,
-  });
+  vi.spyOn(apiClient, 'get').mockImplementation(async (path) => (
+    path === '/api/events/sources'
+      ? { items: [{ document_id: 'caldoc_1', visibility_scope: 'personal', created_at: '2026-09-27T10:00:00Z' }], next_cursor: null }
+      : { items: [], next_cursor: null }
+  ));
   const remove = vi.spyOn(apiClient, 'delete').mockResolvedValue({});
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   container = document.createElement('div');
@@ -103,4 +106,44 @@ it('imports an iCalendar file into personal events and refreshes relations', asy
   await act(async () => { deleteButton?.click(); });
   expect(remove).toHaveBeenCalledWith('/api/events/sources/caldoc_1');
   expect(container.textContent).toContain('일정 파일을 삭제했습니다.');
+});
+
+it('continues bounded reconciliation and loads the next relation page', async () => {
+  const pairCursor = `event_${'a'.repeat(32)}:event_${'b'.repeat(32)}`;
+  const relationCursor = `erel_${'c'.repeat(32)}`;
+  const event = {
+    event_uid: 'event_1', title: '첫 일정', starts_at: '2026-09-27T10:00:00Z',
+    ends_at: '2026-09-27T11:00:00Z', email_id: null, document_id: null, citations: [],
+  };
+  const relation = {
+    relation_uid: relationCursor, relation_type: 'conflicts', confidence: 0.8,
+    corrected: false, source: event, target: { ...event, title: '둘째 일정' },
+  };
+  const post = vi.spyOn(apiClient, 'post').mockImplementation(async (path) => ({
+    next_cursor: path.includes('visibility_scope=personal') && !path.includes('&after=') ? pairCursor : null,
+  }));
+  const get = vi.spyOn(apiClient, 'get').mockImplementation(async (path) => (
+    path === '/api/events/relations?visibility_scope=personal'
+      ? { items: [relation], next_cursor: relationCursor }
+      : path.includes('visibility_scope=personal&after=')
+        ? { items: [{ ...relation, relation_uid: `erel_${'d'.repeat(32)}`, source: { ...event, title: '셋째 일정' } }], next_cursor: null }
+        : { items: [], next_cursor: null }
+  ));
+  container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => { root?.render(<EventRelationsSection />); });
+
+  expect(post).toHaveBeenCalledWith(
+    `/api/events/relations/reconcile?visibility_scope=personal&after=${encodeURIComponent(pairCursor)}`,
+    {},
+  );
+  const more = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === '관계 더 보기',
+  );
+  await act(async () => { more?.click(); });
+  expect(get).toHaveBeenCalledWith(
+    `/api/events/relations?visibility_scope=personal&after=${relationCursor}`,
+  );
+  expect(container.textContent).toContain('셋째 일정');
 });

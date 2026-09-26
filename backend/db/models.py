@@ -1148,6 +1148,22 @@ class SourceEventRecord(Base):
             "visibility_scope",
             "starts_at",
         ),
+        Index(
+            "ix_source_events_scope_end",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "ends_at",
+        ),
+        Index(
+            "ix_source_events_scope_uid",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "event_uid",
+        ),
         Index("ix_source_events_source", "source_kind", "source_record_uid"),
     )
 
@@ -1203,11 +1219,12 @@ class EventRelationRecord(Base):
             "source_event_uid", "target_event_uid", name="uq_event_relations_pair"
         ),
         Index(
-            "ix_event_relations_scope",
+            "ix_event_relations_scope_uid",
             "user_id",
             "organization_id",
             "workspace_id",
             "visibility_scope",
+            "relation_uid",
         ),
     )
 

@@ -29,6 +29,15 @@ interface CalendarSourceList {
   next_cursor: string | null;
 }
 
+interface RelationPage {
+  items: EventRelation[];
+  next_cursor: string | null;
+}
+
+interface ReconcilePage {
+  next_cursor: string | null;
+}
+
 type VisibleRelation = EventRelation & { scope: VisibilityScope };
 
 const scopes: VisibilityScope[] = ['personal', 'organization'];
@@ -87,21 +96,34 @@ export function EventRelationsSection() {
   const [sourceError, setSourceError] = useState(false);
   const [deletingSource, setDeletingSource] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [relationCursors, setRelationCursors] = useState<Record<VisibilityScope, string | null>>({ personal: null, organization: null });
+  const [loadingMoreRelations, setLoadingMoreRelations] = useState(false);
+  const [relationPageError, setRelationPageError] = useState(false);
 
   useEffect(() => {
     let active = true;
     void Promise.all(
       scopes.map(async (scope) => {
-        const items = await apiClient.post<EventRelation[]>(
-          `/api/events/relations/reconcile?visibility_scope=${scope}`,
-          {},
+        let cursor: string | null = null;
+        do {
+          const page: ReconcilePage = await apiClient.post<ReconcilePage>(
+            `/api/events/relations/reconcile?visibility_scope=${scope}${cursor ? `&after=${encodeURIComponent(cursor)}` : ''}`,
+            {},
+          );
+          cursor = page.next_cursor ?? null;
+        } while (cursor !== null && active);
+        if (!active) return { scope, page: { items: [], next_cursor: null } };
+        const page = await apiClient.get<RelationPage>(
+          `/api/events/relations?visibility_scope=${scope}`,
         );
-        return items.map((item) => ({ ...item, scope }));
+        return { scope, page };
       }),
     )
-      .then((items) => {
+      .then((pages) => {
         if (!active) return;
-        setRelations(items.flat());
+        setRelations(pages.flatMap(({ scope, page }) => page.items.map((item) => ({ ...item, scope }))));
+        setRelationCursors(Object.fromEntries(pages.map(({ scope, page }) => [scope, page.next_cursor])) as Record<VisibilityScope, string | null>);
+        setRelationPageError(false);
         setStatus('ready');
       })
       .catch(() => {
@@ -176,6 +198,26 @@ export function EventRelationsSection() {
       setSourceError(true);
     } finally {
       setLoadingMore(false);
+    }
+  }
+
+  async function loadMoreRelations() {
+    if (loadingMoreRelations) return;
+    setLoadingMoreRelations(true);
+    try {
+      const pages = await Promise.all(scopes.filter((scope) => relationCursors[scope]).map(async (scope) => {
+        const page = await apiClient.get<RelationPage>(
+          `/api/events/relations?visibility_scope=${scope}&after=${encodeURIComponent(relationCursors[scope]!)}`,
+        );
+        return { scope, page };
+      }));
+      setRelations((current) => [...current, ...pages.flatMap(({ scope, page }) => page.items.map((item) => ({ ...item, scope })))]);
+      setRelationCursors((current) => ({ ...current, ...Object.fromEntries(pages.map(({ scope, page }) => [scope, page.next_cursor])) }));
+      setRelationPageError(false);
+    } catch {
+      setRelationPageError(true);
+    } finally {
+      setLoadingMoreRelations(false);
     }
   }
 
@@ -268,6 +310,10 @@ export function EventRelationsSection() {
           {saveError === relation.relation_uid ? <p role="alert" className="mt-2 text-destructive">수정하지 못했습니다. 다시 시도해 주세요.</p> : null}
         </article>
       )) : null}
+      {status === 'ready' && scopes.some((scope) => relationCursors[scope]) ? (
+        <button type="button" disabled={loadingMoreRelations} onClick={() => void loadMoreRelations()} className="mt-4 text-xs font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-60">관계 더 보기</button>
+      ) : null}
+      {relationPageError ? <p role="alert" className="mt-2 text-destructive">추가 관계를 불러오지 못했습니다. 더 보기를 다시 눌러 주세요.</p> : null}
     </section>
   );
 }
