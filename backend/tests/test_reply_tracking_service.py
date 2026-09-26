@@ -133,6 +133,24 @@ def test_configured_email_addresses_handles_none():
     assert configured_email_addresses(None) == set()
 
 
+def test_configured_email_addresses_includes_pop3_alias():
+    from db.models import TenantConfig
+    from services.reply_tracking_service import configured_email_addresses
+
+    config = TenantConfig(
+        user_id="owner",
+        smtp_username="sent@example.com",
+        imap_username="inbox@example.com",
+        pop3_username="archive@example.com",
+    )
+
+    assert configured_email_addresses(config) == {
+        "sent@example.com",
+        "inbox@example.com",
+        "archive@example.com",
+    }
+
+
 def test_thread_reply_candidate_returns_none_when_no_user_addresses():
     sent_message = make_email(
         "sent_needs_reply",

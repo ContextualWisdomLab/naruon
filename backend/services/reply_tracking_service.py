@@ -29,13 +29,14 @@ def _parse_multiple_addresses(raw_addresses: str) -> frozenset[str]:
     )
 
 
-def configured_email_addresses(tenant_config: TenantConfig | None) -> set[str]:
+def configured_email_addresses(tenant_config: object | None) -> set[str]:
     addresses = set()
     if tenant_config is None:
         return addresses
     for raw_address in (
         getattr(tenant_config, "smtp_username", None),
         getattr(tenant_config, "imap_username", None),
+        getattr(tenant_config, "pop3_username", None),
     ):
         if raw_address:
             normalized_address = _parse_single_address(raw_address)

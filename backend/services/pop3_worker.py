@@ -8,6 +8,7 @@ from services.email_client import validate_pop3_destination
 from services.email_parser import parse_eml_bytes
 from services.exceptions import EmailParseError
 from services.imap_worker import process_fetched_email
+from services.reply_tracking_service import configured_email_addresses
 
 logger = logging.getLogger(__name__)
 MAX_POP3_FETCH_MESSAGES = 10
@@ -108,7 +109,7 @@ class Pop3SyncWorker:
             return 0
 
         imported_count = 0
-        owner_addresses = [config.pop3_username] if config.pop3_username else None
+        owner_addresses = configured_email_addresses(config)
         async with AsyncSessionLocal() as session:
             try:
                 for raw_message in messages:
