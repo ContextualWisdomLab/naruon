@@ -1176,7 +1176,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
   if (routeSpec.name === "search") {
     await page.getByText("20B readiness result", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "관계 원본", exact: true }).click();
-    await page.getByText("원본 메시지 필터로 관계 API를 조회합니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("관계 조회는 선택한 결과의 원본 범위 안에서만 수행됩니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "판단 보조", exact: true }).click();
     await page.getByText("외부 실행은 사용자가 메일, 일정, 관계 캡처 액션을 명시적으로 선택할 때만 진행됩니다.", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "관계 캡처", exact: true }).click();
