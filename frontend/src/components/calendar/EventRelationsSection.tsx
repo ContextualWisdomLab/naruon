@@ -9,6 +9,7 @@ interface EventSource {
   event_uid: string;
   title: string;
   status_code: string;
+  location_text: string | null;
   starts_at: string;
   ends_at: string;
   email_id: number | null;
@@ -65,6 +66,7 @@ function EventEvidence({ event }: { event: EventSource }) {
       <p className="truncate font-semibold">{event.title}</p>
       <p className="text-xs text-muted-foreground">{time}</p>
       <p className="text-xs text-muted-foreground">원본 상태: {statusLabels[event.status_code] ?? '확인 필요'}</p>
+      {event.location_text ? <p className="text-xs text-muted-foreground">원본 장소: {event.location_text}</p> : null}
       {event.citations.length > 0 ? (
         <ul className="mt-2 space-y-1 text-xs text-muted-foreground" aria-label={`${event.title} 원본 근거`}>
           {event.citations.map((citation) => (

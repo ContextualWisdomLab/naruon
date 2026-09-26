@@ -68,6 +68,7 @@ class EventSourceResponse(BaseModel):
     event_uid: str
     title: str
     status_code: str
+    location_text: str | None
     starts_at: datetime.datetime
     ends_at: datetime.datetime
     email_id: int | None
@@ -514,6 +515,7 @@ def _event_source_response(
         event_uid=event.event_uid,
         title=event.title,
         status_code=event.status_code,
+        location_text=event.location_text,
         starts_at=event.starts_at,
         ends_at=event.ends_at,
         email_id=event.email_id,

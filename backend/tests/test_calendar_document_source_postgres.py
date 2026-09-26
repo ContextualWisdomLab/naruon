@@ -75,6 +75,7 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                     "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n"
                     f"UID:{uid}\nDTSTART:{start}\nDTEND:{end}\n"
                     f"{status_line}"
+                    "LOCATION:Conference Hall\n"
                     f"SUMMARY:{uid}\nEND:VEVENT\nEND:VCALENDAR"
                 )
 
@@ -102,6 +103,8 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             assert len(first) == len(second) == 1
             assert first[0].status_code == "confirmed"
             assert second[0].status_code == "tentative"
+            assert first[0].location_text == "Conference Hall"
+            assert any(citation.label == "장소" for citation in first[0].citations)
             assert first[0].email_id is None
             assert first[0].document_id
             assert any(
@@ -120,6 +123,7 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 await list_event_relations("organization", owner, session)
             ).items
             assert len(relations) == 1
+            assert relations[0].source.location_text == "Conference Hall"
             assert {
                 relations[0].source.status_code,
                 relations[0].target.status_code,
