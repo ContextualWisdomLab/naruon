@@ -69,6 +69,7 @@ async def _prepare_pre_migration_schema() -> None:
     try:
         await connection.execute(
             """
+            DROP TABLE IF EXISTS object_storage_cleanup_records CASCADE;
             DROP TABLE IF EXISTS document_object_records CASCADE;
             DROP TABLE IF EXISTS object_storage_providers CASCADE;
             DROP TABLE IF EXISTS workspace_documents CASCADE;
