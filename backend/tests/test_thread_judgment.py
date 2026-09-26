@@ -1,5 +1,7 @@
 import pytest
+from unittest.mock import AsyncMock
 
+from services.llm_provider_selection import RuntimeLLMProvider
 from services.thread_judgment import (
     CitedStatement,
     JudgmentSegment,
@@ -7,6 +9,7 @@ from services.thread_judgment import (
     JudgmentObject,
     ThreadJudgmentDraft,
     UnresolvedTension,
+    synthesize_thread_judgment,
     validate_judgment_citations,
 )
 
@@ -68,7 +71,6 @@ def test_thread_judgment_rejects_uncited_claims_and_one_message_tensions():
                 )
             ],
         )
-
     card.current_state.linked_object_uids = ["real"]
     with pytest.raises(ValueError, match="lacks cited evidence"):
         validate_judgment_citations(
@@ -83,3 +85,32 @@ def test_thread_judgment_rejects_uncited_claims_and_one_message_tensions():
                 )
             ],
         )
+
+
+@pytest.mark.asyncio
+async def test_thread_judgment_closes_transport_when_sdk_construction_fails(monkeypatch):
+    http_client = AsyncMock()
+
+    async def build_client(_base_url):
+        return None, http_client
+
+    def fail_sdk_construction(**_kwargs):
+        raise ValueError("invalid provider configuration")
+
+    monkeypatch.setattr(
+        "services.thread_judgment.build_llm_provider_http_client", build_client
+    )
+    monkeypatch.setattr("services.thread_judgment.AsyncOpenAI", fail_sdk_construction)
+    provider = RuntimeLLMProvider(
+        api_key="test",
+        base_url=None,
+        chat_model="test-model",
+        embedding_model="test-embedding",
+        provider_name="test",
+        provider_source="tenant_config",
+    )
+
+    with pytest.raises(ValueError, match="invalid provider configuration"):
+        await synthesize_thread_judgment([], [], [], provider)
+
+    http_client.aclose.assert_awaited_once_with()

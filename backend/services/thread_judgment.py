@@ -142,12 +142,13 @@ async def synthesize_thread_judgment(
         ensure_ascii=False,
     )
     validated_url, http_client = await build_llm_provider_http_client(provider.base_url)
-    client = AsyncOpenAI(
-        api_key=provider.api_key,
-        base_url=validated_url,
-        http_client=http_client,
-    )
+    client = None
     try:
+        client = AsyncOpenAI(
+            api_key=provider.api_key,
+            base_url=validated_url,
+            http_client=http_client,
+        )
         response = await client.beta.chat.completions.parse(
             model=provider.chat_model,
             messages=[
@@ -174,7 +175,10 @@ async def synthesize_thread_judgment(
             response_format=ThreadJudgmentDraft,
         )
     finally:
-        await client.close()
+        if client is None:
+            await http_client.aclose()
+        else:
+            await client.close()
 
     draft = response.choices[0].message.parsed
     if draft is None:
