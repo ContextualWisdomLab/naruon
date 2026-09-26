@@ -191,6 +191,93 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 await download_calendar_source(first[0].document_id, owner, session)
             assert removed.value.status_code == 404
 
+            dependencies_ics = (
+                "BEGIN:VCALENDAR\nVERSION:2.0\n"
+                "BEGIN:VEVENT\nUID:early@example.com\n"
+                "DTSTART:20260928T100000Z\nDTEND:20260928T110000Z\n"
+                "SUMMARY:Early\nEND:VEVENT\n"
+                "BEGIN:VEVENT\nUID:later@example.com\n"
+                "DTSTART:20260928T120000Z\nDTEND:20260928T130000Z\n"
+                "RELATED-TO;RELTYPE=DEPENDS-ON:early@example.com\n"
+                "SUMMARY:Later\nEND:VEVENT\nEND:VCALENDAR"
+            )
+            await upload_calendar_source(
+                CalendarSourceUploadRequest(
+                    ics_text=dependencies_ics, visibility_scope="personal"
+                ),
+                owner,
+                session,
+            )
+            dependency_progress = await reconcile_event_relations(
+                "personal", owner, session, mode="dependencies"
+            )
+            assert dependency_progress.processed_dependencies == 1
+            relation = (await list_event_relations("personal", owner, session)).items[0]
+            assert relation.relation_type == "enables"
+            assert relation.enabler_event_uid == next(
+                event.event_uid
+                for event in (relation.source, relation.target)
+                if event.title == "Early"
+            )
+            assert any(
+                citation.label == "선행 일정"
+                for event in (relation.source, relation.target)
+                for citation in event.citations
+            )
+            assert (
+                await list_event_relations("personal", other_owner, session)
+            ).items == []
+            with pytest.raises(HTTPException) as invalid_direction:
+                await correct_event_relation(
+                    relation.relation_uid,
+                    EventRelationCorrectionRequest(
+                        relation_type="enables", enabler_event_uid="event_unknown"
+                    ),
+                    "personal",
+                    owner,
+                    session,
+                )
+            assert invalid_direction.value.status_code == 422
+            reversed_direction = await correct_event_relation(
+                relation.relation_uid,
+                EventRelationCorrectionRequest(
+                    relation_type="enables",
+                    enabler_event_uid=next(
+                        event.event_uid
+                        for event in (relation.source, relation.target)
+                        if event.title == "Later"
+                    ),
+                ),
+                "personal",
+                owner,
+                session,
+            )
+            assert reversed_direction.enabler_event_uid != relation.enabler_event_uid
+            corrected = await correct_event_relation(
+                relation.relation_uid,
+                EventRelationCorrectionRequest(relation_type="unrelated"),
+                "personal",
+                owner,
+                session,
+            )
+            assert corrected.enabler_event_uid is None
+            corrections = (
+                (await session.execute(select(EventRelationCorrectionRecord)))
+                .scalars()
+                .all()
+            )
+            assert any(
+                item.before_enabler_event_uid == relation.enabler_event_uid
+                and item.after_enabler_event_uid == reversed_direction.enabler_event_uid
+                for item in corrections
+            )
+            await reconcile_event_relations(
+                "personal", owner, session, mode="dependencies"
+            )
+            assert (await list_event_relations("personal", owner, session)).items[
+                0
+            ].relation_type == "unrelated"
+
             session.add_all(
                 CalendarSourceDocumentRecord(
                     user_id=owner.user_id,
@@ -208,7 +295,7 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             second_page = await list_calendar_sources(
                 first_page.next_cursor, owner, session
             )
-            assert len(second_page.items) == 1
+            assert len(second_page.items) == 2
             assert second_page.next_cursor is None
 
             start = datetime.datetime(2026, 10, 1, 10, tzinfo=datetime.timezone.utc)

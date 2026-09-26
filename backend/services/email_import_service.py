@@ -32,7 +32,10 @@ from services.batch_embedding_service import (
     BatchEmbeddingPartial,
     try_batch_import_embeddings,
 )
-from services.calendar_conflict_ics import parse_calendar_source_events_from_ics
+from services.calendar_conflict_ics import (
+    dependency_evidence_from_segments,
+    parse_calendar_source_events_from_ics,
+)
 from services.calendar_conflict_policy import CalendarPolicyValidationError
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
@@ -480,11 +483,28 @@ def _append_calendar_source_events(
                 {"DTEND", "DURATION"} & property_names
             ):
                 continue
+            dependencies = dependency_evidence_from_segments(
+                event.commitment.commitment_id,
+                [
+                    (segment.content_segment_uid, segment.safe_text_content)
+                    for segment in attachment.content_segments
+                    if event_path in segment.segment_path
+                ],
+            )
             citations = [
                 uid
                 for name, uid in cited_properties
-                if name in {"UID", "DTSTART", "DTEND", "DURATION", "SUMMARY", "LOCATION", "STATUS"}
-            ]
+                if name
+                in {
+                    "UID",
+                    "DTSTART",
+                    "DTEND",
+                    "DURATION",
+                    "SUMMARY",
+                    "LOCATION",
+                    "STATUS",
+                }
+            ] + [item["segment_uid"] for item in dependencies]
             identity = json.dumps(
                 [source_uid, event.commitment.commitment_id], ensure_ascii=False
             )
@@ -514,6 +534,7 @@ def _append_calendar_source_events(
                     ends_at=event.commitment.end_at,
                     location_text=event.location,
                     source_segment_uids=citations,
+                    dependency_evidence=dependencies,
                 )
             )
 

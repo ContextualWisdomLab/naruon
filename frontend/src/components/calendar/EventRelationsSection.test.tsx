@@ -22,6 +22,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
   const relation = {
     relation_uid: 'erel_1',
     relation_type: 'conflicts',
+    enabler_event_uid: null,
     confidence: 0.8,
     corrected: false,
     source: {
@@ -41,9 +42,9 @@ it('shows cited source links and saves a relation correction in one click', asyn
       ? { items: [relation], next_cursor: null }
       : { items: [], next_cursor: null }
   ));
-  const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
-    ...relation, relation_type: 'unrelated', confidence: 1, corrected: true,
-  });
+  const patch = vi.spyOn(apiClient, 'patch').mockImplementation(async (_path, body) => ({
+    ...relation, ...(body as object), confidence: 1, corrected: true,
+  }));
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -52,7 +53,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
     root?.render(<EventRelationsSection />);
     await Promise.resolve();
   });
-  expect(post).toHaveBeenCalledTimes(2);
+  expect(post).toHaveBeenCalledTimes(4);
   expect(container.querySelectorAll('a[href^="/mail?id="]')).toHaveLength(1);
   expect(container.querySelector('a[href="/api/events/sources/doc_13"]')).not.toBeNull();
   expect(container.textContent).toContain('20260927T100000Z');
@@ -66,9 +67,19 @@ it('shows cited source links and saves a relation correction in one click', asyn
 
   expect(patch).toHaveBeenCalledWith(
     '/api/events/relations/erel_1?visibility_scope=organization',
-    { relation_type: 'unrelated' },
+    { relation_type: 'unrelated', enabler_event_uid: null },
   );
   expect(container.textContent).toContain('직접 수정함');
+
+  const direction = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === '오른쪽 일정이 왼쪽 일정에 도움',
+  );
+  await act(async () => { direction?.click(); });
+  expect(patch).toHaveBeenLastCalledWith(
+    '/api/events/relations/erel_1?visibility_scope=organization',
+    { relation_type: 'enables', enabler_event_uid: 'event_2' },
+  );
+  expect(container.textContent).toContain('회의 → 워크숍');
 });
 
 it('imports an iCalendar file into personal events and refreshes relations', async () => {
@@ -99,7 +110,7 @@ it('imports an iCalendar file into personal events and refreshes relations', asy
     visibility_scope: 'personal',
   });
   expect(container.textContent).toContain('일정 1개를 가져왔습니다.');
-  expect(post).toHaveBeenCalledTimes(5);
+  expect(post).toHaveBeenCalledTimes(9);
   const deleteButton = [...container.querySelectorAll('button')].find(
     (button) => button.textContent === '삭제',
   );
@@ -117,10 +128,11 @@ it('continues bounded reconciliation and loads the next relation page', async ()
   };
   const relation = {
     relation_uid: relationCursor, relation_type: 'conflicts', confidence: 0.8,
-    corrected: false, source: event, target: { ...event, title: '둘째 일정' },
+    enabler_event_uid: null, corrected: false, source: event,
+    target: { ...event, event_uid: 'event_2', title: '둘째 일정' },
   };
   const post = vi.spyOn(apiClient, 'post').mockImplementation(async (path) => ({
-    next_cursor: path.includes('visibility_scope=personal') && !path.includes('&after=') ? pairCursor : null,
+    next_cursor: path.includes('visibility_scope=personal&mode=overlaps') && !path.includes('&after=') ? pairCursor : null,
   }));
   const get = vi.spyOn(apiClient, 'get').mockImplementation(async (path) => (
     path === '/api/events/relations?visibility_scope=personal'
@@ -135,7 +147,7 @@ it('continues bounded reconciliation and loads the next relation page', async ()
   await act(async () => { root?.render(<EventRelationsSection />); });
 
   expect(post).toHaveBeenCalledWith(
-    `/api/events/relations/reconcile?visibility_scope=personal&after=${encodeURIComponent(pairCursor)}`,
+    `/api/events/relations/reconcile?visibility_scope=personal&mode=overlaps&after=${encodeURIComponent(pairCursor)}`,
     {},
   );
   const more = [...container.querySelectorAll('button')].find(

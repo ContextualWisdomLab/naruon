@@ -52,7 +52,7 @@ async def test_event_relation_revision_upgrades_and_downgrades():
                 } == {
                     column.name
                     for column in Base.metadata.tables["event_relations"].columns
-                }
+                } - {"enabler_event_uid"}
                 with Operations.context(MigrationContext.configure(sync_connection)):
                     revision.downgrade()
                 inspector.clear_cache()

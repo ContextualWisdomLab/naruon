@@ -18,6 +18,7 @@ interface EventSource {
 interface EventRelation {
   relation_uid: string;
   relation_type: RelationType;
+  enabler_event_uid: string | null;
   confidence: number;
   corrected: boolean;
   source: EventSource;
@@ -104,14 +105,16 @@ export function EventRelationsSection() {
     let active = true;
     void Promise.all(
       scopes.map(async (scope) => {
-        let cursor: string | null = null;
-        do {
-          const page: ReconcilePage = await apiClient.post<ReconcilePage>(
-            `/api/events/relations/reconcile?visibility_scope=${scope}${cursor ? `&after=${encodeURIComponent(cursor)}` : ''}`,
-            {},
-          );
-          cursor = page.next_cursor ?? null;
-        } while (cursor !== null && active);
+        for (const mode of ['dependencies', 'overlaps'] as const) {
+          let cursor: string | null = null;
+          do {
+            const page: ReconcilePage = await apiClient.post<ReconcilePage>(
+              `/api/events/relations/reconcile?visibility_scope=${scope}&mode=${mode}${cursor ? `&after=${encodeURIComponent(cursor)}` : ''}`,
+              {},
+            );
+            cursor = page.next_cursor ?? null;
+          } while (cursor !== null && active);
+        }
         if (!active) return { scope, page: { items: [], next_cursor: null } };
         const page = await apiClient.get<RelationPage>(
           `/api/events/relations?visibility_scope=${scope}`,
@@ -145,14 +148,14 @@ export function EventRelationsSection() {
     return () => { active = false; };
   }, [retryKey]);
 
-  async function correct(relation: VisibleRelation, relationType: RelationType) {
-    if (savingUid !== null || relation.relation_type === relationType) return;
+  async function correct(relation: VisibleRelation, relationType: RelationType, enablerEventUid: string | null = null) {
+    if (savingUid !== null || (relation.relation_type === relationType && relation.enabler_event_uid === enablerEventUid)) return;
     setSavingUid(relation.relation_uid);
     setSaveError(null);
     try {
       const next = await apiClient.patch<EventRelation>(
         `/api/events/relations/${encodeURIComponent(relation.relation_uid)}?visibility_scope=${relation.scope}`,
-        { relation_type: relationType },
+        { relation_type: relationType, enabler_event_uid: enablerEventUid },
       );
       setRelations((current) => current.map((item) => (
         item.relation_uid === next.relation_uid ? { ...next, scope: item.scope } : item
@@ -287,14 +290,17 @@ export function EventRelationsSection() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">{relation.scope === 'personal' ? '개인' : '조직'}</span>
             <span className="font-semibold">{labels[relation.relation_type]}</span>
-            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : '원본 일정 시간 기준'}</span>
+            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : relation.relation_type === 'enables' ? '원본 일정의 선행 관계 기준' : '원본 일정 시간 기준'}</span>
           </div>
+          {relation.relation_type === 'enables' && relation.enabler_event_uid ? (
+            <p className="mt-2 text-xs text-muted-foreground">{relation.enabler_event_uid === relation.source.event_uid ? relation.source.title : relation.target.title} → {relation.enabler_event_uid === relation.source.event_uid ? relation.target.title : relation.source.title}</p>
+          ) : null}
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <EventEvidence event={relation.source} />
             <EventEvidence event={relation.target} />
           </div>
           <div className="mt-3 flex flex-wrap gap-2" aria-label="일정 관계 수정">
-            {(Object.keys(labels) as RelationType[]).map((type) => (
+            {(['conflicts', 'unrelated'] as const).map((type) => (
               <button
                 key={type}
                 type="button"
@@ -304,6 +310,18 @@ export function EventRelationsSection() {
                 className="border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               >
                 {labels[type]}
+              </button>
+            ))}
+            {([relation.source, relation.target] as const).map((event, index) => (
+              <button
+                key={event.event_uid}
+                type="button"
+                aria-pressed={relation.relation_type === 'enables' && relation.enabler_event_uid === event.event_uid}
+                disabled={savingUid !== null || (relation.relation_type === 'enables' && relation.enabler_event_uid === event.event_uid)}
+                onClick={() => void correct(relation, 'enables', event.event_uid)}
+                className="border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+              >
+                {index === 0 ? '왼쪽 일정이 오른쪽 일정에 도움' : '오른쪽 일정이 왼쪽 일정에 도움'}
               </button>
             ))}
           </div>

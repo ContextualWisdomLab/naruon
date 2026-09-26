@@ -1164,6 +1164,14 @@ class SourceEventRecord(Base):
             "visibility_scope",
             "event_uid",
         ),
+        Index(
+            "ix_source_events_scope_key",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "source_event_key",
+        ),
         Index("ix_source_events_source", "source_kind", "source_record_uid"),
     )
 
@@ -1193,6 +1201,9 @@ class SourceEventRecord(Base):
     )
     location_text: Mapped[str | None] = mapped_column(String(512), nullable=True)
     source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    dependency_evidence: Mapped[list[dict[str, str]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
@@ -1214,6 +1225,11 @@ class EventRelationRecord(Base):
         ),
         CheckConstraint(
             "confidence >= 0 AND confidence <= 1", name="ck_event_relations_confidence"
+        ),
+        CheckConstraint(
+            "enabler_event_uid IS NULL OR (relation_type = 'enables' AND "
+            "enabler_event_uid IN (source_event_uid, target_event_uid))",
+            name="ck_event_relations_enabler",
         ),
         UniqueConstraint(
             "source_event_uid", "target_event_uid", name="uq_event_relations_pair"
@@ -1240,6 +1256,7 @@ class EventRelationRecord(Base):
     workspace_id: Mapped[str] = mapped_column(String, nullable=False)
     visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
     relation_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    enabler_event_uid: Mapped[str | None] = mapped_column(String(40), nullable=True)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     evidence_code: Mapped[str] = mapped_column(String(64), nullable=False)
     source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
@@ -1267,6 +1284,8 @@ class EventRelationCorrectionRecord(Base):
     actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
     before_type: Mapped[str] = mapped_column(String(16), nullable=False)
     after_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    before_enabler_event_uid: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    after_enabler_event_uid: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),

@@ -29,6 +29,39 @@ _MAX_ICS_DOCUMENT_BYTES = 262_144
 _RECURRENCE_PROPERTY_NAMES = ("RRULE", "RDATE", "EXDATE")
 
 
+def dependency_evidence_from_segments(
+    event_uid: str, segments: list[tuple[str, str]]
+) -> list[dict[str, str]]:
+    """Keep only explicit UID dependencies with their source segment citation."""
+    evidence = []
+    seen: set[str] = set()
+    for segment_uid, source_text in segments:
+        header, separator, value = source_text.partition(":")
+        if not separator:
+            continue
+        property_name, *parameters = header.split(";")
+        if property_name.upper() != "RELATED-TO":
+            continue
+        params = {}
+        for part in parameters:
+            name, marker, parameter = part.partition("=")
+            if marker:
+                params[name.upper()] = parameter.upper()
+        target_uid = value.strip()
+        if (
+            params.get("RELTYPE") != "DEPENDS-ON"
+            or params.get("VALUE", "UID") != "UID"
+            or not target_uid
+            or len(target_uid) > 256
+            or target_uid == event_uid
+            or target_uid in seen
+        ):
+            continue
+        evidence.append({"target_uid": target_uid, "segment_uid": segment_uid})
+        seen.add(target_uid)
+    return evidence
+
+
 @dataclass(frozen=True, slots=True)
 class CalendarSourceEvent:
     commitment: CalendarCommitment
@@ -88,7 +121,9 @@ def parse_calendar_source_events_from_ics(
     return tuple(events)
 
 
-def parse_calendar_commitments_from_ics(ics_text: str) -> tuple[CalendarCommitment, ...]:
+def parse_calendar_commitments_from_ics(
+    ics_text: str,
+) -> tuple[CalendarCommitment, ...]:
     """Extract VEVENT commitments from one iCalendar/ICS document.
 
     RFC 5545 VEVENT ``STATUS`` defaults to ``CONFIRMED`` when omitted. Date-only
@@ -188,7 +223,9 @@ def _commitment_from_vevent(component: Any) -> CalendarCommitment:
             "calendar_ics_uid_required",
             "VEVENT evidence must include a non-blank UID",
         )
-    start_at = _aware_datetime_property(component, "DTSTART", "calendar_ics_dtstart_required")
+    start_at = _aware_datetime_property(
+        component, "DTSTART", "calendar_ics_dtstart_required"
+    )
     end_at = _vevent_end_at(component, start_at)
     return CalendarCommitment(
         commitment_id=commitment_id.strip(),
@@ -232,7 +269,9 @@ def _vevent_end_at(
         )
     if has_duration:
         duration = component.decoded("DURATION")
-        if not isinstance(duration, datetime.timedelta) or duration <= datetime.timedelta(0):
+        if not isinstance(
+            duration, datetime.timedelta
+        ) or duration <= datetime.timedelta(0):
             raise CalendarPolicyValidationError(
                 "calendar_ics_interval_required",
                 "VEVENT DURATION must be a positive interval",

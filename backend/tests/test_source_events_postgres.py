@@ -46,6 +46,7 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
             "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n"
             "UID:meeting@example.com\nDTSTART:20260927T100000Z\n"
             "DTEND:20260927T110000Z\nSUMMARY:Meeting\n"
+            "RELATED-TO;RELTYPE=DEPENDS-ON:before@example.com\n"
             "END:VEVENT\nEND:VCALENDAR"
         )
         email, _ = _build_email_object(
@@ -90,6 +91,11 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
             assert owned.visibility_scope == "organization"
             assert owned.source_event_key == "meeting@example.com"
             assert owned.source_segment_uids
+            assert len(owned.dependency_evidence) == 1
+            assert owned.dependency_evidence[0]["target_uid"] == "before@example.com"
+            assert (
+                owned.dependency_evidence[0]["segment_uid"] in owned.source_segment_uids
+            )
             assert (
                 await session.execute(
                     select(SourceEventRecord).where(

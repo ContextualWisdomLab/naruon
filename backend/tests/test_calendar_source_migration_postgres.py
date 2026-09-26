@@ -43,6 +43,16 @@ async def test_calendar_source_revision_upgrades_and_downgrades():
     assert end_index_spec is not None and end_index_spec.loader is not None
     end_index_revision = importlib.util.module_from_spec(end_index_spec)
     end_index_spec.loader.exec_module(end_index_revision)
+    dependency_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/0024_event_dependencies.py"
+    )
+    dependency_spec = importlib.util.spec_from_file_location(
+        "event_dependency_revision", dependency_path
+    )
+    assert dependency_spec is not None and dependency_spec.loader is not None
+    dependency_revision = importlib.util.module_from_spec(dependency_spec)
+    dependency_spec.loader.exec_module(dependency_revision)
     try:
         async with root_engine.begin() as connection:
             await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
@@ -55,6 +65,28 @@ async def test_calendar_source_revision_upgrades_and_downgrades():
             await connection.execute(text("DROP INDEX ix_source_events_scope_end"))
             await connection.execute(text("DROP INDEX ix_source_events_scope_uid"))
             await connection.execute(text("DROP INDEX ix_event_relations_scope_uid"))
+            await connection.execute(text("DROP INDEX ix_source_events_scope_key"))
+            await connection.execute(
+                text("ALTER TABLE source_events DROP COLUMN dependency_evidence")
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE event_relations DROP CONSTRAINT ck_event_relations_enabler"
+                )
+            )
+            await connection.execute(
+                text("ALTER TABLE event_relations DROP COLUMN enabler_event_uid")
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE event_relation_corrections DROP COLUMN before_enabler_event_uid"
+                )
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE event_relation_corrections DROP COLUMN after_enabler_event_uid"
+                )
+            )
             await connection.execute(
                 text(
                     "CREATE INDEX ix_event_relations_scope ON event_relations "
@@ -66,6 +98,7 @@ async def test_calendar_source_revision_upgrades_and_downgrades():
                 with Operations.context(MigrationContext.configure(sync_connection)):
                     revision.upgrade()
                     end_index_revision.upgrade()
+                    dependency_revision.upgrade()
                 inspector = inspect(sync_connection)
                 assert inspector.has_table("calendar_source_documents")
                 assert {
@@ -94,7 +127,18 @@ async def test_calendar_source_revision_upgrades_and_downgrades():
                 assert "ix_event_relations_scope_uid" in {
                     index["name"] for index in inspector.get_indexes("event_relations")
                 }
+                assert "ix_source_events_scope_key" in {
+                    index["name"] for index in inspector.get_indexes("source_events")
+                }
+                assert "dependency_evidence" in {
+                    column["name"] for column in inspector.get_columns("source_events")
+                }
+                assert "enabler_event_uid" in {
+                    column["name"]
+                    for column in inspector.get_columns("event_relations")
+                }
                 with Operations.context(MigrationContext.configure(sync_connection)):
+                    dependency_revision.downgrade()
                     end_index_revision.downgrade()
                     revision.downgrade()
                 inspector.clear_cache()
@@ -110,6 +154,9 @@ async def test_calendar_source_revision_upgrades_and_downgrades():
                 }
                 assert "ix_event_relations_scope" in {
                     index["name"] for index in inspector.get_indexes("event_relations")
+                }
+                assert "dependency_evidence" not in {
+                    column["name"] for column in inspector.get_columns("source_events")
                 }
 
             await connection.run_sync(verify_revision)

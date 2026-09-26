@@ -29,13 +29,17 @@ from services.calendar_conflict_policy import (
     CalendarPolicyValidationError,
     evaluate_calendar_conflicts,
 )
-from services.calendar_conflict_ics import parse_calendar_source_events_from_ics
+from services.calendar_conflict_ics import (
+    dependency_evidence_from_segments,
+    parse_calendar_source_events_from_ics,
+)
 from services.content_graph import parse_content
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 _PAGE_SIZE = 100
 _PAIR_CURSOR = re.compile(r"event_[0-9a-f]{32}:event_[0-9a-f]{32}\Z")
 _RELATION_CURSOR = re.compile(r"erel_[0-9a-f]{32}\Z")
+_EVENT_CURSOR = re.compile(r"event_[0-9a-f]{32}\Z")
 
 
 class EventConflictResponse(BaseModel):
@@ -76,6 +80,7 @@ class EventRelationResponse(BaseModel):
     source_event_uid: str
     target_event_uid: str
     relation_type: RelationType
+    enabler_event_uid: str | None
     confidence: float
     evidence_code: str
     source_segment_uids: list[str]
@@ -91,6 +96,7 @@ class EventRelationPageResponse(BaseModel):
 
 class EventReconcilePageResponse(BaseModel):
     processed_conflicts: int
+    processed_dependencies: int = 0
     next_cursor: str | None
 
 
@@ -98,6 +104,7 @@ class EventRelationCorrectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     relation_type: RelationType
+    enabler_event_uid: str | None = None
 
 
 class CalendarSourceUploadRequest(BaseModel):
@@ -223,11 +230,20 @@ async def upload_calendar_source(
             raise HTTPException(
                 status_code=422, detail="Calendar evidence is incomplete"
             )
+        dependencies = dependency_evidence_from_segments(
+            event.commitment.commitment_id,
+            [
+                (segment.content_segment_uid, segment.safe_text_content)
+                for segment in segment_rows
+            ],
+        )
+        dependency_uids = {item["segment_uid"] for item in dependencies}
         cited_segments = [
             segment
             for segment in segment_rows
             if segment.safe_text_content.partition(":")[0].split(";", 1)[0]
             in {"UID", "DTSTART", "DTEND", "DURATION", "SUMMARY", "LOCATION", "STATUS"}
+            or segment.content_segment_uid in dependency_uids
         ]
         event_uid = (
             "event_"
@@ -254,6 +270,7 @@ async def upload_calendar_source(
             source_segment_uids=[
                 segment.content_segment_uid for segment in cited_segments
             ],
+            dependency_evidence=dependencies,
         )
         records.append(record)
         citations.update(
@@ -440,6 +457,7 @@ def _relation_response(
         source_event_uid=relation.source_event_uid,
         target_event_uid=relation.target_event_uid,
         relation_type=relation.relation_type,
+        enabler_event_uid=relation.enabler_event_uid,
         confidence=relation.confidence,
         evidence_code=relation.evidence_code,
         source_segment_uids=relation.source_segment_uids,
@@ -456,6 +474,7 @@ _CITATION_LABELS = {
     "DURATION": "기간",
     "LOCATION": "장소",
     "STATUS": "상태",
+    "RELATED-TO": "선행 일정",
 }
 
 
@@ -645,7 +664,12 @@ async def reconcile_event_relations(
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
     after: str | None = None,
+    mode: Literal["overlaps", "dependencies"] = "overlaps",
 ) -> EventReconcilePageResponse:
+    if mode == "dependencies":
+        return await _reconcile_event_dependencies(
+            visibility_scope, auth_context, db, after
+        )
     overlaps = await list_event_conflicts(visibility_scope, auth_context, db, after)
     for overlap in overlaps.items:
         source_uid, target_uid = sorted(
@@ -684,6 +708,121 @@ async def reconcile_event_relations(
     )
 
 
+async def _reconcile_event_dependencies(
+    visibility_scope: str,
+    auth_context: AuthContext,
+    db: AsyncSession,
+    after: str | None,
+) -> EventReconcilePageResponse:
+    if after is not None and _EVENT_CURSOR.fullmatch(after) is None:
+        raise HTTPException(status_code=422, detail="Invalid dependency cursor")
+    statement = select(SourceEventRecord).where(
+        *_source_event_scope(SourceEventRecord, auth_context, visibility_scope),
+        SourceEventRecord.event_type == "calendar_event",
+        SourceEventRecord.status_code.in_(("confirmed", "tentative", "desired")),
+        func.json_array_length(SourceEventRecord.dependency_evidence) > 0,
+    )
+    if after is not None:
+        statement = statement.where(SourceEventRecord.event_uid > after)
+    dependents = (
+        (
+            await db.execute(
+                statement.order_by(SourceEventRecord.event_uid).limit(_PAGE_SIZE + 1)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    page = dependents[:_PAGE_SIZE]
+    target_keys = {
+        evidence["target_uid"]
+        for dependent in page
+        for evidence in dependent.dependency_evidence
+    }
+    matches: dict[str, list[SourceEventRecord]] = {}
+    if target_keys:
+        targets = (
+            (
+                await db.execute(
+                    select(SourceEventRecord).where(
+                        *_source_event_scope(
+                            SourceEventRecord, auth_context, visibility_scope
+                        ),
+                        SourceEventRecord.event_type == "calendar_event",
+                        SourceEventRecord.status_code.in_(
+                            ("confirmed", "tentative", "desired")
+                        ),
+                        SourceEventRecord.source_event_key.in_(target_keys),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for target in targets:
+            matches.setdefault(target.source_event_key, []).append(target)
+    processed = 0
+    for dependent in page:
+        for evidence in dependent.dependency_evidence:
+            candidates = matches.get(evidence["target_uid"], [])
+            same_source = [
+                candidate
+                for candidate in candidates
+                if candidate.source_record_uid == dependent.source_record_uid
+                and candidate.source_kind == dependent.source_kind
+            ]
+            if same_source:
+                candidates = same_source
+            if len(candidates) != 1:
+                continue
+            enabler = candidates[0]
+            if (
+                enabler.event_uid == dependent.event_uid
+                or enabler.ends_at > dependent.starts_at
+            ):
+                continue
+            source_uid, target_uid = sorted((enabler.event_uid, dependent.event_uid))
+            relation_uid = (
+                "erel_"
+                + hashlib.sha256(f"{source_uid}\0{target_uid}".encode()).hexdigest()[
+                    :32
+                ]
+            )
+            await db.execute(
+                pg_insert(EventRelationRecord)
+                .values(
+                    relation_uid=relation_uid,
+                    source_event_uid=source_uid,
+                    target_event_uid=target_uid,
+                    user_id=auth_context.user_id,
+                    organization_id=auth_context.organization_id,
+                    workspace_id=auth_context.workspace_id,
+                    visibility_scope=visibility_scope,
+                    relation_type="enables",
+                    enabler_event_uid=enabler.event_uid,
+                    confidence=1.0,
+                    evidence_code="explicit_ical_dependency",
+                    source_segment_uids=list(
+                        dict.fromkeys(
+                            (
+                                *enabler.source_segment_uids,
+                                *dependent.source_segment_uids,
+                            )
+                        )
+                    ),
+                    created_at=datetime.datetime.now(datetime.timezone.utc),
+                )
+                .on_conflict_do_nothing()
+            )
+            processed += 1
+    await db.commit()
+    return EventReconcilePageResponse(
+        processed_conflicts=0,
+        processed_dependencies=processed,
+        next_cursor=page[-1].event_uid if len(dependents) > _PAGE_SIZE else None,
+    )
+
+
 @router.patch("/relations/{relation_uid}", response_model=EventRelationResponse)
 async def correct_event_relation(
     relation_uid: str,
@@ -698,17 +837,31 @@ async def correct_event_relation(
     if not relations:
         raise HTTPException(status_code=404, detail="Event relation not found")
     relation, source, target = relations[0]
-    if relation.relation_type != request.relation_type:
+    if request.relation_type == "enables":
+        if request.enabler_event_uid not in (
+            relation.source_event_uid,
+            relation.target_event_uid,
+        ):
+            raise HTTPException(status_code=422, detail="Choose the preceding event")
+    elif request.enabler_event_uid is not None:
+        raise HTTPException(status_code=422, detail="Unexpected preceding event")
+    if (
+        relation.relation_type != request.relation_type
+        or relation.enabler_event_uid != request.enabler_event_uid
+    ):
         db.add(
             EventRelationCorrectionRecord(
                 relation_uid=relation.relation_uid,
                 actor_user_id=auth_context.user_id,
                 before_type=relation.relation_type,
                 after_type=request.relation_type,
+                before_enabler_event_uid=relation.enabler_event_uid,
+                after_enabler_event_uid=request.enabler_event_uid,
                 source_segment_uids=relation.source_segment_uids,
             )
         )
         relation.relation_type = request.relation_type
+        relation.enabler_event_uid = request.enabler_event_uid
         relation.confidence = 1.0
         relation.evidence_code = "human_correction"
         relation.corrected_by_user_id = auth_context.user_id

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from services.calendar_conflict_ics import (
+    dependency_evidence_from_segments,
     evaluate_calendar_conflicts_from_ics,
     parse_calendar_commitments_from_ics,
     parse_calendar_source_events_from_ics,
@@ -19,6 +20,19 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "calendar"
 def _ics(name: str) -> str:
     """Load one synthetic iCalendar/ICS VEVENT fixture."""
     return (FIXTURE_DIR / name).read_text(encoding="utf-8")
+
+
+def test_dependency_evidence_requires_explicit_uid_and_keeps_citation() -> None:
+    assert dependency_evidence_from_segments(
+        "later@example.com",
+        [
+            ("parent", "RELATED-TO;RELTYPE=PARENT: earlier@example.com"),
+            ("uri", "RELATED-TO;RELTYPE=DEPENDS-ON;VALUE=URI: https://example.com"),
+            ("self", "RELATED-TO;RELTYPE=DEPENDS-ON: later@example.com"),
+            ("dependency", "RELATED-TO;RELTYPE=DEPENDS-ON: earlier@example.com"),
+            ("duplicate", "RELATED-TO;RELTYPE=DEPENDS-ON: earlier@example.com"),
+        ],
+    ) == [{"target_uid": "earlier@example.com", "segment_uid": "dependency"}]
 
 
 def test_source_events_reject_ambiguous_update_identity() -> None:
@@ -95,7 +109,9 @@ def test_known_ics_pairs_decide_conflict_or_allow(
 
 def test_cancelled_vevent_is_parsed_but_does_not_occupy_the_slot() -> None:
     """STATUS:CANCELLED is valid iCalendar evidence and must not block a confirmed proposal."""
-    commitments = parse_calendar_commitments_from_ics(_ics("existing-cancelled-1000z.ics"))
+    commitments = parse_calendar_commitments_from_ics(
+        _ics("existing-cancelled-1000z.ics")
+    )
 
     assert len(commitments) == 1
     assert commitments[0].commitment_id == "existing-cancelled-1000z"
