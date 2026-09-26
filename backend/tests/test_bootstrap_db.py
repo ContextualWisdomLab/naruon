@@ -342,7 +342,7 @@ def test_schema_backfill_adds_webdav_account_columns_and_indexes(monkeypatch):
         and "encode(sha256" in statement
         and "bytea" in statement
         and "hex" in statement
-        and "random()::text" in statement
+        and "gen_random_uuid()::text" in statement
         and "clock_timestamp()::text" in statement
         for statement in statements
     )
@@ -393,7 +393,7 @@ def test_schema_backfill_adds_project_folder_columns_and_indexes(monkeypatch):
         and "encode(sha256" in statement
         and "bytea" in statement
         and "hex" in statement
-        and "random()::text" in statement
+        and "gen_random_uuid()::text" in statement
         and "clock_timestamp()::text" in statement
         for statement in statements
     )
