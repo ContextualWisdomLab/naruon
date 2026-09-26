@@ -150,6 +150,19 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 workspace="workspace-org-1",
             )
             uncited.source_segment_uids = []
+            rescheduled = peer(
+                "event_rescheduled",
+                owner="owner-a",
+                visibility="organization",
+                workspace="workspace-org-1",
+            )
+            rescheduled.source_event_key = owned.source_event_key
+            rescheduled.starts_at = datetime.datetime(
+                2026, 9, 27, 9, 30, tzinfo=datetime.timezone.utc
+            )
+            rescheduled.ends_at = datetime.datetime(
+                2026, 9, 27, 10, 15, tzinfo=datetime.timezone.utc
+            )
             foreign_email = Email(
                 user_id="owner-b",
                 organization_id="org-1",
@@ -174,6 +187,7 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                     personal,
                     other_workspace,
                     uncited,
+                    rescheduled,
                     mismatched_source,
                 ]
             )
@@ -284,6 +298,7 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 personal,
                 other_workspace,
                 uncited,
+                rescheduled,
                 mismatched_source,
             ):
                 await session.delete(event)

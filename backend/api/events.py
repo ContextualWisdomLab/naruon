@@ -147,11 +147,7 @@ async def list_event_conflicts(
         for target in events[index + 1 :]:
             if not source.source_segment_uids or not target.source_segment_uids:
                 continue
-            if (
-                source.source_event_key == target.source_event_key
-                and source.starts_at == target.starts_at
-                and source.ends_at == target.ends_at
-            ):
+            if source.source_event_key == target.source_event_key:
                 continue
             decision = evaluate_calendar_conflicts(
                 _commitment(source), [_commitment(target)]
