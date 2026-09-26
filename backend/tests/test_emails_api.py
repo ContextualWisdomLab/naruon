@@ -1517,6 +1517,7 @@ async def _seed_reply_tracking_smoke_data(Session, user_id, organization_id, now
                     subject="Note to self",
                     date=now - datetime.timedelta(days=2),
                     body="Organize this as knowledge.",
+                    is_personal_reference=True,
                 ),
                 Email(
                     user_id=user_id,
