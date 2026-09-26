@@ -171,6 +171,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
   const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
   const threadRequestIdRef = useRef(0);
+  const judgmentRequestIdRef = useRef(0);
   const handledActionCommandIdRef = useRef<number | null>(null);
   const currentEmailIdRef = useRef<number | null>(emailId);
   const contextSynthesisEventKeyRef = useRef<string | null>(null);
@@ -226,6 +227,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
     const fetchData = async () => {
       threadRequestIdRef.current += 1;
+      judgmentRequestIdRef.current += 1;
       setLoading(true);
       setEmail(null);
       setThreadEmails([]);
@@ -630,7 +632,10 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       if (currentEmailIdRef.current !== email.id) return;
       if (updated.id !== task.id) throw new Error('Task update mismatch');
       setThreadTasks((current) => current.filter((item) => item.id !== task.id));
+      judgmentRequestIdRef.current += 1;
       setThreadJudgment(null);
+      setJudgmentLoading(false);
+      setJudgmentError(null);
     } catch {
       if (requestId === threadRequestIdRef.current && currentEmailIdRef.current === email.id) {
         setDetachError('작업을 이 대화에서 제외하지 못했습니다. 다시 시도해 주세요.');
@@ -681,17 +686,22 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const handleCreateThreadJudgment = async () => {
     if (!email || judgmentLoading) return;
     const selectedEmailId = email.id;
+    const requestId = judgmentRequestIdRef.current + 1;
+    judgmentRequestIdRef.current = requestId;
+    const isLatestRequest = () =>
+      requestId === judgmentRequestIdRef.current &&
+      currentEmailIdRef.current === selectedEmailId;
     setJudgmentLoading(true);
     setJudgmentError(null);
     try {
       const result = await apiClient.post<ThreadJudgmentResponse>('/api/emails/thread-judgment', {
         thread_id: getThreadEventId(email),
       });
-      if (currentEmailIdRef.current === selectedEmailId) setThreadJudgment(result);
+      if (isLatestRequest()) setThreadJudgment(result);
     } catch {
-      if (currentEmailIdRef.current === selectedEmailId) setJudgmentError('판단 카드를 만들지 못했습니다. 다시 시도해 주세요.');
+      if (isLatestRequest()) setJudgmentError('판단 카드를 만들지 못했습니다. 다시 시도해 주세요.');
     } finally {
-      if (currentEmailIdRef.current === selectedEmailId) setJudgmentLoading(false);
+      if (isLatestRequest()) setJudgmentLoading(false);
     }
   };
 
