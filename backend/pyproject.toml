@@ -42,7 +42,7 @@ dependencies = [
 
 [project.optional-dependencies]
 telemetry = [
-  "cwl-telemetry @ git+https://github.com/ContextualWisdomLab/cwl-telemetry.git@cd3d8a6e24b6d44e346f8ca0abd6b48ef19ef741",
+  "cwl-telemetry @ git+https://github.com/ContextualWisdomLab/cwl-telemetry.git@9054639435cc4f2036dd3c83b7bf2fedcc450e2d",
 ]
 
 [dependency-groups]
