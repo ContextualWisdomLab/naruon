@@ -515,6 +515,9 @@ describe("EmailDetail", () => {
     expect((evidence?.[0]?.parentElement as HTMLDetailsElement | undefined)?.open).toBe(true);
     expect(card?.textContent).toContain("Monday");
     expect(card?.textContent).toContain("원문 메일로 이동");
+    const original = evidence?.[0]?.parentElement?.querySelector('button');
+    await act(async () => { original?.click(); });
+    expect(document.activeElement?.id).toBe('msg-31');
   });
 
   it("opens an accessible source drawer from the source chip and records source evidence events", async () => {
@@ -598,6 +601,14 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    await act(async () => { sourceButton?.click(); });
+    const openOriginal = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('스레드 원문으로 이동'),
+    );
+    await act(async () => { openOriginal?.click(); });
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement?.id).toBe('msg-23');
   });
 
   it("lets users create tasks from visible execution items in the email detail", async () => {

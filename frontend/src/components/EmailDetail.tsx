@@ -668,8 +668,14 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   };
 
   const handleOpenOriginalSource = () => {
-    document.getElementById(`msg-${email.id}`)?.scrollIntoView?.({ block: "center" });
+    focusTimelineItem(`msg-${email.id}`);
     setSourceDrawerOpen(false);
+  };
+
+  const focusTimelineItem = (id: string) => {
+    const target = document.getElementById(id);
+    target?.scrollIntoView?.({ block: 'center' });
+    target?.focus();
   };
 
   const handleCreateThreadJudgment = async () => {
@@ -696,7 +702,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       <details key={uid} className="w-full rounded border border-primary/20 px-2 py-1 text-xs">
         <summary className="cursor-pointer text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">근거 발췌 보기</summary>
         <p className="mt-2 whitespace-pre-wrap text-foreground">{source.excerpt}</p>
-        <button type="button" onClick={() => document.getElementById(`msg-${source.email_id}`)?.scrollIntoView?.({ block: 'center' })}
+        <button type="button" onClick={() => focusTimelineItem(`msg-${source.email_id}`)}
           className="mt-2 text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           원문 메일로 이동
         </button>
@@ -712,7 +718,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       {claim.linked_task_uids.map((uid) => {
         const task = threadTasks.find((item) => item.id === uid);
         return task && <button key={uid} type="button" className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => document.getElementById(`task-${uid}`)?.scrollIntoView?.({ block: 'center' })}>
+          onClick={() => focusTimelineItem(`task-${uid}`)}>
           연결된 작업: {task.title}
         </button>;
       })}
@@ -720,7 +726,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         const object = threadJudgment?.objects?.find((item) => item.uid === uid);
         const source = threadJudgment?.evidence.find((item) => item.uid === object?.evidence_segment_uid);
         return object && source && <button key={uid} type="button" className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => document.getElementById(`msg-${source.email_id}`)?.scrollIntoView?.({ block: 'center' })}>
+          onClick={() => focusTimelineItem(`msg-${source.email_id}`)}>
           연결 정보: {object.title}
         </button>;
       })}
@@ -932,7 +938,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 if (item.kind === 'task') {
                   const confidence = toConfidencePercent(item.task.link_confidence ?? undefined);
                   return (
-                    <div id={`task-${item.task.id}`} key={`task-${item.task.id}`} className="rounded-2xl border border-border bg-background/60 p-4 text-card-foreground">
+                    <div id={`task-${item.task.id}`} key={`task-${item.task.id}`} tabIndex={-1} className="rounded-2xl border border-border bg-background/60 p-4 text-card-foreground focus:outline-2 focus:outline-primary">
                       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                         <span>연결된 작업</span>
                         <span>{formatEmailDate(item.task.created_at)}</span>
@@ -952,7 +958,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 }
                 const msg = item.message;
                 return (
-                  <div id={`msg-${msg.id}`} key={msg.id} className={`rounded-2xl border p-4 text-card-foreground ${msg.id === email.id ? 'border-primary/60 bg-primary/5 shadow-sm' : 'border-border bg-background/60'}`} aria-current={msg.id === email.id ? "true" : undefined}>
+                  <div id={`msg-${msg.id}`} key={msg.id} tabIndex={-1} className={`rounded-2xl border p-4 text-card-foreground focus:outline-2 focus:outline-primary ${msg.id === email.id ? 'border-primary/60 bg-primary/5 shadow-sm' : 'border-border bg-background/60'}`} aria-current={msg.id === email.id ? "true" : undefined}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm">{toMailDisplayText(msg.sender, '보낸 사람')}</span>
                       <div className="flex items-center gap-3">
