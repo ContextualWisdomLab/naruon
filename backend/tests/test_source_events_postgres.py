@@ -8,6 +8,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
+from api.auth import AuthContext
+from api.events import list_event_conflicts
 from db.models import Base, SourceEventRecord
 from services.email_import_service import _build_email_object
 
@@ -83,7 +85,84 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 )
             ).scalar_one_or_none() is None
 
+            def peer(uid: str, *, owner: str, visibility: str, workspace: str):
+                return SourceEventRecord(
+                    event_uid=uid,
+                    user_id=owner,
+                    organization_id="org-1",
+                    workspace_id=workspace,
+                    visibility_scope=visibility,
+                    source_kind="calendar_fixture",
+                    source_record_uid=uid,
+                    source_event_key=uid,
+                    event_type="calendar_event",
+                    title="Another meeting",
+                    status_code="confirmed",
+                    starts_at=datetime.datetime(
+                        2026, 9, 27, 10, 30, tzinfo=datetime.timezone.utc
+                    ),
+                    ends_at=datetime.datetime(
+                        2026, 9, 27, 11, 30, tzinfo=datetime.timezone.utc
+                    ),
+                    source_segment_uids=[f"segment-{uid}"],
+                )
+
+            same_owner = peer(
+                "event_same_owner",
+                owner="owner-a",
+                visibility="organization",
+                workspace="workspace-org-1",
+            )
+            other_owner = peer(
+                "event_other_owner",
+                owner="owner-b",
+                visibility="organization",
+                workspace="workspace-org-1",
+            )
+            personal = peer(
+                "event_personal",
+                owner="owner-a",
+                visibility="personal",
+                workspace="workspace-org-1",
+            )
+            other_workspace = peer(
+                "event_other_workspace",
+                owner="owner-a",
+                visibility="organization",
+                workspace="workspace-other",
+            )
+            session.add_all([same_owner, other_owner, personal, other_workspace])
+            await session.commit()
+            auth = AuthContext(
+                user_id="owner-a",
+                organization_id="org-1",
+                workspace_id="workspace-org-1",
+                role="member",
+                group_ids=(),
+            )
+            conflicts = await list_event_conflicts(
+                visibility_scope="organization", auth_context=auth, db=session
+            )
+            assert len(conflicts) == 1
+            assert conflicts[0].reason_code == "occupied_interval_overlap"
+            assert {conflicts[0].source_event_uid, conflicts[0].target_event_uid} == {
+                owned.event_uid,
+                same_owner.event_uid,
+            }
+            assert owned.source_segment_uids in (
+                conflicts[0].source_segment_uids,
+                conflicts[0].target_segment_uids,
+            )
+            assert (
+                await list_event_conflicts(
+                    visibility_scope="personal", auth_context=auth, db=session
+                )
+                == []
+            )
+
             await session.delete(email)
+            for event in (same_owner, other_owner, personal, other_workspace):
+                await session.delete(event)
             await session.commit()
             assert (
                 await session.execute(select(SourceEventRecord))
