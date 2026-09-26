@@ -14,6 +14,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Fresh databases already have email_records.is_read in the baseline model.
+    # Only older installations with the legacy emails table need this branch.
+    if op.get_bind().execute(sa.text("SELECT to_regclass('emails')")).scalar() is None:
+        return
     op.add_column(
         "emails",
         sa.Column(
@@ -26,4 +30,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("emails", "is_read")
+    if op.get_bind().execute(sa.text("SELECT to_regclass('emails')")).scalar() is not None:
+        op.drop_column("emails", "is_read")

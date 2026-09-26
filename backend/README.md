@@ -33,6 +33,28 @@ Prometheus `/metrics` is disabled by default. Set
 `ENABLE_PROMETHEUS_METRICS=true` only behind a trusted scrape path or reverse
 proxy access policy.
 
+OpenTelemetry stays off until an operator enables the encrypted deployment
+credential after `alembic upgrade head`. From `backend/`, provision a scoped
+Collector token through standard input, then restart the backend:
+
+```sh
+python -m scripts.configure_telemetry \
+  --receiver https://collector.example:4318 --environment prod < /secure/token
+```
+
+The command validates the HTTPS origin and stores the token encrypted in the
+database. `--ca-file` accepts a mounted CA certificate path. `--disable`
+turns tracing off after a restart without deleting the credential. At startup,
+the app reads the registry and the exact source revision sealed into the image
+from `OCI_IMAGE_REVISION`; it never reads the OTLP token from an environment
+variable. A missing or invalid registry entry leaves tracing off and reports
+that state through the operational-signals API. The old `ENABLE_OTEL` and
+`OTEL_EXPORTER_OTLP_*` switches are ignored.
+
+The draft `telemetry` extra pins the shared SDK commit for integration testing.
+The current hashed Docker dependency set lacks a reviewed released SDK wheel
+and checksum, so this configuration path has not enabled a deployed image.
+
 For local fixture imports, `OPENAI_API_KEY` is optional. When absent,
 `import_fixtures.py` uses zero-vector embeddings so the local threading proof
 path does not need network access.

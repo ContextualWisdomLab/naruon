@@ -1,6 +1,7 @@
 .git
 .next
 node_modules
+**/.venv
 frontend/.next
 frontend/node_modules
 backend/__pycache__
