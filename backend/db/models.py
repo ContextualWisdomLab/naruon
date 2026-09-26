@@ -164,6 +164,59 @@ class SecurityAuditEvent(Base):
         ),
     )
 
+
+class PluginRegistration(Base):
+    """Stored plugin metadata; no runtime loads registrations yet."""
+
+    __tablename__ = "plugin_registrations"
+
+    registration_uid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    plugin_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    plugin_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    grants: Mapped[list["PluginGrant"]] = relationship(back_populates="registration")
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "workspace_id",
+            "plugin_id",
+            "plugin_version",
+            name="uq_plugin_registration_scope_version",
+        ),
+    )
+
+
+class PluginGrant(Base):
+    """Capabilities scoped through the owning registration's tenant workspace."""
+
+    __tablename__ = "plugin_grants"
+
+    grant_uid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    registration_uid: Mapped[str] = mapped_column(
+        ForeignKey("plugin_registrations.registration_uid"), nullable=False, index=True
+    )
+    granted_capabilities: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    registration: Mapped[PluginRegistration] = relationship(back_populates="grants")
+
+
 class LLMProvider(Base):
     __tablename__ = "llm_providers"
     __table_args__ = (
