@@ -187,7 +187,66 @@ async def test_caldav_adapter_allows_create_without_if_match():
     assert fake_client.requests[0]["headers"] == {
         "Content-Type": "text/calendar; charset=utf-8",
         "Host": "caldav.example.com",
+        "If-None-Match": "*",
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("protocol", ["webdav", "carddav"])
+async def test_non_calendar_writeback_cannot_skip_if_match(protocol):
+    fake_client = FakeDavClient(FakeDavResponse(201))
+    adapters = LocalDavAdapters(
+        [
+            LocalDavSourceConfig(
+                source_id="dav_src_1",
+                protocol=protocol,
+                base_url="https://dav.example.com",
+                writeback_enabled=True,
+            )
+        ],
+        http_client_factory=lambda: fake_client,
+    )
+
+    result = await getattr(adapters, f"write_{protocol}")(
+        {
+            "source_id": "dav_src_1",
+            "target_path": "/Naruon/Notes/task.md",
+            "content": "new content",
+            "requires_if_match": False,
+        }
+    )
+
+    assert result["error_code"] == "invalid_payload"
+    assert fake_client.requests == []
+
+
+@pytest.mark.asyncio
+async def test_caldav_create_collision_is_a_conflict():
+    fake_client = FakeDavClient(FakeDavResponse(412))
+    adapters = LocalDavAdapters(
+        [
+            LocalDavSourceConfig(
+                source_id="caldav_src_1",
+                protocol="caldav",
+                base_url="https://caldav.example.com",
+                writeback_enabled=True,
+            )
+        ],
+        http_client_factory=lambda: fake_client,
+    )
+
+    result = await adapters.write_caldav(
+        {
+            "source_id": "caldav_src_1",
+            "target_path": "/Naruon/Calendar/create.ics",
+            "content": "BEGIN:VCALENDAR\nEND:VCALENDAR\n",
+            "requires_if_match": False,
+        }
+    )
+
+    assert fake_client.requests[0]["headers"]["If-None-Match"] == "*"
+    assert result["status"] == "conflict"
+    assert result["provider_write_executed"] is False
 
 
 @pytest.mark.asyncio

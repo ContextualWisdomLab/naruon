@@ -81,6 +81,8 @@ class LocalDavAdapters:
         if_match = self._payload_text(payload, "if_match")
         if requires_if_match and if_match is None:
             return dispatch_error("missing_if_match")
+        if not requires_if_match and (protocol != "caldav" or if_match is not None):
+            return dispatch_error("invalid_payload")
 
         target_path = self._safe_target_path(payload.get("target_path"))
         if target_path is None:
@@ -102,8 +104,10 @@ class LocalDavAdapters:
             self._payload_text(payload, "content_type") or default_content_type
         )
         headers = {"Content-Type": content_type, **pinned_headers}
-        if if_match is not None:
+        if requires_if_match:
             headers["If-Match"] = if_match
+        else:
+            headers["If-None-Match"] = "*"
         auth = (
             (source.username, source.password or "")
             if source.username is not None
