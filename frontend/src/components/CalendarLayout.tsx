@@ -17,6 +17,7 @@ import { CalendarCandidateView } from './calendar/CalendarCandidateView';
 import { CalendarSidebarLeft } from './calendar/CalendarSidebarLeft';
 import { CalendarSidebarRight } from './calendar/CalendarSidebarRight';
 import { CalendarWritebackSection } from './calendar/CalendarWritebackSection';
+import { EventRelationsSection } from './calendar/EventRelationsSection';
 
 
 
@@ -27,7 +28,7 @@ import { CalendarWritebackSection } from './calendar/CalendarWritebackSection';
 
 
 
-const CALENDAR_VIEW_MODES = ['월간 캘린더', '주간 캘린더', '일정 상세', '회의 조율', '일정 후보'] as const;
+const CALENDAR_VIEW_MODES = ['월간 캘린더', '주간 캘린더', '일정 상세', '회의 조율', '일정 후보', '일정 관계'] as const;
 type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
 
 function calendarViewTabId(mode: CalendarViewMode) {
@@ -234,6 +235,7 @@ export function CalendarLayout() {
               />
             )}
             {viewMode === '일정 후보' && <CalendarCandidateView visibleCandidateEvents={visibleCandidateEvents} />}
+            {viewMode === '일정 관계' && <EventRelationsSection />}
           </div>
         </div>
       </main>

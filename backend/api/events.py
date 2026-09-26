@@ -39,6 +39,15 @@ class EventConflictResponse(BaseModel):
 RelationType = Literal["enables", "conflicts", "unrelated"]
 
 
+class EventSourceResponse(BaseModel):
+    event_uid: str
+    title: str
+    starts_at: datetime.datetime
+    ends_at: datetime.datetime
+    email_id: int | None
+    source_segment_uids: list[str]
+
+
 class EventRelationResponse(BaseModel):
     relation_uid: str
     source_event_uid: str
@@ -48,6 +57,8 @@ class EventRelationResponse(BaseModel):
     evidence_code: str
     source_segment_uids: list[str]
     corrected: bool
+    source: EventSourceResponse
+    target: EventSourceResponse
 
 
 class EventRelationCorrectionRequest(BaseModel):
@@ -134,7 +145,11 @@ async def list_event_conflicts(
     return conflicts
 
 
-def _relation_response(relation: EventRelationRecord) -> EventRelationResponse:
+def _relation_response(
+    relation: EventRelationRecord,
+    source: SourceEventRecord,
+    target: SourceEventRecord,
+) -> EventRelationResponse:
     return EventRelationResponse(
         relation_uid=relation.relation_uid,
         source_event_uid=relation.source_event_uid,
@@ -144,6 +159,22 @@ def _relation_response(relation: EventRelationRecord) -> EventRelationResponse:
         evidence_code=relation.evidence_code,
         source_segment_uids=relation.source_segment_uids,
         corrected=relation.corrected_at is not None,
+        source=EventSourceResponse(
+            event_uid=source.event_uid,
+            title=source.title,
+            starts_at=source.starts_at,
+            ends_at=source.ends_at,
+            email_id=source.email_id,
+            source_segment_uids=source.source_segment_uids,
+        ),
+        target=EventSourceResponse(
+            event_uid=target.event_uid,
+            title=target.title,
+            starts_at=target.starts_at,
+            ends_at=target.ends_at,
+            email_id=target.email_id,
+            source_segment_uids=target.source_segment_uids,
+        ),
     )
 
 
@@ -154,11 +185,11 @@ async def _scoped_relations(
     relation_uid: str | None = None,
     *,
     for_update: bool = False,
-) -> list[EventRelationRecord]:
+) -> list[tuple[EventRelationRecord, SourceEventRecord, SourceEventRecord]]:
     source = aliased(SourceEventRecord)
     target = aliased(SourceEventRecord)
     statement = (
-        select(EventRelationRecord)
+        select(EventRelationRecord, source, target)
         .join(source, EventRelationRecord.source_event_uid == source.event_uid)
         .join(target, EventRelationRecord.target_event_uid == target.event_uid)
         .where(
@@ -173,7 +204,7 @@ async def _scoped_relations(
         statement = statement.with_for_update(of=EventRelationRecord)
     else:
         statement = statement.order_by(EventRelationRecord.relation_uid).limit(100)
-    return list((await db.execute(statement)).scalars().all())
+    return list((await db.execute(statement)).all())
 
 
 @router.get("/relations", response_model=list[EventRelationResponse])
@@ -183,7 +214,7 @@ async def list_event_relations(
     db: AsyncSession = Depends(get_db),
 ) -> list[EventRelationResponse]:
     relations = await _scoped_relations(db, auth_context, visibility_scope)
-    return [_relation_response(relation) for relation in relations]
+    return [_relation_response(relation, source, target) for relation, source, target in relations]
 
 
 @router.post("/relations/reconcile", response_model=list[EventRelationResponse])
@@ -241,7 +272,7 @@ async def correct_event_relation(
     )
     if not relations:
         raise HTTPException(status_code=404, detail="Event relation not found")
-    relation = relations[0]
+    relation, source, target = relations[0]
     if relation.relation_type != request.relation_type:
         db.add(
             EventRelationCorrectionRecord(
@@ -258,4 +289,4 @@ async def correct_event_relation(
         relation.corrected_by_user_id = auth_context.user_id
         relation.corrected_at = datetime.datetime.now(datetime.timezone.utc)
         await db.commit()
-    return _relation_response(relation)
+    return _relation_response(relation, source, target)

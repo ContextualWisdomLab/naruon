@@ -187,6 +187,11 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
             assert relations[0].relation_type == "conflicts"
             assert relations[0].evidence_code == "occupied_interval_overlap"
             assert owned.source_segment_uids[0] in relations[0].source_segment_uids
+            assert {relations[0].source.title, relations[0].target.title} == {
+                "Meeting",
+                "Another meeting",
+            }
+            assert email.id in (relations[0].source.email_id, relations[0].target.email_id)
             assert (
                 len(
                     await reconcile_event_relations(
