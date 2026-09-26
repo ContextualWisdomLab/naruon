@@ -471,7 +471,7 @@ describe("EmailDetail", () => {
       sender: "first@example.com", recipients: "user@example.com",
       subject: "Delivery date", date: "2026-05-17T10:00:00Z", body: "Monday",
     };
-    const second = { ...email, id: 32, message_id: "second@example.com", body: "Tuesday" };
+    const second = { ...email, id: 32, message_id: "second@example.com", date: "2026-05-18T10:00:00Z", body: "Tuesday" };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/emails/31")) return Promise.resolve(jsonResponse(email));
@@ -511,6 +511,7 @@ describe("EmailDetail", () => {
     expect(card?.textContent).toContain("중요한 내용은 원문에서 확인해 주세요");
     const evidence = card?.querySelectorAll('details > summary');
     expect(evidence).toHaveLength(4);
+    expect(evidence?.[0]?.textContent).not.toBe(evidence?.[1]?.textContent);
     await act(async () => { (evidence?.[0] as HTMLElement | undefined)?.click(); });
     expect((evidence?.[0]?.parentElement as HTMLDetailsElement | undefined)?.open).toBe(true);
     expect(card?.textContent).toContain("Monday");

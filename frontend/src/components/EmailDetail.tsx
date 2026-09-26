@@ -698,9 +698,12 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const renderEvidenceLinks = (uids: string[]) => uids.map((uid) => {
     const source = threadJudgment?.evidence.find((item) => item.uid === uid);
     if (!source) return null;
+    const message = conversationMessages.find((item) => item.id === source.email_id);
     return (
       <details key={uid} className="w-full rounded border border-primary/20 px-2 py-1 text-xs">
-        <summary className="cursor-pointer text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">근거 발췌 보기</summary>
+        <summary className="cursor-pointer text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          근거 발췌 보기{message ? ` · ${formatEmailDate(message.date)}` : ''}
+        </summary>
         <p className="mt-2 whitespace-pre-wrap text-foreground">{source.excerpt}</p>
         <button type="button" onClick={() => focusTimelineItem(`msg-${source.email_id}`)}
           className="mt-2 text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
