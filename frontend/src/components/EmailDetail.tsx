@@ -596,7 +596,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         `/api/tasks/${encodeURIComponent(task.id)}`,
         { detach_thread_id: task.related_thread_id },
       );
-      if (requestId !== threadRequestIdRef.current || currentEmailIdRef.current !== email.id) return;
+      if (currentEmailIdRef.current !== email.id) return;
       if (updated.id !== task.id) throw new Error('Task update mismatch');
       setThreadTasks((current) => current.filter((item) => item.id !== task.id));
     } catch {

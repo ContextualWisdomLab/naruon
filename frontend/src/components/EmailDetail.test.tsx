@@ -1227,6 +1227,73 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("메일을 선택하세요");
   });
 
+  it("removes a detached task after a same-email thread refresh", async () => {
+    const email: TestEmail = {
+      id: 23,
+      message_id: "<detach-refresh@example.com>",
+      thread_id: "detach-refresh",
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Detach refresh",
+      date: "2026-04-28T10:00:00Z",
+      body: "Original message",
+    };
+    const task = {
+      id: "detach-task",
+      title: "Task awaiting detach",
+      status: "open",
+      created_at: "2026-04-28T10:01:00Z",
+      link_confidence: null,
+      related_thread_id: email.thread_id,
+    };
+    const patchResponse = deferred<ReturnType<typeof jsonResponse>>();
+    let threadRequests = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/23")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/thread/detach-refresh")) {
+        threadRequests += 1;
+        return Promise.resolve(jsonResponse({ thread: [email], tasks: [task] }));
+      }
+      if (url.endsWith("/api/tasks/detach-task") && init?.method === "PATCH") return patchResponse.promise;
+      if (url.endsWith("/api/emails/send")) return Promise.resolve(jsonResponse({ simulated: true }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root?.render(<EmailDetail emailId={23} />));
+    await waitForCondition(() => container?.textContent?.includes(task.title) ?? false);
+
+    const detachButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("이 대화에서 제외"),
+    );
+    await act(async () => detachButton?.click());
+
+    const draftInput = container.querySelector<HTMLTextAreaElement>("#reply-draft");
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    await act(async () => {
+      setter?.call(draftInput, "Reply before detach completes");
+      draftInput?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const sendButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("답장 보내기"),
+    );
+    await act(async () => sendButton?.click());
+    await waitForCondition(() => threadRequests === 2);
+    expect(container.textContent).toContain(task.title);
+
+    await act(async () => {
+      patchResponse.resolve(jsonResponse({ id: task.id }));
+      await patchResponse.promise;
+    });
+    await waitForCondition(() => !(container?.textContent?.includes(task.title) ?? true));
+    expect(container.textContent).not.toContain(task.title);
+  });
+
   it("cleans up draft states explicitly", async () => {
     const email: TestEmail = {
       id: 20,
