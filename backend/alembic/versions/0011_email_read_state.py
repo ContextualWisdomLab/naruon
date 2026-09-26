@@ -14,6 +14,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if not inspector.has_table("emails"):
+        return
+    if any(column["name"] == "is_read" for column in inspector.get_columns("emails")):
+        return
     op.add_column(
         "emails",
         sa.Column(
@@ -26,4 +32,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("emails", "is_read")
+    # The column may have predated this guarded revision; retain customer state.
+    return
