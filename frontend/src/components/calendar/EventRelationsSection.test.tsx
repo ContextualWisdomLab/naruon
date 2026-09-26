@@ -27,10 +27,12 @@ it('shows cited source links and saves a relation correction in one click', asyn
     source: {
       event_uid: 'event_1', title: '워크숍', starts_at: '2026-09-27T10:00:00Z',
       ends_at: '2026-09-27T11:00:00Z', email_id: 12,
+      citations: [{ segment_uid: 'segment_1', label: '시작', excerpt: '20260927T100000Z' }],
     },
     target: {
       event_uid: 'event_2', title: '회의', starts_at: '2026-09-27T10:30:00Z',
       ends_at: '2026-09-27T11:30:00Z', email_id: 13,
+      citations: [{ segment_uid: 'segment_2', label: '시작', excerpt: '20260927T103000Z' }],
     },
   };
   const post = vi.spyOn(apiClient, 'post').mockImplementation(async (path) => (
@@ -49,6 +51,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
   });
   expect(post).toHaveBeenCalledTimes(2);
   expect(container.querySelectorAll('a[href^="/mail?id="]')).toHaveLength(2);
+  expect(container.textContent).toContain('20260927T100000Z');
   expect(container.textContent).toContain('자동 판단 80%');
 
   const correction = [...container.querySelectorAll('button')].find(

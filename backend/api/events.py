@@ -8,7 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -17,6 +17,8 @@ from api.auth import AuthContext, get_auth_context
 from db.models import (
     EventRelationCorrectionRecord,
     EventRelationRecord,
+    ContentSegmentRecord,
+    Email,
     SourceEventRecord,
 )
 from db.session import get_db
@@ -39,6 +41,12 @@ class EventConflictResponse(BaseModel):
 RelationType = Literal["enables", "conflicts", "unrelated"]
 
 
+class EventCitationResponse(BaseModel):
+    segment_uid: str
+    label: str
+    excerpt: str
+
+
 class EventSourceResponse(BaseModel):
     event_uid: str
     title: str
@@ -46,6 +54,7 @@ class EventSourceResponse(BaseModel):
     ends_at: datetime.datetime
     email_id: int | None
     source_segment_uids: list[str]
+    citations: list[EventCitationResponse]
 
 
 class EventRelationResponse(BaseModel):
@@ -81,6 +90,19 @@ def _event_scope(model, auth_context: AuthContext, visibility_scope: str):
     )
 
 
+def _source_event_scope(model, auth_context: AuthContext, visibility_scope: str):
+    email_scope = [
+        Email.id == model.email_id,
+        *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
+    ]
+    if visibility_scope == "organization":
+        email_scope.append(Email.is_personal_reference.is_(False))
+    return (
+        *_event_scope(model, auth_context, visibility_scope),
+        or_(model.email_id.is_(None), select(Email.id).where(*email_scope).exists()),
+    )
+
+
 def _commitment(event: SourceEventRecord) -> CalendarCommitment:
     return CalendarCommitment(
         commitment_id=event.event_uid,
@@ -103,7 +125,9 @@ async def list_event_conflicts(
             await db.execute(
                 select(SourceEventRecord)
                 .where(
-                    *_event_scope(SourceEventRecord, auth_context, visibility_scope),
+                    *_source_event_scope(
+                        SourceEventRecord, auth_context, visibility_scope
+                    ),
                     SourceEventRecord.event_type == "calendar_event",
                     SourceEventRecord.status_code.in_(
                         ("confirmed", "tentative", "desired")
@@ -149,6 +173,7 @@ def _relation_response(
     relation: EventRelationRecord,
     source: SourceEventRecord,
     target: SourceEventRecord,
+    citation_map: dict[tuple[int, str], ContentSegmentRecord],
 ) -> EventRelationResponse:
     return EventRelationResponse(
         relation_uid=relation.relation_uid,
@@ -159,23 +184,94 @@ def _relation_response(
         evidence_code=relation.evidence_code,
         source_segment_uids=relation.source_segment_uids,
         corrected=relation.corrected_at is not None,
-        source=EventSourceResponse(
-            event_uid=source.event_uid,
-            title=source.title,
-            starts_at=source.starts_at,
-            ends_at=source.ends_at,
-            email_id=source.email_id,
-            source_segment_uids=source.source_segment_uids,
-        ),
-        target=EventSourceResponse(
-            event_uid=target.event_uid,
-            title=target.title,
-            starts_at=target.starts_at,
-            ends_at=target.ends_at,
-            email_id=target.email_id,
-            source_segment_uids=target.source_segment_uids,
-        ),
+        source=_event_source_response(source, citation_map),
+        target=_event_source_response(target, citation_map),
     )
+
+
+_CITATION_LABELS = {
+    "SUMMARY": "제목",
+    "DTSTART": "시작",
+    "DTEND": "종료",
+    "DURATION": "기간",
+    "LOCATION": "장소",
+    "STATUS": "상태",
+}
+
+
+def _event_source_response(
+    event: SourceEventRecord,
+    citation_map: dict[tuple[int, str], ContentSegmentRecord],
+) -> EventSourceResponse:
+    citations = []
+    if event.email_id is not None:
+        for segment_uid in event.source_segment_uids:
+            segment = citation_map.get((event.email_id, segment_uid))
+            if segment is None:
+                continue
+            property_header, _, value = segment.safe_text_content.partition(":")
+            label = _CITATION_LABELS.get(property_header.split(";", 1)[0])
+            if label is None:
+                continue
+            timezone = next(
+                (
+                    part.partition("=")[2]
+                    for part in property_header.split(";")[1:]
+                    if part.startswith("TZID=")
+                ),
+                None,
+            )
+            excerpt = value.strip()
+            if timezone:
+                excerpt = f"{excerpt} ({timezone})"
+            citations.append(
+                EventCitationResponse(
+                    segment_uid=segment_uid,
+                    label=label,
+                    excerpt=excerpt[:240],
+                )
+            )
+    return EventSourceResponse(
+        event_uid=event.event_uid,
+        title=event.title,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        email_id=event.email_id,
+        source_segment_uids=event.source_segment_uids,
+        citations=citations,
+    )
+
+
+async def _citation_map(
+    db: AsyncSession,
+    rows: list[tuple[EventRelationRecord, SourceEventRecord, SourceEventRecord]],
+    auth_context: AuthContext,
+) -> dict[tuple[int, str], ContentSegmentRecord]:
+    events = [event for _, source, target in rows for event in (source, target)]
+    email_ids = {event.email_id for event in events if event.email_id is not None}
+    segment_uids = {uid for event in events for uid in event.source_segment_uids}
+    if not email_ids or not segment_uids:
+        return {}
+    segments = (
+        (
+            await db.execute(
+                select(ContentSegmentRecord)
+                .join(Email, ContentSegmentRecord.email_id == Email.id)
+                .where(
+                    ContentSegmentRecord.email_id.in_(email_ids),
+                    ContentSegmentRecord.content_segment_uid.in_(segment_uids),
+                    *Email.owner_filters(
+                        auth_context.user_id, auth_context.organization_id
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        (segment.email_id, segment.content_segment_uid): segment for segment in segments
+    }
 
 
 async def _scoped_relations(
@@ -194,8 +290,8 @@ async def _scoped_relations(
         .join(target, EventRelationRecord.target_event_uid == target.event_uid)
         .where(
             *_event_scope(EventRelationRecord, auth_context, visibility_scope),
-            *_event_scope(source, auth_context, visibility_scope),
-            *_event_scope(target, auth_context, visibility_scope),
+            *_source_event_scope(source, auth_context, visibility_scope),
+            *_source_event_scope(target, auth_context, visibility_scope),
         )
     )
     if relation_uid is not None:
@@ -214,7 +310,11 @@ async def list_event_relations(
     db: AsyncSession = Depends(get_db),
 ) -> list[EventRelationResponse]:
     relations = await _scoped_relations(db, auth_context, visibility_scope)
-    return [_relation_response(relation, source, target) for relation, source, target in relations]
+    citations = await _citation_map(db, relations, auth_context)
+    return [
+        _relation_response(relation, source, target, citations)
+        for relation, source, target in relations
+    ]
 
 
 @router.post("/relations/reconcile", response_model=list[EventRelationResponse])
@@ -289,4 +389,5 @@ async def correct_event_relation(
         relation.corrected_by_user_id = auth_context.user_id
         relation.corrected_at = datetime.datetime.now(datetime.timezone.utc)
         await db.commit()
-    return _relation_response(relation, source, target)
+    citations = await _citation_map(db, relations, auth_context)
+    return _relation_response(relation, source, target, citations)

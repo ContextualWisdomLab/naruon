@@ -20,6 +20,7 @@ from db.models import (
     Base,
     EventRelationCorrectionRecord,
     EventRelationRecord,
+    Email,
     SourceEventRecord,
 )
 from services.email_import_service import _build_email_object
@@ -149,8 +150,32 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 workspace="workspace-org-1",
             )
             uncited.source_segment_uids = []
+            foreign_email = Email(
+                user_id="owner-b",
+                organization_id="org-1",
+                message_id="<foreign@example.com>",
+                sender="sender@example.com",
+                date=datetime.datetime(2026, 9, 27, tzinfo=datetime.timezone.utc),
+                body="Another owner's mail",
+            )
+            session.add(foreign_email)
+            await session.flush()
+            mismatched_source = peer(
+                "event_mismatched_source",
+                owner="owner-a",
+                visibility="organization",
+                workspace="workspace-org-1",
+            )
+            mismatched_source.email_id = foreign_email.id
             session.add_all(
-                [same_owner, other_owner, personal, other_workspace, uncited]
+                [
+                    same_owner,
+                    other_owner,
+                    personal,
+                    other_workspace,
+                    uncited,
+                    mismatched_source,
+                ]
             )
             await session.commit()
             auth = AuthContext(
@@ -191,7 +216,19 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 "Meeting",
                 "Another meeting",
             }
-            assert email.id in (relations[0].source.email_id, relations[0].target.email_id)
+            assert email.id in (
+                relations[0].source.email_id,
+                relations[0].target.email_id,
+            )
+            cited_source = (
+                relations[0].source
+                if relations[0].source.email_id == email.id
+                else relations[0].target
+            )
+            assert any(
+                citation.label == "시작" and "20260927T100000Z" in citation.excerpt
+                for citation in cited_source.citations
+            )
             assert (
                 len(
                     await reconcile_event_relations(
@@ -241,8 +278,16 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
             assert correction.source_segment_uids == corrected.source_segment_uids
 
             await session.delete(email)
-            for event in (same_owner, other_owner, personal, other_workspace, uncited):
+            for event in (
+                same_owner,
+                other_owner,
+                personal,
+                other_workspace,
+                uncited,
+                mismatched_source,
+            ):
                 await session.delete(event)
+            await session.delete(foreign_email)
             await session.commit()
             assert (
                 await session.execute(select(SourceEventRecord))

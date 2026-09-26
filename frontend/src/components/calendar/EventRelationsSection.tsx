@@ -11,6 +11,7 @@ interface EventSource {
   starts_at: string;
   ends_at: string;
   email_id: number | null;
+  citations: Array<{ segment_uid: string; label: string; excerpt: string }>;
 }
 
 interface EventRelation {
@@ -40,6 +41,13 @@ function EventEvidence({ event }: { event: EventSource }) {
     <div className="min-w-0">
       <p className="truncate font-semibold">{event.title}</p>
       <p className="text-xs text-muted-foreground">{time}</p>
+      {event.citations.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-xs text-muted-foreground" aria-label={`${event.title} 원본 근거`}>
+          {event.citations.map((citation) => (
+            <li key={citation.segment_uid}><span className="font-semibold">{citation.label}</span>: {citation.excerpt}</li>
+          ))}
+        </ul>
+      ) : null}
       {event.email_id !== null ? (
         <a
           href={`/mail?id=${encodeURIComponent(event.email_id)}`}
