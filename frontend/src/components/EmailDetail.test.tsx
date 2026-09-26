@@ -521,6 +521,90 @@ describe("EmailDetail", () => {
     expect(document.activeElement?.id).toBe('msg-31');
   });
 
+  it("does not restore a stale judgment after its linked task is detached", async () => {
+    const email: TestEmail = {
+      id: 41,
+      message_id: "judgment-race@example.com",
+      thread_id: "judgment-race",
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Judgment race",
+      date: "2026-09-27T10:00:00Z",
+      body: "Original state",
+    };
+    const task = {
+      id: "judgment-task",
+      title: "Task used by judgment",
+      status: "open",
+      created_at: "2026-09-27T10:01:00Z",
+      link_confidence: 1,
+      related_thread_id: email.thread_id,
+    };
+    const judgmentResponse = deferred<ReturnType<typeof jsonResponse>>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/41")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/thread/judgment-race")) {
+        return Promise.resolve(jsonResponse({ thread: [email], tasks: [task] }));
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
+      }
+      if (url.endsWith("/api/emails/thread-judgment")) return judgmentResponse.promise;
+      if (url.endsWith("/api/tasks/judgment-task") && init?.method === "PATCH") {
+        return Promise.resolve(jsonResponse({ id: task.id }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={41} />); });
+    await waitForCondition(() => container?.textContent?.includes(task.title) ?? false);
+
+    const create = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("대화 판단 카드"),
+    );
+    await act(async () => { create?.click(); });
+    await waitForCondition(() => fetchMock.mock.calls.some(([input]) =>
+      String(input).endsWith("/api/emails/thread-judgment"),
+    ));
+
+    const detach = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("이 대화에서 제외"),
+    );
+    await act(async () => { detach?.click(); });
+    await waitForCondition(() => !(container?.textContent?.includes(task.title) ?? true));
+
+    await act(async () => {
+      judgmentResponse.resolve(jsonResponse({
+        status: "ready",
+        evidence_limited: false,
+        evidence: [{ uid: "segment-1", email_id: 41, excerpt: "Original state" }],
+        objects: [],
+        judgment: {
+          current_state: {
+            text: "Stale task-linked result",
+            evidence_segment_uids: ["segment-1"],
+            linked_task_uids: [task.id],
+            linked_object_uids: [],
+          },
+          judgment_point: null,
+          recommended_action: null,
+          blocking_dependencies: [],
+          unresolved_commitments: [],
+          tensions: [],
+        },
+      }));
+      await judgmentResponse.promise;
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).not.toContain("Stale task-linked result");
+    expect(container.textContent).toContain("대화 판단 카드 만들기");
+  });
+
   it("opens an accessible source drawer from the source chip and records source evidence events", async () => {
     const email: TestEmail = {
       id: 23,
