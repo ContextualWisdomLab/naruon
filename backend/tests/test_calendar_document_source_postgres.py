@@ -69,10 +69,12 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 group_ids=(),
             )
 
-            def ics(uid: str, start: str, end: str) -> str:
+            def ics(uid: str, start: str, end: str, status: str | None = None) -> str:
+                status_line = f"STATUS:{status}\n" if status else ""
                 return (
                     "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n"
                     f"UID:{uid}\nDTSTART:{start}\nDTEND:{end}\n"
+                    f"{status_line}"
                     f"SUMMARY:{uid}\nEND:VEVENT\nEND:VCALENDAR"
                 )
 
@@ -87,7 +89,10 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             second = await upload_calendar_source(
                 CalendarSourceUploadRequest(
                     ics_text=ics(
-                        "second@example.com", "20260927T103000Z", "20260927T113000Z"
+                        "second@example.com",
+                        "20260927T103000Z",
+                        "20260927T113000Z",
+                        "TENTATIVE",
                     ),
                     visibility_scope="organization",
                 ),
@@ -95,6 +100,8 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 session,
             )
             assert len(first) == len(second) == 1
+            assert first[0].status_code == "confirmed"
+            assert second[0].status_code == "tentative"
             assert first[0].email_id is None
             assert first[0].document_id
             assert any(
@@ -113,6 +120,13 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 await list_event_relations("organization", owner, session)
             ).items
             assert len(relations) == 1
+            assert {
+                relations[0].source.status_code,
+                relations[0].target.status_code,
+            } == {
+                "confirmed",
+                "tentative",
+            }
             assert {
                 relations[0].source.document_id,
                 relations[0].target.document_id,

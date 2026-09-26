@@ -405,6 +405,7 @@ const calendarRelation = {
   source: {
     event_uid: "event_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     title: "워크숍 준비",
+    status_code: "confirmed",
     starts_at: "2026-09-27T09:00:00Z",
     ends_at: "2026-09-27T10:00:00Z",
     email_id: 23,
@@ -414,6 +415,7 @@ const calendarRelation = {
   target: {
     event_uid: "event_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     title: "워크숍",
+    status_code: "tentative",
     starts_at: "2026-09-27T11:00:00Z",
     ends_at: "2026-09-27T12:00:00Z",
     email_id: null,
@@ -1229,6 +1231,8 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("재시도 없음", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "일정 관계" }).click();
     await page.getByText("워크숍 준비 → 워크숍", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("원본 상태: 확정", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("원본 상태: 잠정", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "별개 일정", exact: true }).click();
     await page.getByText("직접 수정함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "왼쪽 일정이 오른쪽 일정에 도움", exact: true }).click();

@@ -26,12 +26,12 @@ it('shows cited source links and saves a relation correction in one click', asyn
     confidence: 0.8,
     corrected: false,
     source: {
-      event_uid: 'event_1', title: '워크숍', starts_at: '2026-09-27T10:00:00Z',
+      event_uid: 'event_1', title: '워크숍', status_code: 'confirmed', starts_at: '2026-09-27T10:00:00Z',
       ends_at: '2026-09-27T11:00:00Z', email_id: 12, document_id: null,
       citations: [{ segment_uid: 'segment_1', label: '시작', excerpt: '20260927T100000Z' }],
     },
     target: {
-      event_uid: 'event_2', title: '회의', starts_at: '2026-09-27T10:30:00Z',
+      event_uid: 'event_2', title: '회의', status_code: 'tentative', starts_at: '2026-09-27T10:30:00Z',
       ends_at: '2026-09-27T11:30:00Z', email_id: null, document_id: 'doc_13',
       citations: [{ segment_uid: 'segment_2', label: '시작', excerpt: '20260927T103000Z' }],
     },
@@ -57,6 +57,8 @@ it('shows cited source links and saves a relation correction in one click', asyn
   expect(container.querySelectorAll('a[href^="/mail?id="]')).toHaveLength(1);
   expect(container.querySelector('a[href="/api/events/sources/doc_13"]')).not.toBeNull();
   expect(container.textContent).toContain('20260927T100000Z');
+  expect(container.textContent).toContain('원본 상태: 확정');
+  expect(container.textContent).toContain('원본 상태: 잠정');
   expect(container.textContent).toContain('원본 일정 시간 기준');
 
   const correction = [...container.querySelectorAll('button')].find(

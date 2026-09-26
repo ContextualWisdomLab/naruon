@@ -8,6 +8,7 @@ type VisibilityScope = 'personal' | 'organization';
 interface EventSource {
   event_uid: string;
   title: string;
+  status_code: string;
   starts_at: string;
   ends_at: string;
   email_id: number | null;
@@ -47,6 +48,12 @@ const labels: Record<RelationType, string> = {
   conflicts: '시간 충돌',
   unrelated: '별개 일정',
 };
+const statusLabels: Record<string, string> = {
+  confirmed: '확정',
+  tentative: '잠정',
+  desired: '희망',
+  cancelled: '취소',
+};
 
 function EventEvidence({ event }: { event: EventSource }) {
   const time = new Date(event.starts_at).toLocaleString('ko-KR', {
@@ -57,6 +64,7 @@ function EventEvidence({ event }: { event: EventSource }) {
     <div className="min-w-0">
       <p className="truncate font-semibold">{event.title}</p>
       <p className="text-xs text-muted-foreground">{time}</p>
+      <p className="text-xs text-muted-foreground">원본 상태: {statusLabels[event.status_code] ?? '확인 필요'}</p>
       {event.citations.length > 0 ? (
         <ul className="mt-2 space-y-1 text-xs text-muted-foreground" aria-label={`${event.title} 원본 근거`}>
           {event.citations.map((citation) => (
