@@ -18,7 +18,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _HASH_PATTERN = re.compile(r"--hash=sha256:([0-9a-f]{64})")
-_EXACT_PIN_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\\\s]+)")
+_EXACT_PIN_PATTERN = re.compile(
+    r"^([A-Za-z0-9_.-]+)(?:\[[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_.-]+)*\])?==([^\\\s]+)"
+)
 
 
 def read_repo_text(relative_path: str) -> str:
@@ -83,11 +85,25 @@ def importer_resolution(importer_section: dict[str, object], group: str, name: s
     return resolution
 
 
+def test_hash_lock_parser_accepts_pinned_requirements_with_extras() -> None:
+    """Keep PEP 508 extras attached to a package without orphaning its hashes."""
+    digest = "a" * 64
+    lock_text = f"package[extra]==1.2.3 \\\n    --hash=sha256:{digest}\n"
+
+    assert exact_requirement_pins(lock_text) == {"package": "1.2.3"}
+    assert hashed_requirement_records(lock_text) == {
+        "package==1.2.3": frozenset({digest})
+    }
+
+
 def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None:
     """Keep backend, Strix, and frontend dependency floors reviewable together."""
     backend_pins = exact_requirement_pins(read_repo_text("backend/requirements.txt"))
     backend_records = hashed_requirement_records(
         read_repo_text("backend/requirements-hashes.txt")
+    )
+    agent_records = hashed_requirement_records(
+        read_repo_text("backend/requirements-agent.txt")
     )
     strix_pins = exact_requirement_pins(read_repo_text("requirements-strix-ci.txt"))
     strix_records = hashed_requirement_records(
@@ -97,14 +113,26 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
 
     assert backend_pins["cryptography"] == "50.0.0"
+    assert backend_pins["httpx2"] == "2.13.0"
     assert backend_pins["protobuf"] == "7.35.1"
     assert "cryptography==50.0.0" in backend_records
+    assert "httpx2==2.13.0" in backend_records
     assert "protobuf==7.35.1" in backend_records
+    assert "httpcore2==2.13.0" in backend_records
+    assert agent_records["httpx2==2.13.0"] == backend_records["httpx2==2.13.0"]
+    assert agent_records["httpcore2==2.13.0"] == backend_records["httpcore2==2.13.0"]
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", digest)
-        for pin in ("cryptography==50.0.0", "protobuf==7.35.1")
+        for pin in (
+            "cryptography==50.0.0",
+            "httpx2==2.13.0",
+            "httpcore2==2.13.0",
+            "protobuf==7.35.1",
+        )
         for digest in backend_records[pin]
     )
+    pytest_config = read_repo_text("backend/pytest.ini")
+    assert "Using `httpx` with `starlette.testclient` is deprecated" not in pytest_config
 
     assert strix_pins["cryptography"] == "50.0.0"
     assert strix_pins["protobuf"] == "6.33.6"
@@ -115,7 +143,6 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         for pin in ("cryptography==50.0.0", "protobuf==6.33.6")
         for digest in strix_records[pin]
     )
-
     root_importer = frontend_lock["importers"]["."]
     postcss_resolution = importer_resolution(
         root_importer, "devDependencies", "postcss"
@@ -144,3 +171,10 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "undici@8.9.0",
     ):
         assert exact_lock_entry in package_records
+
+
+def test_starlette_testclient_uses_httpx2_runtime() -> None:
+    """Exercise Starlette's preferred TestClient transport dependency."""
+    from starlette import testclient
+
+    assert testclient.httpx.__name__ == "httpx2"
