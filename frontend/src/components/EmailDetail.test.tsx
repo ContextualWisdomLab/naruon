@@ -509,7 +509,12 @@ describe("EmailDetail", () => {
     expect(card?.textContent).toContain("엇갈리는 내용");
     expect(card?.textContent).toContain("연결 정보: Delivery issue");
     expect(card?.textContent).toContain("중요한 내용은 원문에서 확인해 주세요");
-    expect(card?.querySelectorAll('button[aria-label^="근거 보기:"]')).toHaveLength(4);
+    const evidence = card?.querySelectorAll('details > summary');
+    expect(evidence).toHaveLength(4);
+    await act(async () => { (evidence?.[0] as HTMLElement | undefined)?.click(); });
+    expect((evidence?.[0]?.parentElement as HTMLDetailsElement | undefined)?.open).toBe(true);
+    expect(card?.textContent).toContain("Monday");
+    expect(card?.textContent).toContain("원문 메일로 이동");
   });
 
   it("opens an accessible source drawer from the source chip and records source evidence events", async () => {
