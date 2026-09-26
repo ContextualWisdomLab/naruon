@@ -55,7 +55,8 @@ class EventConflictPageResponse(BaseModel):
     next_cursor: str | None
 
 
-RelationType = Literal["enables", "conflicts", "unrelated"]
+RelationType = Literal["candidate", "enables", "conflicts", "unrelated"]
+CorrectionRelationType = Literal["enables", "conflicts", "unrelated"]
 
 
 class EventCitationResponse(BaseModel):
@@ -83,7 +84,7 @@ class EventRelationResponse(BaseModel):
     target_event_uid: str
     relation_type: RelationType
     enabler_event_uid: str | None
-    confidence: float
+    confidence: float | None
     evidence_code: str
     source_segment_uids: list[str]
     corrected: bool
@@ -105,7 +106,7 @@ class EventReconcilePageResponse(BaseModel):
 class EventRelationCorrectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    relation_type: RelationType
+    relation_type: CorrectionRelationType
     enabler_event_uid: str | None = None
 
 
@@ -696,10 +697,8 @@ async def reconcile_event_relations(
                 organization_id=auth_context.organization_id,
                 workspace_id=auth_context.workspace_id,
                 visibility_scope=visibility_scope,
-                relation_type="conflicts",
-                # ponytail: time overlap is provisional; enrich confidence with
-                # shared entities and travel context when those sources arrive.
-                confidence=0.8,
+                relation_type="candidate",
+                confidence=None,
                 evidence_code="occupied_interval_overlap",
                 source_segment_uids=citations,
                 created_at=datetime.datetime.now(datetime.timezone.utc),
@@ -879,7 +878,7 @@ async def _reconcile_event_dependencies(
                     visibility_scope=visibility_scope,
                     relation_type="enables",
                     enabler_event_uid=enabler.event_uid,
-                    confidence=1.0,
+                    confidence=None,
                     evidence_code="explicit_ical_dependency",
                     source_segment_uids=list(
                         dict.fromkeys(
@@ -941,7 +940,7 @@ async def correct_event_relation(
         )
         relation.relation_type = request.relation_type
         relation.enabler_event_uid = request.enabler_event_uid
-        relation.confidence = 1.0
+        relation.confidence = None
         relation.evidence_code = "human_correction"
         relation.corrected_by_user_id = auth_context.user_id
         relation.corrected_at = datetime.datetime.now(datetime.timezone.utc)

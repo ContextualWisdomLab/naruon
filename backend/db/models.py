@@ -1220,7 +1220,7 @@ class EventRelationRecord(Base):
             "source_event_uid < target_event_uid", name="ck_event_relations_order"
         ),
         CheckConstraint(
-            "relation_type IN ('enables', 'conflicts', 'unrelated')",
+            "relation_type IN ('candidate', 'enables', 'conflicts', 'unrelated')",
             name="ck_event_relations_type",
         ),
         CheckConstraint(
@@ -1257,7 +1257,7 @@ class EventRelationRecord(Base):
     visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
     relation_type: Mapped[str] = mapped_column(String(16), nullable=False)
     enabler_event_uid: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     evidence_code: Mapped[str] = mapped_column(String(64), nullable=False)
     source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     corrected_by_user_id: Mapped[str | None] = mapped_column(String, nullable=True)

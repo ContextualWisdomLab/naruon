@@ -29,17 +29,18 @@ out of organization project views.
    Represent email, attachment, calendar, task, and later plugin events through
    this common contract, adding adapters only when their source can be checked.
 2. Store event relations separately from project-object edges. Each relation
-   records both event IDs, the verdict, confidence, and the source evidence and
-   features that support it. An `unrelated` verdict is recorded only for a pair
-   actually evaluated; absence of an edge is not an unrelated verdict.
+   records both event IDs, the verdict, calibrated confidence when available,
+   and the source evidence and features that support it. An `unrelated` verdict
+   is recorded only for a pair actually evaluated; absence of an edge is not an
+   unrelated verdict.
 3. Keep owner, organization, workspace, and personal/context visibility in the
    event and relation scopes. Do not compare or expose events across those
    boundaries without the explicit consent bridge required by Epic 5. Unknown
    personal classification remains owner-only.
 4. Retrieve plausible pairs before classifying them from shared entities,
    temporal fit, location, and explicit causal or dependency cues. Bound the
-   candidate set and expose sparse or competing evidence through lower
-   confidence. A shared date or location alone never proves `enables`.
+   candidate set and expose sparse or competing evidence without inventing a
+   confidence score. A shared date or location alone never proves `enables`.
 5. Correct a displayed edge in one gesture. Persist the actor, prior verdict,
    new verdict, evidence, and time in the same transaction. A human correction
    takes precedence over later automatic recomputation until explicitly reset.
@@ -81,9 +82,11 @@ and lodging evidence or retain a user's correction.
 
 Draft [#1788](https://github.com/ContextualWisdomLab/naruon/pull/1788) admits
 owner-private iCalendar uploads and parsed mail attachments into the event
-ledger. It stores cited time-overlap conflicts and, for an explicit
-`RELATED-TO;RELTYPE=DEPENDS-ON` UID, a directional `enables` relation when the
-referenced event is unambiguous in the owner-visible scope and ends before the
+ledger. It stores cited time overlaps as unresolved `candidate` relations with
+no numeric confidence; overlap alone does not prove a commitment conflict.
+For an explicit `RELATED-TO;RELTYPE=DEPENDS-ON` UID, it stores a directional
+`enables` relation when the referenced event is unambiguous in the
+owner-visible scope and ends before the
 dependent event starts. The correction audit records direction changes.
 RFC 9253 defines `DEPENDS-ON` as a dependency in some manner; it does not alone
 prove a finish-to-start schedule, so the implementation requires that additional

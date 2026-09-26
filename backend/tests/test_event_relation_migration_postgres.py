@@ -46,6 +46,16 @@ async def test_event_relation_revision_upgrades_and_downgrades():
                 inspector = inspect(sync_connection)
                 assert inspector.has_table("event_relations")
                 assert inspector.has_table("event_relation_corrections")
+                assert next(
+                    column
+                    for column in inspector.get_columns("event_relations")
+                    if column["name"] == "confidence"
+                )["nullable"]
+                assert "candidate" in next(
+                    constraint["sqltext"]
+                    for constraint in inspector.get_check_constraints("event_relations")
+                    if constraint["name"] == "ck_event_relations_type"
+                )
                 assert {
                     column["name"]
                     for column in inspector.get_columns("event_relations")

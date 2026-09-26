@@ -4,6 +4,7 @@ import datetime
 import uuid
 
 import pytest
+from pydantic import ValidationError
 from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -239,7 +240,10 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 )
             ).items
             assert len(relations) == 1
-            assert relations[0].relation_type == "conflicts"
+            assert relations[0].relation_type == "candidate"
+            assert relations[0].confidence is None
+            with pytest.raises(ValidationError):
+                EventRelationCorrectionRequest(relation_type="candidate")
             assert relations[0].evidence_code == "occupied_interval_overlap"
             assert owned.source_segment_uids[0] in relations[0].source_segment_uids
             assert {relations[0].source.title, relations[0].target.title} == {
@@ -304,7 +308,7 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 correction.actor_user_id,
                 correction.before_type,
                 correction.after_type,
-            ) == ("owner-a", "conflicts", "unrelated")
+            ) == ("owner-a", "candidate", "unrelated")
             assert correction.source_segment_uids == corrected.source_segment_uids
 
             await session.delete(email)

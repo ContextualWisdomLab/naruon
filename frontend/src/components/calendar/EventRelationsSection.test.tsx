@@ -21,9 +21,9 @@ afterEach(() => {
 it('shows cited source links and saves a relation correction in one click', async () => {
   const relation = {
     relation_uid: 'erel_1',
-    relation_type: 'conflicts',
+    relation_type: 'candidate',
     enabler_event_uid: null,
-    confidence: 0.8,
+    confidence: null,
     corrected: false,
     source: {
       event_uid: 'event_1', title: '워크숍', status_code: 'confirmed', location_text: 'Conference Hall', starts_at: '2026-09-27T10:00:00Z',
@@ -43,7 +43,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
       : { items: [], next_cursor: null }
   ));
   const patch = vi.spyOn(apiClient, 'patch').mockImplementation(async (_path, body) => ({
-    ...relation, ...(body as object), confidence: 1, corrected: true,
+    ...relation, ...(body as object), corrected: true,
   }));
   container = document.createElement('div');
   document.body.append(container);
@@ -60,7 +60,8 @@ it('shows cited source links and saves a relation correction in one click', asyn
   expect(container.textContent).toContain('원본 상태: 확정');
   expect(container.textContent).toContain('원본 상태: 잠정');
   expect(container.textContent).toContain('원본 장소: Conference Hall');
-  expect(container.textContent).toContain('원본 일정 시간 기준');
+  expect(container.textContent).toContain('시간이 겹침');
+  expect(container.textContent).toContain('시간만 확인됨 · 관계 판단 전');
 
   const correction = [...container.querySelectorAll('button')].find(
     (button) => button.textContent === '별개 일정',
@@ -131,7 +132,7 @@ it('continues bounded reconciliation and loads the next relation page', async ()
     ends_at: '2026-09-27T11:00:00Z', email_id: null, document_id: null, citations: [],
   };
   const relation = {
-    relation_uid: relationCursor, relation_type: 'conflicts', confidence: 0.8,
+    relation_uid: relationCursor, relation_type: 'candidate', confidence: null,
     enabler_event_uid: null, corrected: false, source: event,
     target: { ...event, event_uid: 'event_2', title: '둘째 일정' },
   };

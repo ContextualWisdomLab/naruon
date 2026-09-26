@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { apiClient } from '@/lib/api-client';
 
-type RelationType = 'enables' | 'conflicts' | 'unrelated';
+type RelationType = 'candidate' | 'enables' | 'conflicts' | 'unrelated';
 type VisibilityScope = 'personal' | 'organization';
 
 interface EventSource {
@@ -21,7 +21,7 @@ interface EventRelation {
   relation_uid: string;
   relation_type: RelationType;
   enabler_event_uid: string | null;
-  confidence: number;
+  confidence: number | null;
   corrected: boolean;
   source: EventSource;
   target: EventSource;
@@ -45,6 +45,7 @@ type VisibleRelation = EventRelation & { scope: VisibilityScope };
 
 const scopes: VisibilityScope[] = ['personal', 'organization'];
 const labels: Record<RelationType, string> = {
+  candidate: '시간이 겹침',
   enables: '진행에 도움',
   conflicts: '시간 충돌',
   unrelated: '별개 일정',
@@ -300,7 +301,7 @@ export function EventRelationsSection() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">{relation.scope === 'personal' ? '개인' : '조직'}</span>
             <span className="font-semibold">{labels[relation.relation_type]}</span>
-            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : relation.relation_type === 'enables' ? '원본 일정의 선행 관계 기준' : '원본 일정 시간 기준'}</span>
+            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : relation.relation_type === 'enables' ? '원본 일정의 선행 관계 기준' : '시간만 확인됨 · 관계 판단 전'}</span>
           </div>
           {relation.relation_type === 'enables' && relation.enabler_event_uid ? (
             <p className="mt-2 text-xs text-muted-foreground">{relation.enabler_event_uid === relation.source.event_uid ? relation.source.title : relation.target.title} → {relation.enabler_event_uid === relation.source.event_uid ? relation.target.title : relation.source.title}</p>

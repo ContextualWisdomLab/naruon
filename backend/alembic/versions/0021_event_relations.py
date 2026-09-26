@@ -22,7 +22,7 @@ def upgrade() -> None:
         sa.Column("workspace_id", sa.String(), nullable=False),
         sa.Column("visibility_scope", sa.String(length=24), nullable=False),
         sa.Column("relation_type", sa.String(length=16), nullable=False),
-        sa.Column("confidence", sa.Float(), nullable=False),
+        sa.Column("confidence", sa.Float(), nullable=True),
         sa.Column("evidence_code", sa.String(length=64), nullable=False),
         sa.Column("source_segment_uids", sa.JSON(), nullable=False),
         sa.Column("corrected_by_user_id", sa.String(), nullable=True),
@@ -38,7 +38,7 @@ def upgrade() -> None:
             "source_event_uid < target_event_uid", name="ck_event_relations_order"
         ),
         sa.CheckConstraint(
-            "relation_type IN ('enables', 'conflicts', 'unrelated')",
+            "relation_type IN ('candidate', 'enables', 'conflicts', 'unrelated')",
             name="ck_event_relations_type",
         ),
         sa.CheckConstraint(
