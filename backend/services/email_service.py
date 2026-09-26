@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from collections.abc import Iterable
 from typing import Dict, Any
 from email.utils import parseaddr, getaddresses
 
@@ -21,17 +22,24 @@ def generate_email_fingerprint(email_data: Dict[str, Any]) -> str:
     return hashlib.sha256(fingerprint_source).hexdigest()
 
 
-def process_self_to_self(email_data: Dict[str, Any], user_email: str) -> bool:
+def process_self_to_self(
+    email_data: Dict[str, Any], user_email: str | Iterable[str]
+) -> bool:
     """
-    Detects if an email is sent from the user to themselves, turning it into a knowledge node.
+    Detect mail sent only between addresses owned by the same user.
     """
     sender_raw = str(email_data.get("sender") or "")
     recipients_raw = email_data.get("recipients") or []
     recipient_inputs = recipients_raw if isinstance(recipients_raw, list) else [recipients_raw]
     recipient_inputs = [str(v) for v in recipient_inputs]
+    owner_inputs = [user_email] if isinstance(user_email, str) else list(user_email)
     
     _, sender_addr = parseaddr(sender_raw)
-    normalized_user = user_email.strip().lower()
+    owner_addresses = {
+        addr.strip().lower()
+        for _, addr in getaddresses([str(value) for value in owner_inputs])
+        if "@" in addr
+    }
     normalized_sender = sender_addr.strip().lower()
     parsed_recipients = {
         addr.strip().lower()
@@ -39,7 +47,11 @@ def process_self_to_self(email_data: Dict[str, Any], user_email: str) -> bool:
         if addr
     }
     
-    if normalized_user and normalized_user == normalized_sender and normalized_user in parsed_recipients:
+    if (
+        normalized_sender in owner_addresses
+        and parsed_recipients
+        and parsed_recipients <= owner_addresses
+    ):
         logger.info("Self-to-self email detected. Organizing as knowledge node.")
         return True
     return False

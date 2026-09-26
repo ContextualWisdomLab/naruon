@@ -69,6 +69,33 @@ async def test_extract_knowledge_from_self_sent_skips_non_self_address():
 
 
 @pytest.mark.asyncio
+async def test_extract_knowledge_skips_mixed_recipient_message():
+    db = AsyncMock(spec=AsyncSession)
+    email = _make_email(recipients="testuser@example.com, teammate@example.com")
+
+    assert await extract_knowledge_from_self_sent(
+        db, email, ["testuser@example.com"]
+    ) is None
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_extract_knowledge_accepts_owner_alias_recipient():
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _ScalarResult()
+    email = _make_email(recipients="alias@example.com")
+
+    task = await extract_knowledge_from_self_sent(
+        db, email, ["testuser@example.com", "alias@example.com"]
+    )
+
+    assert task is not None
+    assert task.source_type == "self_sent_knowledge"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_extract_knowledge_from_self_sent_reuses_existing_task():
     db = AsyncMock(spec=AsyncSession)
     existing_task = TicketTask(

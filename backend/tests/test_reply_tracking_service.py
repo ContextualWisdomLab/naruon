@@ -93,6 +93,17 @@ def test_thread_reply_candidate_ignores_self_sent_knowledge_messages():
     assert thread_reply_candidate([self_sent], USER_ADDRESSES) is None
 
 
+def test_thread_reply_candidate_keeps_mixed_recipient_message():
+    sent = make_email(
+        "self_and_client",
+        sender="me@example.com",
+        recipients="me@example.com, client@example.com",
+        minutes=0,
+    )
+
+    assert thread_reply_candidate([sent], USER_ADDRESSES) is sent
+
+
 def test_thread_reply_candidate_preserves_strict_later_reply_boundary():
     sent_message = make_email(
         "sent_same_time",

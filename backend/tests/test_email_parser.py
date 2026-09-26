@@ -18,6 +18,7 @@ from services.email_parser import (
     parse_eml,
     parse_eml_bytes,
 )
+from services.email_service import process_self_to_self
 
 
 def test_parse_eml_basic():
@@ -42,6 +43,22 @@ This is a test email.\x00"""
         assert "\x00" not in parsed["body"]
     finally:
         os.unlink(temp_path)
+
+
+def test_parse_eml_keeps_copy_recipients_for_self_sent_classification():
+    parsed = parse_eml_bytes(
+        b"From: owner@example.com\r\n"
+        b"To: owner@example.com\r\n"
+        b"Cc: teammate@example.com\r\n"
+        b"Bcc: archive@example.com\r\n"
+        b"Date: Mon, 27 Apr 2026 10:00:00 +0000\r\n"
+        b"\r\nBody"
+    )
+
+    assert parsed["recipients"] == (
+        "owner@example.com, teammate@example.com, archive@example.com"
+    )
+    assert process_self_to_self(parsed, "owner@example.com") is False
 
 
 def test_parse_eml_multipart_html_fallback():
