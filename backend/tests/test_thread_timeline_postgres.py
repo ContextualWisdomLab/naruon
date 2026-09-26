@@ -2,10 +2,12 @@
 
 import datetime
 import uuid
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.auth import AuthContext
@@ -142,11 +144,16 @@ async def test_thread_tasks_stay_with_their_email_owner():
                 )
             assert error.value.status_code == 409
 
-            detached = await update_ticket_task(
-                "thread-task",
-                UpdateTicketTaskRequest(detach_thread_id="shared-thread"),
-                db=session,
-                auth_context=owner_auth,
+            with patch.object(session, "execute", wraps=session.execute) as execute:
+                detached = await update_ticket_task(
+                    "thread-task",
+                    UpdateTicketTaskRequest(detach_thread_id="shared-thread"),
+                    db=session,
+                    auth_context=owner_auth,
+                )
+            assert any(
+                "FOR UPDATE OF ticket_tasks" in str(call.args[0].compile(dialect=postgresql.dialect()))
+                for call in execute.call_args_list
             )
             assert detached.related_thread_id is None
             after = await get_email_thread(

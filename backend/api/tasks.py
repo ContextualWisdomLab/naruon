@@ -215,9 +215,10 @@ async def update_ticket_task(
             status_code=422, detail="At least one ticket field is required"
         )
 
-    result = await db.execute(
-        _build_task_query(auth_context).where(TicketTask.task_uid == task_uid)
-    )
+    query = _build_task_query(auth_context).where(TicketTask.task_uid == task_uid)
+    if request.detach_thread_id is not None:
+        query = query.with_for_update(of=TicketTask)
+    result = await db.execute(query)
     row = result.one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
