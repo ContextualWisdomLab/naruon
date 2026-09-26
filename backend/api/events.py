@@ -741,19 +741,35 @@ async def _reconcile_event_dependencies(
     }
     matches: dict[str, list[SourceEventRecord]] = {}
     if target_keys:
+        ranked_targets = (
+            select(
+                SourceEventRecord.event_uid.label("event_uid"),
+                func.row_number()
+                .over(
+                    partition_by=SourceEventRecord.source_event_key,
+                    order_by=SourceEventRecord.event_uid,
+                )
+                .label("candidate_rank"),
+            )
+            .where(
+                *_source_event_scope(SourceEventRecord, auth_context, visibility_scope),
+                SourceEventRecord.event_type == "calendar_event",
+                SourceEventRecord.status_code.in_(
+                    ("confirmed", "tentative", "desired")
+                ),
+                SourceEventRecord.source_event_key.in_(target_keys),
+            )
+            .subquery()
+        )
         targets = (
             (
                 await db.execute(
-                    select(SourceEventRecord).where(
-                        *_source_event_scope(
-                            SourceEventRecord, auth_context, visibility_scope
-                        ),
-                        SourceEventRecord.event_type == "calendar_event",
-                        SourceEventRecord.status_code.in_(
-                            ("confirmed", "tentative", "desired")
-                        ),
-                        SourceEventRecord.source_event_key.in_(target_keys),
+                    select(SourceEventRecord)
+                    .join(
+                        ranked_targets,
+                        SourceEventRecord.event_uid == ranked_targets.c.event_uid,
                     )
+                    .where(ranked_targets.c.candidate_rank <= 2)
                 )
             )
             .scalars()
@@ -761,18 +777,50 @@ async def _reconcile_event_dependencies(
         )
         for target in targets:
             matches.setdefault(target.source_event_key, []).append(target)
+    same_source_matches: dict[tuple[str, str, str], list[SourceEventRecord]] = {}
     processed = 0
     for dependent in page:
         for evidence in dependent.dependency_evidence:
             candidates = matches.get(evidence["target_uid"], [])
-            same_source = [
-                candidate
-                for candidate in candidates
-                if candidate.source_record_uid == dependent.source_record_uid
-                and candidate.source_kind == dependent.source_kind
-            ]
-            if same_source:
-                candidates = same_source
+            if len(candidates) > 1:
+                source_key = (
+                    evidence["target_uid"],
+                    dependent.source_kind,
+                    dependent.source_record_uid,
+                )
+                if source_key not in same_source_matches:
+                    # ponytail: only ambiguous UIDs need this indexed lookup;
+                    # batch by source if ambiguity volume becomes material.
+                    same_source_matches[source_key] = list(
+                        (
+                            await db.execute(
+                                select(SourceEventRecord)
+                                .where(
+                                    *_source_event_scope(
+                                        SourceEventRecord,
+                                        auth_context,
+                                        visibility_scope,
+                                    ),
+                                    SourceEventRecord.event_type == "calendar_event",
+                                    SourceEventRecord.status_code.in_(
+                                        ("confirmed", "tentative", "desired")
+                                    ),
+                                    SourceEventRecord.source_event_key
+                                    == evidence["target_uid"],
+                                    SourceEventRecord.source_kind
+                                    == dependent.source_kind,
+                                    SourceEventRecord.source_record_uid
+                                    == dependent.source_record_uid,
+                                )
+                                .order_by(SourceEventRecord.event_uid)
+                                .limit(2)
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                if same_source_matches[source_key]:
+                    candidates = same_source_matches[source_key]
             if len(candidates) != 1:
                 continue
             enabler = candidates[0]

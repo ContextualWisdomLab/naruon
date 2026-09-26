@@ -298,6 +298,65 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             assert len(second_page.items) == 2
             assert second_page.next_cursor is None
 
+            for index in range(2):
+                await upload_calendar_source(
+                    CalendarSourceUploadRequest(
+                        ics_text=ics(
+                            "shared@example.com",
+                            f"20260929T{index + 8:02d}0000Z",
+                            f"20260929T{index + 9:02d}0000Z",
+                        ),
+                        visibility_scope="personal",
+                    ),
+                    owner,
+                    session,
+                )
+            await upload_calendar_source(
+                CalendarSourceUploadRequest(
+                    ics_text=(
+                        "BEGIN:VCALENDAR\nVERSION:2.0\n"
+                        "BEGIN:VEVENT\nUID:shared@example.com\n"
+                        "DTSTART:20260929T100000Z\nDTEND:20260929T110000Z\n"
+                        "SUMMARY:Same-source start\nEND:VEVENT\n"
+                        "BEGIN:VEVENT\nUID:same-follower@example.com\n"
+                        "DTSTART:20260929T120000Z\nDTEND:20260929T130000Z\n"
+                        "RELATED-TO;RELTYPE=DEPENDS-ON:shared@example.com\n"
+                        "SUMMARY:Same-source follower\nEND:VEVENT\nEND:VCALENDAR"
+                    ),
+                    visibility_scope="personal",
+                ),
+                owner,
+                session,
+            )
+            await upload_calendar_source(
+                CalendarSourceUploadRequest(
+                    ics_text=(
+                        "BEGIN:VCALENDAR\nVERSION:2.0\n"
+                        "BEGIN:VEVENT\nUID:ambiguous-follower@example.com\n"
+                        "DTSTART:20260929T140000Z\nDTEND:20260929T150000Z\n"
+                        "RELATED-TO;RELTYPE=DEPENDS-ON:shared@example.com\n"
+                        "SUMMARY:Ambiguous follower\nEND:VEVENT\nEND:VCALENDAR"
+                    ),
+                    visibility_scope="personal",
+                ),
+                owner,
+                session,
+            )
+            await reconcile_event_relations(
+                "personal", owner, session, mode="dependencies"
+            )
+            relation_pairs = {
+                frozenset((item.source.title, item.target.title))
+                for item in (
+                    await list_event_relations("personal", owner, session)
+                ).items
+            }
+            assert (
+                frozenset(("Same-source start", "Same-source follower"))
+                in relation_pairs
+            )
+            assert all("Ambiguous follower" not in pair for pair in relation_pairs)
+
             start = datetime.datetime(2026, 10, 1, 10, tzinfo=datetime.timezone.utc)
 
             def vevent(
