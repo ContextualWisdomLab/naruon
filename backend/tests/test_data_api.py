@@ -2920,6 +2920,15 @@ def test_data_pdf_dom_upload_rejects_invalid_signature_and_size(mock_db, monkeyp
     assert mock_db.documents == []
 
 
+
+def test_pending_pdf_document_decoder_success():
+    pdf_bytes = b"%PDF-1.4\n%...\n%%EOF\n"
+    document = Document(
+        document_content=base64.b64encode(pdf_bytes).decode("ascii")
+    )
+    decoded = data_api.decode_pending_pdf_document_bytes(document)
+    assert decoded == pdf_bytes
+
 def test_pending_pdf_document_decoder_rejects_malformed_payloads(monkeypatch):
     malformed_base64 = Document(document_content="not@@base64")
     with pytest.raises(ValueError, match="valid base64"):
