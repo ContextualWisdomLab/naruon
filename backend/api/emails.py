@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, func, or_, select
 from db.session import get_db
-from db.models import Email, TicketTask
+from db.models import Email, TicketTask, TicketTaskThreadDismissal
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -713,6 +713,13 @@ async def get_email_thread(
                 and_(
                     TicketTask.related_email_id.is_(None),
                     TicketTask.related_thread_id.in_(lookup_values),
+                    ~select(TicketTaskThreadDismissal.id)
+                    .where(
+                        TicketTaskThreadDismissal.ticket_task_id == TicketTask.id,
+                        TicketTaskThreadDismissal.thread_key
+                        == TicketTask.related_thread_id,
+                    )
+                    .exists(),
                 ),
             ),
         )

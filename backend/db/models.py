@@ -861,6 +861,27 @@ class TicketTask(Base):
     related_email: Mapped["Email | None"] = relationship(back_populates="ticket_tasks")
 
 
+class TicketTaskThreadDismissal(Base):
+    __tablename__ = "ticket_task_thread_dismissals"
+    __table_args__ = (
+        UniqueConstraint(
+            "ticket_task_id", "thread_key", name="uq_ticket_task_thread_dismissals_link"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column("dismissal_id", primary_key=True)
+    ticket_task_id: Mapped[int] = mapped_column(
+        ForeignKey("ticket_tasks.task_id", ondelete="CASCADE"), nullable=False
+    )
+    thread_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
 Index(
     "uq_ticket_tasks_reply_sla_email",
     TicketTask.user_id,

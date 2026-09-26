@@ -369,7 +369,7 @@ describe("EmailDetail", () => {
     expect(timelineText.indexOf("Review B decision")).toBeLessThan(timelineText.indexOf("Thread B sibling body"));
 
     const detachButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("연결 해제"),
+      (button) => button.textContent?.includes("이 대화에서 제외"),
     );
     expect(detachButton).toBeTruthy();
     await act(async () => detachButton?.click());

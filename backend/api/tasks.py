@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context
 from api.emails import canonical_thread_key
-from db.models import Email, TicketTask
+from db.models import Email, TicketTask, TicketTaskThreadDismissal
 from db.session import get_db
 from services.reply_sla_escalation_service import (
     ReplySlaEscalationResult,
@@ -232,12 +232,26 @@ async def update_ticket_task(
             or task.related_thread_id != request.detach_thread_id
         ):
             raise HTTPException(status_code=409, detail="Thread link changed")
-        task.related_thread_id = None
+        dismissal = await db.execute(
+            select(TicketTaskThreadDismissal.id).where(
+                TicketTaskThreadDismissal.ticket_task_id == task.id,
+                TicketTaskThreadDismissal.thread_key == request.detach_thread_id,
+            )
+        )
+        if dismissal.scalar_one_or_none() is None:
+            db.add(
+                TicketTaskThreadDismissal(
+                    ticket_task_id=task.id,
+                    thread_key=request.detach_thread_id,
+                    actor_user_id=auth_context.user_id,
+                )
+            )
     if request.status is not None:
         task.status = request.status
     if request.priority is not None:
         task.priority = request.priority
-    task.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    if request.status is not None or request.priority is not None:
+        task.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
     await db.commit()
     await db.refresh(task)

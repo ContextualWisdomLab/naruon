@@ -14,7 +14,7 @@ from api.auth import AuthContext
 from api.emails import get_email_thread
 from api.tasks import UpdateTicketTaskRequest, update_ticket_task
 from core.config import settings
-from db.models import Base, Email, TicketTask
+from db.models import Base, Email, TicketTask, TicketTaskThreadDismissal
 
 
 @pytest.mark.asyncio
@@ -175,10 +175,30 @@ async def test_thread_tasks_stay_with_their_email_owner():
                     auth_context=owner_auth,
                 )
             assert any(
-                "FOR UPDATE OF ticket_tasks" in str(call.args[0].compile(dialect=postgresql.dialect()))
+                "FOR UPDATE OF ticket_tasks"
+                in str(call.args[0].compile(dialect=postgresql.dialect()))
                 for call in execute.call_args_list
             )
-            assert detached.related_thread_id is None
+            assert detached.id == "thread-task"
+            assert (
+                await session.execute(task_query)
+            ).scalar_one().related_thread_id == "shared-thread"
+            dismissal = (
+                await session.execute(select(TicketTaskThreadDismissal))
+            ).scalar_one()
+            assert dismissal.thread_key == "shared-thread"
+            assert dismissal.actor_user_id == "owner-a"
+            repeated = await update_ticket_task(
+                "thread-task",
+                UpdateTicketTaskRequest(detach_thread_id="shared-thread"),
+                db=session,
+                auth_context=owner_auth,
+            )
+            assert repeated.id == "thread-task"
+            assert (
+                len((await session.execute(select(TicketTaskThreadDismissal))).all())
+                == 1
+            )
             after = await get_email_thread(
                 "shared-thread", db=session, auth_context=owner_auth
             )

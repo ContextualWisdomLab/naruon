@@ -592,16 +592,16 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     setDetachingTaskId(task.id);
     setDetachError(null);
     try {
-      const updated = await apiClient.patch<{ related_thread_id: string | null }>(
+      const updated = await apiClient.patch<{ id: string }>(
         `/api/tasks/${encodeURIComponent(task.id)}`,
         { detach_thread_id: task.related_thread_id },
       );
       if (requestId !== threadRequestIdRef.current || currentEmailIdRef.current !== email.id) return;
-      if (updated.related_thread_id !== null) throw new Error('Thread link remains');
+      if (updated.id !== task.id) throw new Error('Task update mismatch');
       setThreadTasks((current) => current.filter((item) => item.id !== task.id));
     } catch {
       if (requestId === threadRequestIdRef.current && currentEmailIdRef.current === email.id) {
-        setDetachError('작업 연결을 해제하지 못했습니다. 다시 시도해 주세요.');
+        setDetachError('작업을 이 대화에서 제외하지 못했습니다. 다시 시도해 주세요.');
       }
     } finally {
       if (requestId === threadRequestIdRef.current && currentEmailIdRef.current === email.id) {
@@ -831,7 +831,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                       </p>
                       {confidence === undefined && item.task.related_thread_id && (
                         <Button type="button" size="sm" variant="outline" className="mt-2" disabled={detachingTaskId !== null} onClick={() => void detachThreadTask(item.task)}>
-                          {detachingTaskId === item.task.id ? '연결 해제 중' : '연결 해제'}
+                          {detachingTaskId === item.task.id ? '제외하는 중' : '이 대화에서 제외'}
                         </Button>
                       )}
                     </div>
