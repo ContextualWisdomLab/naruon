@@ -17,7 +17,7 @@ from services.email_import_service import _build_email_object
 from services.knowledge_extractor import (
     extract_knowledge_from_self_sent,
 )
-from services.reply_tracking_service import configured_email_addresses
+from services.reply_tracking_service import personal_reference_addresses
 from services.threading_service import assign_thread_id, generate_email_fingerprint
 
 
@@ -129,6 +129,7 @@ class ImapSyncConfig:
     imap_password: str | None
     smtp_username: str | None
     pop3_username: str | None
+    personal_reference_address: str | None = None
 
 
 class ImapSyncWorker:
@@ -186,6 +187,7 @@ class ImapSyncWorker:
                     TenantConfig.imap_password,
                     TenantConfig.smtp_username,
                     TenantConfig.pop3_username,
+                    TenantConfig.personal_reference_address,
                 ).where(
                     TenantConfig.imap_server.isnot(None),
                     TenantConfig.imap_port.isnot(None),
@@ -201,6 +203,7 @@ class ImapSyncWorker:
                     imap_password=row.imap_password,
                     smtp_username=row.smtp_username,
                     pop3_username=row.pop3_username,
+                    personal_reference_address=row.personal_reference_address,
                 )
                 for row in result
             ]
@@ -321,7 +324,7 @@ class ImapSyncWorker:
             return 0
 
         imported_count = 0
-        owner_addresses = configured_email_addresses(config)
+        owner_addresses = personal_reference_addresses(config)
         async with AsyncSessionLocal() as session:
             try:
                 for raw_message, is_read in messages:

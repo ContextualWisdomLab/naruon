@@ -173,7 +173,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
     assert imported[0]["session"] is session
     assert imported[0]["user_id"] == "pop3-user"
     assert imported[0]["organization_id"] == "org-pop3"
-    assert imported[0]["owner_addresses"] == {"pop3-user@example.com"}
+    assert imported[0]["owner_addresses"] == set()
     assert imported[0]["email_data"]["message_id"] == "<pop3-1@example.com>"
     assert imported[0]["email_data"]["subject"] == "POP3 import"
     assert session.committed is True

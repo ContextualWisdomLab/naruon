@@ -1321,6 +1321,7 @@ class TenantConfig(Base):
     pop3_port: Mapped[int | None] = mapped_column(nullable=True)
     pop3_username: Mapped[str | None] = mapped_column(String, nullable=True)
     pop3_password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    personal_reference_address: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # OAuth and Third Party Settings
     oauth_client_id: Mapped[str | None] = mapped_column(String, nullable=True)

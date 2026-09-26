@@ -199,7 +199,7 @@ async def test_extract_knowledge_from_self_sent_rejects_empty_owner_addresses():
 
 
 @pytest.mark.asyncio
-async def test_extract_knowledge_from_self_sent_uses_user_id_email_fallback():
+async def test_extract_knowledge_from_self_sent_requires_declared_address():
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _ScalarResult()
     email = _make_email(
@@ -210,9 +210,8 @@ async def test_extract_knowledge_from_self_sent_uses_user_id_email_fallback():
 
     task = await extract_knowledge_from_self_sent(db, email)
 
-    assert task is not None
-    assert task.user_id == "testuser@example.com"
-    assert task.related_email_id == 1
+    assert task is None
+    db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio

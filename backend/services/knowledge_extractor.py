@@ -18,15 +18,13 @@ def _single_line_plain_text(value: str | None) -> str:
     return " ".join(text.split())
 
 
-def _normalized_owner_addresses(email: Email, owner_addresses: Iterable[str] | None):
+def _normalized_owner_addresses(owner_addresses: Iterable[str] | None):
     if owner_addresses is None:
         candidates: list[str] = []
     elif isinstance(owner_addresses, str):
         candidates = [owner_addresses]
     else:
         candidates = list(owner_addresses)
-    if "@" in str(email.user_id):
-        candidates.append(str(email.user_id))
     return {
         address.strip().lower()
         for _, address in email_utils.getaddresses(candidates)
@@ -37,7 +35,7 @@ def _normalized_owner_addresses(email: Email, owner_addresses: Iterable[str] | N
 def is_self_sent_email(
     email: Email, owner_addresses: Iterable[str] | None = None
 ) -> bool:
-    tenant_addresses = _normalized_owner_addresses(email, owner_addresses)
+    tenant_addresses = _normalized_owner_addresses(owner_addresses)
     return process_self_to_self(
         {
             "sender": email.sender,

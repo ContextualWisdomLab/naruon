@@ -54,7 +54,7 @@ from services.threading_service import (
     generate_email_fingerprint,
     normalize_message_id,
 )
-from services.reply_tracking_service import configured_email_addresses
+from services.reply_tracking_service import personal_reference_addresses
 from services.tenant_config_scope import get_scoped_tenant_config
 
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
@@ -379,7 +379,7 @@ def _build_email_object(
     )
     email_obj.is_personal_reference = (
         is_self_sent_email(email_obj, owner_addresses)
-        if (owner_addresses or "@" in user_id)
+        if owner_addresses
         and not parsed.get("is_automated_or_list", False)
         else None
     )
@@ -1204,7 +1204,7 @@ async def import_email_uploads(
         tenant_config = await get_scoped_tenant_config(
             session, user_id, organization_id
         )
-        owner_addresses = configured_email_addresses(tenant_config)
+        owner_addresses = personal_reference_addresses(tenant_config)
 
         with TemporaryDirectory(prefix="naruon-email-import-") as temp_dir_name:
             temp_dir = Path(temp_dir_name)

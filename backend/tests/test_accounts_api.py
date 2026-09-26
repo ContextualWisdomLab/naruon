@@ -162,6 +162,7 @@ def test_get_and_update_tenant_config(client: TestClient, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["smtp_server"] is None
+    assert data["personal_reference_address"] is None
     assert data["user_id"] == "testuser"
 
     # Update config
@@ -173,6 +174,7 @@ def test_get_and_update_tenant_config(client: TestClient, monkeypatch):
         "pop3_port": 995,
         "pop3_username": "pop3-user",
         "pop3_password": "pop3-secret",
+        "personal_reference_address": " User@Example.com ",
     }
     response = client.put("/api/accounts/config", json=update_data)
     assert response.status_code == 200
@@ -184,6 +186,13 @@ def test_get_and_update_tenant_config(client: TestClient, monkeypatch):
     assert data["pop3_port"] == 995
     assert data["pop3_username"] == "pop3-user"
     assert data["has_pop3_password"] is True
+    assert data["personal_reference_address"] == "user@example.com"
+
+    invalid = client.put(
+        "/api/accounts/config",
+        json={"personal_reference_address": "shared@example.com, user@example.com"},
+    )
+    assert invalid.status_code == 422
 
 
 def test_accounts_config_uses_signed_session_organization_scope(
