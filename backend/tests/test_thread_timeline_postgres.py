@@ -4,11 +4,13 @@ import datetime
 import uuid
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.auth import AuthContext
 from api.emails import get_email_thread
+from api.tasks import UpdateTicketTaskRequest, update_ticket_task
 from core.config import settings
 from db.models import Base, Email, TicketTask
 
@@ -110,6 +112,47 @@ async def test_thread_tasks_stay_with_their_email_owner():
             "owned-task": 1.0,
             "thread-task": None,
         }
+
+        owner_auth = AuthContext(
+            user_id="owner-a",
+            role="member",
+            organization_id="org-1",
+            group_ids=(),
+            workspace_id="workspace-org-1",
+        )
+        async with sessions() as session:
+            for task_uid, expected_status in (
+                ("foreign-task", 404),
+                ("owned-task", 409),
+            ):
+                with pytest.raises(HTTPException) as error:
+                    await update_ticket_task(
+                        task_uid,
+                        UpdateTicketTaskRequest(detach_thread_id="shared-thread"),
+                        db=session,
+                        auth_context=owner_auth,
+                    )
+                assert error.value.status_code == expected_status
+            with pytest.raises(HTTPException) as error:
+                await update_ticket_task(
+                    "thread-task",
+                    UpdateTicketTaskRequest(detach_thread_id="stale-thread"),
+                    db=session,
+                    auth_context=owner_auth,
+                )
+            assert error.value.status_code == 409
+
+            detached = await update_ticket_task(
+                "thread-task",
+                UpdateTicketTaskRequest(detach_thread_id="shared-thread"),
+                db=session,
+                auth_context=owner_auth,
+            )
+            assert detached.related_thread_id is None
+            after = await get_email_thread(
+                "shared-thread", db=session, auth_context=owner_auth
+            )
+            assert [task.id for task in after.tasks] == ["owned-task"]
     finally:
         await scoped_engine.dispose()
         async with root_engine.begin() as connection:

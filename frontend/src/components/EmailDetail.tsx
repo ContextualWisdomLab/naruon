@@ -36,6 +36,7 @@ type ThreadTaskData = {
   status: 'open' | 'in_progress' | 'blocked' | 'done';
   created_at: string;
   link_confidence: number | null;
+  related_thread_id: string | null;
 };
 interface LlmData {
   summary: string;
@@ -116,6 +117,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [email, setEmail] = useState<EmailData | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailData[]>([]);
   const [threadTasks, setThreadTasks] = useState<ThreadTaskData[]>([]);
+  const [detachingTaskId, setDetachingTaskId] = useState<string | null>(null);
+  const [detachError, setDetachError] = useState<string | null>(null);
   const [llmData, setLlmData] = useState<LlmData | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -159,6 +162,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     const isLatestThreadRequest = () => requestId === threadRequestIdRef.current;
 
     setThreadError(null);
+    setDetachError(null);
+    setDetachingTaskId(null);
 
     if (!currentEmail.thread_id) {
       if (isLatestThreadRequest()) {
@@ -197,6 +202,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setEmail(null);
       setThreadEmails([]);
       setThreadTasks([]);
+      setDetachingTaskId(null);
+      setDetachError(null);
       setThreadError(null);
       setDetailError(null);
       setLlmData(null);
@@ -579,6 +586,29 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   }
 
   const conversationMessages = getConversationMessages(email, threadEmails);
+  const detachThreadTask = async (task: ThreadTaskData) => {
+    if (!task.related_thread_id) return;
+    const requestId = threadRequestIdRef.current;
+    setDetachingTaskId(task.id);
+    setDetachError(null);
+    try {
+      const updated = await apiClient.patch<{ related_thread_id: string | null }>(
+        `/api/tasks/${encodeURIComponent(task.id)}`,
+        { detach_thread_id: task.related_thread_id },
+      );
+      if (requestId !== threadRequestIdRef.current || currentEmailIdRef.current !== email.id) return;
+      if (updated.related_thread_id !== null) throw new Error('Thread link remains');
+      setThreadTasks((current) => current.filter((item) => item.id !== task.id));
+    } catch {
+      if (requestId === threadRequestIdRef.current && currentEmailIdRef.current === email.id) {
+        setDetachError('작업 연결을 해제하지 못했습니다. 다시 시도해 주세요.');
+      }
+    } finally {
+      if (requestId === threadRequestIdRef.current && currentEmailIdRef.current === email.id) {
+        setDetachingTaskId(null);
+      }
+    }
+  };
   const timelineItems = [
     ...conversationMessages.map((message) => ({ kind: 'email' as const, date: message.date, message })),
     ...threadTasks.map((task) => ({ kind: 'task' as const, date: task.created_at, task })),
@@ -783,6 +813,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 <Button size="sm" variant="outline" onClick={() => fetchThread(email)}>다시 시도</Button>
               </div>
             )}
+            {detachError && <p role="alert" className="text-sm text-red-500">{detachError}</p>}
             <div className="space-y-4" data-testid="thread-timeline">
               {timelineItems.map((item) => {
                 if (item.kind === 'task') {
@@ -798,6 +829,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                         {{ open: '접수', in_progress: '진행', blocked: '보류', done: '완료' }[item.task.status] || '상태 확인 필요'}
                         {' · '}연결 확신도 {confidence === undefined ? '미확인' : `${confidence}%`}
                       </p>
+                      {confidence === undefined && item.task.related_thread_id && (
+                        <Button type="button" size="sm" variant="outline" className="mt-2" disabled={detachingTaskId !== null} onClick={() => void detachThreadTask(item.task)}>
+                          {detachingTaskId === item.task.id ? '연결 해제 중' : '연결 해제'}
+                        </Button>
+                      )}
                     </div>
                   );
                 }

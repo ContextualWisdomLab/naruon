@@ -221,6 +221,7 @@ class ThreadTaskItem(BaseModel):
     status: str
     created_at: datetime.datetime
     link_confidence: float | None
+    related_thread_id: str | None
 
 
 class EmailThreadResponse(BaseModel):
@@ -729,6 +730,7 @@ async def get_email_thread(
                 link_confidence=(
                     1.0 if task.related_email_id in email_id_set else None
                 ),
+                related_thread_id=task.related_thread_id,
             )
             for task in tasks
         ],

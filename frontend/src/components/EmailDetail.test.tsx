@@ -284,12 +284,15 @@ describe("EmailDetail", () => {
     const emailBResponse = deferred<ReturnType<typeof jsonResponse>>();
     const threadBResponse = deferred<ReturnType<typeof jsonResponse>>();
 
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (url.endsWith("/api/emails/1")) return emailAResponse.promise;
         if (url.endsWith("/api/emails/2")) return emailBResponse.promise;
         if (url.endsWith("/api/emails/thread/thread-a")) return threadAResponse.promise;
         if (url.endsWith("/api/emails/thread/thread-b")) return threadBResponse.promise;
+        if (url.endsWith("/api/tasks/tentative-b") && init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse({ id: "tentative-b", related_thread_id: null }));
+        }
         if (url.endsWith("/api/llm/summarize")) {
           return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
         }
@@ -329,13 +332,24 @@ describe("EmailDetail", () => {
     await act(async () => {
       threadBResponse.resolve(jsonResponse({
         thread: [emailB, siblingB],
-        tasks: [{
-          id: "task-b",
-          title: "Review B decision",
-          status: "open",
-          created_at: "2026-04-27T11:15:00Z",
-          link_confidence: 1,
-        }],
+        tasks: [
+          {
+            id: "task-b",
+            title: "Review B decision",
+            status: "open",
+            created_at: "2026-04-27T11:15:00Z",
+            link_confidence: 1,
+            related_thread_id: "thread-b",
+          },
+          {
+            id: "tentative-b",
+            title: "Tentative B task",
+            status: "open",
+            created_at: "2026-04-27T11:20:00Z",
+            link_confidence: null,
+            related_thread_id: "thread-b",
+          },
+        ],
       }));
       await threadBResponse.promise;
     });
@@ -353,6 +367,20 @@ describe("EmailDetail", () => {
     const timelineText = container.querySelector("[data-testid='thread-timeline']")?.textContent ?? "";
     expect(timelineText.indexOf("Selected B body")).toBeLessThan(timelineText.indexOf("Review B decision"));
     expect(timelineText.indexOf("Review B decision")).toBeLessThan(timelineText.indexOf("Thread B sibling body"));
+
+    const detachButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("연결 해제"),
+    );
+    expect(detachButton).toBeTruthy();
+    await act(async () => detachButton?.click());
+    await waitForCondition(() => !container?.textContent?.includes("Tentative B task"));
+    expect(container.textContent).not.toContain("Tentative B task");
+    expect(container.textContent).toContain("Review B decision");
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input).endsWith("/api/tasks/tentative-b") &&
+      init?.method === "PATCH" &&
+      init.body === JSON.stringify({ detach_thread_id: "thread-b" }),
+    )).toBe(true);
 
     await act(async () => {
       threadAResponse.resolve(jsonResponse({

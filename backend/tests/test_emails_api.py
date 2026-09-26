@@ -1707,6 +1707,7 @@ async def test_get_email_thread_includes_source_linked_tasks(
             "status": "open",
             "created_at": sample_email.date.isoformat().replace("+00:00", "Z"),
             "link_confidence": 1.0,
+            "related_thread_id": sample_email.thread_id,
         }
     ]
     task_query = compiled_query_text(session.queries[-1]).lower()
