@@ -48,9 +48,10 @@ async def test_extract_knowledge_from_self_sent():
     assert task.related_email_id == 1
     assert task.related_thread_id == "thread1"
     
-    # Verify it was added and committed
+    # The caller owns the transaction so the email and note can roll back together.
     db.add.assert_called_once_with(task)
-    db.commit.assert_awaited_once()
+    db.flush.assert_awaited_once()
+    db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -92,7 +93,8 @@ async def test_extract_knowledge_accepts_owner_alias_recipient():
 
     assert task is not None
     assert task.source_type == "self_sent_knowledge"
-    db.commit.assert_awaited_once()
+    db.flush.assert_awaited_once()
+    db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

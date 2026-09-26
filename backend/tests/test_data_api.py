@@ -17,7 +17,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import api.data as data_api
-from api.auth import get_auth_context, get_current_user
+from api.auth import AuthContext, get_auth_context, get_current_user
 from core.config import settings
 from db.models import (
     get_fernet,
@@ -33,6 +33,40 @@ from db.session import get_db
 from main import app
 
 TEST_SESSION_HMAC_SECRET = "data-quality-surface-hmac-material-32-bytes"  # noqa: S105
+
+
+def test_org_quality_scope_excludes_personal_email_references():
+    from sqlalchemy import select
+
+    admin = AuthContext(
+        user_id="admin",
+        role="tenant_admin",
+        organization_id="org-a",
+        group_ids=(),
+        workspace_id="workspace-a",
+    )
+    query = select(Email).where(*data_api._email_scope_filter(admin))
+    sql = str(query.compile(compile_kwargs={"literal_binds": True})).lower()
+
+    assert "email_records.is_personal_reference is false" in sql
+    assert "email_records.user_id = 'admin'" in sql
+
+
+def test_owner_quality_scope_keeps_personal_email_references():
+    from sqlalchemy import select
+
+    owner = AuthContext(
+        user_id="owner",
+        role="member",
+        organization_id="org-a",
+        group_ids=(),
+        workspace_id="workspace-a",
+    )
+    query = select(Email).where(*data_api._email_scope_filter(owner))
+    sql = str(query.compile(compile_kwargs={"literal_binds": True})).lower()
+
+    assert "email_records.user_id = 'owner'" in sql
+    assert "is_personal_reference" not in sql.split("where", 1)[1]
 
 
 class MockResult:

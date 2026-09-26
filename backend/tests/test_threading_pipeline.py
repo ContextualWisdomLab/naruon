@@ -120,6 +120,10 @@ async def test_email_pipeline_triggers_self_sent_knowledge_extraction():
     extract_mock.assert_awaited_once_with(
         session_mock, new_email, ["user_1@example.com"]
     )
+    assert new_email.is_personal_reference is True
+    assert [segment.safe_text_content for segment in new_email.content_segments] == [
+        "Remember this decision."
+    ]
 
 
 @pytest.mark.asyncio

@@ -109,5 +109,5 @@ async def extract_knowledge_from_self_sent(
         related_thread_id=email.thread_id,
     )
     db.add(task)
-    await db.commit()
+    await db.flush()
     return task

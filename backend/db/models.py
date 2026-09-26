@@ -802,6 +802,10 @@ class Email(Base):
     references: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
     body: Mapped[str] = mapped_column(Text)
+    # NULL legacy/unknown rows stay owner-only until their domain is verified.
+    is_personal_reference: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     # IMAP \Seen read state; defaults read so historical/file imports don't nag.
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Defer large pgvector payloads on default entity loads.

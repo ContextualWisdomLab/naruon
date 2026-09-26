@@ -12,7 +12,7 @@ import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Iterable, Literal
 
 from sqlalchemy import bindparam, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +40,7 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
+from services.knowledge_extractor import is_self_sent_email
 from services.project_graph import (
     ProjectSourceSegment,
     persist_project_graph_projection,
@@ -53,6 +54,8 @@ from services.threading_service import (
     generate_email_fingerprint,
     normalize_message_id,
 )
+from services.reply_tracking_service import configured_email_addresses
+from services.tenant_config_scope import get_scoped_tenant_config
 
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
@@ -349,13 +352,14 @@ def _build_email_object(
     *,
     parsed: EmailData,
     user_id: str,
-    organization_id: str,
+    organization_id: str | None,
     message_id: str,
     thread_id: str | None,
     fingerprint: str,
     persisted_date: datetime.datetime,
     attachment_payloads: list[dict],
     fitted_embeddings: list[list[float]],
+    owner_addresses: Iterable[str] | None = None,
 ) -> tuple[Email, int]:
     email_obj = Email(
         user_id=user_id,
@@ -372,6 +376,11 @@ def _build_email_object(
         date=persisted_date,
         body=parsed.get("body", ""),
         embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
+    )
+    email_obj.is_personal_reference = (
+        is_self_sent_email(email_obj, owner_addresses)
+        if owner_addresses or "@" in user_id
+        else None
     )
 
     attachment_count = 0
@@ -459,7 +468,9 @@ def _append_email_content_graph(
 ) -> None:
     body_parse_result = parse_content(
         source_kind="email_body",
-        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        source_record_uid=_content_graph_source_record_uid(
+            "email", email_obj.user_id, email_obj.organization_id, message_id
+        ),
         content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
         content_type=str(parsed.get("body_content_type") or "text/plain"),
         display_name="Email body",
@@ -487,6 +498,8 @@ def _append_email_content_graph(
             source_kind="attachment",
             source_record_uid=_content_graph_source_record_uid(
                 "attachment",
+                email_obj.user_id,
+                email_obj.organization_id,
                 message_id,
                 str(attachment_index),
                 attachment_obj.filename,
@@ -844,6 +857,7 @@ async def _import_single_eml(
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
     batch_context: "EmailImportBatchContext | None" = None,
+    owner_addresses: set[str] | None = None,
 ) -> EmailImportItemResult:
     try:
         content, parsed = await asyncio.to_thread(_read_and_parse_eml, eml_path)
@@ -899,11 +913,13 @@ async def _import_single_eml(
         persisted_date=persisted_date,
         attachment_payloads=attachment_payloads,
         fitted_embeddings=fitted_embeddings,
+        owner_addresses=owner_addresses,
     )
 
     project_source_segments = (
         _project_source_segments(email_obj)
         if settings.PROJECT_GRAPH_EXTRACTION_ENABLED
+        and email_obj.is_personal_reference is False
         else []
     )
 
@@ -1178,6 +1194,10 @@ async def import_email_uploads(
         remaining_quota = MAX_IMPORT_EMAILS_PER_OWNER - existing_email_count
         if remaining_quota <= 0:
             raise EmailImportQuotaExceeded()
+        tenant_config = await get_scoped_tenant_config(
+            session, user_id, organization_id
+        )
+        owner_addresses = configured_email_addresses(tenant_config)
 
         with TemporaryDirectory(prefix="naruon-email-import-") as temp_dir_name:
             temp_dir = Path(temp_dir_name)
@@ -1226,6 +1246,7 @@ async def import_email_uploads(
                         organization_id=organization_id,
                         embedding_provider=embedding_provider,
                         batch_context=batch_context,
+                        owner_addresses=owner_addresses,
                     )
                 )
     finally:
