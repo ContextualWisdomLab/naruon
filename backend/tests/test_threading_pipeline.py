@@ -127,6 +127,43 @@ async def test_email_pipeline_triggers_self_sent_knowledge_extraction():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "header",
+    ["Auto-Submitted: auto-generated", "List-Id: <team.example.com>"],
+)
+async def test_automated_self_addressed_mail_is_not_a_personal_note(header):
+    from services.email_parser import parse_eml_bytes
+    from services.imap_worker import process_fetched_email
+    from unittest.mock import MagicMock
+
+    parsed = parse_eml_bytes(
+        (
+            "From: team@example.com\n"
+            "To: team@example.com\n"
+            "Subject: Automated loopback\n"
+            "Message-ID: <loopback@example.com>\n"
+            f"{header}\n\n"
+            "Did the job finish?\n"
+        ).encode()
+    )
+    session = AsyncMock()
+    session.add = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute.return_value = result
+
+    with patch("services.imap_worker.extract_knowledge_from_self_sent") as extract:
+        email = await process_fetched_email(
+            session, parsed, "owner-1", "org-1", ["team@example.com"]
+        )
+
+    assert parsed["is_automated_or_list"] is True
+    assert email.is_personal_reference is None
+    assert email.content_nodes[0].node_kind == "document"
+    extract.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_email_pipeline_preserves_personal_scope_as_null():
     from services.imap_worker import process_fetched_email
     from services.email_parser import EmailData

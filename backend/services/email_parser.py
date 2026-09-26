@@ -26,6 +26,7 @@ class EmailData(TypedDict):
     body: str
     body_content_type: NotRequired[str]
     body_parse_content: NotRequired[str]
+    is_automated_or_list: NotRequired[bool]
     attachments: list[dict]
 
 
@@ -196,6 +197,8 @@ def _message_to_email_data(msg: Message) -> EmailData:
     parsed_date = _extract_date(msg)
     message_id = _sanitize_nul(msg.get("Message-ID", ""))
     thread_id = _extract_thread_id(msg, message_id)
+    auto_submitted = str(msg.get("Auto-Submitted", "")).strip().lower()
+    precedence = str(msg.get("Precedence", "")).strip().lower()
 
     return {
         "message_id": message_id,
@@ -225,6 +228,11 @@ def _message_to_email_data(msg: Message) -> EmailData:
         "body": _sanitize_display_text(body),
         "body_content_type": body_content_type,
         "body_parse_content": _sanitize_nul(body),
+        "is_automated_or_list": (
+            auto_submitted not in {"", "no"}
+            or precedence in {"list", "bulk", "junk"}
+            or bool(msg.get("List-Id") or msg.get("List-Unsubscribe") or msg.get("X-Loop"))
+        ),
         "attachments": attachments,
     }
 

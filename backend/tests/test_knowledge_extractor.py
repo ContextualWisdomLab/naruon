@@ -24,6 +24,7 @@ def _make_email(**overrides):
         "recipients": "testuser@example.com",
         "subject": "Buy milk",
         "body": "Don't forget to buy milk later.",
+        "is_personal_reference": True,
     }
     values.update(overrides)
     return Email(**values)

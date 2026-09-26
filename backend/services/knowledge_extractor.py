@@ -86,7 +86,11 @@ async def extract_knowledge_from_self_sent(
     has_note_content = bool(
         _single_line_plain_text(email.subject) or _single_line_plain_text(email.body)
     )
-    if not has_note_content or not is_self_sent_email(email, owner_addresses):
+    if (
+        not has_note_content
+        or email.is_personal_reference is not True
+        or not is_self_sent_email(email, owner_addresses)
+    ):
         return None
 
     existing_task = await _existing_knowledge_task(db, email)

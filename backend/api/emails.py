@@ -19,7 +19,6 @@ from services.reply_tracking_service import (
     check_missing_replies,
     configured_email_addresses,
     message_is_from_user,
-    message_is_self_sent,
     thread_requires_reply,
 )
 from services.threading_service import normalize_message_id
@@ -367,7 +366,7 @@ async def get_emails(
                 email=email,
                 thread_id=group_key,
                 reply_count=reply_counts[group_key],
-                is_self_sent=message_is_self_sent(email, user_addresses),
+                is_self_sent=email.is_personal_reference is True,
                 requires_reply=thread_requires_reply(
                     list(reversed(thread_messages[group_key])), user_addresses
                 ),

@@ -628,9 +628,22 @@ async def test_get_emails_marks_self_sent_and_pending_reply_threads(
         subject="Note to self",
         date=datetime.datetime(2026, 4, 27, 11, 0, tzinfo=datetime.timezone.utc),
         body="Summarize this as knowledge.",
+        is_personal_reference=True,
+    )
+    automated_loopback = Email(
+        id=12,
+        user_id="testuser",
+        message_id="automated-msg",
+        thread_id="automated-thread",
+        sender="testuser@example.com",
+        recipients="testuser@example.com",
+        subject="Automated loopback",
+        date=datetime.datetime(2026, 4, 27, 12, 0, tzinfo=datetime.timezone.utc),
+        body="Did the job finish?",
+        is_personal_reference=None,
     )
     db_session.tenant_config = MailTenantConfig()
-    db_session.items = [self_note, sent_waiting]
+    db_session.items = [automated_loopback, self_note, sent_waiting]
 
     response = await client.get("/api/emails?limit=10")
 
@@ -640,6 +653,8 @@ async def test_get_emails_marks_self_sent_and_pending_reply_threads(
     assert by_thread["waiting-thread"]["is_self_sent"] is False
     assert by_thread["note-thread"]["is_self_sent"] is True
     assert by_thread["note-thread"]["requires_reply"] is False
+    assert by_thread["automated-thread"]["is_self_sent"] is False
+    assert by_thread["automated-thread"]["requires_reply"] is False
 
 
 @pytest.mark.asyncio
@@ -682,6 +697,7 @@ async def test_get_emails_sent_folder_returns_user_sent_threads_only(
         subject="Note to self",
         date=datetime.datetime(2026, 4, 27, 11, 0, tzinfo=datetime.timezone.utc),
         body="Turn this into knowledge.",
+        is_personal_reference=True,
     )
     db_session.tenant_config = MailTenantConfig()
     db_session.items = [self_note, sent_waiting, external_inbox]

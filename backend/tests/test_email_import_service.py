@@ -197,6 +197,7 @@ def test_same_message_graph_ids_are_scoped_to_owner():
 
     assert first.is_personal_reference is True
     assert second.is_personal_reference is True
+    assert first.content_nodes[0].node_kind == "personal_reference"
     assert first.content_nodes[0].content_node_uid != second.content_nodes[0].content_node_uid
 
 

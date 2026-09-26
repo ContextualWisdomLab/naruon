@@ -379,7 +379,8 @@ def _build_email_object(
     )
     email_obj.is_personal_reference = (
         is_self_sent_email(email_obj, owner_addresses)
-        if owner_addresses or "@" in user_id
+        if (owner_addresses or "@" in user_id)
+        and not parsed.get("is_automated_or_list", False)
         else None
     )
 
@@ -532,7 +533,13 @@ def _append_parse_result_records(
             source_kind=parsed_node.source_kind,
             source_record_uid=parsed_node.source_record_uid,
             parent_node_uid=parsed_node.parent_node_uid,
-            node_kind=parsed_node.node_kind,
+            node_kind=(
+                "personal_reference"
+                if email_obj.is_personal_reference
+                and parsed_node.source_kind == "email_body"
+                and parsed_node.parent_node_uid is None
+                else parsed_node.node_kind
+            ),
             node_path=parsed_node.node_path,
             ordinal_index=parsed_node.ordinal_index,
             display_label=parsed_node.display_label,
