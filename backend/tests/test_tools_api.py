@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,58 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_success():
+    result = await registry.invoke_tool(
+        "json_formatter", {"json_string": '{"key":"value","number":1}', "indent": 2}
+    )
+    assert result["formatted_json"] == '{\n  "key": "value",\n  "number": 1\n}'
+
+    # Test float indent conversion
+    result2 = await registry.invoke_tool(
+        "json_formatter", {"json_string": '{"a":1}', "indent": 4.0}
+    )
+    assert result2["formatted_json"] == '{\n    "a": 1\n}'
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_invalid():
+    with pytest.raises(ValueError, match="Invalid JSON string:"):
+        await registry.invoke_tool(
+            "json_formatter", {"json_string": "invalid", "indent": 4}
+        )
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello world", "algorithm": "sha256"}
+    )
+    assert (
+        result["hash"]
+        == "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+    )
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_unsupported_algorithm():
+    with pytest.raises(ValueError, match="Unsupported hash algorithm: invalid"):
+        await registry.invoke_tool(
+            "hash_generator", {"text": "hello", "algorithm": "invalid"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_generation_failure(monkeypatch):
+    import hashlib
+
+    def mock_new(*args, **kwargs):
+        raise Exception("Mock failure")
+
+    monkeypatch.setattr(hashlib, "new", mock_new)
+    with pytest.raises(ValueError, match="Hash generation failed:"):
+        await registry.invoke_tool(
+            "hash_generator", {"text": "hello", "algorithm": "sha256"}
+        )
