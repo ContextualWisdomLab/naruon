@@ -1110,6 +1110,33 @@ class KnowledgeGraphEdgeRecord(Base):
     )
 
 
+class CalendarSourceDocumentRecord(Base):
+    __tablename__ = "calendar_source_documents"
+    __table_args__ = (
+        Index(
+            "ix_calendar_source_documents_owner",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "created_at",
+        ),
+    )
+
+    document_id: Mapped[str] = mapped_column(
+        String(40), primary_key=True, default=lambda: f"caldoc_{uuid.uuid4().hex}"
+    )
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
 class SourceEventRecord(Base):
     __tablename__ = "source_events"
     __table_args__ = (
@@ -1134,6 +1161,10 @@ class SourceEventRecord(Base):
     source_event_key: Mapped[str] = mapped_column(String(256), nullable=False)
     email_id: Mapped[int | None] = mapped_column(
         ForeignKey("email_records.id", ondelete="CASCADE"), nullable=True
+    )
+    calendar_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("calendar_source_documents.document_id", ondelete="CASCADE"),
+        nullable=True,
     )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(240), nullable=False)

@@ -271,6 +271,26 @@ describe("/api runtime proxy route", () => {
     });
   });
 
+  it("forwards scoped calendar relation and source cursor queries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | RequestInfo) =>
+        Response.json({ target_url: String(input) }),
+      ),
+    );
+    const response = await GET(
+      new NextRequest(
+        "https://frontend.naruon.net/api/events/sources?visibility_scope=personal&after=caldoc_123",
+        { headers: { Cookie: `naruon_session=${SIGNED_SESSION_TOKEN}` } },
+      ),
+      { params: Promise.resolve({ path: ["events", "sources"] }) },
+    );
+    await expect(response.json()).resolves.toEqual({
+      target_url:
+        "https://api.naruon.net/api/events/sources?visibility_scope=personal&after=caldoc_123",
+    });
+  });
+
   it("rejects state-changing requests when both Origin and Referer are absent", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

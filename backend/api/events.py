@@ -6,9 +6,9 @@ import datetime
 import hashlib
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import or_, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import and_, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -18,14 +18,18 @@ from db.models import (
     EventRelationCorrectionRecord,
     EventRelationRecord,
     ContentSegmentRecord,
+    CalendarSourceDocumentRecord,
     Email,
     SourceEventRecord,
 )
 from db.session import get_db
 from services.calendar_conflict_policy import (
     CalendarCommitment,
+    CalendarPolicyValidationError,
     evaluate_calendar_conflicts,
 )
+from services.calendar_conflict_ics import parse_calendar_source_events_from_ics
+from services.content_graph import parse_content
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -53,6 +57,7 @@ class EventSourceResponse(BaseModel):
     starts_at: datetime.datetime
     ends_at: datetime.datetime
     email_id: int | None
+    document_id: str | None
     source_segment_uids: list[str]
     citations: list[EventCitationResponse]
 
@@ -76,6 +81,24 @@ class EventRelationCorrectionRequest(BaseModel):
     relation_type: RelationType
 
 
+class CalendarSourceUploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ics_text: str = Field(min_length=1, max_length=262_144)
+    visibility_scope: Literal["personal", "organization"]
+
+
+class CalendarSourceListItem(BaseModel):
+    document_id: str
+    visibility_scope: Literal["personal", "organization"]
+    created_at: datetime.datetime
+
+
+class CalendarSourceListResponse(BaseModel):
+    items: list[CalendarSourceListItem]
+    next_cursor: str | None
+
+
 def _event_scope(model, auth_context: AuthContext, visibility_scope: str):
     organization_filter = (
         model.organization_id == auth_context.organization_id
@@ -97,9 +120,29 @@ def _source_event_scope(model, auth_context: AuthContext, visibility_scope: str)
     ]
     if visibility_scope == "organization":
         email_scope.append(Email.is_personal_reference.is_(False))
+    document_scope = [
+        CalendarSourceDocumentRecord.document_id == model.calendar_document_id,
+        CalendarSourceDocumentRecord.user_id == auth_context.user_id,
+        CalendarSourceDocumentRecord.workspace_id == auth_context.workspace_id,
+        CalendarSourceDocumentRecord.organization_id == auth_context.organization_id,
+        CalendarSourceDocumentRecord.visibility_scope == visibility_scope,
+    ]
     return (
         *_event_scope(model, auth_context, visibility_scope),
-        or_(model.email_id.is_(None), select(Email.id).where(*email_scope).exists()),
+        or_(
+            and_(
+                model.source_kind == "email_calendar_attachment",
+                select(Email.id).where(*email_scope).exists(),
+            ),
+            and_(
+                model.source_kind == "workspace_calendar_document",
+                model.email_id.is_(None),
+                model.source_record_uid == model.calendar_document_id,
+                select(CalendarSourceDocumentRecord.document_id)
+                .where(*document_scope)
+                .exists(),
+            ),
+        ),
     )
 
 
@@ -110,6 +153,191 @@ def _commitment(event: SourceEventRecord) -> CalendarCommitment:
         end_at=event.ends_at,
         status=event.status_code,
     )
+
+
+@router.post("/sources/ics", response_model=list[EventSourceResponse])
+async def upload_calendar_source(
+    request: CalendarSourceUploadRequest,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> list[EventSourceResponse]:
+    if (
+        request.visibility_scope == "organization"
+        and auth_context.organization_id is None
+    ):
+        raise HTTPException(status_code=422, detail="Organization scope is unavailable")
+    try:
+        events = parse_calendar_source_events_from_ics(request.ics_text)
+    except CalendarPolicyValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.error_code) from exc
+
+    document = CalendarSourceDocumentRecord(
+        user_id=auth_context.user_id,
+        workspace_id=auth_context.workspace_id,
+        organization_id=auth_context.organization_id,
+        visibility_scope=request.visibility_scope,
+        content=request.ics_text,
+    )
+    db.add(document)
+    await db.flush()
+    graph = parse_content(
+        source_kind="calendar_document",
+        source_record_uid=document.document_id,
+        content=request.ics_text,
+        content_type="text/calendar",
+    )
+    records = []
+    citations: dict[tuple[str, str], str] = {}
+    for index, event in enumerate(events, start=1):
+        segment_rows = [
+            segment
+            for segment in graph.segments
+            if f"/vevent[{index}]/" in segment.segment_path
+        ]
+        properties = {
+            segment.safe_text_content.partition(":")[0].split(";", 1)[0]
+            for segment in segment_rows
+        }
+        if not {"UID", "DTSTART"} <= properties or not (
+            {"DTEND", "DURATION"} & properties
+        ):
+            raise HTTPException(
+                status_code=422, detail="Calendar evidence is incomplete"
+            )
+        cited_segments = [
+            segment
+            for segment in segment_rows
+            if segment.safe_text_content.partition(":")[0].split(";", 1)[0]
+            in {"UID", "DTSTART", "DTEND", "DURATION", "SUMMARY", "LOCATION", "STATUS"}
+        ]
+        event_uid = (
+            "event_"
+            + hashlib.sha256(
+                f"{document.document_id}\0{event.commitment.commitment_id}".encode()
+            ).hexdigest()[:32]
+        )
+        record = SourceEventRecord(
+            event_uid=event_uid,
+            user_id=auth_context.user_id,
+            organization_id=auth_context.organization_id,
+            workspace_id=auth_context.workspace_id,
+            visibility_scope=request.visibility_scope,
+            source_kind="workspace_calendar_document",
+            source_record_uid=document.document_id,
+            source_event_key=event.commitment.commitment_id,
+            calendar_document_id=document.document_id,
+            event_type="calendar_event",
+            title=event.title,
+            status_code=event.commitment.status,
+            starts_at=event.commitment.start_at,
+            ends_at=event.commitment.end_at,
+            location_text=event.location,
+            source_segment_uids=[
+                segment.content_segment_uid for segment in cited_segments
+            ],
+        )
+        records.append(record)
+        citations.update(
+            {
+                (
+                    document.document_id,
+                    segment.content_segment_uid,
+                ): segment.safe_text_content
+                for segment in cited_segments
+            }
+        )
+    db.add_all(records)
+    await db.commit()
+    return [_event_source_response(record, citations) for record in records]
+
+
+@router.get("/sources", response_model=CalendarSourceListResponse)
+async def list_calendar_sources(
+    after: str | None = Query(default=None, max_length=40),
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> CalendarSourceListResponse:
+    statement = select(CalendarSourceDocumentRecord).where(
+        CalendarSourceDocumentRecord.user_id == auth_context.user_id,
+        CalendarSourceDocumentRecord.workspace_id == auth_context.workspace_id,
+        CalendarSourceDocumentRecord.organization_id == auth_context.organization_id,
+    )
+    if after is not None:
+        statement = statement.where(CalendarSourceDocumentRecord.document_id > after)
+    documents = (
+        (
+            await db.execute(
+                statement.order_by(CalendarSourceDocumentRecord.document_id).limit(21)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return CalendarSourceListResponse(
+        items=[
+            CalendarSourceListItem(
+                document_id=document.document_id,
+                visibility_scope=document.visibility_scope,
+                created_at=document.created_at,
+            )
+            for document in documents[:20]
+        ],
+        next_cursor=documents[19].document_id if len(documents) > 20 else None,
+    )
+
+
+@router.get("/sources/{document_id}")
+async def download_calendar_source(
+    document_id: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    document = (
+        await db.execute(
+            select(CalendarSourceDocumentRecord).where(
+                CalendarSourceDocumentRecord.document_id == document_id,
+                CalendarSourceDocumentRecord.user_id == auth_context.user_id,
+                CalendarSourceDocumentRecord.workspace_id == auth_context.workspace_id,
+                CalendarSourceDocumentRecord.organization_id
+                == auth_context.organization_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=404, detail="Calendar source not found")
+    return Response(
+        content=document.content,
+        media_type="text/calendar",
+        headers={
+            "Content-Disposition": 'attachment; filename="calendar.ics"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.delete("/sources/{document_id}", status_code=204)
+async def delete_calendar_source(
+    document_id: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    document = (
+        await db.execute(
+            select(CalendarSourceDocumentRecord).where(
+                CalendarSourceDocumentRecord.document_id == document_id,
+                CalendarSourceDocumentRecord.user_id == auth_context.user_id,
+                CalendarSourceDocumentRecord.workspace_id == auth_context.workspace_id,
+                CalendarSourceDocumentRecord.organization_id
+                == auth_context.organization_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=404, detail="Calendar source not found")
+    await db.delete(document)
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/overlaps", response_model=list[EventConflictResponse])
@@ -169,7 +397,7 @@ def _relation_response(
     relation: EventRelationRecord,
     source: SourceEventRecord,
     target: SourceEventRecord,
-    citation_map: dict[tuple[int, str], ContentSegmentRecord],
+    citation_map: dict[tuple[str, str], str],
 ) -> EventRelationResponse:
     return EventRelationResponse(
         relation_uid=relation.relation_uid,
@@ -197,42 +425,42 @@ _CITATION_LABELS = {
 
 def _event_source_response(
     event: SourceEventRecord,
-    citation_map: dict[tuple[int, str], ContentSegmentRecord],
+    citation_map: dict[tuple[str, str], str],
 ) -> EventSourceResponse:
     citations = []
-    if event.email_id is not None:
-        for segment_uid in event.source_segment_uids:
-            segment = citation_map.get((event.email_id, segment_uid))
-            if segment is None:
-                continue
-            property_header, _, value = segment.safe_text_content.partition(":")
-            label = _CITATION_LABELS.get(property_header.split(";", 1)[0])
-            if label is None:
-                continue
-            timezone = next(
-                (
-                    part.partition("=")[2]
-                    for part in property_header.split(";")[1:]
-                    if part.startswith("TZID=")
-                ),
-                None,
+    for segment_uid in event.source_segment_uids:
+        source_text = citation_map.get((event.source_record_uid, segment_uid))
+        if source_text is None:
+            continue
+        property_header, _, value = source_text.partition(":")
+        label = _CITATION_LABELS.get(property_header.split(";", 1)[0])
+        if label is None:
+            continue
+        timezone = next(
+            (
+                part.partition("=")[2]
+                for part in property_header.split(";")[1:]
+                if part.startswith("TZID=")
+            ),
+            None,
+        )
+        excerpt = value.strip()
+        if timezone:
+            excerpt = f"{excerpt} ({timezone})"
+        citations.append(
+            EventCitationResponse(
+                segment_uid=segment_uid,
+                label=label,
+                excerpt=excerpt[:240],
             )
-            excerpt = value.strip()
-            if timezone:
-                excerpt = f"{excerpt} ({timezone})"
-            citations.append(
-                EventCitationResponse(
-                    segment_uid=segment_uid,
-                    label=label,
-                    excerpt=excerpt[:240],
-                )
-            )
+        )
     return EventSourceResponse(
         event_uid=event.event_uid,
         title=event.title,
         starts_at=event.starts_at,
         ends_at=event.ends_at,
         email_id=event.email_id,
+        document_id=event.calendar_document_id,
         source_segment_uids=event.source_segment_uids,
         citations=citations,
     )
@@ -242,32 +470,82 @@ async def _citation_map(
     db: AsyncSession,
     rows: list[tuple[EventRelationRecord, SourceEventRecord, SourceEventRecord]],
     auth_context: AuthContext,
-) -> dict[tuple[int, str], ContentSegmentRecord]:
+) -> dict[tuple[str, str], str]:
     events = [event for _, source, target in rows for event in (source, target)]
     email_ids = {event.email_id for event in events if event.email_id is not None}
     segment_uids = {uid for event in events for uid in event.source_segment_uids}
-    if not email_ids or not segment_uids:
+    if not segment_uids:
         return {}
-    segments = (
-        (
-            await db.execute(
-                select(ContentSegmentRecord)
-                .join(Email, ContentSegmentRecord.email_id == Email.id)
-                .where(
-                    ContentSegmentRecord.email_id.in_(email_ids),
-                    ContentSegmentRecord.content_segment_uid.in_(segment_uids),
-                    *Email.owner_filters(
-                        auth_context.user_id, auth_context.organization_id
-                    ),
+    citations: dict[tuple[str, str], str] = {}
+    if email_ids:
+        segments = (
+            (
+                await db.execute(
+                    select(ContentSegmentRecord)
+                    .join(Email, ContentSegmentRecord.email_id == Email.id)
+                    .where(
+                        ContentSegmentRecord.email_id.in_(email_ids),
+                        ContentSegmentRecord.content_segment_uid.in_(segment_uids),
+                        *Email.owner_filters(
+                            auth_context.user_id, auth_context.organization_id
+                        ),
+                    )
                 )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    return {
-        (segment.email_id, segment.content_segment_uid): segment for segment in segments
+        citations.update(
+            {
+                (
+                    segment.source_record_uid,
+                    segment.content_segment_uid,
+                ): segment.safe_text_content
+                for segment in segments
+            }
+        )
+    document_ids = {
+        event.calendar_document_id
+        for event in events
+        if event.calendar_document_id is not None
     }
+    if document_ids:
+        documents = (
+            (
+                await db.execute(
+                    select(CalendarSourceDocumentRecord).where(
+                        CalendarSourceDocumentRecord.document_id.in_(document_ids),
+                        CalendarSourceDocumentRecord.user_id == auth_context.user_id,
+                        CalendarSourceDocumentRecord.workspace_id
+                        == auth_context.workspace_id,
+                        CalendarSourceDocumentRecord.organization_id
+                        == auth_context.organization_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for document in documents:
+            # ponytail: reparse the bounded file for citations; persist its
+            # segments when document-backed relation reads grow large.
+            graph = parse_content(
+                source_kind="calendar_document",
+                source_record_uid=document.document_id,
+                content=document.content,
+                content_type="text/calendar",
+            )
+            citations.update(
+                {
+                    (
+                        document.document_id,
+                        segment.content_segment_uid,
+                    ): segment.safe_text_content
+                    for segment in graph.segments
+                    if segment.content_segment_uid in segment_uids
+                }
+            )
+    return citations
 
 
 async def _scoped_relations(

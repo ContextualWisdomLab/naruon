@@ -104,9 +104,10 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                     organization_id="org-1",
                     workspace_id=workspace,
                     visibility_scope=visibility,
-                    source_kind="calendar_fixture",
+                    source_kind="email_calendar_attachment",
                     source_record_uid=uid,
                     source_event_key=uid,
+                    email_id=email.id,
                     event_type="calendar_event",
                     title="Another meeting",
                     status_code="confirmed",
@@ -173,6 +174,7 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
             )
             session.add(foreign_email)
             await session.flush()
+            other_owner.email_id = foreign_email.id
             mismatched_source = peer(
                 "event_mismatched_source",
                 owner="owner-a",

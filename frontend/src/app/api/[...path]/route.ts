@@ -35,6 +35,8 @@ const CLIENT_AUTHORITY_HEADERS = new Set([
 const ALLOWED_BACKEND_QUERY_PARAMS = new Set([
   "folder",
   "limit",
+  "visibility_scope",
+  "after",
   "source_message_id",
   "source_thread_id",
 ]);

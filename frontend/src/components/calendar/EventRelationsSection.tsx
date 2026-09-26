@@ -11,6 +11,7 @@ interface EventSource {
   starts_at: string;
   ends_at: string;
   email_id: number | null;
+  document_id: string | null;
   citations: Array<{ segment_uid: string; label: string; excerpt: string }>;
 }
 
@@ -21,6 +22,11 @@ interface EventRelation {
   corrected: boolean;
   source: EventSource;
   target: EventSource;
+}
+
+interface CalendarSourceList {
+  items: Array<{ document_id: string; visibility_scope: VisibilityScope; created_at: string }>;
+  next_cursor: string | null;
 }
 
 type VisibleRelation = EventRelation & { scope: VisibilityScope };
@@ -56,6 +62,14 @@ function EventEvidence({ event }: { event: EventSource }) {
           원본 메일 보기
         </a>
       ) : null}
+      {event.document_id !== null ? (
+        <a
+          href={`/api/events/sources/${encodeURIComponent(event.document_id)}`}
+          className="text-xs font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          원본 일정 파일 보기
+        </a>
+      ) : null}
     </div>
   );
 }
@@ -66,6 +80,13 @@ export function EventRelationsSection() {
   const [retryKey, setRetryKey] = useState(0);
   const [savingUid, setSavingUid] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [sources, setSources] = useState<CalendarSourceList['items']>([]);
+  const [sourceCursor, setSourceCursor] = useState<string | null>(null);
+  const [sourceError, setSourceError] = useState(false);
+  const [deletingSource, setDeletingSource] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -89,6 +110,19 @@ export function EventRelationsSection() {
     return () => { active = false; };
   }, [retryKey]);
 
+  useEffect(() => {
+    let active = true;
+    void apiClient.get<CalendarSourceList>('/api/events/sources')
+      .then((page) => {
+        if (!active) return;
+        setSources(page.items);
+        setSourceCursor(page.next_cursor);
+        setSourceError(false);
+      })
+      .catch(() => { if (active) setSourceError(true); });
+    return () => { active = false; };
+  }, [retryKey]);
+
   async function correct(relation: VisibleRelation, relationType: RelationType) {
     if (savingUid !== null || relation.relation_type === relationType) return;
     setSavingUid(relation.relation_uid);
@@ -108,10 +142,94 @@ export function EventRelationsSection() {
     }
   }
 
+  async function importIcs(file: File) {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      if (file.size > 262_144) throw new Error('Calendar file too large');
+      const icsText = await file.text();
+      const events = await apiClient.post<EventSource[]>('/api/events/sources/ics', {
+        ics_text: icsText,
+        visibility_scope: 'personal',
+      });
+      setImportResult(`일정 ${events.length}개를 가져왔습니다.`);
+      setStatus('loading');
+      setRetryKey((key) => key + 1);
+    } catch {
+      setImportResult('일정 파일을 가져오지 못했습니다. 파일을 확인하고 다시 시도해 주세요.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function loadMoreSources() {
+    if (!sourceCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await apiClient.get<CalendarSourceList>(
+        `/api/events/sources?after=${encodeURIComponent(sourceCursor)}`,
+      );
+      setSources((current) => [...current, ...page.items]);
+      setSourceCursor(page.next_cursor);
+      setSourceError(false);
+    } catch {
+      setSourceError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function removeSource(documentId: string) {
+    if (!window.confirm('이 일정 파일과 연결된 일정, 수정 기록을 삭제할까요?')) return;
+    setDeletingSource(documentId);
+    try {
+      await apiClient.delete(`/api/events/sources/${encodeURIComponent(documentId)}`);
+      setImportResult('일정 파일을 삭제했습니다.');
+      setStatus('loading');
+      setRetryKey((key) => key + 1);
+    } catch {
+      setSourceError(true);
+    } finally {
+      setDeletingSource(null);
+    }
+  }
+
   return (
     <section aria-labelledby="event-relations-heading" className="border border-border bg-card p-4 text-sm">
       <h2 id="event-relations-heading" className="text-base font-bold">일정 관계</h2>
-      <p className="mt-1 text-muted-foreground">초대장에 적힌 시간을 비교했습니다. 연결이 틀리면 아래에서 바로 고칠 수 있습니다.</p>
+      <p className="mt-1 text-muted-foreground">초대장과 일정 파일에 적힌 시간을 비교했습니다. 연결이 틀리면 아래에서 바로 고칠 수 있습니다.</p>
+      <label className="mt-3 block text-sm font-semibold">
+        내 일정 파일 가져오기 (.ics)
+        <input
+          type="file"
+          accept=".ics,text/calendar"
+          disabled={importing}
+          className="mt-1 block w-full text-xs"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            if (file) void importIcs(file);
+          }}
+        />
+      </label>
+      {importing ? <p role="status" className="mt-2">일정 파일을 가져오는 중입니다.</p> : null}
+      {importResult ? <p role="status" className="mt-2">{importResult}</p> : null}
+      {sources.length > 0 ? (
+        <div className="mt-3">
+          <h3 className="font-semibold">가져온 일정 파일</h3>
+          <ul className="mt-1 space-y-1">
+            {sources.map((source) => (
+              <li key={source.document_id} className="flex flex-wrap items-center gap-2 text-xs">
+                <a href={`/api/events/sources/${encodeURIComponent(source.document_id)}`} className="text-primary underline-offset-2 hover:underline">{new Date(source.created_at).toLocaleString('ko-KR')} 일정 파일</a>
+                <span className="text-muted-foreground">{source.visibility_scope === 'personal' ? '개인' : '조직'}</span>
+                <button type="button" disabled={deletingSource !== null} onClick={() => void removeSource(source.document_id)} className="text-destructive underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">삭제</button>
+              </li>
+            ))}
+          </ul>
+          {sourceCursor ? <button type="button" disabled={loadingMore} onClick={() => void loadMoreSources()} className="mt-2 text-xs font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-60">더 보기</button> : null}
+        </div>
+      ) : null}
+      {sourceError ? <p role="alert" className="mt-2 text-destructive">일정 파일 목록을 처리하지 못했습니다. <button type="button" className="underline" onClick={() => setRetryKey((key) => key + 1)}>다시 시도</button></p> : null}
       {status === 'loading' ? <p role="status" className="mt-4">일정 관계를 확인하는 중입니다.</p> : null}
       {status === 'error' ? (
         <div className="mt-4" role="alert">
@@ -127,7 +245,7 @@ export function EventRelationsSection() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">{relation.scope === 'personal' ? '개인' : '조직'}</span>
             <span className="font-semibold">{labels[relation.relation_type]}</span>
-            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : '초대장 시간 기준'}</span>
+            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : '원본 일정 시간 기준'}</span>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <EventEvidence event={relation.source} />
