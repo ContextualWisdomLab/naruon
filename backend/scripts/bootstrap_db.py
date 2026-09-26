@@ -187,10 +187,6 @@ def _get_create_indexes_statements() -> list[Executable]:
             "ON email_records (user_id, organization_id, date)"
         ),
         text(
-            "CREATE INDEX IF NOT EXISTS ix_emails_owner_date "
-            "ON emails (user_id, organization_id, date)"
-        ),
-        text(
             "CREATE INDEX IF NOT EXISTS ix_sender_relationships_owner_source "
             "ON sender_relationships "
             "(user_id, organization_id, source_message_id, source_thread_id)"
