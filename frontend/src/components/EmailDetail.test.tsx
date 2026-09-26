@@ -269,6 +269,7 @@ describe("EmailDetail", () => {
       ...emailB,
       id: 3,
       message_id: "<b-sibling@example.com>",
+      date: "2026-04-27T11:30:00Z",
       body: "Thread B sibling body",
     };
     const siblingA: TestEmail = {
@@ -326,7 +327,16 @@ describe("EmailDetail", () => {
     );
 
     await act(async () => {
-      threadBResponse.resolve(jsonResponse({ thread: [emailB, siblingB] }));
+      threadBResponse.resolve(jsonResponse({
+        thread: [emailB, siblingB],
+        tasks: [{
+          id: "task-b",
+          title: "Review B decision",
+          status: "open",
+          created_at: "2026-04-27T11:15:00Z",
+          link_confidence: 1,
+        }],
+      }));
       await threadBResponse.promise;
     });
 
@@ -339,9 +349,22 @@ describe("EmailDetail", () => {
     );
     expect(container.textContent).toContain("Thread B sibling body");
     expect(container.textContent).toContain("2개 메시지");
+    expect(container.textContent).toContain("Review B decision");
+    const timelineText = container.querySelector("[data-testid='thread-timeline']")?.textContent ?? "";
+    expect(timelineText.indexOf("Selected B body")).toBeLessThan(timelineText.indexOf("Review B decision"));
+    expect(timelineText.indexOf("Review B decision")).toBeLessThan(timelineText.indexOf("Thread B sibling body"));
 
     await act(async () => {
-      threadAResponse.resolve(jsonResponse({ thread: [emailA, siblingA] }));
+      threadAResponse.resolve(jsonResponse({
+        thread: [emailA, siblingA],
+        tasks: [{
+          id: "task-a",
+          title: "Stale A task",
+          status: "open",
+          created_at: "2026-04-27T10:30:00Z",
+          link_confidence: 1,
+        }],
+      }));
       await threadAResponse.promise;
     });
     await flushAsyncWork();
@@ -349,6 +372,7 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("Thread B sibling body");
     expect(container.textContent).toContain("2개 메시지");
     expect(container.textContent).not.toContain("Thread A stale sibling body");
+    expect(container.textContent).not.toContain("Stale A task");
 
     const unsupportedThreadActions = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button"),

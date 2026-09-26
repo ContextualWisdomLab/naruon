@@ -30,6 +30,13 @@ type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
 };
+type ThreadTaskData = {
+  id: string;
+  title: string;
+  status: 'open' | 'in_progress' | 'blocked' | 'done';
+  created_at: string;
+  link_confidence: number | null;
+};
 interface LlmData {
   summary: string;
   action_items: string[];
@@ -108,6 +115,7 @@ function normalizeLlmData(payload: unknown): LlmData {
 export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
   const [email, setEmail] = useState<EmailData | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailData[]>([]);
+  const [threadTasks, setThreadTasks] = useState<ThreadTaskData[]>([]);
   const [llmData, setLlmData] = useState<LlmData | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -156,20 +164,23 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       if (isLatestThreadRequest()) {
         setThreadLoading(false);
         setThreadEmails([currentEmail]);
+        setThreadTasks([]);
       }
       return;
     }
 
     setThreadLoading(true);
     try {
-      const threadJson = await apiClient.get<{ thread: EmailData[] }>(buildThreadUrl('', currentEmail.thread_id));
+      const threadJson = await apiClient.get<{ thread: EmailData[]; tasks?: ThreadTaskData[] }>(buildThreadUrl('', currentEmail.thread_id));
       if (!isLatestThreadRequest()) return;
       setThreadEmails(threadJson.thread || []);
+      setThreadTasks(threadJson.tasks || []);
     } catch (err) {
       if (!isLatestThreadRequest()) return;
       console.error("Error fetching thread:", err);
       setThreadError("대화 흐름을 불러오지 못했습니다.");
       setThreadEmails([currentEmail]);
+      setThreadTasks([]);
     } finally {
       if (isLatestThreadRequest()) setThreadLoading(false);
     }
@@ -185,6 +196,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setLoading(true);
       setEmail(null);
       setThreadEmails([]);
+      setThreadTasks([]);
       setThreadError(null);
       setDetailError(null);
       setLlmData(null);
@@ -567,6 +579,14 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   }
 
   const conversationMessages = getConversationMessages(email, threadEmails);
+  const timelineItems = [
+    ...conversationMessages.map((message) => ({ kind: 'email' as const, date: message.date, message })),
+    ...threadTasks.map((task) => ({ kind: 'task' as const, date: task.created_at, task })),
+  ].sort((left, right) => {
+    const leftTime = Date.parse(left.date || '');
+    const rightTime = Date.parse(right.date || '');
+    return (Number.isFinite(leftTime) ? leftTime : Infinity) - (Number.isFinite(rightTime) ? rightTime : Infinity);
+  });
   const safeEmailSender = toMailDisplayText(email.sender, '보낸 사람');
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
@@ -755,7 +775,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 </Badge>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">오래된 메시지부터 최신 메시지 순서로 보여줍니다. 답장은 선택된 메시지를 기준으로 작성됩니다.</p>
+            <p className="text-xs text-muted-foreground">메일과 연결된 작업을 시간순으로 보여줍니다. 답장은 선택된 메시지를 기준으로 작성됩니다.</p>
             {threadLoading && <p role="status" aria-live="polite" className="text-sm text-muted-foreground">대화 흐름을 불러오는 중입니다...</p>}
             {threadError && (
               <div role="alert" className="flex items-center gap-3 text-sm text-red-500">
@@ -763,30 +783,49 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 <Button size="sm" variant="outline" onClick={() => fetchThread(email)}>다시 시도</Button>
               </div>
             )}
-            <div className="space-y-4">
-              {conversationMessages.map((msg) => (
-                <div id={`msg-${msg.id}`} key={msg.id} className={`rounded-2xl border p-4 text-card-foreground ${msg.id === email.id ? 'border-primary/60 bg-primary/5 shadow-sm' : 'border-border bg-background/60'}`} aria-current={msg.id === email.id ? "true" : undefined}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm">{toMailDisplayText(msg.sender, '보낸 사람')}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
+            <div className="space-y-4" data-testid="thread-timeline">
+              {timelineItems.map((item) => {
+                if (item.kind === 'task') {
+                  const confidence = toConfidencePercent(item.task.link_confidence ?? undefined);
+                  return (
+                    <div key={`task-${item.task.id}`} className="rounded-2xl border border-border bg-background/60 p-4 text-card-foreground">
+                      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                        <span>연결된 작업</span>
+                        <span>{formatEmailDate(item.task.created_at)}</span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium">{toMailDisplayText(item.task.title, '작업 제목 없음')}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {{ open: '접수', in_progress: '진행', blocked: '보류', done: '완료' }[item.task.status] || '상태 확인 필요'}
+                        {' · '}연결 확신도 {confidence === undefined ? '미확인' : `${confidence}%`}
+                      </p>
                     </div>
+                  );
+                }
+                const msg = item.message;
+                return (
+                  <div id={`msg-${msg.id}`} key={msg.id} className={`rounded-2xl border p-4 text-card-foreground ${msg.id === email.id ? 'border-primary/60 bg-primary/5 shadow-sm' : 'border-border bg-background/60'}`} aria-current={msg.id === email.id ? "true" : undefined}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-sm">{toMailDisplayText(msg.sender, '보낸 사람')}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
+                      </div>
+                    </div>
+                    {msg.id === email.id && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">선택된 메시지</Badge>}
+                    {msg.id === email.id && translationError && (
+                      <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                        {translationError}
+                      </div>
+                    )}
+                    {msg.id === email.id && translation && (
+                      <div className="mb-6 rounded-2xl bg-secondary/40 p-4 border border-border">
+                        <p className="text-xs font-bold text-primary mb-2">한국어 번역 결과</p>
+                        <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(translation)}</div>
+                      </div>
+                    )}
+                    <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
                   </div>
-                  {msg.id === email.id && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">선택된 메시지</Badge>}
-                  {msg.id === email.id && translationError && (
-                    <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-                      {translationError}
-                    </div>
-                  )}
-                  {msg.id === email.id && translation && (
-                    <div className="mb-6 rounded-2xl bg-secondary/40 p-4 border border-border">
-                      <p className="text-xs font-bold text-primary mb-2">한국어 번역 결과</p>
-                      <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(translation)}</div>
-                    </div>
-                  )}
-                  <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
