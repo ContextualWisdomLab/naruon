@@ -4,6 +4,7 @@ from services.thread_judgment import (
     CitedStatement,
     JudgmentSegment,
     JudgmentTask,
+    JudgmentObject,
     ThreadJudgmentDraft,
     UnresolvedTension,
     validate_judgment_citations,
@@ -50,4 +51,35 @@ def test_thread_judgment_rejects_uncited_claims_and_one_message_tensions():
             card,
             segments,
             [JudgmentTask(uid="real", title="Known task", status="open")],
+        )
+
+    card.current_state.linked_task_uids = []
+    card.current_state.linked_object_uids = ["missing"]
+    with pytest.raises(ValueError, match="unknown object"):
+        validate_judgment_citations(
+            card,
+            segments,
+            objects=[
+                JudgmentObject(
+                    uid="real",
+                    title="Known object",
+                    object_type="issue",
+                    evidence_segment_uid="a",
+                )
+            ],
+        )
+
+    card.current_state.linked_object_uids = ["real"]
+    with pytest.raises(ValueError, match="lacks cited evidence"):
+        validate_judgment_citations(
+            card,
+            segments,
+            objects=[
+                JudgmentObject(
+                    uid="real",
+                    title="Different evidence",
+                    object_type="issue",
+                    evidence_segment_uid="b",
+                )
+            ],
         )

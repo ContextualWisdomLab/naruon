@@ -485,8 +485,9 @@ describe("EmailDetail", () => {
             { uid: "first-segment", email_id: 31, excerpt: "Monday" },
             { uid: "second-segment", email_id: 32, excerpt: "Tuesday" },
           ],
+          objects: [{ uid: "issue-1", title: "Delivery issue", evidence_segment_uid: "first-segment" }],
           judgment: {
-            current_state: { text: "Dates conflict", evidence_segment_uids: ["first-segment", "second-segment"], linked_task_uids: [] },
+            current_state: { text: "Dates conflict", evidence_segment_uids: ["first-segment", "second-segment"], linked_task_uids: [], linked_object_uids: ["issue-1"] },
             judgment_point: null, recommended_action: null,
             blocking_dependencies: [], unresolved_commitments: [],
             tensions: [{ description: "Dates remain unresolved", first_evidence_segment_uids: ["first-segment"], second_evidence_segment_uids: ["second-segment"] }],
@@ -506,6 +507,7 @@ describe("EmailDetail", () => {
     await act(async () => { create?.click(); });
     await waitForCondition(() => card?.textContent?.includes("Dates conflict") ?? false);
     expect(card?.textContent).toContain("엇갈리는 내용");
+    expect(card?.textContent).toContain("연결 정보: Delivery issue");
     expect(card?.textContent).toContain("일부 근거만");
     expect(card?.querySelectorAll('button[aria-label^="근거 보기:"]')).toHaveLength(4);
   });

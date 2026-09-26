@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, func, or_, select
 from db.session import get_db
-from db.models import ContentSegmentRecord, Email, TicketTask, TicketTaskThreadDismissal
+from db.models import (
+    ContentSegmentRecord,
+    Email,
+    ProjectGraphObjectRecord,
+    TicketTask,
+    TicketTaskThreadDismissal,
+)
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -26,6 +32,7 @@ from services.threading_service import normalize_message_id
 from services.thread_judgment import (
     JudgmentSegment,
     JudgmentTask,
+    JudgmentObject,
     ThreadJudgmentDraft,
     synthesize_thread_judgment,
 )
@@ -248,10 +255,18 @@ class ThreadJudgmentEvidence(BaseModel):
     excerpt: str
 
 
+class ThreadJudgmentObject(BaseModel):
+    uid: str
+    title: str
+    object_type: str
+    evidence_segment_uid: str
+
+
 class ThreadJudgmentResponse(BaseModel):
     status: Literal["ready", "insufficient_evidence"]
     judgment: ThreadJudgmentDraft | None
     evidence: list[ThreadJudgmentEvidence]
+    objects: list[ThreadJudgmentObject] = Field(default_factory=list)
     source_count: int
     evidence_limited: bool = False
 
@@ -816,6 +831,35 @@ async def create_thread_judgment(
         JudgmentTask(uid=task.id, title=task.title, status=task.status)
         for task in thread.tasks
     ]
+    object_result = await db.execute(
+        select(ProjectGraphObjectRecord)
+        .where(
+            ProjectGraphObjectRecord.email_id.in_(email_ids),
+            ProjectGraphObjectRecord.primary_content_segment_id.in_(
+                [segment.content_segment_id for segment, _, _ in rows]
+            ),
+            ProjectGraphObjectRecord.user_id == auth_context.user_id,
+            ProjectGraphObjectRecord.organization_id == auth_context.organization_id,
+            ProjectGraphObjectRecord.workspace_id == auth_context.workspace_id,
+        )
+        .order_by(ProjectGraphObjectRecord.project_graph_object_id.asc())
+        .limit(41)
+    )
+    object_rows = object_result.scalars().all()
+    evidence_limited = evidence_limited or len(object_rows) > 40
+    evidence_uid_by_id = {
+        segment.content_segment_id: segment.content_segment_uid
+        for segment, _, _ in rows
+    }
+    objects = [
+        JudgmentObject(
+            uid=item.object_uid,
+            title=item.title,
+            object_type=item.object_type,
+            evidence_segment_uid=evidence_uid_by_id[item.primary_content_segment_id],
+        )
+        for item in object_rows[:40]
+    ]
     provider = None
     provider_failed = False
     try:
@@ -834,7 +878,7 @@ async def create_thread_judgment(
     judgment = None
     model_failed = False
     try:
-        judgment = await synthesize_thread_judgment(segments, tasks, provider)
+        judgment = await synthesize_thread_judgment(segments, tasks, objects, provider)
     except Exception:
         model_failed = True
     if model_failed or judgment is None:
@@ -869,6 +913,15 @@ async def create_thread_judgment(
                 excerpt=segment.safe_text_content[:240],
             )
             for segment, message_id, _ in rows
+        ],
+        objects=[
+            ThreadJudgmentObject(
+                uid=item.uid,
+                title=item.title,
+                object_type=item.object_type,
+                evidence_segment_uid=item.evidence_segment_uid,
+            )
+            for item in objects
         ],
         source_count=len(thread.thread),
         evidence_limited=evidence_limited,

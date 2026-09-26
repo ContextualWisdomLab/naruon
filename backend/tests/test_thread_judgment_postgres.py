@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from api.auth import AuthContext
 from api.emails import ThreadJudgmentRequest, create_thread_judgment
 from core.config import settings
-from db.models import Base, ContentNodeRecord, ContentSegmentRecord, Email
+from db.models import (
+    Base,
+    ContentNodeRecord,
+    ContentSegmentRecord,
+    Email,
+    ProjectGraphObjectRecord,
+)
 from services.llm_provider_selection import RuntimeLLMProvider
 from services.thread_judgment import CitedStatement, ThreadJudgmentDraft
 
@@ -66,19 +72,36 @@ async def test_thread_judgment_uses_only_owner_segments():
                 )
                 session.add(node)
                 await session.flush()
+                segment = ContentSegmentRecord(
+                    content_segment_uid=segment_uid,
+                    email_id=email.id,
+                    content_node_id=node.content_node_id,
+                    source_kind="email_body",
+                    source_record_uid=message_id,
+                    segment_kind="paragraph",
+                    segment_path="body/1",
+                    ordinal_index=0,
+                    safe_text_content=segment_text,
+                    content_hash=f"hash-{owner}",
+                    word_count=3,
+                )
+                session.add(segment)
+                await session.flush()
                 session.add(
-                    ContentSegmentRecord(
-                        content_segment_uid=segment_uid,
+                    ProjectGraphObjectRecord(
+                        object_uid=f"object-{owner}",
+                        user_id=owner,
+                        organization_id="org-1",
+                        workspace_id="workspace-org-1",
                         email_id=email.id,
-                        content_node_id=node.content_node_id,
-                        source_kind="email_body",
-                        source_record_uid=message_id,
-                        segment_kind="paragraph",
-                        segment_path="body/1",
-                        ordinal_index=0,
-                        safe_text_content=segment_text,
-                        content_hash=f"hash-{owner}",
-                        word_count=3,
+                        primary_content_segment_id=segment.content_segment_id,
+                        object_type="issue",
+                        title=f"Issue for {owner}",
+                        summary=f"Issue from {message_id}",
+                        confidence=0.7,
+                        source_segment_uids=[segment_uid],
+                        extractor_name="test",
+                        extractor_version="1",
                     )
                 )
             await session.commit()
@@ -95,6 +118,7 @@ async def test_thread_judgment_uses_only_owner_segments():
             current_state=CitedStatement(
                 text="Owner's message is present",
                 evidence_segment_uids=["owned-segment"],
+                linked_object_uids=["object-owner-a"],
             ),
             judgment_point=None,
             recommended_action=None,
@@ -131,6 +155,10 @@ async def test_thread_judgment_uses_only_owner_segments():
                 "owned-segment"
             ]
             assert synthesize.await_args.args[1] == []
+            assert [item.uid for item in synthesize.await_args.args[2]] == [
+                "object-owner-a"
+            ]
+            assert [item.uid for item in result.objects] == ["object-owner-a"]
 
             async with sessions() as session:
                 with pytest.raises(HTTPException) as error:

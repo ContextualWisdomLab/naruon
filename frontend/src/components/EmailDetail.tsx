@@ -42,6 +42,7 @@ type JudgmentClaim = {
   text: string;
   evidence_segment_uids: string[];
   linked_task_uids: string[];
+  linked_object_uids: string[];
 };
 type ThreadJudgment = {
   current_state: JudgmentClaim | null;
@@ -59,6 +60,7 @@ type ThreadJudgmentResponse = {
   status: 'ready' | 'insufficient_evidence';
   judgment: ThreadJudgment | null;
   evidence: { uid: string; email_id: number; excerpt: string }[];
+  objects: { uid: string; title: string; evidence_segment_uid: string }[];
   evidence_limited: boolean;
 };
 interface LlmData {
@@ -709,6 +711,14 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         return task && <button key={uid} type="button" className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => document.getElementById(`task-${uid}`)?.scrollIntoView?.({ block: 'center' })}>
           연결된 작업: {task.title}
+        </button>;
+      })}
+      {(claim.linked_object_uids ?? []).map((uid) => {
+        const object = threadJudgment?.objects?.find((item) => item.uid === uid);
+        const source = threadJudgment?.evidence.find((item) => item.uid === object?.evidence_segment_uid);
+        return object && source && <button key={uid} type="button" className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => document.getElementById(`msg-${source.email_id}`)?.scrollIntoView?.({ block: 'center' })}>
+          연결 정보: {object.title}
         </button>;
       })}
     </div>
