@@ -193,4 +193,43 @@ describe("SearchLayout product events", () => {
     )).toBe(true);
     expect(JSON.stringify(getRecordedProductEvents())).not.toContain("계약");
   });
+
+  it("shows a self-addressed result as personal storage without a reply count", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({
+          results: [{
+            id: 303,
+            source_message_id: "<self-note@example.com>",
+            subject: "여행 메모",
+            sender: "me@example.com",
+            date: "2026-09-27T00:00:00Z",
+            snippet: "예약 확인 정보",
+            thread_id: "self-thread",
+            reply_count: 1,
+            is_personal_reference: true,
+            score: 0.9,
+          }],
+        }));
+      }
+      if (url.includes("/api/ontology/relationships?")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root?.render(<SearchLayout />));
+    await waitForCondition(() => container?.textContent?.includes("여행 메모") ?? false);
+
+    const result = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("여행 메모"),
+    );
+    expect(result?.textContent).toContain("개인 자료");
+    expect(result?.textContent).not.toContain("메일 스레드");
+    expect(result?.textContent).not.toContain("답장 1건");
+  });
 });

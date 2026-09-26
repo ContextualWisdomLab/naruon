@@ -42,6 +42,7 @@ type SearchResultItem = {
   snippet: string;
   thread_id: string | null;
   reply_count?: number;
+  is_personal_reference?: boolean;
   score?: number;
   result_kind?: string | null;
   evidence_kinds?: string[];
@@ -320,15 +321,21 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-border/50 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
               <FileText className="size-3" aria-hidden="true" />
-              {result.thread_id ? "메일 스레드" : "메일"}
+              {result.is_personal_reference
+                ? "개인 자료"
+                : result.thread_id
+                  ? "메일 스레드"
+                  : "메일"}
             </span>
             <span className="text-[10px] text-muted-foreground">
               <Clock className="mr-0.5 inline size-3" aria-hidden="true" />
               {formatResultDate(result.date)}
             </span>
-            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-              답장 {result.reply_count ?? 1}건
-            </span>
+            {!result.is_personal_reference ? (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                답장 {result.reply_count ?? 1}건
+              </span>
+            ) : null}
             {evidenceKindLabel(result.result_kind) ? (
               <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
                 근거: {evidenceKindLabel(result.result_kind)}
