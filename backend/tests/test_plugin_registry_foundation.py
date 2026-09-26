@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from api.auth import AuthContext, get_auth_context
-from db.models import PluginGrant, PluginRegistration
+from db.models import (
+    PluginArtifact,
+    PluginDefinition,
+    PluginGrant,
+    PluginRegistration,
+    PluginRelease,
+)
 from db.session import get_db
 from main import app
 
@@ -24,10 +30,6 @@ def _registration(uid: str, org: str) -> PluginRegistration:
         registration_uid=uid,
         organization_id=org,
         workspace_id=f"workspace-{org}",
-        plugin_id="example",
-        plugin_version="1.0.0",
-        artifact_sha256="a" * 64,
-        manifest={"plugin_id": "example"},
     )
 
 
@@ -35,21 +37,62 @@ def test_registry_persists_grants_and_lists_only_authoritative_tenant_scope():
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
-    PluginRegistration.__table__.create(engine)
-    PluginGrant.__table__.create(engine)
+    for model in (
+        PluginDefinition,
+        PluginRelease,
+        PluginArtifact,
+        PluginRegistration,
+        PluginGrant,
+    ):
+        model.__table__.create(engine)
     try:
         with Session(engine) as session:
+            definition = PluginDefinition(
+                plugin_uid="plugin-definition",
+                plugin_id="example",
+                display_name="Example",
+            )
+            release = PluginRelease(
+                release_uid="plugin-release",
+                plugin_version="1.0.0",
+                publisher_id="publisher",
+                manifest={"plugin_id": "example"},
+            )
+            artifact = PluginArtifact(
+                artifact_uid="plugin-artifact",
+                artifact_sha256="a" * 64,
+                distribution_uri="https://example.test/plugin.tar.gz",
+                source_commit="b" * 40,
+            )
+            other_release = PluginRelease(
+                release_uid="plugin-other-release",
+                plugin_version="2.0.0",
+                publisher_id="publisher",
+                manifest={"plugin_id": "example"},
+            )
+            other_artifact = PluginArtifact(
+                artifact_uid="plugin-other-artifact",
+                artifact_sha256="c" * 64,
+                distribution_uri="https://example.test/plugin-v2.tar.gz",
+                source_commit="d" * 40,
+            )
+            definition.releases.append(release)
+            definition.releases.append(other_release)
+            release.artifacts.append(artifact)
+            other_release.artifacts.append(other_artifact)
             own = _registration("plugin-own", "org-a")
             other = _registration("plugin-other", "org-b")
             other_workspace = _registration("plugin-other-workspace", "org-a")
             other_workspace.workspace_id = "workspace-other"
+            artifact.registrations.extend([own, other_workspace])
+            other_artifact.registrations.append(other)
             own.grants.append(
                 PluginGrant(
                     grant_uid="grant-own",
                     granted_capabilities={"scopes": ["read:calendar"]},
                 )
             )
-            session.add_all([own, other, other_workspace])
+            session.add(definition)
             session.commit()
             assert session.scalar(
                 select(PluginGrant).where(PluginGrant.grant_uid == "grant-own")
@@ -78,6 +121,9 @@ def test_registry_persists_grants_and_lists_only_authoritative_tenant_scope():
                     assert [row["registration_uid"] for row in response.json()] == [
                         "plugin-own"
                     ]
+                    assert response.json()[0]["plugin_id"] == "example"
+                    assert response.json()[0]["plugin_version"] == "1.0.0"
+                    assert response.json()[0]["artifact_sha256"] == "a" * 64
                     assert response.json()[0]["enabled"] is False
                     assert client.post("/api/plugins", json={}).status_code == 405
 

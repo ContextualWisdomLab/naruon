@@ -165,18 +165,71 @@ class SecurityAuditEvent(Base):
     )
 
 
+class PluginDefinition(Base):
+    """Stable internal identity, independent of any provider package ID."""
+
+    __tablename__ = "plugin_definitions"
+
+    plugin_uid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    plugin_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+
+    releases: Mapped[list["PluginRelease"]] = relationship(back_populates="definition")
+
+
+class PluginRelease(Base):
+    """Versioned release metadata; verified admission is not available yet."""
+
+    __tablename__ = "plugin_releases"
+
+    release_uid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    plugin_uid: Mapped[str] = mapped_column(
+        ForeignKey("plugin_definitions.plugin_uid"), nullable=False, index=True
+    )
+    plugin_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    publisher_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    manifest: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+
+    definition: Mapped[PluginDefinition] = relationship(back_populates="releases")
+    artifacts: Mapped[list["PluginArtifact"]] = relationship(back_populates="release")
+    __table_args__ = (
+        UniqueConstraint("plugin_uid", "plugin_version", name="uq_plugin_release_version"),
+    )
+
+
+class PluginArtifact(Base):
+    """Distribution locator and claimed digest for one release."""
+
+    __tablename__ = "plugin_artifacts"
+
+    artifact_uid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    release_uid: Mapped[str] = mapped_column(
+        ForeignKey("plugin_releases.release_uid"), nullable=False, index=True
+    )
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    distribution_uri: Mapped[str] = mapped_column(String(2048), nullable=False)
+    source_commit: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    release: Mapped[PluginRelease] = relationship(back_populates="artifacts")
+    registrations: Mapped[list["PluginRegistration"]] = relationship(
+        back_populates="artifact"
+    )
+    __table_args__ = (
+        UniqueConstraint("release_uid", "artifact_sha256", name="uq_plugin_artifact_digest"),
+    )
+
+
 class PluginRegistration(Base):
-    """Stored plugin metadata; no runtime loads registrations yet."""
+    """Tenant installation intent for one exact artifact; execution is unavailable."""
 
     __tablename__ = "plugin_registrations"
 
     registration_uid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    artifact_uid: Mapped[str] = mapped_column(
+        ForeignKey("plugin_artifacts.artifact_uid"), nullable=False, index=True
+    )
     organization_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     workspace_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    plugin_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    plugin_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    manifest: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -184,14 +237,12 @@ class PluginRegistration(Base):
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
 
+    artifact: Mapped[PluginArtifact] = relationship(back_populates="registrations")
     grants: Mapped[list["PluginGrant"]] = relationship(back_populates="registration")
     __table_args__ = (
         UniqueConstraint(
-            "organization_id",
-            "workspace_id",
-            "plugin_id",
-            "plugin_version",
-            name="uq_plugin_registration_scope_version",
+            "organization_id", "workspace_id", "artifact_uid",
+            name="uq_plugin_registration_scope_artifact",
         ),
     )
 

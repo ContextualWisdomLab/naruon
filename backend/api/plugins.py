@@ -6,13 +6,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context, is_admin_role
-from db.models import PluginRegistration
+from db.models import (
+    PluginArtifact,
+    PluginDefinition,
+    PluginRegistration,
+    PluginRelease,
+)
 from db.session import get_db
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
 
 
 class PluginRegistrationSummary(BaseModel):
+    """Buyer-safe metadata for one tenant registration of one exact artifact."""
+
     registration_uid: str
     plugin_id: str
     plugin_version: str
@@ -25,6 +32,7 @@ async def list_plugin_registrations(
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> list[PluginRegistrationSummary]:
+    """List this administrator's workspace registrations without loading plugins."""
     if (
         auth_context.session_verifier == "hmac"
         or not is_admin_role(auth_context.role)
@@ -33,20 +41,23 @@ async def list_plugin_registrations(
         raise HTTPException(status_code=403, detail="Plugin registry access denied")
 
     result = await db.execute(
-        select(PluginRegistration)
+        select(PluginRegistration, PluginArtifact, PluginRelease, PluginDefinition)
+        .join(PluginRegistration.artifact)
+        .join(PluginArtifact.release)
+        .join(PluginRelease.definition)
         .where(
             PluginRegistration.organization_id == auth_context.organization_id,
             PluginRegistration.workspace_id == auth_context.workspace_id,
         )
-        .order_by(PluginRegistration.plugin_id, PluginRegistration.plugin_version)
+        .order_by(PluginDefinition.plugin_id, PluginRelease.plugin_version)
     )
     return [
         PluginRegistrationSummary(
-            registration_uid=row.registration_uid,
-            plugin_id=row.plugin_id,
-            plugin_version=row.plugin_version,
-            artifact_sha256=row.artifact_sha256,
-            enabled=row.enabled,
+            registration_uid=registration.registration_uid,
+            plugin_id=definition.plugin_id,
+            plugin_version=release.plugin_version,
+            artifact_sha256=artifact.artifact_sha256,
+            enabled=registration.enabled,
         )
-        for row in result.scalars().all()
+        for registration, artifact, release, definition in result.all()
     ]
