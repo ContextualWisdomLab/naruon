@@ -35,6 +35,7 @@ from services.s3_object_storage import (
     S3ClientConfiguration,
     S3ObjectStorageBackend,
     S3ObjectStorageRequestError,
+    S3StoredObject,
     sign_s3_request,
 )
 
@@ -276,6 +277,15 @@ class _TimeoutTransport(httpx.AsyncBaseTransport):
 
 
 async def _exercise_timeout_mapping() -> None:
+    payload = b"%PDF-1.7 timeout"
+    object_key = "workspace-documents/opaque/timeout/source.pdf"
+    stored = S3StoredObject(
+        bucket_name=_BUCKET_NAME,
+        object_key=object_key,
+        content_type="application/pdf",
+        content_length=len(payload),
+        checksum_sha256=hashlib.sha256(payload).hexdigest(),
+    )
     backend = S3ObjectStorageBackend(
         _integration_configuration(),
         httpx.AsyncClient(transport=_TimeoutTransport(), trust_env=False),
@@ -283,10 +293,14 @@ async def _exercise_timeout_mapping() -> None:
     try:
         with pytest.raises(S3ObjectStorageRequestError):
             await backend.put_object(
-                object_key="workspace-documents/opaque/timeout/source.pdf",
-                payload=b"%PDF-1.7 timeout",
+                object_key=object_key,
+                payload=payload,
                 content_type="application/pdf",
             )
+        with pytest.raises(S3ObjectStorageRequestError):
+            await backend.get_object(stored)
+        with pytest.raises(S3ObjectStorageRequestError):
+            await backend.delete_object(stored)
     finally:
         await backend.aclose()
 
