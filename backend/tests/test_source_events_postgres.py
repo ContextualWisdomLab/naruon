@@ -16,6 +16,7 @@ from api.events import (
     correct_event_relation,
     list_event_conflicts,
     list_event_relations,
+    list_source_events,
     reconcile_event_relations,
 )
 from db.models import (
@@ -209,6 +210,18 @@ async def test_calendar_source_event_persists_with_owner_and_citations():
                 role="member",
                 group_ids=(),
             )
+            listed = await list_source_events("organization", auth, session)
+            assert owned.event_uid in {item.event_uid for item in listed.items}
+            assert any(
+                item.event_uid == owned.event_uid and item.citations
+                for item in listed.items
+            )
+            assert not {
+                other_owner.event_uid,
+                personal.event_uid,
+                other_workspace.event_uid,
+                mismatched_source.event_uid,
+            } & {item.event_uid for item in listed.items}
             conflicts_page = await list_event_conflicts(
                 visibility_scope="organization", auth_context=auth, db=session
             )
