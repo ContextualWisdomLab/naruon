@@ -971,7 +971,7 @@ async def test_long_attachment_quotes_keep_original_citation_and_hash(
                     title="Delivery",
                     summary="Acme will deliver.",
                     source_segment_uids=[entry["content_segment_uid"]],
-                    confidence=0.8,
+                    confidence=0.7 + len(requests) / 100,
                     fact_kind="commitment",
                     fact_value="will deliver",
                     evidence_excerpt=quote,
@@ -987,6 +987,7 @@ async def test_long_attachment_quotes_keep_original_citation_and_hash(
     )
     assert len(result.objects) == len(result.edges) == 1
     fact = result.objects[0]
+    assert result.edges[0].confidence == fact.confidence
     assert fact.source_segment_uids == (segment.content_segment_uid,)
     assert fact.attributes["evidence_excerpt"] == quote
     assert (
