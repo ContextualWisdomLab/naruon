@@ -88,3 +88,22 @@ PDF response verification. The current supplier additionally exposes `/ready`
 for authentication and executable readiness; adopting it requires reconciling
 the supplier's newer required-authentication contract with Naruon's provider
 credentials. A healthcheck-only change against the old pin is insufficient.
+
+## General fact inference integration boundary
+
+The existing grounded LLM extractor is already selected through
+`services/project_graph/extractor_registry.py` and called by email import.
+However, `_ALLOWED_TYPE_VALUES` in `llm_extractor.py` explicitly excludes
+`ProjectObjectType.ATTACHMENT_FACT`. Its object payload carries a title,
+summary, citations and confidence, but no fact kind/value or source hash.
+Consequently enabling the LLM selector alone cannot fulfill the attachment
+fact UI/API contract. Import separately appends literal labelled facts.
+
+The next implementation should extend the existing grounded extraction
+contract, rather than add another provider client: validate date/amount/party/
+commitment fields, require one owned attachment segment for each fact, derive
+its source hash locally, and preserve per-object extractor provenance. Do not
+accept a model-supplied hash or promote an email-body citation into an
+attachment fact. The existing fact API verifies exact UID and source hash;
+any inference extension must satisfy that verifier unchanged. Confidence and
+semantic correctness need provider/model evaluation, not just schema tests.
