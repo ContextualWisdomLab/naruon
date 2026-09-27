@@ -9,6 +9,7 @@ The API runtime lock audit does not cover the second NVIDIA Dockerfile install:
 |---|---:|---|
 | Existing MinerU 3.4.4 pipeline + exact API lock | 108 | 8 advisory records on Transformers 4.57.6, 5 distinct IDs |
 | MinerU 4.0.7 torch + exact API lock | 142 | No known vulnerabilities in this resolved Python dependency set |
+| MinerU 4.0.7 full / vLLM 0.28.0 + exact API lock | 264 | No known vulnerabilities; no skipped packages; Python 3.10 target |
 
 ## Existing runtime findings
 
@@ -156,3 +157,46 @@ security follow-up. Their combined Compose/hygiene/dependency contracts pass
 27 tests with warnings as errors. The supplier GPU dependency audit remains a
 separate failing legacy-runtime condition; the replay is no substitute for the
 missing MinerU 4 adapter and deployment acceptance.
+
+
+## Complete NVIDIA engine dependency candidate
+
+The 142-package `torch` candidate does not include the NVIDIA VLM engine.
+The complete `mineru[full]==4.0.7` graph, combined with the same exact API lock,
+resolves 264 packages for the existing Python 3.10 / Linux x86_64 glibc 2.35
+target. Hash-required `pip-audit --disable-pip` exited zero with no vulnerability
+records and no skipped dependencies. Selected versions include vLLM 0.28.0,
+Torch 2.13.0, Transformers 5.17.0 and setuptools 84.0.0.
+
+Two rejected alternatives establish why the Python target matters:
+
+- The upstream Docker example's vLLM 0.21.0 pins Torch 2.11.0, conflicting with
+  the `torch>=2.13.0` security constraint.
+- On Python 3.12, every vLLM version allowed by MinerU 4.0.7 requires
+  setuptools below 81, conflicting with `setuptools>=83.0.0`. The vLLM 0.28.0
+  requirement applies only when `python_version > "3.11"`; retaining the
+  existing Python 3.10 target permits the patched version without an override.
+
+Primary metadata: [vLLM 0.28.0](https://pypi.org/pypi/vllm/0.28.0/json).
+The [upstream Dockerfile](https://github.com/opendatalab/MinerU/blob/master/docker/global/Dockerfile)
+is an example, not an accepted security pin or proof of local driver support.
+
+Reproduction input includes the frozen API export, `mineru[full]==4.0.7`,
+`torch>=2.13.0` and `setuptools>=83.0.0`. Compile using the same hash and
+binary policy above with Python 3.10. Jieba remains the only verified source
+metadata exception. Resolution and audit run in a sanitized environment;
+no NVIDIA packages or models were installed on a deployment machine.
+
+Scratch evidence:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| newsdom-mineru4-vllm-py310-hashed-20260928.txt | 6d71c25f31bfe5f7f5dddd493512497451c5e4f75f3bf04fa646faac69c52a6e |
+| newsdom-mineru4-vllm-py310-audit-20260928.json | df0bb46d4862ba81aea4fa69d3b3d2e2faeca1de0ba9aaea85f70cdcb5929f27 |
+
+This establishes a security-compatible full dependency candidate, not the
+missing language-aware adapter, container build, GPU recognition, driver
+compatibility or deployment acceptance. The resolved CUDA packages are in the
+13.x family; the existing image uses CUDA 12.6.3 and the target driver has not
+been verified. Neither the base-image label nor the Python audit proves
+that the combined runtime can execute on that host.
