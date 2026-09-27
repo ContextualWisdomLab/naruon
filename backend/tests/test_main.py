@@ -170,9 +170,11 @@ async def test_lifespan_starts_mail_reply_sla_and_writeback_retry_workers(monkey
 
 @pytest.mark.asyncio
 async def test_lifespan_closes_database_pools_when_request_scope_fails(monkeypatch):
+    import importlib
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
-    from db import session
+
+    session = importlib.import_module("db.session")
 
     primary_dispose = AsyncMock()
     readonly_dispose = AsyncMock()
