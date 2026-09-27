@@ -250,3 +250,28 @@ Do not merge until #1794 is integrated through its owner path, executable negati
 The cited-fact owner advanced ordinarily to [#1795 `831911acc2d8b2f7399319ae3c8a3d16d358460c`](https://github.com/ContextualWisdomLab/naruon/pull/1795), adding owned-thread retrieval and `email_id` to the response contract. The UI owner advanced to [#1793 `924dddb6c6121874ae9c2618e9b41ca393f28cb0`](https://github.com/ContextualWisdomLab/naruon/pull/1793), was retargeted to #1795's branch, and ordinary-merged that exact parent while preserving both backend fact contracts and the four-file UI delta. This removes the unprotected sibling dependency without closing either PR.
 
 #1793 remains Draft and inherits #1795 as a prerequisite. Its new cited-fact UI adds loading, error/retry, pagination, per-message placement and exact source-segment links, but keeps Korean copy and fact labels in component source. The earlier eight-locale, real-browser/AT/touch/responsive, offline/permission/read-only/stale/conflict, reload, large-data p95, current-head hosted checks and independent-review FAIL/PENDING rows remain authoritative. #1795 remains Draft with #1794 protected PostgreSQL acceptance and the domain/persistence/idempotency/recovery rows still pending.
+
+
+### Current-head preservation update — 2026-09-27
+
+Attachment UI [#1793](https://github.com/ContextualWisdomLab/naruon/pull/1793) now points to exact `7801381704b05ca7f3a2693f9bd1cc807e9de430`. The child commit is one ordinary commit ahead of verified integrated head `924dddb6c6121874ae9c2618e9b41ca393f28cb0` with zero changed files, so the #1795 parent integration and four-file UI delta remain byte-preserved. #1793 is still Draft; its current Application CI, CodeQL PR, Semgrep, Security, Bandit and image workflows are queued, with no independent approval or unresolved review thread. No predecessor receipt transfers.
+
+#### WebDAV lifecycle successor — naruon#1796
+
+Repeated concurrent writes on original Draft [#1449](https://github.com/ContextualWisdomLab/naruon/pull/1449) removed its doctoring/Gap/UI lifecycle contract and reintroduced four generated `.jules` source-fix/retrigger files after ordinary-forward repair. Original #1449 remains open/Draft as provenance. Verified Draft successor [#1796](https://github.com/ContextualWisdomLab/naruon/pull/1796) points exactly to repaired commit `404535926d199236efcf4f7471a6e247a5207139`; GitHub reports it mergeable with nine changed files, zero reviews and zero review threads.
+
+The successor preserves the product-owned confirmation `alertdialog`, focus entry and restoration, cyclic Tab/Shift+Tab, Escape cancellation, body scroll lock, per-action busy feedback, frozen repository/WebDAV selection during pending work, confirmation-before-write, and focused source tests. Presentation state does not replace document, workspace, WebDAV account, provider write, or conflict domain truth.
+
+| Concern | Exact-head evidence | Status |
+|---|---|---|
+| Determinism / semantics | Source and focused tests preserve exact confirmation, inert cancel, selected request context and server-authoritative write path | Source Partial PASS |
+| Pointer / touch / keyboard / focus | DOM keyboard/focus contracts exist | Real Chromium/Firefox/WebKit pointer, touch, keyboard and AT replay FAIL |
+| Persistence / reload / recovery | Server-authoritative request and visible completion contracts exist | Reload, duplicate submit, late response, conflict, rollback and focus recovery E2E FAIL |
+| Responsive / reduced motion | Full-viewport modal boundary is source-tested | 320/768/desktop screenshots, touch target and reduced-motion evidence FAIL |
+| States | Busy and confirmation/cancel are covered | loading, empty, error, offline, permission, read-only, stale, conflict and retry applicability/evidence Partial/FAIL |
+| Locales | Korean product copy is present | ko/en/ja/zh/vi/es/de/fr versioned resources, wrapping, CJK and fallback FAIL |
+| CTA → API | Confirmed CTA retains the existing conflict-aware WebDAV materialization endpoint | Real authenticated provider wiring and failure/recovery E2E pending |
+| Performance / lifecycle | Selection freeze and cleanup intent are documented | Representative median/p95, abort/unmount/race cleanup evidence FAIL |
+| Hosted admission | Application CI, CodeQL PR, Semgrep, Security, Bandit and image workflows exist on the exact head | All queued; independent review absent |
+
+#1796 remains **Proposed / Merge HOLD** until every applicable FAIL is repaired or bounded by an accepted decision and the unchanged exact head has terminal required Checks plus qualifying independent review. No generated helper, predecessor receipt, mutable external source or presentation DTO counts as delivery authority.
