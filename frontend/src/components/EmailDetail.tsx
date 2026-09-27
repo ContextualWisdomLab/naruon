@@ -846,17 +846,17 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                   <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
                   {msg.attachment_evidence?.map((attachment, index) => (
                     <details key={`${attachment.filename}-${index}`} className="mt-3 border-t border-border pt-3 text-sm">
-                      <summary className="cursor-pointer font-medium">첨부: {toMailDisplayText(attachment.filename, '이름 없는 첨부파일')}</summary>
+                      <summary className="cursor-pointer break-words font-medium">첨부: {toMailDisplayText(attachment.filename, '이름 없는 첨부파일')}</summary>
                       {attachment.segments.length > 0 ? (
                         <div className="mt-2 space-y-2 pl-4">
                           {attachment.segments.map((segment) => (
-                            <p id={`attachment-segment-${segment.uid}`} key={segment.uid} className="whitespace-pre-wrap">{toMailBodyText(segment.text)}</p>
+                            <p id={`attachment-segment-${segment.uid}`} key={segment.uid} tabIndex={-1} className="whitespace-pre-wrap break-words">{toMailBodyText(segment.text)}</p>
                           ))}
                           {threadFacts.filter((fact) => fact.email_id === msg.id && fact.attachment_id === attachment.attachment_id).map((fact) => (
                             <div key={fact.object_uid} className="border-l-2 border-primary/40 pl-3 text-sm">
-                              <p><span className="font-medium">문서에서 추출한 {factLabels[fact.fact_kind] ?? '내용'}:</span> {toMailBodyText(fact.value)}</p>
-                              <a href={`#attachment-segment-${encodeURIComponent(fact.source_segment_uid)}`} className="text-primary underline">원문 근거 보기</a>
-                              <p className="text-xs text-muted-foreground">{toMailBodyText(fact.evidence_excerpt)}</p>
+                              <p className="break-words"><span className="font-medium">문서에서 추출한 {factLabels[fact.fact_kind] ?? '내용'}:</span> {toMailBodyText(fact.value)}</p>
+                              <a href={`#attachment-segment-${encodeURIComponent(fact.source_segment_uid)}`} aria-label={`${toMailDisplayText(attachment.filename, '첨부파일')}의 ${factLabels[fact.fact_kind] ?? '내용'} 원문 근거 보기`} className="text-primary underline">원문 근거 보기</a>
+                              <p className="break-words text-xs text-muted-foreground">{toMailBodyText(fact.evidence_excerpt)}</p>
                             </div>
                           ))}
                         </div>

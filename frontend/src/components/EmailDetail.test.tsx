@@ -295,6 +295,8 @@ describe("EmailDetail", () => {
     expect(message?.textContent).toContain("Meeting at noon");
     expect(message?.textContent).toContain("날짜: 2026-05-17");
     expect(message?.querySelector('a[href="#attachment-segment-segment-1"]')?.textContent).toContain("원문 근거 보기");
+    expect(message?.querySelector('a[href="#attachment-segment-segment-1"]')?.getAttribute("aria-label")).toContain("agenda.pdf의 날짜");
+    expect(message?.querySelector("#attachment-segment-segment-1")?.getAttribute("tabindex")).toBe("-1");
     expect(message?.textContent).toContain("첨부: scan.pdf");
     expect(message?.textContent).toContain("표시할 수 있는 내용이 없습니다.");
     const moreFacts = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("첨부 사실 더 보기"));
