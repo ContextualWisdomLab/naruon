@@ -849,7 +849,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                           ))}
                           {threadFacts.filter((fact) => fact.email_id === msg.id && fact.attachment_id === attachment.attachment_id).map((fact) => (
                             <div key={fact.object_uid} className="border-l-2 border-primary/40 pl-3 text-sm">
-                              <p><span className="font-medium">{factLabels[fact.fact_kind] ?? '확인된 내용'}:</span> {toMailBodyText(fact.value)}</p>
+                              <p><span className="font-medium">문서에서 추출한 {factLabels[fact.fact_kind] ?? '내용'}:</span> {toMailBodyText(fact.value)}</p>
                               <a href={`#attachment-segment-${encodeURIComponent(fact.source_segment_uid)}`} className="text-primary underline">원문 근거 보기</a>
                               <p className="text-xs text-muted-foreground">{toMailBodyText(fact.evidence_excerpt)}</p>
                             </div>
