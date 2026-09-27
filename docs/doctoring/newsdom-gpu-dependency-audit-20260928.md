@@ -48,6 +48,19 @@ The official PyPI wheel was checked against its published SHA-256 before reading
 
 Source comparison with the official SHA-verified 3.4.4 wheel confirms its pipeline `_build_bbox` and VLM content-list builder also scale coordinates to 0–1000. Preserve those existing units rather than introduce a version-only rescaling. Page dimensions are a separate metadata contract. Legacy pipeline module SHA-256: `ead402d9965bf1d3723e3e36e63aa0aa6c5036565d8e6a185c430d98ff9e4878`; legacy VLM module SHA-256: `0103bbfb650d7d0de170a3b9a5ffd7829e2168ccfb443131a2db282c02b837cd`.
 
+The public 4.0.7 SDK accepts `flash`, `basic`, `standard`, and `advanced` only.
+`standard` maps to internal `high`; `advanced` maps to internal `xhigh`.
+Do not pass those internal effort names as the public `tier` argument. The real
+Korean run above used public `advanced`, hence internal `xhigh`, not the smaller
+Chinese-only recognition path. Tier mapping source SHA-256:
+`4299322d99026676e664e4e1cd807f107a9f463b135fa65567110e5224b86c58`;
+public types SHA-256: `c9769e192a92db5b0cf421fe4127fc18d4d06825bcb005dc62925cdf2e19b585`.
+PyPI still reports 4.0.7 as the latest release. The actual public connection
+configuration also has no language or prompt override; source SHA-256:
+`ac0e8fe185b38fbdabfd93cbc9242576654e68fd606315be9e2d63ee55c2662e`.
+An adapter must resolve explicit language-selection semantics rather than mutate
+cached model prompts across requests or silently discard a request option.
+
 Next implementation must thread validated language selection through the actual OCR model context, preserve coordinate units and select every page. Do not silently ignore language, substitute text-only parsing for OCR, or declare the 142-package audit sufficient runtime acceptance.
 
 Further source inspection narrows that language remedy: the 4.0.7 Torch OCR model resource lists only `ch` and `seal` (resource SHA-256 `52980d101f82fb549c2c33ec4b90b8266b687adf855dee2a1ac47f386192ba55`). Its recognition dictionary contains neither Hangul syllables nor Hangul jamo (SHA-256 `b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d`). Passing `korean` through alone cannot restore the old model contract. High/xhigh uses native VLM recognition; real multilingual OCR must be tested there before choosing it. This does not establish that every MinerU 4 path cannot recognize Korean.

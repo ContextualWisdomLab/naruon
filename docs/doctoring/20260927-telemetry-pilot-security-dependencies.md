@@ -23,7 +23,13 @@ Frontend tests: initial concurrent build/test invocation timed out in one existi
 
 At UI integration head `71e58e5093f02e7b97874d4dcb973dc83a73f57d`, a separate detached worktree completed a frozen pnpm 11.5.3 install without the earlier dependency-resolution warnings; tracked package and lock bytes remained unchanged. Next 16.3.3 production build passed. With conflicting terminal color overrides removed from the command environment, all **443 frontend tests in 51 files passed**, and ESLint completed without warning output. Node was 24.21.0, so this is not an exact pinned-24.19.0 receipt. These later results do not convert the initial timeout or warning-bearing historical runs into green acceptance, and do not transfer to another head or prove hosted security/review acceptance.
 
-## Advisory-specific follow-up, 2026-09-28
+## Advisory-specific follow-up, 2026-09-27 UTC
+
+This follow-up was recorded in commit `3fc5ebcbd22e24f05cfd978fbd22c2d8c16fb63a`
+at 2026-09-27 17:41:16 UTC (2026-09-28 02:41:16 Asia/Seoul). The checks
+below had completed before that record; the former date-only heading used
+Asia/Seoul. The subsequent PR #1799 review was submitted at
+2026-09-27 18:11:06 UTC on `cf9124f1c834f9343dee8f6e9d10be5a5d0c7242`.
 
 [GHSA-vcvr-r3jv-pc5j](https://github.com/vercel/next.js/security/advisories/GHSA-vcvr-r3jv-pc5j)
 affects Next.js `>=16.2.0,<16.3.6`; the primary advisory identifies 16.3.6 as
