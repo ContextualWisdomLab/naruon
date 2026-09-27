@@ -29,6 +29,20 @@ def _payload(
     return llm_extractor.ExtractionPayload(objects=list(objects))
 
 
+def test_project_llm_cannot_forge_literal_attachment_facts():
+    segment = _segment("seg1", "Total: ₩1,200,000")
+    payload = _payload(
+        llm_extractor.ExtractedObjectPayload(
+            object_type="attachment_fact",
+            title="Total: ₩1,200,000",
+            summary="Total: ₩1,200,000",
+            source_segment_uids=["seg1"],
+            confidence=0.9,
+        )
+    )
+    assert llm_extractor._validated_objects(payload, {"seg1": segment}) == []
+
+
 @pytest.mark.asyncio
 async def test_grounded_objects_are_mapped_with_citations(monkeypatch):
     monkeypatch.setattr(

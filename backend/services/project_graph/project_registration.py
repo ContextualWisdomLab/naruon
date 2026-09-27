@@ -614,6 +614,8 @@ def _candidate_groups(
 ) -> tuple[_CandidateGroup, ...]:
     records_by_email: dict[int, list[ProjectGraphObjectRecord]] = defaultdict(list)
     for record in records:
+        if record.object_type == ProjectObjectType.ATTACHMENT_FACT.value:
+            continue
         records_by_email[record.email_id].append(record)
 
     groups: list[_CandidateGroup] = []
