@@ -253,6 +253,11 @@ def _session_uses_postgresql(session: AsyncSession) -> bool:
     return getattr(getattr(bind, "dialect", None), "name", None) == "postgresql"
 
 
+def _owner_import_lock_key(user_id: str, organization_id: str) -> str:
+    payload = f"{user_id}\x00{organization_id}".encode("utf-8", errors="surrogatepass")
+    return hashlib.sha256(payload).hexdigest()
+
+
 async def _acquire_owner_import_quota_lock(
     session: AsyncSession, *, user_id: str, organization_id: str
 ) -> bool:
@@ -260,7 +265,7 @@ async def _acquire_owner_import_quota_lock(
         return False
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -279,7 +284,7 @@ async def _release_owner_import_quota_lock(
 ) -> None:
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -461,7 +466,9 @@ def _append_email_content_graph(
 ) -> None:
     body_parse_result = parse_content(
         source_kind="email_body",
-        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        source_record_uid=_content_graph_source_record_uid(
+            "email", email_obj.user_id, email_obj.organization_id or "", message_id
+        ),
         content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
         content_type=str(parsed.get("body_content_type") or "text/plain"),
         display_name="Email body",
@@ -489,6 +496,8 @@ def _append_email_content_graph(
             source_kind="attachment",
             source_record_uid=_content_graph_source_record_uid(
                 "attachment",
+                email_obj.user_id,
+                email_obj.organization_id or "",
                 message_id,
                 str(attachment_index),
                 attachment_obj.filename,
