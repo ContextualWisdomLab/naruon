@@ -64,12 +64,27 @@ MinerU. Thus a healthy container from this recipe is insufficient evidence of
 PDF readiness. No NewsDOM container or local MinerU executable was present
 in the inspected local environment.
 
-Supplier `main` at `d5683aa971332392005fe2a94e826931e4d5b568` installs a
-`mineru` extra and sets `NEWSDOM_MINERU_BIN`. This is evidence that the supplier
-has a runtime packaging path, not authorization to replace the pin: that tree
-uses different dependency versions (including MinerU 3.0.9) from the pinned
-newer development tree. A blind switch could regress dependency/security and
-response contracts. Next action: reconcile the runtime packaging delta with
-the current supplier development tree, validate its frozen lock/image and
-PDF response, then update Naruon's full commit pin. Preserve the internal-only
-network exposure of the unauthenticated parse service.
+## RCA correction after supplier policy and test inspection
+
+The supplier's current development tree
+`539528f9667524f6b65de0ee7b8b21fbdd97c380` deliberately retains an API-only
+standard image. `tests/test_docker_delivery.py` explicitly asserts that the
+default Dockerfile excludes MinerU; `docs/operations/deploy-runbook.md`
+requires an external runtime for that image. This is an intentional supplier
+contract, not a supplier packaging omission.
+
+A separate `Dockerfile.nvidia` already exists at Naruon's pinned revision and
+installs `mineru[pipeline]==3.0.9`, setting `NEWSDOM_MINERU_BIN=mineru`. The
+current supplier development tree updates that image to MinerU 3.4.4. The
+consumer selects `Dockerfile`, so the actionable root cause is selection of an
+API-only image without supplying its external runtime. Do not add a duplicate
+supplier image or change its default contract to fix the consumer.
+
+Next action: use the existing runtime-bearing image on a verified Linux NVIDIA
+deployment, or supply a reviewed CPU runtime to the API image when CPU is the
+target. The inspected Mac host does not establish NVIDIA availability. Retain
+exact revision/dependency validation, internal network confinement and real
+PDF response verification. The current supplier additionally exposes `/ready`
+for authentication and executable readiness; adopting it requires reconciling
+the supplier's newer required-authentication contract with Naruon's provider
+credentials. A healthcheck-only change against the old pin is insufficient.
