@@ -26,15 +26,22 @@ def test_read_state_upgrade_preserves_existing_rows(table, already_present):
             sa.text(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY{columns})")
         )
         connection.execute(sa.text(f"INSERT INTO {table} (id) VALUES (1)"))
+        if already_present:
+            connection.execute(sa.text(f"UPDATE {table} SET is_read = false"))
+        expected = 0 if already_present else 1
         with Operations.context(MigrationContext.configure(connection)):
             module.upgrade()
             module.upgrade()
             assert (
                 connection.execute(sa.text(f"SELECT is_read FROM {table}")).scalar_one()
-                == 1
+                == expected
             )
             module.downgrade()
-        assert "is_read" not in {
+        assert "is_read" in {
             column["name"] for column in sa.inspect(connection).get_columns(table)
         }
+        assert (
+            connection.execute(sa.text(f"SELECT is_read FROM {table}")).scalar_one()
+            == expected
+        )
     engine.dispose()

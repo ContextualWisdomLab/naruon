@@ -37,4 +37,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column(_email_table(), "is_read")
+    # Current bootstrap metadata also creates this column. Its origin cannot be
+    # reconstructed on rollback, so retain read-state data on every schema path.
+    pass
