@@ -5,8 +5,13 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from asyncpg.exceptions import (
+    InvalidAuthorizationSpecificationError,
+    InvalidPasswordError,
+)
 from fastapi import HTTPException
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.auth import AuthContext
@@ -33,9 +38,19 @@ async def test_thread_judgment_uses_only_owner_segments():
         connect_args={"server_settings": {"search_path": f"{schema},public"}},
     )
     now = datetime.datetime(2026, 9, 27, tzinfo=datetime.timezone.utc)
+    schema_created = False
     try:
-        async with root_engine.begin() as connection:
-            await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        try:
+            async with root_engine.begin() as connection:
+                await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        except (
+            InvalidAuthorizationSpecificationError,
+            InvalidPasswordError,
+            OperationalError,
+            OSError,
+        ) as exc:
+            pytest.skip(f"PostgreSQL smoke database unavailable: {exc}")
         async with scoped_engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all, checkfirst=False)
 
@@ -159,6 +174,7 @@ async def test_thread_judgment_uses_only_owner_segments():
             patch("api.emails.synthesize_thread_judgment", synthesize),
         ):
             async with sessions() as session:
+
                 async def synthesize_after_read(*_args, **_kwargs):
                     assert not session.in_transaction()
                     return judgment
@@ -175,7 +191,8 @@ async def test_thread_judgment_uses_only_owner_segments():
             assert [item.uid for item in result.evidence] == ["owned-segment"]
             assert synthesize.await_count == 2
             assert [item.uid for item in synthesize.await_args_list[0].args[0]] == [
-                "owned-segment", *[f"owned-segment-{index}" for index in range(1, 40)]
+                "owned-segment",
+                *[f"owned-segment-{index}" for index in range(1, 40)],
             ]
             assert [item.uid for item in synthesize.await_args_list[1].args[0]] == [
                 "owned-segment-40"
@@ -205,6 +222,9 @@ async def test_thread_judgment_uses_only_owner_segments():
             assert synthesize.await_count == 2
     finally:
         await scoped_engine.dispose()
-        async with root_engine.begin() as connection:
-            await connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        if schema_created:
+            async with root_engine.begin() as connection:
+                await connection.execute(
+                    text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+                )
         await root_engine.dispose()
