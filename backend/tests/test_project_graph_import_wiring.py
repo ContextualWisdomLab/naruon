@@ -197,7 +197,8 @@ async def test_attachment_fact_rejects_invalid_or_unlabelled_values(monkeypatch)
     )
     segment = _segment(
         "attachment-segment",
-        "Due date: 2026-02-30\nAmount: 12345\nSomebody promised $10\nVendor: ",
+        "Due date: 2026-02-30\nAmount: 12345\nAmount: $1,,200\n"
+        "Amount: $1,2\nSomebody promised $10\nVendor: Notes: delayed shipment",
     )
     segment.source_kind = "attachment"
     await import_service._persist_project_graph_projection(

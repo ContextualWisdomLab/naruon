@@ -294,12 +294,14 @@ _FACT_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 _FACT_DATE_RE = re.compile(r"^(20\d{2})[-./](\d{1,2})[-./](\d{1,2})$")
+_AMOUNT_NUMBER = r"(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?"
 _FACT_AMOUNT_RE = re.compile(
-    r"^(?:[₩$€£]\s*\d[\d,]*(?:\.\d{1,2})?|"
-    r"(?:USD|KRW|EUR|GBP)\s+\d[\d,]*(?:\.\d{1,2})?|"
-    r"\d[\d,]*(?:\.\d{1,2})?\s*원)$",
+    rf"^(?:[₩$€£]\s*{_AMOUNT_NUMBER}|"
+    rf"(?:USD|KRW|EUR|GBP)\s+{_AMOUNT_NUMBER}|"
+    rf"{_AMOUNT_NUMBER}\s*원)$",
     re.IGNORECASE,
 )
+_OTHER_LABEL_RE = re.compile(r"(?<!\S)[A-Za-z가-힣][\w -]{0,32}[:：]\s*")
 _FACT_LABELS = {
     "date": "date",
     "due date": "date",
@@ -339,6 +341,8 @@ def extract_attachment_facts(
             end = matches[index + 1].start() if index + 1 < len(matches) else None
             value = segment.safe_text_content[match.end() : end].strip()
             if not value or len(value) > 160:
+                continue
+            if kind in {"party", "commitment"} and _OTHER_LABEL_RE.search(value):
                 continue
             if kind == "date":
                 date_match = _FACT_DATE_RE.fullmatch(value)

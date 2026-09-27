@@ -123,16 +123,28 @@ async def isolated_fact_sessionmaker():
         connect_args={"server_settings": {"search_path": f"{schema},public"}},
         execution_options={"schema_translate_map": {None: schema}},
     )
+    schema_created = False
     try:
-        async with admin_engine.begin() as conn:
-            await conn.execute(text(f"CREATE SCHEMA {schema}"))
-        async with scoped_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        try:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                await conn.execute(text(f"CREATE SCHEMA {schema}"))
+                schema_created = True
+            async with scoped_engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except (
+            InvalidAuthorizationSpecificationError,
+            InvalidPasswordError,
+            OperationalError,
+            OSError,
+        ) as exc:
+            pytest.skip(f"PostgreSQL smoke database unavailable: {exc}")
         yield async_sessionmaker(scoped_engine, expire_on_commit=False)
     finally:
         await scoped_engine.dispose()
-        async with admin_engine.begin() as conn:
-            await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         await admin_engine.dispose()
 
 
