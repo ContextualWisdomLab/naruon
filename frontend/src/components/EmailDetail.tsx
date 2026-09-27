@@ -992,7 +992,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                           </div>
                         ) : (
                           <p className="mt-2 pl-4 text-muted-foreground">
-                            {attachment.parse_status.endsWith('_pending') ? '첨부 내용을 준비하고 있습니다.' : '표시할 수 있는 내용이 없습니다.'}
+                            {attachment.parse_status.endsWith('_pending') ? '첨부 내용을 준비하고 있습니다.' : '첨부 내용을 읽지 못했습니다.'}
                           </p>
                         )}
                       </details>
