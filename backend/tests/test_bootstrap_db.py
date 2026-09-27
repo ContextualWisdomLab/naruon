@@ -36,6 +36,7 @@ def _execute_schema_backfill(sync_conn):
 
 def test_schema_backfill_adds_email_columns(monkeypatch):
     statements = _get_schema_statements(monkeypatch)
+    assert not any("on emails (" in statement for statement in statements)
     assert any(
         "alter table email_records add column if not exists reply_to" in statement
         for statement in statements
@@ -770,11 +771,11 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 text("""
                     INSERT INTO email_records (
                         user_id, organization_id, message_id, sender, recipients,
-                        subject, "date", body
+                        subject, "date", body, is_read
                     )
                     VALUES (
                         :user_id, :organization_id, :message_id, :sender,
-                        :recipients, :subject, now(), :body
+                        :recipients, :subject, now(), :body, TRUE
                     )
                     RETURNING id
                     """),

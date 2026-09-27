@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import asyncpg
 import httpx
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
@@ -2942,7 +2943,7 @@ def test_pending_pdf_document_decoder_rejects_malformed_payloads(monkeypatch):
 async def _seed_smoke_test_data(conn, ids: dict):
     await conn.execute(text("SELECT 1"))
     await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    await conn.run_sync(Base.metadata.create_all)
+    await conn.run_sync(Base.metadata.create_all, checkfirst=False)
     first_message_id = f"<data-smoke-{uuid.uuid4().hex}@example.com>"
     second_message_id = f"<data-smoke-missing-{uuid.uuid4().hex}@example.com>"
     rival_message_id = f"<data-rival-{uuid.uuid4().hex}@example.com>"
@@ -2951,11 +2952,11 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_records (
                 user_id, organization_id, message_id, thread_id,
-                fingerprint, sender, recipients, subject, "date", body
+                fingerprint, sender, recipients, subject, "date", body, is_read
             )
             VALUES (
                 :user_id, :organization_id, :message_id, :thread_id,
-                :fingerprint, :sender, :recipients, :subject, now(), :body
+                :fingerprint, :sender, :recipients, :subject, now(), :body, TRUE
             )
             RETURNING id
             """
@@ -2977,11 +2978,11 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_records (
                 user_id, organization_id, message_id, sender, recipients,
-                subject, "date", body
+                subject, "date", body, is_read
             )
             VALUES (
                 :user_id, :organization_id, :message_id, :sender,
-                :recipients, :subject, now(), :body
+                :recipients, :subject, now(), :body, TRUE
             )
             RETURNING id
             """
@@ -3001,11 +3002,11 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_records (
                 user_id, organization_id, message_id, thread_id,
-                fingerprint, sender, recipients, subject, "date", body
+                fingerprint, sender, recipients, subject, "date", body, is_read
             )
             VALUES (
                 :user_id, :organization_id, :message_id, :thread_id,
-                :fingerprint, :sender, :recipients, :subject, now(), :body
+                :fingerprint, :sender, :recipients, :subject, now(), :body, TRUE
             )
             RETURNING id
             """
@@ -3393,15 +3394,49 @@ async def _teardown_smoke_test_data(conn, ids: dict):
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.postgres
-async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
-    monkeypatch,
-):
+@pytest_asyncio.fixture
+async def isolated_data_quality_engine():
     database_url = getattr(settings, "DATABASE_URL", None)
     if not database_url:
         pytest.skip("PostgreSQL smoke path unavailable: DATABASE_URL is not set")
+    schema = f"data_quality_smoke_{uuid.uuid4().hex[:12]}"
+    root_engine = create_async_engine(database_url)
+    engine = create_async_engine(
+        database_url,
+        connect_args={"server_settings": {"search_path": f"{schema},public"}},
+    )
+    schema_created = False
+    try:
+        try:
+            async with root_engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        except (
+            ConnectionRefusedError,
+            OSError,
+            OperationalError,
+            asyncpg.CannotConnectNowError,
+            asyncpg.InvalidAuthorizationSpecificationError,
+            asyncpg.InvalidCatalogNameError,
+            asyncpg.InvalidPasswordError,
+        ):
+            pytest.skip("PostgreSQL smoke path unavailable")
+        yield engine
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with root_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await root_engine.dispose()
 
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
+    monkeypatch, isolated_data_quality_engine,
+):
     # EncryptedString needs a key for both seeding (encrypt) and the API
     # read (decrypt); monkeypatch restores it on any exit incl. skip.
     monkeypatch.setattr(
@@ -3436,7 +3471,7 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
         "other_workspace_event_uid": other_workspace_event_uid,
     }
 
-    engine = create_async_engine(database_url, echo=False)
+    engine = isolated_data_quality_engine
     try:
         async with engine.begin() as conn:
             await _seed_smoke_test_data(conn, ids)
@@ -3449,11 +3484,7 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
         asyncpg.InvalidCatalogNameError,
         asyncpg.InvalidPasswordError,
     ):
-        await engine.dispose()
         pytest.skip("PostgreSQL smoke path unavailable")
-    except Exception:
-        await engine.dispose()
-        raise
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -3488,7 +3519,6 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
         app.dependency_overrides.update(original_overrides)
         async with engine.begin() as conn:
             await _teardown_smoke_test_data(conn, ids)
-        await engine.dispose()
 
     assert response.status_code == 200, response.text
     data = response.json()
