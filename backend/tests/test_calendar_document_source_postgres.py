@@ -212,7 +212,7 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             dependencies_ics = (
                 "BEGIN:VCALENDAR\nVERSION:2.0\n"
                 "BEGIN:VEVENT\nUID:early@example.com\n"
-                "DTSTART:20260928T100000Z\nDTEND:20260928T110000Z\n"
+                "DTSTART:20260928T100000Z\nDTEND:20260928T123000Z\n"
                 "SUMMARY:Early\nEND:VEVENT\n"
                 "BEGIN:VEVENT\nUID:later@example.com\n"
                 "DTSTART:20260928T120000Z\nDTEND:20260928T130000Z\n"
@@ -226,6 +226,10 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 owner,
                 session,
             )
+            await reconcile_event_relations("personal", owner, session, mode="overlaps")
+            assert (
+                await list_event_relations("personal", owner, session)
+            ).items[0].relation_type == "candidate"
             dependency_progress = await reconcile_event_relations(
                 "personal", owner, session, mode="dependencies"
             )

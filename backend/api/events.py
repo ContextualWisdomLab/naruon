@@ -856,7 +856,7 @@ async def _reconcile_event_dependencies(
             enabler = candidates[0]
             if (
                 enabler.event_uid == dependent.event_uid
-                or enabler.ends_at > dependent.starts_at
+                or enabler.starts_at >= dependent.starts_at
             ):
                 continue
             source_uid, target_uid = sorted((enabler.event_uid, dependent.event_uid))
@@ -865,6 +865,11 @@ async def _reconcile_event_dependencies(
                 + hashlib.sha256(f"{source_uid}\0{target_uid}".encode()).hexdigest()[
                     :32
                 ]
+            )
+            source_segment_uids = list(
+                dict.fromkeys(
+                    (*enabler.source_segment_uids, *dependent.source_segment_uids)
+                )
             )
             await db.execute(
                 pg_insert(EventRelationRecord)
@@ -880,17 +885,25 @@ async def _reconcile_event_dependencies(
                     enabler_event_uid=enabler.event_uid,
                     confidence=None,
                     evidence_code="explicit_ical_dependency",
-                    source_segment_uids=list(
-                        dict.fromkeys(
-                            (
-                                *enabler.source_segment_uids,
-                                *dependent.source_segment_uids,
-                            )
-                        )
-                    ),
+                    source_segment_uids=source_segment_uids,
                     created_at=datetime.datetime.now(datetime.timezone.utc),
                 )
-                .on_conflict_do_nothing()
+                .on_conflict_do_update(
+                    index_elements=[
+                        EventRelationRecord.source_event_uid,
+                        EventRelationRecord.target_event_uid,
+                    ],
+                    set_={
+                        "relation_type": "enables",
+                        "enabler_event_uid": enabler.event_uid,
+                        "evidence_code": "explicit_ical_dependency",
+                        "source_segment_uids": source_segment_uids,
+                    },
+                    where=and_(
+                        EventRelationRecord.relation_type == "candidate",
+                        EventRelationRecord.corrected_at.is_(None),
+                    ),
+                )
             )
             processed += 1
     await db.commit()
