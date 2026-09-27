@@ -53,7 +53,11 @@ _MAX_SEGMENTS_PER_REQUEST = 40
 _MAX_SEGMENT_TEXT_CHARS = 2000
 _MAX_TITLE_CHARS = 240
 _MAX_RELATIONS_PER_REQUEST = 200
-_ALLOWED_TYPE_VALUES = {member.value for member in ProjectObjectType}
+_ALLOWED_TYPE_VALUES = {
+    member.value
+    for member in ProjectObjectType
+    if member is not ProjectObjectType.ATTACHMENT_FACT
+}
 
 # Controlled vocabulary for typed object-to-object relations. Kept small and
 # domain-meaningful so the inter-object graph stays honest instead of accreting

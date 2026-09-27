@@ -48,6 +48,8 @@ from services.newsdom_pdf_recognition import (
     recognize_pdf_dom,
     resolve_newsdom_config_from_db,
 )
+from services.project_graph import ProjectSourceSegment, persist_project_graph_projection
+from services.project_graph.extractors import extract_attachment_facts
 
 logger = logging.getLogger(__name__)
 _sysrand = random.SystemRandom()
@@ -241,7 +243,7 @@ async def process_pending_attachment(
         return RESULT_PENDING
 
     try:
-        await recognize_attachment_pdf(
+        records = await recognize_attachment_pdf(
             email=email,
             attachment=attachment,
             pdf_bytes=pdf_bytes,
@@ -266,6 +268,27 @@ async def process_pending_attachment(
             exc,
         )
         return RESULT_FAILED
+    facts = extract_attachment_facts(
+        ProjectSourceSegment(
+            content_segment_uid=segment.content_segment_uid,
+            source_kind=segment.source_kind,
+            source_record_uid=segment.source_record_uid,
+            safe_text_content=segment.safe_text_content,
+            heading_path=segment.heading_path,
+            segment_path=segment.segment_path,
+            ordinal_index=segment.ordinal_index,
+        )
+        for segment in records.parse_result.segments
+    )
+    if facts.objects:
+        await session.flush()
+        await persist_project_graph_projection(
+            session,
+            extraction=facts,
+            user_id=email.user_id,
+            organization_id=email.organization_id,
+            workspace_id=f"workspace-{email.organization_id or email.user_id}",
+        )
     return RESULT_RECOGNIZED
 
 
@@ -492,7 +515,12 @@ class NewsdomRecognitionWorker:
             statement = statement.where(Attachment.id > after_id)
         return (
             statement.order_by(Attachment.id)
-            .options(selectinload(Attachment.email))
+            .options(
+                selectinload(Attachment.email).selectinload(Email.content_nodes),
+                selectinload(Attachment.email).selectinload(Email.content_segments),
+                selectinload(Attachment.content_nodes),
+                selectinload(Attachment.content_segments),
+            )
             .limit(self.batch_limit)
         )
 
