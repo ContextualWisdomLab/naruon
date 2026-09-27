@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import re
 from typing import List, Optional
 
@@ -94,17 +95,19 @@ async def execute_prompt_with_llm(
     from openai import AsyncOpenAI
     from core.config import settings as app_settings
 
-    validated_base_url, http_client = await build_llm_provider_http_client(base_url)
-    messages = []
-    if system_message:
-        messages.append({"role": "system", "content": system_message})
-    messages.append({"role": "user", "content": prompt_text})
-    client = AsyncOpenAI(
-        api_key=api_key,
-        base_url=validated_base_url,
-        http_client=http_client,
-    )
+    client = None
+    http_client = None
     try:
+        validated_base_url, http_client = await build_llm_provider_http_client(base_url)
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt_text})
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=validated_base_url,
+            http_client=http_client,
+        )
         response = await client.chat.completions.create(
             model=model_name or app_settings.OPENAI_MODEL,
             messages=messages,
@@ -113,16 +116,26 @@ async def execute_prompt_with_llm(
         )
         content = response.choices[0].message.content
         return {"result": content if content else ""}
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error(f"Prompt execution failed: {e}")
+    except Exception as exc:
+        logging.getLogger(__name__).error(
+            "Prompt execution failed",
+            extra={"error_type": type(exc).__name__},
+        )
         raise HTTPException(
             status_code=502,
             detail="Failed to execute prompt with AI provider. Check provider status.",
         )
     finally:
-        await client.close()
+        try:
+            if client is not None:
+                await client.close()
+            elif http_client is not None:
+                await http_client.aclose()
+        except Exception as exc:
+            logging.getLogger(__name__).error(
+                "Prompt provider client cleanup failed",
+                extra={"error_type": type(exc).__name__},
+            )
 
 
 def _render_prompt_test_variable(name: str, value: str) -> str:
