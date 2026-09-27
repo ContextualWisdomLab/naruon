@@ -47,7 +47,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 LLM_EXTRACTOR_NAME = "llm_grounded_project_graph"
-LLM_EXTRACTOR_VERSION = "2026.09.27.3"
+LLM_EXTRACTOR_VERSION = "2026.09.27.4"
 
 _MAX_SEGMENTS_PER_REQUEST = 40
 _MAX_SEGMENT_TEXT_CHARS = 2000
@@ -432,7 +432,17 @@ async def extract_project_semantics_llm(
             edges.extend(_relation_edges(payload.relations, objects_by_local_key))
     return ProjectSemanticExtractionResult(
         objects=tuple({obj.uid: obj for obj in objects}.values()),
-        edges=tuple(dict.fromkeys(edges)),
+        edges=tuple(
+            {
+                (
+                    edge.source_uid,
+                    edge.target_uid,
+                    edge.edge_type,
+                    edge.source_segment_uids,
+                ): edge
+                for edge in edges
+            }.values()
+        ),
         extractor_name=LLM_EXTRACTOR_NAME,
         extractor_version=LLM_EXTRACTOR_VERSION,
     )
