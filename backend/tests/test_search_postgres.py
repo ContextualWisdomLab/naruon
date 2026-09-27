@@ -19,6 +19,9 @@ import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+
 import httpx
 import pytest
 import pytest_asyncio
@@ -84,8 +87,16 @@ async def _apply_language_agnostic_search_ddl(conn) -> None:
     for create_index_statement in migration_module._TRIGRAM_INDEX_STATEMENTS.values():
         await conn.execute(text(create_index_statement))
     attachment_migration = _load_attachment_search_migration_module()
-    await conn.execute(text(attachment_migration._DROP_INDEX_SQL))
-    await conn.execute(text(attachment_migration._CREATE_INDEX_SQL))
+
+    def upgrade(sync_connection):
+        with patch.object(
+            attachment_migration,
+            "op",
+            Operations(MigrationContext.configure(sync_connection)),
+        ):
+            attachment_migration.upgrade()
+
+    await conn.run_sync(upgrade)
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -449,7 +460,9 @@ async def test_attachment_filename_index_migration_roundtrip(
         connection = await session.connection()
 
         def check_indexes(sync_connection):
-            with patch.object(migration.op, "get_bind", return_value=sync_connection):
+            with patch.object(
+                migration, "op", Operations(MigrationContext.configure(sync_connection))
+            ):
                 migration.downgrade()
                 old_index = sync_connection.execute(
                     text(
@@ -465,6 +478,8 @@ async def test_attachment_filename_index_migration_roundtrip(
                 ).scalar_one()
                 assert "coalesce(filename" in new_index.lower()
                 assert "coalesce(content" in new_index.lower()
+                assert "USING gist" in new_index
+                assert "siglen='256'" in new_index
 
         await connection.run_sync(check_indexes)
 
