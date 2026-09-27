@@ -1,6 +1,7 @@
 import datetime
 import base64
 import asyncio
+import hashlib
 import uuid
 from dataclasses import replace
 from email.message import EmailMessage
@@ -217,7 +218,7 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
         attachment = Attachment(
             email_id=segment.email_id,
             filename="invoice.txt",
-            content="Invoice date: 2026-09-27 Total: ₩1,200,000",
+            content="Invoice date: 2026-09-27 합계: ₩1,200,000",
         )
         session.add(attachment)
         await session.flush()
@@ -246,6 +247,21 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
         assert fact.organization_id == organization_id
         assert fact.source_segment_uids == [segment.content_segment_uid]
         assert fact.attributes_json["fact_kind"] == "amount"
+        assert fact.attributes_json["value"] == "₩1,200,000"
+        assert fact.attributes_json["label_locale"] == "ko"
+        assert fact.attributes_json["validation_status"] == "format_validated"
+        assert fact.attributes_json["source_segment_hash"] == hashlib.sha256(
+            segment.safe_text_content.encode("utf-8")
+        ).hexdigest()
+        assert fact.status_code == "candidate"
+        assert fact.confidence == 0.9
+        assert (fact.extractor_name, fact.extractor_version) == (
+            "literal_attachment_fact", "1"
+        )
+        date_fact = next(
+            item for item in result.objects if item.attributes_json["fact_kind"] == "date"
+        )
+        assert date_fact.attributes_json["label_locale"] == "en"
         assert any(
             edge.target_object_id == fact.project_graph_object_id
             for edge in result.edges

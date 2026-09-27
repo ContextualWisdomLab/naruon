@@ -185,6 +185,9 @@ async def test_attachment_facts_persist_without_optional_project_extraction(
         edge.source_uid == "segment:attachment-segment" for edge in extraction.edges
     )
     assert len({obj.uid for obj in extraction.objects}) == 4
+    assert {obj.attributes["validation_status"] for obj in extraction.objects} == {
+        "format_validated", "literal_unverified"
+    }
     project_mock.assert_not_awaited()
     session.commit.assert_awaited_once()
 
