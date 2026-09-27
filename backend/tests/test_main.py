@@ -166,3 +166,25 @@ async def test_lifespan_starts_mail_reply_sla_and_writeback_retry_workers(monkey
         "stop:pop3",
         "stop:imap",
     ]
+
+
+@pytest.mark.asyncio
+async def test_lifespan_closes_database_pools_when_request_scope_fails(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from db import session
+
+    primary_dispose = AsyncMock()
+    readonly_dispose = AsyncMock()
+    monkeypatch.setattr(main, "DISABLE_WORKERS", True)
+    monkeypatch.setattr(main, "preload_oidc_jwks", lambda: None)
+    monkeypatch.setattr(main, "activate_deployment_telemetry", AsyncMock())
+    monkeypatch.setattr(session, "engine", SimpleNamespace(dispose=primary_dispose))
+    monkeypatch.setattr(session, "readonly_engine", SimpleNamespace(dispose=readonly_dispose))
+
+    with pytest.raises(RuntimeError, match="request scope failed"):
+        async with main.lifespan(app):
+            raise RuntimeError("request scope failed")
+
+    primary_dispose.assert_awaited_once()
+    readonly_dispose.assert_awaited_once()

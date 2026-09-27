@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -65,14 +66,23 @@ async def lifespan(app: FastAPI):
         await reply_sla_scheduler.start()
         await newsdom_recognition_worker.start()
         await provider_writeback_retry_worker.start()
-    yield
-    if not DISABLE_WORKERS:
-        await provider_writeback_retry_worker.stop()
-        await newsdom_recognition_worker.stop()
-        await reply_sla_scheduler.stop()
-        await pop3_worker.stop()
-        await imap_worker.stop()
-    shutdown_telemetry(app)
+    try:
+        yield
+    finally:
+        try:
+            if not DISABLE_WORKERS:
+                await provider_writeback_retry_worker.stop()
+                await newsdom_recognition_worker.stop()
+                await reply_sla_scheduler.stop()
+                await pop3_worker.stop()
+                await imap_worker.stop()
+        finally:
+            try:
+                shutdown_telemetry(app)
+            finally:
+                from db.session import engine, readonly_engine
+
+                await asyncio.gather(engine.dispose(), readonly_engine.dispose())
 
 
 app = FastAPI(
