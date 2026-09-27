@@ -269,6 +269,7 @@ describe("EmailDetail", () => {
       ...emailB,
       id: 3,
       message_id: "<b-sibling@example.com>",
+      date: "2026-04-27T11:30:00Z",
       body: "Thread B sibling body",
     };
     const siblingA: TestEmail = {
@@ -283,12 +284,15 @@ describe("EmailDetail", () => {
     const emailBResponse = deferred<ReturnType<typeof jsonResponse>>();
     const threadBResponse = deferred<ReturnType<typeof jsonResponse>>();
 
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (url.endsWith("/api/emails/1")) return emailAResponse.promise;
         if (url.endsWith("/api/emails/2")) return emailBResponse.promise;
         if (url.endsWith("/api/emails/thread/thread-a")) return threadAResponse.promise;
         if (url.endsWith("/api/emails/thread/thread-b")) return threadBResponse.promise;
+        if (url.endsWith("/api/tasks/tentative-b") && init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse({ id: "tentative-b", related_thread_id: null }));
+        }
         if (url.endsWith("/api/llm/summarize")) {
           return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
         }
@@ -326,7 +330,27 @@ describe("EmailDetail", () => {
     );
 
     await act(async () => {
-      threadBResponse.resolve(jsonResponse({ thread: [emailB, siblingB] }));
+      threadBResponse.resolve(jsonResponse({
+        thread: [emailB, siblingB],
+        tasks: [
+          {
+            id: "task-b",
+            title: "Review B decision",
+            status: "open",
+            created_at: "2026-04-27T11:15:00Z",
+            link_confidence: 1,
+            related_thread_id: "thread-b",
+          },
+          {
+            id: "tentative-b",
+            title: "Tentative B task",
+            status: "open",
+            created_at: "2026-04-27T11:20:00Z",
+            link_confidence: null,
+            related_thread_id: "thread-b",
+          },
+        ],
+      }));
       await threadBResponse.promise;
     });
 
@@ -339,9 +363,36 @@ describe("EmailDetail", () => {
     );
     expect(container.textContent).toContain("Thread B sibling body");
     expect(container.textContent).toContain("2개 메시지");
+    expect(container.textContent).toContain("Review B decision");
+    const timelineText = container.querySelector("[data-testid='thread-timeline']")?.textContent ?? "";
+    expect(timelineText.indexOf("Selected B body")).toBeLessThan(timelineText.indexOf("Review B decision"));
+    expect(timelineText.indexOf("Review B decision")).toBeLessThan(timelineText.indexOf("Thread B sibling body"));
+
+    const detachButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("이 대화에서 제외"),
+    );
+    expect(detachButton).toBeTruthy();
+    await act(async () => detachButton?.click());
+    await waitForCondition(() => !container?.textContent?.includes("Tentative B task"));
+    expect(container.textContent).not.toContain("Tentative B task");
+    expect(container.textContent).toContain("Review B decision");
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input).endsWith("/api/tasks/tentative-b") &&
+      init?.method === "PATCH" &&
+      init.body === JSON.stringify({ detach_thread_id: "thread-b" }),
+    )).toBe(true);
 
     await act(async () => {
-      threadAResponse.resolve(jsonResponse({ thread: [emailA, siblingA] }));
+      threadAResponse.resolve(jsonResponse({
+        thread: [emailA, siblingA],
+        tasks: [{
+          id: "task-a",
+          title: "Stale A task",
+          status: "open",
+          created_at: "2026-04-27T10:30:00Z",
+          link_confidence: 1,
+        }],
+      }));
       await threadAResponse.promise;
     });
     await flushAsyncWork();
@@ -349,6 +400,7 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("Thread B sibling body");
     expect(container.textContent).toContain("2개 메시지");
     expect(container.textContent).not.toContain("Thread A stale sibling body");
+    expect(container.textContent).not.toContain("Stale A task");
 
     const unsupportedThreadActions = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button"),
@@ -1173,6 +1225,73 @@ describe("EmailDetail", () => {
     await act(async () => { await flushAsyncWork(); });
 
     expect(container.textContent).toContain("메일을 선택하세요");
+  });
+
+  it("removes a detached task after a same-email thread refresh", async () => {
+    const email: TestEmail = {
+      id: 23,
+      message_id: "<detach-refresh@example.com>",
+      thread_id: "detach-refresh",
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Detach refresh",
+      date: "2026-04-28T10:00:00Z",
+      body: "Original message",
+    };
+    const task = {
+      id: "detach-task",
+      title: "Task awaiting detach",
+      status: "open",
+      created_at: "2026-04-28T10:01:00Z",
+      link_confidence: null,
+      related_thread_id: email.thread_id,
+    };
+    const patchResponse = deferred<ReturnType<typeof jsonResponse>>();
+    let threadRequests = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/23")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/thread/detach-refresh")) {
+        threadRequests += 1;
+        return Promise.resolve(jsonResponse({ thread: [email], tasks: [task] }));
+      }
+      if (url.endsWith("/api/tasks/detach-task") && init?.method === "PATCH") return patchResponse.promise;
+      if (url.endsWith("/api/emails/send")) return Promise.resolve(jsonResponse({ simulated: true }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root?.render(<EmailDetail emailId={23} />));
+    await waitForCondition(() => container?.textContent?.includes(task.title) ?? false);
+
+    const detachButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("이 대화에서 제외"),
+    );
+    await act(async () => detachButton?.click());
+
+    const draftInput = container.querySelector<HTMLTextAreaElement>("#reply-draft");
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    await act(async () => {
+      setter?.call(draftInput, "Reply before detach completes");
+      draftInput?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const sendButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("답장 보내기"),
+    );
+    await act(async () => sendButton?.click());
+    await waitForCondition(() => threadRequests === 2);
+    expect(container.textContent).toContain(task.title);
+
+    await act(async () => {
+      patchResponse.resolve(jsonResponse({ id: task.id }));
+      await patchResponse.promise;
+    });
+    await waitForCondition(() => !(container?.textContent?.includes(task.title) ?? true));
+    expect(container.textContent).not.toContain(task.title);
   });
 
   it("cleans up draft states explicitly", async () => {

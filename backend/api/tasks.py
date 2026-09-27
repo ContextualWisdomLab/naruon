@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context
 from api.emails import canonical_thread_key
-from db.models import Email, TicketTask
+from db.models import Email, TicketTask, TicketTaskThreadDismissal
 from db.session import get_db
 from services.reply_sla_escalation_service import (
     ReplySlaEscalationResult,
@@ -74,6 +74,7 @@ class UpdateTicketTaskRequest(BaseModel):
 
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
+    detach_thread_id: str | None = Field(default=None, min_length=1, max_length=512)
 
 
 def _normalize_execution_items(items: list[str]) -> list[str]:
@@ -205,24 +206,52 @@ async def update_ticket_task(
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(get_auth_context),
 ) -> TicketTaskResponse:
-    if request.status is None and request.priority is None:
+    if (
+        request.status is None
+        and request.priority is None
+        and request.detach_thread_id is None
+    ):
         raise HTTPException(
             status_code=422, detail="At least one ticket field is required"
         )
 
-    result = await db.execute(
-        _build_task_query(auth_context).where(TicketTask.task_uid == task_uid)
-    )
+    query = _build_task_query(auth_context).where(TicketTask.task_uid == task_uid)
+    if request.detach_thread_id is not None:
+        query = query.with_for_update(of=TicketTask).execution_options(
+            populate_existing=True
+        )
+    result = await db.execute(query)
     row = result.one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
     task, source_email_id = row
+    if request.detach_thread_id is not None:
+        if (
+            task.related_email_id is not None
+            or task.related_thread_id != request.detach_thread_id
+        ):
+            raise HTTPException(status_code=409, detail="Thread link changed")
+        dismissal = await db.execute(
+            select(TicketTaskThreadDismissal.id).where(
+                TicketTaskThreadDismissal.ticket_task_id == task.id,
+                TicketTaskThreadDismissal.thread_key == request.detach_thread_id,
+            )
+        )
+        if dismissal.scalar_one_or_none() is None:
+            db.add(
+                TicketTaskThreadDismissal(
+                    ticket_task_id=task.id,
+                    thread_key=request.detach_thread_id,
+                    actor_user_id=auth_context.user_id,
+                )
+            )
     if request.status is not None:
         task.status = request.status
     if request.priority is not None:
         task.priority = request.priority
-    task.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    if request.status is not None or request.priority is not None:
+        task.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
     await db.commit()
     await db.refresh(task)
