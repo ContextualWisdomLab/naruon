@@ -35,6 +35,9 @@ const CLIENT_AUTHORITY_HEADERS = new Set([
 const ALLOWED_BACKEND_QUERY_PARAMS = new Set([
   "folder",
   "limit",
+  "visibility_scope",
+  "after",
+  "mode",
   "source_message_id",
   "source_thread_id",
 ]);
@@ -122,7 +125,7 @@ function filteredResponseHeaders(response: Response): Headers {
   return headers;
 }
 
-function safeBackendQuery(searchParams: URLSearchParams): string {
+function safeBackendQuery(searchParams: URLSearchParams, path: string[]): string {
   const forwardedParams = new URLSearchParams();
   const seenNames = new Set<string>();
   let paramCount = 0;
@@ -134,6 +137,9 @@ function safeBackendQuery(searchParams: URLSearchParams): string {
     }
     if (!ALLOWED_BACKEND_QUERY_PARAMS.has(name)) {
       throw new InvalidProxyQueryError(`Unsupported query parameter: ${name}`);
+    }
+    if (name === "mode" && (path.join("/") !== "events/relations/reconcile" || !["dependencies", "overlaps"].includes(value))) {
+      throw new InvalidProxyQueryError("Invalid calendar relation mode");
     }
     if (seenNames.has(name)) {
       throw new InvalidProxyQueryError(`Duplicate query parameter: ${name}`);
@@ -231,7 +237,7 @@ async function proxyApiRequest(
   try {
     target = trustedBackendOrigin();
     target.pathname = `/api/${safeBackendPath(path)}`;
-    target.search = safeBackendQuery(request.nextUrl.searchParams);
+    target.search = safeBackendQuery(request.nextUrl.searchParams, path);
   } catch (error) {
     if (error instanceof InvalidProxyQueryError) {
       return NextResponse.json(

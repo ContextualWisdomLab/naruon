@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Float,
@@ -822,6 +823,9 @@ class Email(Base):
     knowledge_graph_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
         back_populates="email", cascade="all, delete-orphan"
     )
+    source_events: Mapped[list["SourceEventRecord"]] = relationship(
+        back_populates="email", cascade="all, delete-orphan"
+    )
     ticket_tasks: Mapped[list["TicketTask"]] = relationship(
         back_populates="related_email", cascade="all, delete-orphan"
     )
@@ -1103,6 +1107,190 @@ class KnowledgeGraphEdgeRecord(Base):
         "ContentSegmentRecord",
         back_populates="incoming_edges",
         foreign_keys=[target_segment_id],
+    )
+
+
+class CalendarSourceDocumentRecord(Base):
+    __tablename__ = "calendar_source_documents"
+    __table_args__ = (
+        Index(
+            "ix_calendar_source_documents_owner",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "created_at",
+        ),
+    )
+
+    document_id: Mapped[str] = mapped_column(
+        String(40), primary_key=True, default=lambda: f"caldoc_{uuid.uuid4().hex}"
+    )
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
+class SourceEventRecord(Base):
+    __tablename__ = "source_events"
+    __table_args__ = (
+        Index(
+            "ix_source_events_scope_time",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "starts_at",
+        ),
+        Index(
+            "ix_source_events_scope_end",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "ends_at",
+        ),
+        Index(
+            "ix_source_events_scope_uid",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "event_uid",
+        ),
+        Index(
+            "ix_source_events_scope_key",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "source_event_key",
+        ),
+        Index("ix_source_events_source", "source_kind", "source_record_uid"),
+    )
+
+    event_uid: Mapped[str] = mapped_column(String(40), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    source_event_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    email_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_records.id", ondelete="CASCADE"), nullable=True
+    )
+    calendar_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("calendar_source_documents.document_id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    status_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    starts_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ends_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    location_text: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    dependency_evidence: Mapped[list[dict[str, str]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email | None"] = relationship(back_populates="source_events")
+
+
+class EventRelationRecord(Base):
+    __tablename__ = "event_relations"
+    __table_args__ = (
+        CheckConstraint(
+            "source_event_uid < target_event_uid", name="ck_event_relations_order"
+        ),
+        CheckConstraint(
+            "relation_type IN ('candidate', 'enables', 'conflicts', 'unrelated')",
+            name="ck_event_relations_type",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1", name="ck_event_relations_confidence"
+        ),
+        CheckConstraint(
+            "enabler_event_uid IS NULL OR (relation_type = 'enables' AND "
+            "enabler_event_uid IN (source_event_uid, target_event_uid))",
+            name="ck_event_relations_enabler",
+        ),
+        UniqueConstraint(
+            "source_event_uid", "target_event_uid", name="uq_event_relations_pair"
+        ),
+        Index(
+            "ix_event_relations_scope_uid",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "visibility_scope",
+            "relation_uid",
+        ),
+    )
+
+    relation_uid: Mapped[str] = mapped_column(String(40), primary_key=True)
+    source_event_uid: Mapped[str] = mapped_column(
+        ForeignKey("source_events.event_uid", ondelete="CASCADE"), nullable=False
+    )
+    target_event_uid: Mapped[str] = mapped_column(
+        ForeignKey("source_events.event_uid", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    visibility_scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    relation_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    enabler_event_uid: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    evidence_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    corrected_by_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    corrected_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
+class EventRelationCorrectionRecord(Base):
+    __tablename__ = "event_relation_corrections"
+    __table_args__ = (Index("ix_event_relation_corrections_relation", "relation_uid"),)
+
+    correction_uid: Mapped[str] = mapped_column(
+        String(40), primary_key=True, default=lambda: f"erc_{uuid.uuid4().hex}"
+    )
+    relation_uid: Mapped[str] = mapped_column(
+        ForeignKey("event_relations.relation_uid", ondelete="CASCADE"), nullable=False
+    )
+    actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    before_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    after_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    before_enabler_event_uid: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    after_enabler_event_uid: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_segment_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
     )
 
 

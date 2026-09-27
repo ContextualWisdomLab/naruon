@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import dataclass
 from typing import Any
 
 from icalendar import Calendar
@@ -15,6 +16,7 @@ from services.calendar_conflict_policy import (
     PolicyValidationCode,
     evaluate_calendar_conflicts,
 )
+from services.text_safety import strip_html_markup
 
 _ICS_STATUS_MAP: dict[str, CommitmentStatus] = {
     "CONFIRMED": "confirmed",
@@ -27,7 +29,101 @@ _MAX_ICS_DOCUMENT_BYTES = 262_144
 _RECURRENCE_PROPERTY_NAMES = ("RRULE", "RDATE", "EXDATE")
 
 
-def parse_calendar_commitments_from_ics(ics_text: str) -> tuple[CalendarCommitment, ...]:
+def dependency_evidence_from_segments(
+    event_uid: str, segments: list[tuple[str, str]]
+) -> list[dict[str, str]]:
+    """Keep only explicit UID dependencies with their source segment citation."""
+    evidence = []
+    seen: set[str] = set()
+    for segment_uid, source_text in segments:
+        header, separator, value = source_text.partition(":")
+        if not separator:
+            continue
+        property_name, *parameters = header.split(";")
+        if property_name.upper() != "RELATED-TO":
+            continue
+        params = {}
+        for part in parameters:
+            name, marker, parameter = part.partition("=")
+            if marker:
+                params[name.upper()] = parameter.upper()
+        target_uid = value.strip()
+        if (
+            params.get("RELTYPE") != "DEPENDS-ON"
+            or params.get("VALUE", "UID") != "UID"
+            or not target_uid
+            or len(target_uid) > 256
+            or target_uid == event_uid
+            or target_uid in seen
+        ):
+            continue
+        evidence.append({"target_uid": target_uid, "segment_uid": segment_uid})
+        seen.add(target_uid)
+    return evidence
+
+
+@dataclass(frozen=True, slots=True)
+class CalendarSourceEvent:
+    commitment: CalendarCommitment
+    title: str
+    location: str | None
+
+
+def parse_calendar_source_events_from_ics(
+    ics_text: str,
+) -> tuple[CalendarSourceEvent, ...]:
+    """Admit bounded, distinct VEVENTs for source-backed event storage."""
+    calendar = _parse_calendar(ics_text)
+    if str(calendar.get("METHOD", "")).strip().upper() == "CANCEL":
+        raise CalendarPolicyValidationError(
+            "calendar_ics_invalid",
+            "Cancellation messages require an event-update contract",
+        )
+    events: list[CalendarSourceEvent] = []
+    seen_uids: set[str] = set()
+    for component in calendar.walk("VEVENT"):
+        if len(events) >= _MAX_EXISTING_ICS_COMMITMENTS:
+            raise CalendarPolicyValidationError(
+                "calendar_existing_batch_exceeded", "Too many VEVENTs in one source"
+            )
+        if "RECURRENCE-ID" in component:
+            raise CalendarPolicyValidationError(
+                "calendar_ics_recurrence_unsupported",
+                "Recurring VEVENT instances require a separate source contract",
+            )
+        commitment = _commitment_from_vevent(component)
+        if len(commitment.commitment_id) > 256 or commitment.commitment_id in seen_uids:
+            raise CalendarPolicyValidationError(
+                "calendar_ics_invalid", "VEVENT UIDs must be distinct and bounded"
+            )
+        seen_uids.add(commitment.commitment_id)
+        title = (
+            " ".join(
+                strip_html_markup(_text_property(component, "SUMMARY") or "")
+                .replace("\x00", "")
+                .split()
+            )[:240]
+            or "Calendar event"
+        )
+        location = (
+            " ".join(
+                strip_html_markup(_text_property(component, "LOCATION") or "")
+                .replace("\x00", "")
+                .split()
+            )[:512]
+            or None
+        )
+        events.append(CalendarSourceEvent(commitment, title, location))
+    if not events:
+        raise CalendarPolicyValidationError(
+            "calendar_ics_vevent_required", "iCalendar evidence must include a VEVENT"
+        )
+    return tuple(events)
+
+
+def parse_calendar_commitments_from_ics(
+    ics_text: str,
+) -> tuple[CalendarCommitment, ...]:
     """Extract VEVENT commitments from one iCalendar/ICS document.
 
     RFC 5545 VEVENT ``STATUS`` defaults to ``CONFIRMED`` when omitted. Date-only
@@ -127,7 +223,9 @@ def _commitment_from_vevent(component: Any) -> CalendarCommitment:
             "calendar_ics_uid_required",
             "VEVENT evidence must include a non-blank UID",
         )
-    start_at = _aware_datetime_property(component, "DTSTART", "calendar_ics_dtstart_required")
+    start_at = _aware_datetime_property(
+        component, "DTSTART", "calendar_ics_dtstart_required"
+    )
     end_at = _vevent_end_at(component, start_at)
     return CalendarCommitment(
         commitment_id=commitment_id.strip(),
@@ -171,7 +269,9 @@ def _vevent_end_at(
         )
     if has_duration:
         duration = component.decoded("DURATION")
-        if not isinstance(duration, datetime.timedelta) or duration <= datetime.timedelta(0):
+        if not isinstance(
+            duration, datetime.timedelta
+        ) or duration <= datetime.timedelta(0):
             raise CalendarPolicyValidationError(
                 "calendar_ics_interval_required",
                 "VEVENT DURATION must be a positive interval",

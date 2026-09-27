@@ -17,6 +17,7 @@ import { CalendarCandidateView } from './calendar/CalendarCandidateView';
 import { CalendarSidebarLeft } from './calendar/CalendarSidebarLeft';
 import { CalendarSidebarRight } from './calendar/CalendarSidebarRight';
 import { CalendarWritebackSection } from './calendar/CalendarWritebackSection';
+import { EventRelationsSection } from './calendar/EventRelationsSection';
 
 
 
@@ -27,7 +28,7 @@ import { CalendarWritebackSection } from './calendar/CalendarWritebackSection';
 
 
 
-const CALENDAR_VIEW_MODES = ['월간 캘린더', '주간 캘린더', '일정 상세', '회의 조율', '일정 후보'] as const;
+const CALENDAR_VIEW_MODES = ['월간 캘린더', '주간 캘린더', '일정 상세', '회의 조율', '일정 후보', '일정 관계'] as const;
 type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
 
 function calendarViewTabId(mode: CalendarViewMode) {
@@ -206,20 +207,24 @@ export function CalendarLayout() {
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto p-4 pb-[calc(7rem+env(safe-area-inset-bottom))] md:p-6 lg:pb-6">
-          <p className="sr-only">원본 계정 일정 반영 흐름</p>
-          <CalendarWritebackSection
-            requestWritebackIntent={requestWritebackIntent}
-            isWritebackActionDisabled={isWritebackActionDisabled}
-            pendingWritebackAction={pendingWritebackAction}
-            isProviderExecutionDisabled={isProviderExecutionDisabled}
-            writebackSources={writebackSources}
-            selectedWritebackSource={selectedWritebackSource}
-            setSelectedSourceId={setSelectedSourceId}
-            isCustomerOwnedWritableSource={isCustomerOwnedWritableSource}
-            sourceLoadStatus={sourceLoadStatus}
-            writebackStatus={writebackStatus}
-            writebackResult={writebackResult}
-          />
+          {viewMode !== '일정 관계' && (
+            <>
+              <p className="sr-only">원본 계정 일정 반영 흐름</p>
+              <CalendarWritebackSection
+                requestWritebackIntent={requestWritebackIntent}
+                isWritebackActionDisabled={isWritebackActionDisabled}
+                pendingWritebackAction={pendingWritebackAction}
+                isProviderExecutionDisabled={isProviderExecutionDisabled}
+                writebackSources={writebackSources}
+                selectedWritebackSource={selectedWritebackSource}
+                setSelectedSourceId={setSelectedSourceId}
+                isCustomerOwnedWritableSource={isCustomerOwnedWritableSource}
+                sourceLoadStatus={sourceLoadStatus}
+                writebackStatus={writebackStatus}
+                writebackResult={writebackResult}
+              />
+            </>
+          )}
 
           <div id="calendar-view-panel" role="tabpanel" aria-labelledby={calendarViewTabId(viewMode)}>
             {viewMode === '월간 캘린더' && <CalendarMonthView visibleMonthEvents={visibleMonthEvents} />}
@@ -234,12 +239,13 @@ export function CalendarLayout() {
               />
             )}
             {viewMode === '일정 후보' && <CalendarCandidateView visibleCandidateEvents={visibleCandidateEvents} />}
+            {viewMode === '일정 관계' && <EventRelationsSection />}
           </div>
         </div>
       </main>
 
       {/* Right Sidebar - Event Detail */}
-      <CalendarSidebarRight selectedDetailEvent={selectedDetailEvent} />
+      {viewMode !== '일정 관계' && <CalendarSidebarRight selectedDetailEvent={selectedDetailEvent} />}
     </div>
   );
 }

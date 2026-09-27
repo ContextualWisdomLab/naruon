@@ -464,6 +464,74 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
         "xml",
         "calendar",
     }
+    assert email_obj.source_events == []
+
+
+def test_calendar_attachment_creates_owner_scoped_cited_source_event():
+    ics = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n"
+        "UID:planning@example.com\nDTSTART;TZID=Asia/Seoul:20260927T100000\n"
+        "DTEND;TZID=Asia/Seoul:20260927T110000\nSUMMARY:Planning\nLOCATION:Seoul\n"
+        "END:VEVENT\nBEGIN:VEVENT\nUID:review@example.com\n"
+        "DTSTART:20260927T120000Z\nDTEND:20260927T130000Z\n"
+        "SUMMARY:Review\nEND:VEVENT\nEND:VCALENDAR"
+    )
+    attachment = {
+        "filename": "invite.ics",
+        "content": "Calendar invite",
+        "content_type": "text/calendar",
+        "parse_content": ics,
+        "parse_content_type": "text/calendar",
+        "parser_key": "calendar",
+        "parse_status": "parsed",
+    }
+    parsed = {
+        "message_id": "<invite@example.com>",
+        "sender": "sender@example.com",
+        "recipients": "owner@example.com",
+        "body": "See invitation",
+    }
+
+    def build(user_id: str, sender: str):
+        return email_import_module._build_email_object(
+            parsed={**parsed, "sender": sender},
+            user_id=user_id,
+            organization_id="org-1",
+            message_id="<invite@example.com>",
+            thread_id="thread-1",
+            fingerprint="fingerprint-1",
+            persisted_date=datetime.datetime(2026, 9, 27, tzinfo=datetime.timezone.utc),
+            attachment_payloads=[attachment],
+            fitted_embeddings=[],
+            owner_addresses=["owner@example.com"],
+        )[0]
+
+    work_email = build("owner-1", "sender@example.com")
+    work_event, second_event = work_email.source_events
+    personal_event = build("owner-1", "owner@example.com").source_events[0]
+    other_owner_event = build("owner-2", "sender@example.com").source_events[0]
+
+    assert work_event.event_uid == build("owner-1", "sender@example.com").source_events[0].event_uid
+    assert work_event.event_uid != other_owner_event.event_uid
+    assert work_event.visibility_scope == "organization"
+    assert personal_event.visibility_scope == "personal"
+    assert work_event.source_event_key == "planning@example.com"
+    assert work_event.title == "Planning"
+    assert work_event.location_text == "Seoul"
+    assert work_event.starts_at == datetime.datetime(
+        2026, 9, 27, 1, tzinfo=datetime.timezone.utc
+    )
+    assert work_event.ends_at == datetime.datetime(
+        2026, 9, 27, 2, tzinfo=datetime.timezone.utc
+    )
+    assert any(
+        "DTSTART;TZID=Asia/Seoul:" in segment.safe_text_content
+        and segment.content_segment_uid in work_event.source_segment_uids
+        for segment in work_email.attachments[0].content_segments
+    )
+    assert len(work_event.source_segment_uids) >= 5
+    assert second_event.title == "Review"
+    assert set(work_event.source_segment_uids).isdisjoint(second_event.source_segment_uids)
 
 
 @pytest.mark.asyncio
