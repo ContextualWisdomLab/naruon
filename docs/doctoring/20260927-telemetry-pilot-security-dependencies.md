@@ -45,3 +45,5 @@ pin contracts pass with warnings as errors, and frozen pnpm 11.5.3 install
 succeeds in a new isolated worktree. Local Node is 24.21.0; the repository's
 24.19.0 pin has not been verified in this environment. Hosted acceptance remains
 separate from these local checks.
+
+Local frontend verification on the candidate: lint/typecheck completed without diagnostics; the initial default-worker run had 435 passes and two unchanged 5-second timeouts. The two-worker repeat passes all 437 tests in 51 files with the same assertions and timeouts. The Next.js 16.3.6 production build exits zero and generates all 16 pages. This is local Node 24.21.0 evidence, not pinned-node or protected hosted acceptance.
