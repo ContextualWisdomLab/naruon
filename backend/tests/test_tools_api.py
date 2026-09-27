@@ -1211,3 +1211,41 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler
+    import hashlib
+
+    text = "hello"
+
+    res_md5 = await hash_generator_handler({"text": text, "algorithm": "md5"})
+    assert res_md5["hash"] == hashlib.md5(text.encode()).hexdigest()
+
+    res_sha1 = await hash_generator_handler({"text": text, "algorithm": "sha1"})
+    assert res_sha1["hash"] == hashlib.sha1(text.encode()).hexdigest()
+
+    res_sha256 = await hash_generator_handler({"text": text, "algorithm": "sha256"})
+    assert res_sha256["hash"] == hashlib.sha256(text.encode()).hexdigest()
+
+    res_sha512 = await hash_generator_handler({"text": text, "algorithm": "sha512"})
+    assert res_sha512["hash"] == hashlib.sha512(text.encode()).hexdigest()
+
+    res_default = await hash_generator_handler({"text": text, "algorithm": "unknown"})
+    assert res_default["hash"] == hashlib.sha256(text.encode()).hexdigest()
+
+@pytest.mark.asyncio
+async def test_url_encoder_handler():
+    from api.tools import url_encoder_handler
+    import urllib.parse
+    text = "hello world"
+    res = await url_encoder_handler({"text": text})
+    assert res["encoded_url"] == urllib.parse.quote(text)
+
+@pytest.mark.asyncio
+async def test_url_decoder_handler():
+    from api.tools import url_decoder_handler
+    import urllib.parse
+    text = "hello%20world"
+    res = await url_decoder_handler({"encoded_text": text})
+    assert res["decoded_url"] == urllib.parse.unquote(text)

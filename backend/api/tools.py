@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,66 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+    encoded_text = text.encode("utf-8")
+
+    if algorithm == "md5":
+        return {"hash": hashlib.md5(encoded_text).hexdigest()}
+    elif algorithm == "sha1":
+        return {"hash": hashlib.sha1(encoded_text).hexdigest()}
+    elif algorithm == "sha512":
+        return {"hash": hashlib.sha512(encoded_text).hexdigest()}
+    else:
+        return {"hash": hashlib.sha256(encoded_text).hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="입력된 문자열의 해시값(MD5, SHA-1, SHA-256, SHA-512)을 생성합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"encoded_url": urllib.parse.quote(text)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="문자열을 URL 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    encoded_text = params.get("encoded_text", "")
+    return {"decoded_url": urllib.parse.unquote(encoded_text)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩된 문자열을 일반 텍스트로 디코딩합니다.",
+        category="유틸리티",
+        parameters={"encoded_text": "string"},
+    ),
+    url_decoder_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
