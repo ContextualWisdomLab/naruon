@@ -26,7 +26,7 @@ MinerU 3.4.4 and 3.4.5 both require Transformers `<5` for pipeline; several repo
 
 Target: Python 3.10, Linux x86_64 glibc 2.35 (Ubuntu 22.04). The generic Linux resolver target defaults to an older ABI and initially rejected the available llama.cpp wheel; explicitly matching the image ABI removed that false incompatibility.
 
-Use `uv export --frozen --no-dev --no-emit-project --format requirements-txt` from the exact supplier source, include that export plus the exact MinerU extra/version in a relative requirements input, and compile with `--python-version 3.10 --python-platform x86_64-manylinux_2_35 --generate-hashes`. Audit with `pip-audit --disable-pip`.
+Use `uv export --frozen --no-dev --no-emit-project --format requirements-txt` from the exact supplier source, include that export plus the exact MinerU extra/version in a relative requirements input, and compile with `--python-version 3.10 --python-platform x86_64-manylinux_2_35 --generate-hashes`. Audit the generated file with `pip-audit --disable-pip --require-hashes -r <compiled-file>`.
 
 The 4.x resolution permits source metadata only for jieba 0.42.1 (`--only-binary :all: --no-binary jieba`). Its official sdist SHA-256 `055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2` was verified and its static distutils setup inspected first. Resolution ran with a sanitized environment; no model weights or GPU runtime packages were installed.
 
@@ -45,6 +45,8 @@ The official PyPI wheel was checked against its published SHA-256 before reading
 - `mineru/parser/mineru_parser.py`: constructor and analysis calls carry tier, OCR mode, image analysis and VLM configuration, but no OCR language selection. Source SHA-256: `ee26543dc29856996dbbfe52629fec66c7ac63f0035340aebfc639a56b8da648`.
 - `mineru/model/runtime/hybrid.py`: `HybridLocalModelContext.get_ocr_model` passes literal `lang="ch"` to the atomic OCR model. Its constructor has device and small-backend parameters only. Existing NewsDOM's explicit `korean`, Arabic and other script-family requests therefore cannot be preserved by simply replacing its CLI with this public parser. Source SHA-256: `cb925a1f0c6f1c81dcff31fbb9e596806fc4fd520b8c2d0ee5618924042e6404`.
 - Public `mineru.render.render_content_list` preserves `page_idx` and can replace custom block serialization. Its shared renderer converts normalized 0–1 bounding boxes to 0–1000 integer coordinates; those values must not be interpreted as physical page units without conversion. Shared-renderer source SHA-256: `6134e696525937c1441d90ac4c813a8cff47464a6c175bfaa4d391dbc8d0e2f3`.
+
+Source comparison with the official SHA-verified 3.4.4 wheel confirms its pipeline `_build_bbox` and VLM content-list builder also scale coordinates to 0–1000. Preserve those existing units rather than introduce a version-only rescaling. Page dimensions are a separate metadata contract. Legacy pipeline module SHA-256: `ead402d9965bf1d3723e3e36e63aa0aa6c5036565d8e6a185c430d98ff9e4878`; legacy VLM module SHA-256: `0103bbfb650d7d0de170a3b9a5ffd7829e2168ccfb443131a2db282c02b837cd`.
 
 Next implementation must thread validated language selection through the actual OCR model context, preserve coordinate units and select every page. Do not silently ignore language, substitute text-only parsing for OCR, or declare the 142-package audit sufficient runtime acceptance.
 

@@ -23,6 +23,11 @@ in the production profile; a missing token leaves the service unready. Starting
 the service alone does not configure a provider.
 The override inherits the full supplier commit pin and internal network;
 it adds no host port mapping. Keep the authenticated parser private.
+Both selections use a read-only root filesystem and no-new-privileges.
+Temporary request/output files use `/tmp` tmpfs; the named `newsdom-model-cache`
+volume preserves the nonroot home, including model caches and generated
+`mineru.json`. External configuration mounts must remain read-only.
+The volume uses the supplier image's existing home-directory ownership.
 The override's healthcheck requires the MinerU executable as well as API
 liveness. This checks installation, not model availability or inference.
 

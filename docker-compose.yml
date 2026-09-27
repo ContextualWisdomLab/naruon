@@ -51,6 +51,14 @@ services:
       # Commit-pinned for reproducible builds; bump deliberately.
       context: https://github.com/ContextualWisdomLab/newsdom-api.git#927ff2dec160a00ed11ec045727a422ff7ba4cbd
       dockerfile: Dockerfile
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    # MinerU persists downloaded models and mineru.json in the nonroot home.
+    volumes:
+      - newsdom-model-cache:/home/newsdom
     # Keep the authenticated parser on the internal network. Configure the same
     # token in the organization's NewsDOM provider registry; never publish it.
     environment:
@@ -130,3 +138,4 @@ services:
 
 volumes:
   postgres-data:
+  newsdom-model-cache:
