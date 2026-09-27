@@ -12,27 +12,34 @@ down_revision = "0017_merge_newsdom_carddav_heads"
 branch_labels = None
 depends_on = None
 
-_DROP_INDEX_SQL = "DROP INDEX IF EXISTS ix_email_attachments_content_trgm"
-_CREATE_INDEX_SQL = (
-    "CREATE INDEX ix_email_attachments_content_trgm "
-    "ON email_attachments USING gist "
-    "((search_normalized_text(coalesce(filename, '') || ' ' || "
-    "coalesce(content, ''))) gist_trgm_ops(siglen=256))"
-)
-_RESTORE_INDEX_SQL = (
-    "CREATE INDEX ix_email_attachments_content_trgm "
-    "ON email_attachments USING gist "
-    "((search_normalized_text(content)) gist_trgm_ops(siglen=256))"
-)
-
 
 def upgrade() -> None:
-    connection = op.get_bind()
-    connection.execute(text(_DROP_INDEX_SQL))
-    connection.execute(text(_CREATE_INDEX_SQL))
+    op.drop_index(
+        "ix_email_attachments_content_trgm",
+        table_name="email_attachments",
+        if_exists=True,
+    )
+    op.create_index(
+        "ix_email_attachments_content_trgm",
+        "email_attachments",
+        [
+            text(
+                "(search_normalized_text(coalesce(filename, '') || ' ' || coalesce(content, ''))) gist_trgm_ops(siglen=256)"
+            )
+        ],
+        postgresql_using="gist",
+    )
 
 
 def downgrade() -> None:
-    connection = op.get_bind()
-    connection.execute(text(_DROP_INDEX_SQL))
-    connection.execute(text(_RESTORE_INDEX_SQL))
+    op.drop_index(
+        "ix_email_attachments_content_trgm",
+        table_name="email_attachments",
+        if_exists=True,
+    )
+    op.create_index(
+        "ix_email_attachments_content_trgm",
+        "email_attachments",
+        [text("(search_normalized_text(content)) gist_trgm_ops(siglen=256)")],
+        postgresql_using="gist",
+    )
