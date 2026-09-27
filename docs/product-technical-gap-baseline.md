@@ -275,3 +275,12 @@ The successor preserves the product-owned confirmation `alertdialog`, focus entr
 | Hosted admission | Application CI, CodeQL PR, Semgrep, Security, Bandit and image workflows exist on the exact head | All queued; independent review absent |
 
 #1796 remains **Proposed / Merge HOLD** until every applicable FAIL is repaired or bounded by an accepted decision and the unchanged exact head has terminal required Checks plus qualifying independent review. No generated helper, predecessor receipt, mutable external source or presentation DTO counts as delivery authority.
+
+
+### Attachment ownership invariant stack update — 2026-09-27
+
+Backend fact owner [#1795](https://github.com/ContextualWisdomLab/naruon/pull/1795) advanced ordinarily to exact `606c01325fa7c64c9c6696f049a5d0590d6ba226`. Its two-file successor adds a fail-closed invariant before an existing ProjectGraph object UID can be updated: `user_id`, `organization_id`, and `workspace_id` must match the stored aggregate scope. A PostgreSQL regression proves a colliding cross-user UID cannot transfer ownership or its primary source-segment citation. This is a valid product-domain security delta and is preserved.
+
+Consumer [#1793](https://github.com/ContextualWisdomLab/naruon/pull/1793) ordinary-merged that exact prerequisite without rewriting history at two-parent commit `36aafa2976ab26fffbdb998cb82ea956ae765262`. Fresh #1795→#1793 comparison is 5 commits ahead, 0 behind, with exactly the four consumer-owned files `backend/api/emails.py`, `backend/tests/test_emails_api.py`, `frontend/src/components/EmailDetail.test.tsx`, and `frontend/src/components/EmailDetail.tsx`. The backend invariant therefore remains canonical in #1795 while #1793 consumes it through real ancestry rather than copied source.
+
+Both PRs remain Draft/mergeable. #1795's cancelled exact-head core workflows were re-run and #1793 generated fresh exact-head workflows; all are nonterminal. The historical CHANGES_REQUESTED review on #1795 is not a current-head approval. The existing eight-locale, browser/AT/touch/responsive, offline/permission/read-only/stale/conflict/reload, large-data p95, protected PostgreSQL prerequisite, terminal Checks, and independent-review FAIL/PENDING gates remain unchanged.
