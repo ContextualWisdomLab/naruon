@@ -234,6 +234,7 @@ class ThreadTaskItem(BaseModel):
     status: str
     created_at: datetime.datetime
     link_confidence: float | None
+    related_email_id: int | None = Field(exclude=True)
     related_thread_id: str | None
 
 
@@ -777,6 +778,7 @@ async def get_email_thread(
                 link_confidence=(
                     1.0 if task.related_email_id in email_id_set else None
                 ),
+                related_email_id=task.related_email_id,
                 related_thread_id=task.related_thread_id,
             )
             for task in tasks
@@ -838,9 +840,18 @@ async def create_thread_judgment(
         )
         for _, segment_uid, _, segment_text, _, message_id, date in rows
     ]
+    message_id_by_email_id = {email.id: email.message_id for email in thread.thread}
+    cited_message_ids = {segment.message_id for segment in segments}
     tasks = [
-        JudgmentTask(uid=task.id, title=task.title, status=task.status)
+        JudgmentTask(
+            uid=task.id,
+            title=task.title,
+            status=task.status,
+            message_id=message_id_by_email_id[task.related_email_id],
+        )
         for task in thread.tasks
+        if task.related_email_id in message_id_by_email_id
+        and message_id_by_email_id[task.related_email_id] in cited_message_ids
     ]
     object_result = await db.execute(
         select(ProjectGraphObjectRecord)

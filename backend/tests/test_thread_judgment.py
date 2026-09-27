@@ -56,7 +56,11 @@ def test_thread_judgment_rejects_uncited_claims_and_one_message_tensions():
         validate_judgment_citations(
             card,
             segments,
-            [JudgmentTask(uid="real", title="Known task", status="open")],
+            [
+                JudgmentTask(
+                    uid="real", title="Known task", status="open", message_id="first"
+                )
+            ],
         )
 
     card.current_state.linked_task_uids = []
@@ -88,6 +92,31 @@ def test_thread_judgment_rejects_uncited_claims_and_one_message_tensions():
                 )
             ],
         )
+
+
+def test_thread_judgment_task_link_requires_its_source_message():
+    segments = [
+        JudgmentSegment(uid="a", message_id="first", text="A task was created."),
+        JudgmentSegment(uid="b", message_id="second", text="Other news."),
+    ]
+    task = JudgmentTask(
+        uid="task", title="Follow up", status="open", message_id="first"
+    )
+    card = ThreadJudgmentDraft(
+        current_state=CitedStatement(
+            text="Follow up", evidence_segment_uids=["b"], linked_task_uids=["task"]
+        ),
+        judgment_point=None,
+        recommended_action=None,
+        blocking_dependencies=[],
+        unresolved_commitments=[],
+        tensions=[],
+    )
+
+    with pytest.raises(ValueError, match="task lacks cited evidence"):
+        validate_judgment_citations(card, segments, [task])
+    card.current_state.evidence_segment_uids = ["a"]
+    validate_judgment_citations(card, segments, [task])
 
 
 @pytest.mark.asyncio

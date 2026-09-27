@@ -129,6 +129,10 @@ async def test_thread_tasks_stay_with_their_email_owner():
             "owned-task": 1.0,
             "thread-task": None,
         }
+        assert {task.id: task.related_email_id for task in result.tasks} == {
+            "owned-task": owned.id,
+            "thread-task": None,
+        }
 
         owner_auth = AuthContext(
             user_id="owner-a",

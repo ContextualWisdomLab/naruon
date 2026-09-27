@@ -23,6 +23,7 @@ class JudgmentTask:
     uid: str
     title: str
     status: str
+    message_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +70,7 @@ def validate_judgment_citations(
 ) -> None:
     """Reject a card if any claim cites unknown evidence or a tension cites one message."""
     source_by_uid = {segment.uid: segment.message_id for segment in segments}
-    task_uids = {task.uid for task in tasks or []}
+    task_source_by_uid = {task.uid: task.message_id for task in tasks or []}
     object_source_by_uid = {
         item.uid: item.evidence_segment_uid for item in objects or []
     }
@@ -87,8 +88,17 @@ def validate_judgment_citations(
     for claim in claims:
         if any(uid not in source_by_uid for uid in claim.evidence_segment_uids):
             raise ValueError("Thread judgment cites unknown evidence")
-        if any(uid not in task_uids for uid in claim.linked_task_uids):
+        if any(uid not in task_source_by_uid for uid in claim.linked_task_uids):
             raise ValueError("Thread judgment cites unknown task")
+        if any(
+            task_source_by_uid[uid]
+            not in {
+                source_by_uid[segment_uid]
+                for segment_uid in claim.evidence_segment_uids
+            }
+            for uid in claim.linked_task_uids
+        ):
+            raise ValueError("Thread judgment task lacks cited evidence")
         if any(uid not in object_source_by_uid for uid in claim.linked_object_uids):
             raise ValueError("Thread judgment cites unknown object")
         if any(
@@ -130,7 +140,12 @@ async def synthesize_thread_judgment(
         {
             "segments": payload,
             "tasks": [
-                {"uid": task.uid, "title": task.title, "status": task.status}
+                {
+                    "uid": task.uid,
+                    "title": task.title,
+                    "status": task.status,
+                    "message_id": task.message_id,
+                }
                 for task in tasks
             ],
             "objects": [

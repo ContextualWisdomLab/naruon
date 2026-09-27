@@ -23,6 +23,7 @@ from db.models import (
     ContentSegmentRecord,
     Email,
     ProjectGraphObjectRecord,
+    TicketTask,
 )
 from services.llm_provider_selection import RuntimeLLMProvider
 from services.thread_judgment import CitedStatement, ThreadJudgmentDraft
@@ -74,6 +75,28 @@ async def test_thread_judgment_uses_only_owner_segments():
                 )
                 session.add(email)
                 await session.flush()
+                session.add(
+                    TicketTask(
+                        task_uid=f"task-{owner}",
+                        user_id=owner,
+                        organization_id="org-1",
+                        title=f"Task for {owner}",
+                        related_email_id=email.id,
+                        related_thread_id="shared-thread",
+                        created_at=now,
+                    )
+                )
+                if owner == "owner-a":
+                    session.add(
+                        TicketTask(
+                            task_uid="thread-only-task",
+                            user_id=owner,
+                            organization_id="org-1",
+                            title="Thread-only task",
+                            related_thread_id="shared-thread",
+                            created_at=now,
+                        )
+                    )
                 node = ContentNodeRecord(
                     content_node_uid=f"node-{owner}",
                     email_id=email.id,
@@ -199,7 +222,10 @@ async def test_thread_judgment_uses_only_owner_segments():
             ]
             assert synthesize.await_args_list[1].kwargs["previous"] == judgment
             assert len(synthesize.await_args_list[1].kwargs["known_segments"]) == 41
-            assert synthesize.await_args_list[0].args[1] == []
+            assert [
+                (task.uid, task.message_id)
+                for task in synthesize.await_args_list[0].args[1]
+            ] == [("task-owner-a", "owned@example.com")]
             assert [item.uid for item in synthesize.await_args_list[0].args[2]] == [
                 "object-owner-a"
             ]
