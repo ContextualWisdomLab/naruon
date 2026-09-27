@@ -897,6 +897,7 @@ class Attachment(Base):
     parse_error_code: Mapped[str | None] = mapped_column(
         String(120), nullable=True
     )
+    fact_extractor_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
 

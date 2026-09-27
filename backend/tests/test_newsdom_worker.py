@@ -568,15 +568,18 @@ async def test_worker_start_stop_are_idempotent(monkeypatch):
         await blocker.wait()
 
     monkeypatch.setattr(worker, "_run_loop", blocked_loop)
+    monkeypatch.setattr(worker, "_run_fact_loop", blocked_loop)
     await worker.start()
     await entered.wait()
     task = worker._task
+    fact_task = worker._fact_task
     await worker.start()
     await worker.stop()
     await worker.stop()
 
     assert task is not None
     assert task.cancelled()
+    assert fact_task is not None and fact_task.cancelled()
 
     worker._is_running = True
     worker._task = None
