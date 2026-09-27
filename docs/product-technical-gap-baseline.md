@@ -6,6 +6,21 @@
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
+**Current exact-head security repair (2026-09-27):** PR
+[#1782](https://github.com/ContextualWisdomLab/naruon/pull/1782) at
+`d156f6b286b520f5cc93fa66f4fc079cfa6a46a1` failed Security Scan run
+[`36248648092`](https://github.com/ContextualWisdomLab/naruon/actions/runs/36248648092)
+because the generated locks still contained vulnerable AnyIO `4.14.1`,
+Next.js `16.2.12`, and Sharp `0.35.0`. The source repair updates those floors
+to `4.15.1`, `16.3.6`, and `0.35.4`, aligns `eslint-config-next`, and adds a
+cross-lock regression contract. Local evidence is backend `1807 passed, 33
+skipped`, frontend `437 passed`, plus successful lint, typecheck, production
+build, and frozen installs. This item remains **In progress / Draft**: the
+published repair commit and its exact-head hosted Security Scan must be
+observed terminal green before the failure can be marked resolved. Full causal
+evidence and rejected alternatives are recorded in
+`docs/doctoring/pr-1782-trivy-dependency-rca.md`.
+
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
 PR #1337 merged into protected `develop` at `2026-08-25T00:10:39Z` and

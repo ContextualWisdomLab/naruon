@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -144,3 +145,46 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "undici@8.9.0",
     ):
         assert exact_lock_entry in package_records
+
+
+def test_trivy_dependency_security_floors_match_all_generated_locks() -> None:
+    """Keep the exact Trivy-remediated versions coherent across source and locks."""
+    backend_lock = tomllib.loads(read_repo_text("backend/uv.lock"))
+    backend_packages = {
+        package_record["name"]: package_record["version"]
+        for package_record in backend_lock["package"]
+    }
+    backend_records = hashed_requirement_records(
+        read_repo_text("backend/requirements-hashes.txt")
+    )
+    frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(
+        read_repo_text("frontend/pnpm-workspace.yaml")
+    )
+    frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+    root_importer = frontend_lock["importers"]["."]
+
+    assert backend_packages["anyio"] == "4.15.1"
+    assert "anyio==4.15.1" in backend_records
+
+    assert frontend_package["dependencies"]["next"] == "16.3.6"
+    assert frontend_package["devDependencies"]["eslint-config-next"] == "16.3.6"
+    assert frontend_workspace["overrides"]["sharp"] == "0.35.4"
+    assert frontend_lock["overrides"]["sharp"] == "0.35.4"
+
+    next_resolution = importer_resolution(root_importer, "dependencies", "next")
+    eslint_resolution = importer_resolution(
+        root_importer, "devDependencies", "eslint-config-next"
+    )
+    assert next_resolution["specifier"] == "16.3.6"
+    assert next_resolution["version"].split("(", 1)[0] == "16.3.6"
+    assert eslint_resolution["specifier"] == "16.3.6"
+    assert eslint_resolution["version"].split("(", 1)[0] == "16.3.6"
+
+    for exact_lock_entry in ("next@16.3.6", "sharp@0.35.4"):
+        assert exact_lock_entry in frontend_lock["packages"]
+        assert any(
+            snapshot_key == exact_lock_entry
+            or snapshot_key.startswith(f"{exact_lock_entry}(")
+            for snapshot_key in frontend_lock["snapshots"]
+        )
