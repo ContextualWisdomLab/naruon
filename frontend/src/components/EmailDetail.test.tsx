@@ -353,6 +353,7 @@ describe("EmailDetail", () => {
   });
 
   it("loads attachment segments on open and retrieves an exact cited segment", async () => {
+    let pageRequests = 0;
     const email = {
       id: 31, message_id: "<attachment@example.com>", thread_id: "attachment-thread",
       sender: "sender@example.com", recipients: "user@example.com", subject: "Invoice",
@@ -373,6 +374,7 @@ describe("EmailDetail", () => {
         return jsonResponse({ uid: "segment-2", text: "Total: $1,200" });
       }
       if (url.includes("/api/emails/attachments/91/segments?")) {
+        if (++pageRequests === 1) return new Response(null, { status: 503 });
         const offset = new URL(url, "http://test").searchParams.get("offset");
         return jsonResponse(offset === "0"
           ? { segments: [{ uid: "segment-1", text: "Invoice date: 2026-05-17" }], next_offset: 1 }
@@ -396,6 +398,11 @@ describe("EmailDetail", () => {
       details.open = true;
       details.dispatchEvent(new Event("toggle", { bubbles: true }));
     });
+    await flushAsyncWork();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("첨부 내용을 불러오지 못했습니다.");
+    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "첨부 내용 다시 불러오기");
+    expect(retry).toBeDefined();
+    await act(async () => { retry?.click(); });
     await flushAsyncWork();
     expect(container.querySelector("#attachment-segment-segment-1")?.textContent).toBe("Invoice date: 2026-05-17");
 

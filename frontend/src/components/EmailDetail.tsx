@@ -967,6 +967,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                             ))}
                             {page?.loading && <p role="status">첨부 내용을 불러오는 중입니다...</p>}
                             {page?.error && <p role="alert">{page.error}</p>}
+                            {page?.error && !page.loaded && (
+                              <Button size="sm" variant="outline" disabled={page.loading} onClick={() => fetchAttachmentPage(attachment.attachment_id, threadRequestIdRef.current, 0)}>첨부 내용 다시 불러오기</Button>
+                            )}
                             {page?.loaded && segments.length === 0 && <p className="text-muted-foreground">표시할 수 있는 내용이 없습니다.</p>}
                             {page?.nextOffset !== null && page?.nextOffset !== undefined && (
                               <Button size="sm" variant="outline" disabled={page.loading} onClick={() => fetchAttachmentPage(attachment.attachment_id, threadRequestIdRef.current, page.nextOffset!)}>첨부 내용 더 보기</Button>
