@@ -50,11 +50,14 @@ test('loads attachment evidence only when opened and follows its exact citation'
   await expect(attachment).toBeVisible();
   expect(segmentRequests).toEqual([]);
 
-  await attachment.click();
+  await attachment.focus();
+  await page.keyboard.press('Enter');
   await expect(page.getByText('Invoice date: 2026-05-11')).toBeVisible();
-  await page.getByRole('link', { name: 'invoice.txt의 금액 원문 근거 보기' }).click();
+  await page.getByRole('link', { name: 'invoice.txt의 금액 원문 근거 보기' }).focus();
+  await page.keyboard.press('Enter');
   await expect(page.locator('#attachment-segment-segment-2')).toBeFocused();
   await page.getByRole('button', { name: '첨부 내용 더 보기' }).click();
   await expect(page.getByText('Payment due tomorrow')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   expect(segmentRequests).toContain('/api/emails/attachments/91/segments/segment-2');
 });
