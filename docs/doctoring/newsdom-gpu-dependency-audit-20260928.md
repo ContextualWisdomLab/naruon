@@ -48,6 +48,16 @@ The official PyPI wheel was checked against its published SHA-256 before reading
 
 Next implementation must thread validated language selection through the actual OCR model context, preserve coordinate units and select every page. Do not silently ignore language, substitute text-only parsing for OCR, or declare the 142-package audit sufficient runtime acceptance.
 
+Further source inspection narrows that language remedy: the 4.0.7 Torch OCR model resource lists only `ch` and `seal` (resource SHA-256 `52980d101f82fb549c2c33ec4b90b8266b687adf855dee2a1ac47f386192ba55`). Its recognition dictionary contains neither Hangul syllables nor Hangul jamo (SHA-256 `b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d`). Passing `korean` through alone cannot restore the old model contract. High/xhigh uses native VLM recognition; real multilingual OCR must be tested there before choosing it. This does not establish that every MinerU 4 path cannot recognize Korean.
+
+### Isolated local execution candidate
+
+macOS 26.5.1, Apple arm64, Python 3.13.15: the generic macOS resolver initially selected Torch 2.11 and setuptools 81, reporting three advisory records across two packages. Matching the actual supported ABI with `MACOSX_DEPLOYMENT_TARGET=14.0`, plus `torch>=2.13.0` and `setuptools>=83.0.0`, resolves 119 packages with Torch 2.14.0 and setuptools 84.0.0 and zero known vulnerabilities. Hash-enforced installation succeeded in the isolated `/tmp/newsdom-mineru4-runtime-20260928/.venv`; shared project environments were not changed.
+
+The installed public `render_content_list` passed synthetic page-index, blank-page metadata, Korean source-text and normalized-coordinate assertions. Its strict middle schema requires metadata, a full-document flag, per-block indices and fixed-layout bounding boxes; initial incomplete synthetic records were rejected before constructing the valid fixture. This is native serialization evidence only, not OCR or Linux/NVIDIA runtime acceptance.
+
+Local fixed-resolution SHA-256: `a49b21186897c20906b1961ed6948fbc0ff1a110b3f7ca7d15977562afac60ee`; audit SHA-256: `0b4737786890a2816f2cba79a4b52cab9a101b6a14fa4bc93e578452cb3747a9`. These are local scratch receipts and must be reproduced before acceptance.
+
 The independent existing DOM defect that omitted model-declared blank pages is repaired in [newsdom-api #958](https://github.com/ContextualWisdomLab/newsdom-api/pull/958), stacked on security-owner #822. At `65696f393224a1e08ab42fff5151cbf3639a8a4e`, 487 tests pass with warnings as errors and 100% production branch coverage. That synthetic regression proves DOM page preservation, not OCR quality or protected merge acceptance.
 
 ## Local evidence digests
