@@ -89,7 +89,7 @@ def test_compose_forwards_existing_extraction_settings(configured, nvidia):
     }
     assert "/ready" in newsdom["healthcheck"]["test"][-1]
     assert newsdom["build"]["context"].endswith(
-        "#927ff2dec160a00ed11ec045727a422ff7ba4cbd"
+        "#65696f393224a1e08ab42fff5151cbf3639a8a4e"
     )
 
     assert newsdom["read_only"] is True

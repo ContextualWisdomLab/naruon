@@ -3,7 +3,7 @@
 Naruon's default `newsdom` compose profile builds the supplier's API-only
 Dockerfile. Its `/health` response proves liveness, not PDF recognition.
 Compose uses `/ready`, which requires both parser authentication and an available
-MinerU runtime. The supplier at `927ff2dec160a00ed11ec045727a422ff7ba4cbd`
+MinerU runtime. The supplier at `65696f393224a1e08ab42fff5151cbf3639a8a4e`
 provides `Dockerfile.nvidia` with MinerU 3.4.4.
 
 The existing MinerU 3.4.4 runtime fails the combined GPU dependency audit.
@@ -63,13 +63,15 @@ the flags alone is not inference acceptance.
 
 ## Supplier security prerequisite
 
-The selected immutable supplier commit is canonical security PR newsdom-api
-#822's current head `927ff2dec160a00ed11ec045727a422ff7ba4cbd`. Its lock retains
+The selected immutable supplier commit is blank-page successor PR newsdom-api
+#958's head `65696f393224a1e08ab42fff5151cbf3639a8a4e`, based on canonical security PR #822's
+head `927ff2dec160a00ed11ec045727a422ff7ba4cbd`. The successor changes only DOM
+page preservation and its regression test; its lock and Dockerfiles are unchanged. Its lock retains
 security-fixed AnyIO 4.14.2 and pypdf 6.18.0. The supplier owner branch remains
 unchanged. Its additional form-field bounds are preserved; qualifying review
 and protected supplier acceptance remain pending.
 
-Validation on this exact supplier source and lock: 486 tests pass with warnings
+Validation on this exact supplier source and lock: 487 tests pass with warnings
 as errors and 100% production branch coverage; exported API runtime requirements
 report zero known vulnerabilities. The strict test command applies no warning
 suppression, independently from the supplier workflow's existing filter.
@@ -85,3 +87,5 @@ passed 485 tests but is not adopted, because the owner's existing fix suffices.
 This pin remains a review candidate. The GPU image build, MinerU transitive
 packages/model execution, real OCR, and independent protected acceptance are
 unverified. Dependency/API tests do not establish those outcomes.
+
+The successor preserves a model-declared blank page between content pages; page numbers and dimensions remain present even when no article is emitted. This closes the supplier-to-runtime pin gap without claiming a MinerU 4 adapter or a deployed OCR result.

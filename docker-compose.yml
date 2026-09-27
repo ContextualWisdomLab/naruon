@@ -49,7 +49,7 @@ services:
       - newsdom
     build:
       # Commit-pinned for reproducible builds; bump deliberately.
-      context: https://github.com/ContextualWisdomLab/newsdom-api.git#927ff2dec160a00ed11ec045727a422ff7ba4cbd
+      context: https://github.com/ContextualWisdomLab/newsdom-api.git#65696f393224a1e08ab42fff5151cbf3639a8a4e
       dockerfile: Dockerfile
     security_opt:
       - no-new-privileges:true
