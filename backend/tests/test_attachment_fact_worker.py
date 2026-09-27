@@ -176,3 +176,60 @@ def test_completion_marker_migration_roundtrip():
         assert "fact_extractor_version" not in {
             c["name"] for c in inspect(connection).get_columns("email_attachments")
         }
+
+
+@pytest.mark.asyncio
+async def test_fresh_migration_chain_creates_attachment_fact_column():
+    from pathlib import Path
+    import uuid
+
+    from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import inspect, text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from core.config import settings
+
+    schema = f"attachment_migrations_{uuid.uuid4().hex}"
+    engine = create_async_engine(settings.DATABASE_URL)
+    config = Config()
+    config.set_main_option(
+        "script_location", str(Path(__file__).resolve().parents[1] / "alembic")
+    )
+    script = ScriptDirectory.from_config(config)
+    schema_created = False
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(text(f"CREATE SCHEMA {schema}"))
+            schema_created = True
+        async with engine.begin() as connection:
+            await connection.execute(text(f"SET LOCAL search_path TO {schema}, public"))
+
+            def upgrade(sync_connection):
+                sync_connection = sync_connection.execution_options(
+                    schema_translate_map={None: schema}
+                )
+                with Operations.context(MigrationContext.configure(sync_connection)):
+                    for revision in reversed(list(script.walk_revisions())):
+                        revision.module.upgrade()
+                columns = {
+                    column["name"]
+                    for column in inspect(sync_connection).get_columns(
+                        "email_attachments", schema=schema
+                    )
+                }
+                assert "fact_extractor_version" in columns
+                assert inspect(sync_connection).has_table(
+                    "email_records", schema=schema
+                )
+
+            await connection.run_sync(upgrade)
+    finally:
+        if schema_created:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+                )
+        await engine.dispose()
