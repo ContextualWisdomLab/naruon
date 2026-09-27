@@ -730,7 +730,7 @@ async def get_email_thread(
                 Email.thread_id.in_(lookup_values), Email.message_id.in_(lookup_values)
             ),
         )
-        .order_by(Email.date.asc())
+        .order_by(Email.date.asc(), Email.id.asc())
     )
     emails = result.scalars().all()
     if not emails:
@@ -857,8 +857,7 @@ async def create_thread_judgment(
     )
     object_rows = object_result.scalars().all()
     evidence_uid_by_id = {
-        segment_id: segment_uid
-        for segment_id, segment_uid, *_ in rows
+        segment_id: segment_uid for segment_id, segment_uid, *_ in rows
     }
     objects = [
         JudgmentObject(
