@@ -211,3 +211,35 @@ A focused RED contract at `f8431b0e…` models judgment generation completing af
 | Stack / hosted admission | #1786 dependency, exact-head Checks and current independent approval | Pending |
 
 Do not merge until the applicable FAIL rows, stacked-base integration, exact-head hosted Checks, and current-head independent review are satisfied.
+
+
+## Attachment thread evidence card — naruon#1793
+
+Canonical product UI writer [naruon#1793](https://github.com/ContextualWisdomLab/naruon/pull/1793) is Draft/Proposed at exact head `adadb0e6766ac763faf1aaec17fd4bbaef977329`. The four-file slice preserves owner-scoped Attachment/ContentSegment evidence under its parent thread message and omits raw attachment bytes. Its `attachment_evidence` response is a presentation DTO and never replaces Attachment, ContentSegment, Email, owner, workspace, ordinal, or citation domain truth.
+
+| Concern | Exact-head evidence | Status |
+|---|---|---|
+| Determinism / domain truth | Stable segment UID and ordinal sorting; cross-message segment filter | Partial PASS; exact owner/workspace/schema negative contract pending |
+| Semantics / exact alternative | Native details/summary and exact segment text | Partial PASS; structured export/list and long-content behavior pending |
+| Accessibility / interaction | DOM rendering assertion only | Chromium/Firefox/WebKit pointer, touch, keyboard, focus and AT FAIL |
+| Responsive / locales | Korean copy is hard-coded in the component | 320/768/desktop and ko/en/ja/zh/vi/es/de/fr FAIL |
+| Failure / recovery | Parsed, pending and unavailable copy exists | Loading, offline, permission, read-only, stale, conflict, retry, busy, late-response race and reload FAIL |
+| Large data / performance | No representative large-segment measurement | DOM size and render p95 FAIL |
+| Hosted admission | Local source checks recorded; zero review threads | Exact-head hosted terminal Checks and independent approval pending |
+
+Do not merge until every applicable FAIL row is GREEN on the unchanged exact head. Translation resources remain a DB-backed, versioned product boundary; do not ship a browser-wide catalog or promote this DTO to domain truth.
+
+## Cited attachment fact card — naruon#1795
+
+Canonical product backend writer [naruon#1795](https://github.com/ContextualWisdomLab/naruon/pull/1795) is Draft/Proposed at exact head `934128fdff9bc345f61b9c40bf607c4867d3da78`. The nine-file slice owns bounded literal date, currency, party, and commitment facts with source-segment and attachment linkage plus paged owner-scoped retrieval. Presentation labels and optional model output are not authoritative fact state.
+
+| Concern | Exact-head evidence | Status |
+|---|---|---|
+| Provenance / identity | Source segment, attachment, email, owner and workspace checks are present | Source contract PASS; immutable released schema absent |
+| Exact value / locale | Labelled values and invalid currency grouping are covered | Locale, normalized value/type, validity, confidence and status contract Partial |
+| Persistence / idempotency | Disposable PostgreSQL persistence and owner denial are recorded | Duplicate import, reparse, stale segment, concurrent import and rollback FAIL |
+| Pagination / recovery | Paged owner endpoint exists | Stable ordering under concurrent writes and continuation recovery pending |
+| Dependency / hosted admission | #1794 repairs two protected-base PostgreSQL smoke failures | #1794 protected acceptance, exact-head hosted Checks and independent approval pending |
+| UI consumption | #1793/#1792 remain separate product lanes | No cross-boundary truth transfer; released contract/ACL required |
+
+Do not merge until #1794 is integrated through its owner path, executable negative fixtures cover the FAIL rows, and exact-head hosted security/schema/database gates plus current independent review are terminal.
