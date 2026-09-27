@@ -944,3 +944,54 @@ async def test_all_attachment_segments_are_processed_in_bounded_requests(
     assert all(
         len(batch) <= llm_extractor._MAX_SEGMENTS_PER_REQUEST for batch in batches
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote_start,padding", [(1900, 222), (2400, 222), (1900, 0)])
+async def test_long_attachment_quotes_keep_original_citation_and_hash(
+    monkeypatch, quote_start, padding
+):
+    import hashlib
+    import json
+    from dataclasses import replace
+
+    quote = "Acme will deliver." + "z" * padding
+    assert len(quote) <= 240
+    text = "x" * quote_start + quote + "y" * 2000
+    segment = replace(_segment("long-attachment", text), source_kind="attachment")
+    requests = []
+
+    async def call(**kwargs):
+        entries = json.loads(kwargs["segments_json"])["segments"]
+        requests.append(entries)
+        return _payload(
+            *[
+                llm_extractor.ExtractedObjectPayload(
+                    object_type="attachment_fact",
+                    title="Delivery",
+                    summary="Acme will deliver.",
+                    source_segment_uids=[entry["content_segment_uid"]],
+                    confidence=0.8,
+                    fact_kind="commitment",
+                    fact_value="will deliver",
+                    evidence_excerpt=quote,
+                )
+                for entry in entries
+                if quote in entry["text"]
+            ]
+        )
+
+    monkeypatch.setattr(llm_extractor, "_call_llm", call)
+    result = await llm_extractor.extract_project_semantics_llm(
+        [segment], api_key="synthetic", model="synthetic"
+    )
+    assert len(result.objects) == len(result.edges) == 1
+    fact = result.objects[0]
+    assert fact.source_segment_uids == (segment.content_segment_uid,)
+    assert fact.attributes["evidence_excerpt"] == quote
+    assert (
+        fact.attributes["source_segment_hash"]
+        == hashlib.sha256(text.encode()).hexdigest()
+    )
+    assert all(len(entry["text"]) <= 2000 for request in requests for entry in request)
+    assert requests[-1][0]["text"].endswith("y" * 100)
