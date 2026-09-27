@@ -30,6 +30,10 @@ test('loads attachment evidence only when opened and follows its exact citation'
     }
     if (url.pathname.startsWith('/api/emails/attachments/91/segments')) {
       segmentRequests.push(url.pathname + url.search);
+      if (segmentRequests.length === 1) {
+        await route.fulfill({ status: 503, json: { detail: 'temporarily unavailable' } });
+        return;
+      }
       if (url.pathname.endsWith('/segment-2')) {
         await route.fulfill({ json: { uid: 'segment-2', text: 'Total: $1,200' } });
       } else {
@@ -52,6 +56,8 @@ test('loads attachment evidence only when opened and follows its exact citation'
 
   await attachment.focus();
   await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert').filter({ hasText: '첨부 내용을 불러오지 못했습니다.' })).toBeVisible();
+  await page.getByRole('button', { name: '첨부 내용 다시 불러오기' }).click();
   await expect(page.getByText('Invoice date: 2026-05-11')).toBeVisible();
   await page.getByRole('link', { name: 'invoice.txt의 금액 원문 근거 보기' }).focus();
   await page.keyboard.press('Enter');
