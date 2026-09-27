@@ -40,7 +40,10 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
-from services.knowledge_extractor import is_self_sent_email
+from services.knowledge_extractor import (
+    extract_knowledge_from_self_sent,
+    is_self_sent_email,
+)
 from services.project_graph import (
     ProjectSourceSegment,
     persist_project_graph_projection,
@@ -931,6 +934,9 @@ async def _import_single_eml(
 
     session.add(email_obj)
     try:
+        if email_obj.is_personal_reference is True:
+            await session.flush()
+            await extract_knowledge_from_self_sent(session, email_obj, owner_addresses)
         await session.commit()
     except Exception:
         await session.rollback()
