@@ -13,9 +13,20 @@ branch_labels = None
 depends_on = None
 
 
+def _email_table() -> str:
+    inspector = sa.inspect(op.get_bind())
+    return "email_records" if inspector.has_table("email_records") else "emails"
+
+
 def upgrade() -> None:
+    table = _email_table()
+    if any(
+        column["name"] == "is_read"
+        for column in sa.inspect(op.get_bind()).get_columns(table)
+    ):
+        return
     op.add_column(
-        "emails",
+        table,
         sa.Column(
             "is_read",
             sa.Boolean(),
@@ -26,4 +37,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("emails", "is_read")
+    # Current bootstrap metadata also creates this column. Its origin cannot be
+    # reconstructed on rollback, so retain read-state data on every schema path.
+    pass
