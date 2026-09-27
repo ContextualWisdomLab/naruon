@@ -179,15 +179,18 @@ def test_completion_marker_migration_roundtrip():
 
 
 @pytest.mark.asyncio
-async def test_fresh_migration_chain_creates_attachment_fact_column():
+async def test_fresh_migration_chain_creates_attachment_fact_column(monkeypatch):
     from pathlib import Path
     import uuid
 
     from alembic.config import Config
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
+    import asyncio
+
+    from alembic import command
     from alembic.script import ScriptDirectory
+    from alembic.runtime.environment import EnvironmentContext
     from sqlalchemy import inspect, text
+    import sqlalchemy.ext.asyncio as async_sqlalchemy
     from sqlalchemy.ext.asyncio import create_async_engine
 
     from core.config import settings
@@ -199,21 +202,44 @@ async def test_fresh_migration_chain_creates_attachment_fact_column():
         "script_location", str(Path(__file__).resolve().parents[1] / "alembic")
     )
     script = ScriptDirectory.from_config(config)
+    original_factory = async_sqlalchemy.async_engine_from_config
+
+    def scoped_engine_factory(*args, **kwargs):
+        kwargs["connect_args"] = {
+            "server_settings": {"search_path": f"{schema},public"}
+        }
+        kwargs["execution_options"] = {"schema_translate_map": {None: schema}}
+        return original_factory(*args, **kwargs)
+
+    monkeypatch.setattr(
+        async_sqlalchemy, "async_engine_from_config", scoped_engine_factory
+    )
+    original_configure = EnvironmentContext.configure
+
+    def scoped_version_table(environment, *args, **kwargs):
+        kwargs["version_table_schema"] = schema
+        return original_configure(environment, *args, **kwargs)
+
+    monkeypatch.setattr(EnvironmentContext, "configure", scoped_version_table)
     schema_created = False
     try:
         async with engine.begin() as connection:
             await connection.execute(text(f"CREATE SCHEMA {schema}"))
             schema_created = True
+        await asyncio.to_thread(command.upgrade, config, "head")
         async with engine.begin() as connection:
-            await connection.execute(text(f"SET LOCAL search_path TO {schema}, public"))
-
-            def upgrade(sync_connection):
-                sync_connection = sync_connection.execution_options(
-                    schema_translate_map={None: schema}
+            installed_heads = (
+                (
+                    await connection.execute(
+                        text(f"SELECT version_num FROM {schema}.alembic_version")
+                    )
                 )
-                with Operations.context(MigrationContext.configure(sync_connection)):
-                    for revision in reversed(list(script.walk_revisions())):
-                        revision.module.upgrade()
+                .scalars()
+                .all()
+            )
+            assert installed_heads == script.get_heads()
+
+            def verify(sync_connection):
                 columns = {
                     column["name"]
                     for column in inspect(sync_connection).get_columns(
@@ -225,7 +251,7 @@ async def test_fresh_migration_chain_creates_attachment_fact_column():
                     "email_records", schema=schema
                 )
 
-            await connection.run_sync(upgrade)
+            await connection.run_sync(verify)
     finally:
         if schema_created:
             async with engine.begin() as connection:
