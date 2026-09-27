@@ -65,6 +65,12 @@ An omitted pair also has no evaluated evidence or confidence.
 Rejected as the Story 1.4 storage path: it cannot link approval, mail, task,
 and lodging evidence or retain a user's correction.
 
+### Require the referenced event to finish before its dependent starts
+
+Rejected for an explicit `DEPENDS-ON` source assertion: RFC 9253 defines a
+dependency without requiring finish-to-start scheduling. That guard would
+discard a cited dependency whenever the two event intervals overlap.
+
 ## Consequences
 
 - The event source contract and owner checks precede relation inference.
@@ -86,11 +92,14 @@ ledger. It stores cited time overlaps as unresolved `candidate` relations with
 no numeric confidence; overlap alone does not prove a commitment conflict.
 For an explicit `RELATED-TO;RELTYPE=DEPENDS-ON` UID, it stores a directional
 `enables` relation when the referenced event is unambiguous in the
-owner-visible scope and ends before the
-dependent event starts. The correction audit records direction changes.
-RFC 9253 defines `DEPENDS-ON` as a dependency in some manner; it does not alone
-prove a finish-to-start schedule, so the implementation requires that additional
-chronology before classifying the pair. The draft does not supply authenticated
+owner-visible scope and starts before the dependent event. Explicit source
+evidence upgrades an uncorrected time-overlap candidate; a human correction
+still wins. RFC 9253 defines `DEPENDS-ON` as a dependency in some manner, not
+a finish-to-start schedule. The resulting `enables` verdict reports the
+source assertion, not proof that one event has finished or permission to move
+either event. Equal or reversed start order remains unclassified until the
+source relation semantics can be checked more fully. The correction audit
+records direction changes. The draft does not supply authenticated
 CalDAV inbound sync, lodging or approval adapters, shared-entity classification,
 or evaluated automatic `unrelated` verdicts. The existing CalDAV account sync
 function still reports skipped work; the writeback registry is not inbound
