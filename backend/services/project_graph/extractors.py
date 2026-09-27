@@ -334,6 +334,9 @@ def extract_attachment_facts(
     for segment in segments:
         if segment.source_kind != "attachment":
             continue
+        source_segment_hash = hashlib.sha256(
+            segment.safe_text_content.encode("utf-8", errors="surrogatepass")
+        ).hexdigest()
         matches = list(_FACT_LABEL_RE.finditer(segment.safe_text_content))
         for index, match in enumerate(matches):
             label = match["label"].casefold()
@@ -369,7 +372,12 @@ def extract_attachment_facts(
                 confidence=0.9,
                 extractor_name="literal_attachment_fact",
                 extractor_version="1",
-                attributes={"fact_kind": kind, "label": match["label"], "value": value},
+                attributes={
+                    "fact_kind": kind,
+                    "label": match["label"],
+                    "value": value,
+                    "source_segment_hash": source_segment_hash,
+                },
             )
             objects.append(fact)
             edges.append(

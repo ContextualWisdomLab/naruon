@@ -1,4 +1,5 @@
 import datetime
+import base64
 import uuid
 from dataclasses import replace
 from email.message import EmailMessage
@@ -39,6 +40,9 @@ from services.project_graph import (
 )
 from services.project_graph.extractors import extract_attachment_facts
 import services.email_import_service as import_service
+from services.newsdom_pdf_recognition import NewsdomRuntimeConfig
+from services.newsdom_worker import NewsdomRecognitionWorker, process_pending_attachment
+import services.newsdom_worker as newsdom_worker_module
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -346,6 +350,23 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
             )
         assert denied.value.status_code == 404
 
+        segment.safe_text_content = "Total: $999"
+        await session.commit()
+        with pytest.raises(HTTPException) as stale_text:
+            await get_attachment_facts(
+                segment.email_id, limit=10, offset=0, db=session, auth_context=owner,
+            )
+        assert stale_text.value.status_code == 409
+
+        segment.safe_text_content = attachment.content
+        fact.source_segment_uids = ["wrong-segment"]
+        await session.commit()
+        with pytest.raises(HTTPException) as stale_citation:
+            await get_attachment_facts(
+                segment.email_id, limit=10, offset=0, db=session, auth_context=owner,
+            )
+        assert stale_citation.value.status_code == 409
+
 
 @pytest.mark.asyncio
 async def test_attachment_fact_failure_rolls_back_email_and_retry_is_idempotent(
@@ -439,6 +460,99 @@ async def test_attachment_fact_failure_rolls_back_email_and_retry_is_idempotent(
             )
             == 2
         )
+
+
+@pytest.mark.asyncio
+async def test_deferred_pdf_recognition_persists_attachment_facts(
+    isolated_fact_sessionmaker, monkeypatch,
+):
+    user_id = f"fact-user-{uuid.uuid4().hex}"
+    organization_id = f"org-fact-{uuid.uuid4().hex[:12]}"
+    async with isolated_fact_sessionmaker() as session:
+        segment = await _seed_source_segment(
+            session, user_id=user_id, organization_id=organization_id
+        )
+        email = await session.get(Email, segment.email_id)
+        attachment = Attachment(
+            email=email,
+            filename="invoice.pdf",
+            content=base64.b64encode(b"%PDF-1.7 fixture").decode("ascii"),
+            parse_status="pdf_dom_recognition_pending",
+        )
+        session.add(attachment)
+        await session.commit()
+
+    async def resolve_config(_session, _organization_id):
+        return NewsdomRuntimeConfig(
+            base_url="https://newsdom.example.com",
+            api_token=None,
+            request_language="auto",
+            recognition_mode="auto",
+            provider_name="fixture",
+        )
+
+    async def recognize(**_kwargs):
+        return {"pages": [{"page_number": 1, "articles": [
+            {"headline": "Invoice", "body_blocks": [
+                "Invoice date: 2026-09-27\nTotal: $1,200"
+            ]}
+        ]}]}
+
+    async with isolated_fact_sessionmaker() as session:
+        pending = await session.scalar(
+            NewsdomRecognitionWorker(batch_limit=1)._pending_attachment_statement(None)
+        )
+        real_persist = newsdom_worker_module.persist_project_graph_projection
+
+        async def fail_after_write(*args, **kwargs):
+            await real_persist(*args, **kwargs)
+            raise RuntimeError("injected fact persistence failure")
+
+        monkeypatch.setattr(
+            newsdom_worker_module, "persist_project_graph_projection", fail_after_write
+        )
+        with pytest.raises(RuntimeError, match="injected fact persistence failure"):
+            await process_pending_attachment(
+                session=session,
+                attachment=pending,
+                config_resolver=resolve_config,
+                request_fn=recognize,
+            )
+        await session.rollback()
+        assert await session.scalar(
+            select(func.count()).select_from(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.user_id == user_id
+            )
+        ) == 0
+
+        monkeypatch.setattr(
+            newsdom_worker_module, "persist_project_graph_projection", real_persist
+        )
+        pending = await session.scalar(
+            NewsdomRecognitionWorker(batch_limit=1)._pending_attachment_statement(None)
+        )
+        assert pending.parse_status == "pdf_dom_recognition_pending"
+        result = await process_pending_attachment(
+            session=session,
+            attachment=pending,
+            config_resolver=resolve_config,
+            request_fn=recognize,
+        )
+        assert result == "recognized"
+        await session.commit()
+        facts = (
+            await session.scalars(
+                select(ProjectGraphObjectRecord).where(
+                    ProjectGraphObjectRecord.user_id == user_id,
+                    ProjectGraphObjectRecord.attachment_id == attachment.id,
+                    ProjectGraphObjectRecord.object_type == "attachment_fact",
+                )
+            )
+        ).all()
+        assert {fact.attributes_json["fact_kind"] for fact in facts} == {
+            "date", "amount"
+        }
+        assert all(fact.source_segment_uids for fact in facts)
 
 
 @pytest.mark.asyncio
