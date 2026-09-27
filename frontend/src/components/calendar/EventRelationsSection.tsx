@@ -37,11 +37,17 @@ interface RelationPage {
   next_cursor: string | null;
 }
 
+interface EventPage {
+  items: EventSource[];
+  next_cursor: string | null;
+}
+
 interface ReconcilePage {
   next_cursor: string | null;
 }
 
 type VisibleRelation = EventRelation & { scope: VisibilityScope };
+type VisibleEvent = EventSource & { scope: VisibilityScope };
 
 const scopes: VisibilityScope[] = ['personal', 'organization'];
 const labels: Record<RelationType, string> = {
@@ -97,6 +103,10 @@ function EventEvidence({ event }: { event: EventSource }) {
 
 export function EventRelationsSection() {
   const [relations, setRelations] = useState<VisibleRelation[]>([]);
+  const [events, setEvents] = useState<VisibleEvent[]>([]);
+  const [eventCursors, setEventCursors] = useState<Record<VisibilityScope, string | null>>({ personal: null, organization: null });
+  const [eventError, setEventError] = useState(false);
+  const [loadingMoreEvents, setLoadingMoreEvents] = useState(false);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryKey, setRetryKey] = useState(0);
   const [savingUid, setSavingUid] = useState<string | null>(null);
@@ -156,6 +166,20 @@ export function EventRelationsSection() {
         setSourceError(false);
       })
       .catch(() => { if (active) setSourceError(true); });
+    return () => { active = false; };
+  }, [retryKey]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all(scopes.map(async (scope) => ({
+      scope,
+      page: await apiClient.get<EventPage>(`/api/events/items?visibility_scope=${scope}`),
+    }))).then((pages) => {
+      if (!active) return;
+      setEvents(pages.flatMap(({ scope, page }) => page.items.map((item) => ({ ...item, scope }))));
+      setEventCursors(Object.fromEntries(pages.map(({ scope, page }) => [scope, page.next_cursor])) as Record<VisibilityScope, string | null>);
+      setEventError(false);
+    }).catch(() => { if (active) setEventError(true); });
     return () => { active = false; };
   }, [retryKey]);
 
@@ -235,6 +259,24 @@ export function EventRelationsSection() {
     }
   }
 
+  async function loadMoreEvents() {
+    if (loadingMoreEvents) return;
+    setLoadingMoreEvents(true);
+    try {
+      const pages = await Promise.all(scopes.filter((scope) => eventCursors[scope]).map(async (scope) => ({
+        scope,
+        page: await apiClient.get<EventPage>(`/api/events/items?visibility_scope=${scope}&after=${encodeURIComponent(eventCursors[scope]!)}`),
+      })));
+      setEvents((current) => [...current, ...pages.flatMap(({ scope, page }) => page.items.map((item) => ({ ...item, scope })))]);
+      setEventCursors((current) => ({ ...current, ...Object.fromEntries(pages.map(({ scope, page }) => [scope, page.next_cursor])) }));
+      setEventError(false);
+    } catch {
+      setEventError(true);
+    } finally {
+      setLoadingMoreEvents(false);
+    }
+  }
+
   async function removeSource(documentId: string) {
     if (!window.confirm('이 일정 파일과 연결된 일정, 수정 기록을 삭제할까요?')) return;
     setDeletingSource(documentId);
@@ -286,6 +328,21 @@ export function EventRelationsSection() {
         </div>
       ) : null}
       {sourceError ? <p role="alert" className="mt-2 text-destructive">일정 파일 목록을 처리하지 못했습니다. <button type="button" className="underline" onClick={() => setRetryKey((key) => key + 1)}>다시 시도</button></p> : null}
+      {events.length > 0 ? (
+        <div className="mt-4 border-t border-border pt-4">
+          <h3 className="font-semibold">원본에서 찾은 일정</h3>
+          <ul className="mt-2 space-y-3">
+            {events.map((event) => (
+              <li key={event.event_uid}>
+                <span className="text-xs text-muted-foreground">{event.scope === 'personal' ? '개인' : '조직'}</span>
+                <EventEvidence event={event} />
+              </li>
+            ))}
+          </ul>
+          {scopes.some((scope) => eventCursors[scope]) ? <button type="button" disabled={loadingMoreEvents} onClick={() => void loadMoreEvents()} className="mt-2 text-xs font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-60">일정 더 보기</button> : null}
+        </div>
+      ) : null}
+      {eventError ? <p role="alert" className="mt-2 text-destructive">일정을 불러오지 못했습니다. <button type="button" className="underline" onClick={() => setRetryKey((key) => key + 1)}>다시 시도</button></p> : null}
       {status === 'loading' ? <p role="status" className="mt-4">일정 관계를 확인하는 중입니다.</p> : null}
       {status === 'error' ? (
         <div className="mt-4" role="alert">

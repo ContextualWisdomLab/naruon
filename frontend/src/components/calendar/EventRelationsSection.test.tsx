@@ -38,7 +38,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
   };
   const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ next_cursor: null });
   vi.spyOn(apiClient, 'get').mockImplementation(async (path) => (
-    path.includes('visibility_scope=organization')
+    path === '/api/events/relations?visibility_scope=organization'
       ? { items: [relation], next_cursor: null }
       : { items: [], next_cursor: null }
   ));
@@ -85,6 +85,37 @@ it('shows cited source links and saves a relation correction in one click', asyn
   );
   expect(container.textContent).toContain('회의 → 워크숍');
   expect(direction?.getAttribute('aria-pressed')).toBe('true');
+});
+
+it('shows an imported event and its citation without a relation after refresh', async () => {
+  const cursor = `event_${'a'.repeat(32)}`;
+  const event = {
+    event_uid: cursor, title: '단독 일정', status_code: 'confirmed', location_text: null,
+    starts_at: '2026-09-27T10:00:00Z', ends_at: '2026-09-27T11:00:00Z',
+    email_id: null, document_id: 'caldoc_1',
+    citations: [{ segment_uid: 'segment_1', label: '시작', excerpt: '20260927T100000Z' }],
+  };
+  vi.spyOn(apiClient, 'post').mockResolvedValue({ next_cursor: null });
+  const get = vi.spyOn(apiClient, 'get').mockImplementation(async (path) => (
+    path === '/api/events/items?visibility_scope=personal'
+      ? { items: [event], next_cursor: cursor }
+      : path === `/api/events/items?visibility_scope=personal&after=${cursor}`
+        ? { items: [{ ...event, event_uid: `event_${'b'.repeat(32)}`, title: '다음 일정' }], next_cursor: null }
+        : { items: [], next_cursor: null }
+  ));
+  container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => { root?.render(<EventRelationsSection />); });
+
+  expect(container.textContent).toContain('단독 일정');
+  expect(container.textContent).toContain('20260927T100000Z');
+  expect(container.querySelector('a[href="/api/events/sources/caldoc_1"]')).not.toBeNull();
+  expect(container.textContent).toContain('확인된 일정 관계가 아직 없습니다.');
+  const more = [...container.querySelectorAll('button')].find((button) => button.textContent === '일정 더 보기');
+  await act(async () => { more?.click(); });
+  expect(get).toHaveBeenCalledWith(`/api/events/items?visibility_scope=personal&after=${cursor}`);
+  expect(container.textContent).toContain('다음 일정');
 });
 
 it('imports an iCalendar file into personal events and refreshes relations', async () => {

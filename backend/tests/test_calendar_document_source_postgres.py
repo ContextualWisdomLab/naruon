@@ -18,6 +18,7 @@ from api.events import (
     list_calendar_sources,
     list_event_conflicts,
     list_event_relations,
+    list_source_events,
     reconcile_event_relations,
     upload_calendar_source,
 )
@@ -111,6 +112,22 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 citation.label == "시작" and "20260927T100000Z" in citation.excerpt
                 for citation in first[0].citations
             )
+            source_events = await list_source_events("organization", owner, session)
+            assert {item.event_uid for item in source_events.items} == {
+                first[0].event_uid,
+                second[0].event_uid,
+            }
+            assert all(item.citations for item in source_events.items)
+            assert (
+                await list_source_events("organization", other_owner, session)
+            ).items == []
+            assert (
+                await list_source_events("organization", other_workspace, session)
+            ).items == []
+            assert (await list_source_events("personal", owner, session)).items == []
+            with pytest.raises(HTTPException) as invalid_event_cursor:
+                await list_source_events("organization", owner, session, "invalid")
+            assert invalid_event_cursor.value.status_code == 422
             source = await download_calendar_source(
                 first[0].document_id, owner, session
             )
@@ -227,9 +244,9 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                 session,
             )
             await reconcile_event_relations("personal", owner, session, mode="overlaps")
-            assert (
-                await list_event_relations("personal", owner, session)
-            ).items[0].relation_type == "candidate"
+            assert (await list_event_relations("personal", owner, session)).items[
+                0
+            ].relation_type == "candidate"
             dependency_progress = await reconcile_event_relations(
                 "personal", owner, session, mode="dependencies"
             )

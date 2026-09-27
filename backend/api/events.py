@@ -78,6 +78,11 @@ class EventSourceResponse(BaseModel):
     citations: list[EventCitationResponse]
 
 
+class EventSourcePageResponse(BaseModel):
+    items: list[EventSourceResponse]
+    next_cursor: str | None
+
+
 class EventRelationResponse(BaseModel):
     relation_uid: str
     source_event_uid: str
@@ -528,10 +533,9 @@ def _event_source_response(
 
 async def _citation_map(
     db: AsyncSession,
-    rows: list[tuple[EventRelationRecord, SourceEventRecord, SourceEventRecord]],
+    events: list[SourceEventRecord],
     auth_context: AuthContext,
 ) -> dict[tuple[str, str], str]:
-    events = [event for _, source, target in rows for event in (source, target)]
     email_ids = {event.email_id for event in events if event.email_id is not None}
     segment_uids = {uid for event in events for uid in event.source_segment_uids}
     if not segment_uids:
@@ -642,6 +646,38 @@ async def _scoped_relations(
     return list((await db.execute(statement)).all())
 
 
+@router.get("/items", response_model=EventSourcePageResponse)
+async def list_source_events(
+    visibility_scope: Literal["personal", "organization"] = Query(),
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+    after: str | None = None,
+) -> EventSourcePageResponse:
+    if after is not None and _EVENT_CURSOR.fullmatch(after) is None:
+        raise HTTPException(status_code=422, detail="Invalid event cursor")
+    statement = select(SourceEventRecord).where(
+        *_source_event_scope(SourceEventRecord, auth_context, visibility_scope),
+        SourceEventRecord.event_type == "calendar_event",
+    )
+    if after is not None:
+        statement = statement.where(SourceEventRecord.event_uid > after)
+    events = list(
+        (
+            await db.execute(
+                statement.order_by(SourceEventRecord.event_uid).limit(_PAGE_SIZE + 1)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    page = events[:_PAGE_SIZE]
+    citations = await _citation_map(db, page, auth_context)
+    return EventSourcePageResponse(
+        items=[_event_source_response(event, citations) for event in page],
+        next_cursor=page[-1].event_uid if len(events) > _PAGE_SIZE else None,
+    )
+
+
 @router.get("/relations", response_model=EventRelationPageResponse)
 async def list_event_relations(
     visibility_scope: Literal["personal", "organization"] = Query(),
@@ -653,7 +689,11 @@ async def list_event_relations(
         raise HTTPException(status_code=422, detail="Invalid relation cursor")
     relations = await _scoped_relations(db, auth_context, visibility_scope, after=after)
     page = relations[:_PAGE_SIZE]
-    citations = await _citation_map(db, page, auth_context)
+    citations = await _citation_map(
+        db,
+        [event for _, source, target in page for event in (source, target)],
+        auth_context,
+    )
     return EventRelationPageResponse(
         items=[
             _relation_response(relation, source, target, citations)
@@ -958,5 +998,5 @@ async def correct_event_relation(
         relation.corrected_by_user_id = auth_context.user_id
         relation.corrected_at = datetime.datetime.now(datetime.timezone.utc)
         await db.commit()
-    citations = await _citation_map(db, relations, auth_context)
+    citations = await _citation_map(db, [source, target], auth_context)
     return _relation_response(relation, source, target, citations)
