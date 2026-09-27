@@ -60,7 +60,9 @@ class ConnectionManager:
         self.connection_records: dict[str, RunnerConnectionRecord] = {}
         self.last_seen_by_org: dict[str, str] = {}
         self.last_disconnect_by_org: dict[str, str] = {}
-        self.pending_responses: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self.pending_responses: dict[
+            str, tuple[str, asyncio.Future[dict[str, Any]]]
+        ] = {}
 
     async def connect(
         self,
@@ -134,8 +136,10 @@ class ConnectionManager:
         timeout_seconds: float = 30,
         schedule_retry: bool = True,
     ) -> dict[str, Any]:
-        connection = self._active_connection_for_scope(organization_id, workspace_id)
-        if connection is None:
+        connection_entry = self._active_connection_for_scope(
+            organization_id, workspace_id
+        )
+        if connection_entry is None:
             await _record_connector_command_event_safely(
                 organization_id=organization_id,
                 workspace_id=workspace_id,
@@ -151,14 +155,13 @@ class ConnectionManager:
                 schedule_retry=schedule_retry,
             )
 
-        request_id = _valid_request_id(command.get("request_id")) or (
-            f"runner_req_{uuid.uuid4().hex}"
-        )
+        connection_key, connection = connection_entry
+        request_id = f"runner_req_{uuid.uuid4().hex}"
         outbound_command = dict(command)
         outbound_command["request_id"] = request_id
         loop = asyncio.get_running_loop()
         response_future: asyncio.Future[dict[str, Any]] = loop.create_future()
-        self.pending_responses[request_id] = response_future
+        self.pending_responses[request_id] = (connection_key, response_future)
         try:
             await connection.send_text(
                 json.dumps(outbound_command, separators=(",", ":"), sort_keys=True)
@@ -223,8 +226,11 @@ class ConnectionManager:
         request_id = _valid_request_id(payload.get("request_id"))
         if request_id is None:
             return False
-        response_future = self.pending_responses.get(request_id)
-        if response_future is None or response_future.done():
+        pending = self.pending_responses.get(request_id)
+        if pending is None:
+            return False
+        expected_connection_key, response_future = pending
+        if expected_connection_key != connection_key or response_future.done():
             return False
         response_future.set_result(payload)
         record = self.connection_records.get(connection_key)
@@ -252,11 +258,15 @@ class ConnectionManager:
             if candidate
         ]
         if active_records:
-            last_seen_candidates.extend(record.connected_at for record in active_records)
+            last_seen_candidates.extend(
+                record.connected_at for record in active_records
+            )
         last_seen_at = max(last_seen_candidates) if last_seen_candidates else None
         return RunnerConnectionSnapshot(
             organization_id=organization_id,
-            workspace_id=active_records[0].workspace_id if active_records else workspace_id,
+            workspace_id=active_records[0].workspace_id
+            if active_records
+            else workspace_id,
             connection_state="connected" if active_count else "not_connected",
             active_connection_count=active_count,
             last_seen_at=last_seen_at,
@@ -268,20 +278,22 @@ class ConnectionManager:
         self.connection_records.clear()
         self.last_seen_by_org.clear()
         self.last_disconnect_by_org.clear()
-        for response_future in self.pending_responses.values():
+        for _, response_future in self.pending_responses.values():
             if not response_future.done():
                 response_future.cancel()
         self.pending_responses.clear()
 
     def _active_connection_for_scope(
         self, organization_id: str, workspace_id: str
-    ) -> WebSocket | None:
+    ) -> tuple[str, WebSocket] | None:
         for connection_key, record in self.connection_records.items():
             if (
                 record.organization_id == organization_id
                 and record.workspace_id == workspace_id
             ):
-                return self.active_connections.get(connection_key)
+                connection = self.active_connections.get(connection_key)
+                if connection is not None:
+                    return connection_key, connection
         return None
 
 
