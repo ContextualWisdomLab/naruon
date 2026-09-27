@@ -38,6 +38,7 @@ const ALLOWED_BACKEND_QUERY_PARAMS = new Set([
   "source_message_id",
   "source_thread_id",
 ]);
+const ATTACHMENT_FACT_QUERY_PARAMS = new Set(["include_thread", "offset"]);
 const MAX_QUERY_PARAM_COUNT = 12;
 const MAX_QUERY_PARAM_VALUE_LENGTH = 2048;
 const MAX_PROXY_PATH_SEGMENTS = 32;
@@ -122,17 +123,20 @@ function filteredResponseHeaders(response: Response): Headers {
   return headers;
 }
 
-function safeBackendQuery(searchParams: URLSearchParams): string {
+function safeBackendQuery(searchParams: URLSearchParams, path: string[]): string {
   const forwardedParams = new URLSearchParams();
   const seenNames = new Set<string>();
   let paramCount = 0;
+  const attachmentFactsPath = path.length === 3 && path[0] === "emails"
+    && path[1] === "attachment-facts" && /^\d+$/u.test(path[2]);
 
   for (const [name, value] of searchParams) {
     paramCount += 1;
     if (paramCount > MAX_QUERY_PARAM_COUNT) {
       throw new InvalidProxyQueryError("Too many query parameters");
     }
-    if (!ALLOWED_BACKEND_QUERY_PARAMS.has(name)) {
+    if (!ALLOWED_BACKEND_QUERY_PARAMS.has(name)
+      && !(attachmentFactsPath && ATTACHMENT_FACT_QUERY_PARAMS.has(name))) {
       throw new InvalidProxyQueryError(`Unsupported query parameter: ${name}`);
     }
     if (seenNames.has(name)) {
@@ -231,7 +235,7 @@ async function proxyApiRequest(
   try {
     target = trustedBackendOrigin();
     target.pathname = `/api/${safeBackendPath(path)}`;
-    target.search = safeBackendQuery(request.nextUrl.searchParams);
+    target.search = safeBackendQuery(request.nextUrl.searchParams, path);
   } catch (error) {
     if (error instanceof InvalidProxyQueryError) {
       return NextResponse.json(

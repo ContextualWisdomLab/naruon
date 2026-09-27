@@ -271,6 +271,36 @@ describe("/api runtime proxy route", () => {
     });
   });
 
+  it("forwards paged attachment facts for the signed thread", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | RequestInfo) =>
+        Response.json({ target_url: String(input) }),
+      ),
+    );
+
+    const response = await GET(
+      new NextRequest("https://frontend.naruon.net/api/emails/attachment-facts/31?include_thread=true&limit=500&offset=1"),
+      { params: Promise.resolve({ path: ["emails", "attachment-facts", "31"] }) },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      target_url: "https://api.naruon.net/api/emails/attachment-facts/31?include_thread=true&limit=500&offset=1",
+    });
+  });
+
+  it("keeps attachment fact pagination parameters scoped to that route", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await GET(
+      new NextRequest("https://frontend.naruon.net/api/tasks?include_thread=true"),
+      { params: Promise.resolve({ path: ["tasks"] }) },
+    );
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects state-changing requests when both Origin and Referer are absent", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
