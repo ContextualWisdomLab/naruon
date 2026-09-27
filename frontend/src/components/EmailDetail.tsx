@@ -183,7 +183,12 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setFactsNextOffset(page.next_offset);
     } catch (error) {
       if (requestId !== threadRequestIdRef.current) return;
-      if ((error as { status?: number }).status !== 404) {
+      const status = (error as { status?: number }).status;
+      if (status === 409) {
+        setThreadFacts([]);
+        setFactsNextOffset(null);
+        setFactsError('첨부 내용이 변경됐습니다. 다시 불러와 주세요.');
+      } else if (status !== 404) {
         setFactsError('첨부 사실을 불러오지 못했습니다.');
       }
     } finally {

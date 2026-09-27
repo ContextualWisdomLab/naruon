@@ -306,6 +306,50 @@ describe("EmailDetail", () => {
     expect(followUp?.textContent).not.toContain("2026-05-17");
   });
 
+  it("removes displayed facts when a later page reports changed evidence", async () => {
+    const email = {
+      id: 31, message_id: "<attachment@example.com>", thread_id: "attachment-thread",
+      sender: "sender@example.com", recipients: "user@example.com", subject: "Invoice",
+      date: "2026-05-17T09:00:00Z", body: "Please review",
+      attachment_evidence: [{
+        attachment_id: 91, filename: "invoice.txt", parse_status: "parsed",
+        segments: [{ uid: "segment-1", text: "Total: $1,200" }],
+      }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/31")) return jsonResponse(email);
+      if (url.endsWith("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [email] });
+      if (url.includes("/api/emails/attachment-facts/31?")) {
+        const offset = new URL(url, "http://test").searchParams.get("offset");
+        if (offset === "0") return jsonResponse({
+          facts: [{ object_uid: "fact-1", email_id: 31, attachment_id: 91,
+            fact_kind: "amount", value: "$1,200", source_segment_uid: "segment-1",
+            evidence_excerpt: "Total: $1,200" }],
+          next_offset: 1,
+        });
+        return new Response("", { status: 409 });
+      }
+      if (url.endsWith("/api/llm/summarize")) return jsonResponse({ summary: "Summary", action_items: [] });
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={31} />); });
+    await flushAsyncWork();
+    expect(container.textContent).toContain("문서에서 추출한 금액: $1,200");
+
+    const moreFacts = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("첨부 사실 더 보기"),
+    );
+    await act(async () => { moreFacts?.click(); });
+    await flushAsyncWork();
+    expect(container.textContent).not.toContain("문서에서 추출한 금액: $1,200");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("첨부 내용이 변경됐습니다.");
+  });
+
   it("keeps the latest conversation when an older thread request resolves late", async () => {
     const emailA: TestEmail = {
       id: 1,
