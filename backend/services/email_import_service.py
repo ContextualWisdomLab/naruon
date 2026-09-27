@@ -503,6 +503,8 @@ def _append_calendar_source_events(
                     "SUMMARY",
                     "LOCATION",
                     "STATUS",
+                    "ORGANIZER",
+                    "ATTENDEE",
                 }
             ] + [item["segment_uid"] for item in dependencies]
             identity = json.dumps(

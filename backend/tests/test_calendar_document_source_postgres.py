@@ -77,6 +77,8 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                     f"UID:{uid}\nDTSTART:{start}\nDTEND:{end}\n"
                     f"{status_line}"
                     "LOCATION:Conference Hall\n"
+                    "ORGANIZER;CN=Host:mailto:host@example.com\n"
+                    "ATTENDEE;PARTSTAT=ACCEPTED:mailto:guest@example.com\n"
                     f"SUMMARY:{uid}\nEND:VEVENT\nEND:VCALENDAR"
                 )
 
@@ -106,6 +108,14 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             assert second[0].status_code == "tentative"
             assert first[0].location_text == "Conference Hall"
             assert any(citation.label == "장소" for citation in first[0].citations)
+            assert any(
+                citation.label == "주최자" and "host@example.com" in citation.excerpt
+                for citation in first[0].citations
+            )
+            assert any(
+                citation.label == "참석자" and "guest@example.com" in citation.excerpt
+                for citation in first[0].citations
+            )
             assert first[0].email_id is None
             assert first[0].document_id
             assert any(

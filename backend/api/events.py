@@ -250,7 +250,17 @@ async def upload_calendar_source(
             segment
             for segment in segment_rows
             if segment.safe_text_content.partition(":")[0].split(";", 1)[0]
-            in {"UID", "DTSTART", "DTEND", "DURATION", "SUMMARY", "LOCATION", "STATUS"}
+            in {
+                "UID",
+                "DTSTART",
+                "DTEND",
+                "DURATION",
+                "SUMMARY",
+                "LOCATION",
+                "STATUS",
+                "ORGANIZER",
+                "ATTENDEE",
+            }
             or segment.content_segment_uid in dependency_uids
         ]
         event_uid = (
@@ -482,6 +492,8 @@ _CITATION_LABELS = {
     "DURATION": "기간",
     "LOCATION": "장소",
     "STATUS": "상태",
+    "ORGANIZER": "주최자",
+    "ATTENDEE": "참석자",
     "RELATED-TO": "선행 일정",
 }
 
