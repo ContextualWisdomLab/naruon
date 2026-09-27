@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
-from db.models import Email
+from db.models import ContentSegmentRecord, Email, ProjectGraphObjectRecord
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -211,6 +211,20 @@ class EmailDetailResponse(BaseModel):
     references: str | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
+
+
+class AttachmentFactItem(BaseModel):
+    object_uid: str
+    attachment_id: int
+    fact_kind: str
+    value: str
+    source_segment_uid: str
+    evidence_excerpt: str
+
+
+class AttachmentFactPage(BaseModel):
+    facts: list[AttachmentFactItem]
+    next_offset: int | None = None
 
 
 class UniqueThreadCandidateRequest(BaseModel):
@@ -654,6 +668,63 @@ async def get_email(
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
     return _email_detail_response(email)
+
+
+@router.get("/attachment-facts/{email_id}", response_model=AttachmentFactPage)
+async def get_attachment_facts(
+    email_id: int,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    auth_context: AuthContext = Depends(get_auth_context),
+):
+    owned_email_id = await db.scalar(
+        select(Email.id).where(
+            Email.id == email_id,
+            *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
+        )
+    )
+    if owned_email_id is None:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    result = await db.execute(
+        select(ProjectGraphObjectRecord, ContentSegmentRecord)
+        .join(
+            ContentSegmentRecord,
+            ContentSegmentRecord.content_segment_id
+            == ProjectGraphObjectRecord.primary_content_segment_id,
+        )
+        .where(
+            ProjectGraphObjectRecord.email_id == email_id,
+            ProjectGraphObjectRecord.user_id == auth_context.user_id,
+            ProjectGraphObjectRecord.organization_id == auth_context.organization_id,
+            ProjectGraphObjectRecord.workspace_id == auth_context.workspace_id,
+            ProjectGraphObjectRecord.object_type == "attachment_fact",
+            ProjectGraphObjectRecord.attachment_id.is_not(None),
+            ContentSegmentRecord.email_id == email_id,
+            ContentSegmentRecord.attachment_id
+            == ProjectGraphObjectRecord.attachment_id,
+            ContentSegmentRecord.source_kind == "attachment",
+        )
+        .order_by(ProjectGraphObjectRecord.project_graph_object_id)
+        .offset(offset)
+        .limit(limit + 1)
+    )
+    rows = result.all()
+    return AttachmentFactPage(
+        facts=[
+            AttachmentFactItem(
+                object_uid=fact.object_uid,
+                attachment_id=fact.attachment_id,
+                fact_kind=str((fact.attributes_json or {}).get("fact_kind", "")),
+                value=str((fact.attributes_json or {}).get("value", "")),
+                source_segment_uid=segment.content_segment_uid,
+                evidence_excerpt=_safe_email_body(segment.safe_text_content)[:240],
+            )
+            for fact, segment in rows[:limit]
+        ],
+        next_offset=offset + limit if len(rows) > limit else None,
+    )
 
 
 @router.get(

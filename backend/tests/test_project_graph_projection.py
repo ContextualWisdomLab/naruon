@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from asyncpg.exceptions import (
     InvalidAuthorizationSpecificationError,
     InvalidPasswordError,
@@ -12,6 +13,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
+from api.auth import AuthContext
+from api.emails import get_attachment_facts
 from db.models import (
     Attachment,
     Base,
@@ -148,14 +151,14 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
         attachment = Attachment(
             email_id=segment.email_id,
             filename="invoice.txt",
-            content="Total: ₩1,200,000",
+            content="Invoice date: 2026-09-27 Total: ₩1,200,000",
         )
         session.add(attachment)
         await session.flush()
         segment.attachment_id = attachment.id
         segment.source_kind = "attachment"
         segment.source_record_uid = f"attachment:{attachment.id}"
-        segment.safe_text_content = "Total: ₩1,200,000"
+        segment.safe_text_content = attachment.content
         extraction = extract_attachment_facts([_source_segment(segment)])
 
         result = await persist_project_graph_projection(
@@ -167,15 +170,53 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
         )
         await session.commit()
 
-        assert len(result.objects) == len(result.edges) == 1
-        fact = result.objects[0]
+        assert len(result.objects) == len(result.edges) == 2
+        fact = next(
+            item for item in result.objects if item.attributes_json["fact_kind"] == "amount"
+        )
         assert fact.attachment_id == attachment.id
         assert fact.email_id == segment.email_id
         assert fact.user_id == user_id
         assert fact.organization_id == organization_id
         assert fact.source_segment_uids == [segment.content_segment_uid]
         assert fact.attributes_json["fact_kind"] == "amount"
-        assert result.edges[0].target_object_id == fact.project_graph_object_id
+        assert any(
+            edge.target_object_id == fact.project_graph_object_id
+            for edge in result.edges
+        )
+
+        owner = AuthContext(
+            user_id=user_id, role="member", organization_id=organization_id,
+            group_ids=(), workspace_id=f"workspace-{organization_id}",
+        )
+        first = await get_attachment_facts(
+            segment.email_id, limit=1, offset=0, db=session, auth_context=owner,
+        )
+        second = await get_attachment_facts(
+            segment.email_id, limit=1, offset=1, db=session, auth_context=owner,
+        )
+        assert first.next_offset == 1
+        assert second.next_offset is None
+        assert {item.fact_kind for item in first.facts + second.facts} == {
+            "date", "amount"
+        }
+        assert all(
+            item.source_segment_uid == segment.content_segment_uid
+            and item.attachment_id == attachment.id
+            and item.evidence_excerpt == segment.safe_text_content
+            for item in first.facts + second.facts
+        )
+
+        other_user = AuthContext(
+            user_id="different-user", role="member", organization_id=organization_id,
+            group_ids=(), workspace_id=f"workspace-{organization_id}",
+        )
+        with pytest.raises(HTTPException) as denied:
+            await get_attachment_facts(
+                segment.email_id, limit=1, offset=0, db=session,
+                auth_context=other_user,
+            )
+        assert denied.value.status_code == 404
 
 
 @pytest.mark.asyncio
