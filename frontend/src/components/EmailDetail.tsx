@@ -30,10 +30,27 @@ type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
   attachment_evidence?: {
+    attachment_id: number;
     filename: string;
     parse_status: string;
     segments: { uid: string; text: string }[];
   }[];
+};
+
+type AttachmentFact = {
+  object_uid: string;
+  email_id: number;
+  attachment_id: number;
+  fact_kind: string;
+  value: string;
+  source_segment_uid: string;
+  evidence_excerpt: string;
+};
+
+type AttachmentFactPage = { facts: AttachmentFact[]; next_offset: number | null };
+
+const factLabels: Record<string, string> = {
+  date: '날짜', amount: '금액', party: '당사자', commitment: '약속',
 };
 interface LlmData {
   summary: string;
@@ -119,6 +136,10 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [detailError, setDetailError] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [threadFacts, setThreadFacts] = useState<AttachmentFact[]>([]);
+  const [factsNextOffset, setFactsNextOffset] = useState<number | null>(null);
+  const [factsLoading, setFactsLoading] = useState(false);
+  const [factsError, setFactsError] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<string>('');
   const [translation, setTranslation] = useState<string | null>(null);
@@ -150,12 +171,36 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     handledActionCommandIdRef.current = null;
   }, [emailId]);
 
+  const fetchFactPage = useCallback(async (emailId: number, requestId: number, offset: number) => {
+    setFactsLoading(true);
+    setFactsError(null);
+    try {
+      const page = await apiClient.get<AttachmentFactPage>(
+        `/api/emails/attachment-facts/${emailId}?include_thread=true&limit=500&offset=${offset}`,
+      );
+      if (requestId !== threadRequestIdRef.current) return;
+      setThreadFacts((previous) => offset === 0 ? page.facts : [...previous, ...page.facts]);
+      setFactsNextOffset(page.next_offset);
+    } catch (error) {
+      if (requestId !== threadRequestIdRef.current) return;
+      if ((error as { status?: number }).status !== 404) {
+        setFactsError('첨부 사실을 불러오지 못했습니다.');
+      }
+    } finally {
+      if (requestId === threadRequestIdRef.current) setFactsLoading(false);
+    }
+  }, []);
+
   const fetchThread = useCallback(async (currentEmail: EmailData) => {
     const requestId = threadRequestIdRef.current + 1;
     threadRequestIdRef.current = requestId;
     const isLatestThreadRequest = () => requestId === threadRequestIdRef.current;
 
     setThreadError(null);
+    setThreadFacts([]);
+    setFactsNextOffset(null);
+    setFactsLoading(false);
+    setFactsError(null);
 
     if (!currentEmail.thread_id) {
       if (isLatestThreadRequest()) {
@@ -169,7 +214,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     try {
       const threadJson = await apiClient.get<{ thread: EmailData[] }>(buildThreadUrl('', currentEmail.thread_id));
       if (!isLatestThreadRequest()) return;
-      setThreadEmails(threadJson.thread || []);
+      const messages = threadJson.thread || [];
+      setThreadEmails(messages);
+      if (messages.some((message) => message.attachment_evidence?.some((attachment) => attachment.segments.length > 0))) {
+        void fetchFactPage(currentEmail.id, requestId, 0);
+      }
     } catch (err) {
       if (!isLatestThreadRequest()) return;
       console.error("Error fetching thread:", err);
@@ -178,7 +227,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     } finally {
       if (isLatestThreadRequest()) setThreadLoading(false);
     }
-  }, []);
+  }, [fetchFactPage]);
 
   useEffect(() => {
     if (!emailId) return;
@@ -796,7 +845,14 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                       {attachment.segments.length > 0 ? (
                         <div className="mt-2 space-y-2 pl-4">
                           {attachment.segments.map((segment) => (
-                            <p key={segment.uid} className="whitespace-pre-wrap">{toMailBodyText(segment.text)}</p>
+                            <p id={`attachment-segment-${segment.uid}`} key={segment.uid} className="whitespace-pre-wrap">{toMailBodyText(segment.text)}</p>
+                          ))}
+                          {threadFacts.filter((fact) => fact.email_id === msg.id && fact.attachment_id === attachment.attachment_id).map((fact) => (
+                            <div key={fact.object_uid} className="border-l-2 border-primary/40 pl-3 text-sm">
+                              <p><span className="font-medium">{factLabels[fact.fact_kind] ?? '확인된 내용'}:</span> {toMailBodyText(fact.value)}</p>
+                              <a href={`#attachment-segment-${encodeURIComponent(fact.source_segment_uid)}`} className="text-primary underline">원문 근거 보기</a>
+                              <p className="text-xs text-muted-foreground">{toMailBodyText(fact.evidence_excerpt)}</p>
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -809,6 +865,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 </div>
               ))}
             </div>
+            {factsLoading && <p role="status" className="text-sm text-muted-foreground">첨부 사실을 불러오는 중입니다...</p>}
+            {factsError && <div role="alert" className="text-sm text-red-500">{factsError}<Button size="sm" variant="outline" onClick={() => fetchFactPage(email.id, threadRequestIdRef.current, factsNextOffset ?? 0)}>다시 시도</Button></div>}
+            {factsNextOffset !== null && <Button size="sm" variant="outline" disabled={factsLoading} onClick={() => fetchFactPage(email.id, threadRequestIdRef.current, factsNextOffset)}>첨부 사실 더 보기</Button>}
           </div>
 
           <Separator />

@@ -261,10 +261,24 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [{
         ...email,
         attachment_evidence: [
-          { filename: "agenda.pdf", parse_status: "parsed", segments: [{ uid: "segment-1", text: "Meeting at noon" }] },
-          { filename: "scan.pdf", parse_status: "parse_failed", segments: [] },
+          { attachment_id: 91, filename: "agenda.pdf", parse_status: "parsed", segments: [{ uid: "segment-1", text: "Meeting at noon" }] },
+          { attachment_id: 92, filename: "scan.pdf", parse_status: "parse_failed", segments: [] },
+        ],
+      }, {
+        ...email, id: 32, message_id: "<follow-up@example.com>", body: "Follow-up",
+        attachment_evidence: [
+          { attachment_id: 93, filename: "parties.txt", parse_status: "parsed", segments: [{ uid: "segment-2", text: "Vendor: Partner Ltd" }] },
         ],
       }] });
+      if (url.includes("/api/emails/attachment-facts/31?")) {
+        const firstPage = new URL(url, "http://test").searchParams.get("offset") === "0";
+        return jsonResponse({
+          facts: firstPage
+            ? [{ object_uid: "fact-1", email_id: 31, attachment_id: 91, fact_kind: "date", value: "2026-05-17", source_segment_uid: "segment-1", evidence_excerpt: "Meeting at noon" }]
+            : [{ object_uid: "fact-2", email_id: 32, attachment_id: 93, fact_kind: "party", value: "Partner Ltd", source_segment_uid: "segment-2", evidence_excerpt: "Vendor: Partner Ltd" }],
+          next_offset: firstPage ? 1 : null,
+        });
+      }
       if (url.endsWith("/api/llm/summarize")) return jsonResponse({ summary: "Summary", action_items: [] });
       throw new Error(`Unexpected fetch: ${url}`);
     }));
@@ -279,8 +293,17 @@ describe("EmailDetail", () => {
     expect(message?.textContent).toContain("Please review");
     expect(message?.textContent).toContain("첨부: agenda.pdf");
     expect(message?.textContent).toContain("Meeting at noon");
+    expect(message?.textContent).toContain("날짜: 2026-05-17");
+    expect(message?.querySelector('a[href="#attachment-segment-segment-1"]')?.textContent).toContain("원문 근거 보기");
     expect(message?.textContent).toContain("첨부: scan.pdf");
     expect(message?.textContent).toContain("표시할 수 있는 내용이 없습니다.");
+    const moreFacts = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("첨부 사실 더 보기"));
+    expect(moreFacts).toBeDefined();
+    await act(async () => { moreFacts?.click(); });
+    await flushAsyncWork();
+    const followUp = container.querySelector("#msg-32");
+    expect(followUp?.textContent).toContain("당사자: Partner Ltd");
+    expect(followUp?.textContent).not.toContain("2026-05-17");
   });
 
   it("keeps the latest conversation when an older thread request resolves late", async () => {

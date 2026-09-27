@@ -183,6 +183,7 @@ def _email_detail_response(
         references=email.references,
         attachment_evidence=[
             ThreadAttachmentResponse(
+                attachment_id=attachment.id,
                 filename=_safe_email_display_text(attachment.filename),
                 parse_status=attachment.parse_status,
                 segments=[
@@ -225,6 +226,7 @@ class ThreadAttachmentSegmentResponse(BaseModel):
 
 
 class ThreadAttachmentResponse(BaseModel):
+    attachment_id: int
     filename: str
     parse_status: str
     segments: list[ThreadAttachmentSegmentResponse]

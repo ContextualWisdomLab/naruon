@@ -1645,6 +1645,8 @@ async def test_get_email_thread_includes_scoped_attachment_segments(
         email_id=sample_email.id, filename="scan.pdf", parse_status="parse_failed"
     )
     failed.content_segments = []
+    parsed.id = 91
+    failed.id = 92
     sample_email.attachments = [parsed, failed]
 
     response = await client.get(f"/api/emails/thread/{sample_email.thread_id}")
@@ -1652,11 +1654,12 @@ async def test_get_email_thread_includes_scoped_attachment_segments(
     assert response.status_code == 200
     assert response.json()["thread"][0]["attachment_evidence"] == [
         {
+            "attachment_id": 91,
             "filename": "agenda.pdf",
             "parse_status": "parsed",
             "segments": [{"uid": "segment-1", "text": "Meeting at noon"}],
         },
-        {"filename": "scan.pdf", "parse_status": "parse_failed", "segments": []},
+        {"attachment_id": 92, "filename": "scan.pdf", "parse_status": "parse_failed", "segments": []},
     ]
     assert "Private content" not in response.text
 
