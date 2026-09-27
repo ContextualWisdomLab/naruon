@@ -258,7 +258,7 @@ def _detect_text_language(text: str) -> str:
 
 async def email_translator_handler(params: Dict[str, Any]) -> Any:
     """Translate email text into the requested target language."""
-    text = params.get("text", "")
+    text = params.get("text") or ""
     target_language = params.get("target_language", "ko")
     source_language = _detect_text_language(text)
     lowered_text = text.lower()
@@ -346,7 +346,7 @@ async def reply_drafter_handler(params: Dict[str, Any]) -> Any:
 
 async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     """Classify email text sentiment for the tools API."""
-    text = params.get("text", "")
+    text = params.get("text") or ""
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
     negative_terms = {
@@ -553,7 +553,7 @@ registry.register(
 
 
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
-    text = params.get("text", "")
+    text = params.get("text") or ""
     char_count = len(text)
     char_count_no_spaces = len(
         text.replace(" ", "").replace("\n", "").replace("\r", "").replace("\t", "")
@@ -578,7 +578,7 @@ registry.register(
 
 
 async def base64_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
+    text = params.get("text") or ""
     return {"encoded_text": base64.b64encode(text.encode("utf-8")).decode("utf-8")}
 
 
@@ -595,7 +595,7 @@ registry.register(
 
 
 async def base64_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    encoded_text = params.get("encoded_text", "")
+    encoded_text = params.get("encoded_text") or ""
     try:
         return {
             "decoded_text": base64.b64decode(encoded_text, validate=True).decode(
@@ -772,14 +772,22 @@ registry.register(
 
 
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
-    algorithm = params.get("algorithm", "sha256").lower()
+    text = params.get("text") or ""
+    algorithm = (params.get("algorithm") or "sha256").lower()
     encoded_text = text.encode("utf-8")
 
     if algorithm == "md5":
-        return {"hash": hashlib.md5(encoded_text).hexdigest()}
+        return {
+            "hash": hashlib.md5(
+                encoded_text
+            ).hexdigest()  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5
+        }
     elif algorithm == "sha1":
-        return {"hash": hashlib.sha1(encoded_text).hexdigest()}
+        return {
+            "hash": hashlib.sha1(
+                encoded_text
+            ).hexdigest()  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+        }
     elif algorithm == "sha512":
         return {"hash": hashlib.sha512(encoded_text).hexdigest()}
     else:
@@ -799,7 +807,7 @@ registry.register(
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
+    text = params.get("text") or ""
     return {"encoded_url": urllib.parse.quote(text)}
 
 
@@ -816,7 +824,7 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    encoded_text = params.get("encoded_text", "")
+    encoded_text = params.get("encoded_text") or ""
     return {"decoded_url": urllib.parse.unquote(encoded_text)}
 
 
