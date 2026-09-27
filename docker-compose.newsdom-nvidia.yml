@@ -1,0 +1,13 @@
+# Opt-in Linux NVIDIA runtime; inherits the exact supplier pin and private network.
+services:
+  newsdom:
+    platform: linux/amd64
+    build:
+      dockerfile: Dockerfile.nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
