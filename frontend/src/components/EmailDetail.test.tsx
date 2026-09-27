@@ -244,6 +244,45 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("alert(3)");
   });
 
+  it("shows parsed and unavailable attachments with their parent message", async () => {
+    const email = {
+      id: 31,
+      message_id: "<attachment@example.com>",
+      thread_id: "attachment-thread",
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Agenda",
+      date: "2026-05-17T09:00:00Z",
+      body: "Please review",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/31")) return jsonResponse(email);
+      if (url.endsWith("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [{
+        ...email,
+        attachment_evidence: [
+          { filename: "agenda.pdf", parse_status: "parsed", segments: [{ uid: "segment-1", text: "Meeting at noon" }] },
+          { filename: "scan.pdf", parse_status: "parse_failed", segments: [] },
+        ],
+      }] });
+      if (url.endsWith("/api/llm/summarize")) return jsonResponse({ summary: "Summary", action_items: [] });
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={31} />); });
+    await flushAsyncWork();
+
+    const message = container.querySelector("#msg-31");
+    expect(message?.textContent).toContain("Please review");
+    expect(message?.textContent).toContain("첨부: agenda.pdf");
+    expect(message?.textContent).toContain("Meeting at noon");
+    expect(message?.textContent).toContain("첨부: scan.pdf");
+    expect(message?.textContent).toContain("표시할 수 있는 내용이 없습니다.");
+  });
+
   it("keeps the latest conversation when an older thread request resolves late", async () => {
     const emailA: TestEmail = {
       id: 1,

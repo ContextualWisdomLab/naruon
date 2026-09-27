@@ -17,7 +17,7 @@ from pydantic import SecretStr
 from api import emails as emails_api
 from api.auth import get_auth_context as auth_get_auth_context
 from core.config import settings
-from db.models import Email, LLMProvider
+from db.models import Attachment, ContentSegmentRecord, Email, LLMProvider
 from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
@@ -1618,6 +1618,47 @@ async def test_get_email_thread(client: AsyncClient, db_session, sample_email: E
     assert "thread" in data
     assert len(data["thread"]) == 1
     assert data["thread"][0]["id"] == sample_email.id
+
+
+@pytest.mark.asyncio
+async def test_get_email_thread_includes_scoped_attachment_segments(
+    client: AsyncClient, sample_email: Email
+):
+    parsed = Attachment(
+        email_id=sample_email.id, filename="agenda.pdf", parse_status="parsed"
+    )
+    parsed.content_segments = [
+        ContentSegmentRecord(
+            email_id=sample_email.id,
+            content_segment_uid="segment-1",
+            ordinal_index=1,
+            safe_text_content="Meeting at noon",
+        ),
+        ContentSegmentRecord(
+            email_id=sample_email.id + 1,
+            content_segment_uid="other-owner-segment",
+            ordinal_index=2,
+            safe_text_content="Private content",
+        ),
+    ]
+    failed = Attachment(
+        email_id=sample_email.id, filename="scan.pdf", parse_status="parse_failed"
+    )
+    failed.content_segments = []
+    sample_email.attachments = [parsed, failed]
+
+    response = await client.get(f"/api/emails/thread/{sample_email.thread_id}")
+
+    assert response.status_code == 200
+    assert response.json()["thread"][0]["attachment_evidence"] == [
+        {
+            "filename": "agenda.pdf",
+            "parse_status": "parsed",
+            "segments": [{"uid": "segment-1", "text": "Meeting at noon"}],
+        },
+        {"filename": "scan.pdf", "parse_status": "parse_failed", "segments": []},
+    ]
+    assert "Private content" not in response.text
 
 
 @pytest.mark.asyncio

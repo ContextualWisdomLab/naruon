@@ -29,6 +29,11 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  attachment_evidence?: {
+    filename: string;
+    parse_status: string;
+    segments: { uid: string; text: string }[];
+  }[];
 };
 interface LlmData {
   summary: string;
@@ -785,6 +790,22 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     </div>
                   )}
                   <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
+                  {msg.attachment_evidence?.map((attachment, index) => (
+                    <details key={`${attachment.filename}-${index}`} className="mt-3 border-t border-border pt-3 text-sm">
+                      <summary className="cursor-pointer font-medium">첨부: {toMailDisplayText(attachment.filename, '이름 없는 첨부파일')}</summary>
+                      {attachment.segments.length > 0 ? (
+                        <div className="mt-2 space-y-2 pl-4">
+                          {attachment.segments.map((segment) => (
+                            <p key={segment.uid} className="whitespace-pre-wrap">{toMailBodyText(segment.text)}</p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 pl-4 text-muted-foreground">
+                          {attachment.parse_status.endsWith('_pending') ? '첨부 내용을 준비하고 있습니다.' : '표시할 수 있는 내용이 없습니다.'}
+                        </p>
+                      )}
+                    </details>
+                  ))}
                 </div>
               ))}
             </div>

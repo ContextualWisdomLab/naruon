@@ -3,8 +3,9 @@ from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import load_only, selectinload
 from db.session import get_db
-from db.models import Email
+from db.models import Attachment, ContentSegmentRecord, Email
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -165,7 +166,9 @@ def _email_list_item(
     )
 
 
-def _email_detail_response(email: Email) -> "EmailDetailResponse":
+def _email_detail_response(
+    email: Email, *, include_attachments: bool = False
+) -> "EmailDetailResponse":
     return EmailDetailResponse(
         id=email.id,
         message_id=email.message_id,
@@ -178,6 +181,25 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
         thread_id=canonical_thread_key(email),
         in_reply_to=email.in_reply_to,
         references=email.references,
+        attachment_evidence=[
+            ThreadAttachmentResponse(
+                filename=_safe_email_display_text(attachment.filename),
+                parse_status=attachment.parse_status,
+                segments=[
+                    ThreadAttachmentSegmentResponse(
+                        uid=segment.content_segment_uid,
+                        text=_safe_email_body(segment.safe_text_content),
+                    )
+                    for segment in sorted(
+                        attachment.content_segments, key=lambda item: item.ordinal_index
+                    )
+                    if segment.email_id == email.id
+                ],
+            )
+            for attachment in email.attachments
+        ]
+        if include_attachments
+        else [],
     )
 
 
@@ -197,6 +219,17 @@ class EmailListItem(BaseModel):
     schedule_conflict: bool = False
 
 
+class ThreadAttachmentSegmentResponse(BaseModel):
+    uid: str
+    text: str
+
+
+class ThreadAttachmentResponse(BaseModel):
+    filename: str
+    parse_status: str
+    segments: list[ThreadAttachmentSegmentResponse]
+
+
 class EmailDetailResponse(BaseModel):
     id: int
     message_id: str
@@ -211,6 +244,7 @@ class EmailDetailResponse(BaseModel):
     references: str | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
+    attachment_evidence: list[ThreadAttachmentResponse] = Field(default_factory=list)
 
 
 class UniqueThreadCandidateRequest(BaseModel):
@@ -668,6 +702,17 @@ async def get_email_thread(
     lookup_values = thread_lookup_values(thread_id)
     result = await db.execute(
         select(Email)
+        .options(
+            selectinload(Email.attachments).options(
+                load_only(Attachment.id, Attachment.filename, Attachment.parse_status),
+                selectinload(Attachment.content_segments).load_only(
+                    ContentSegmentRecord.content_segment_uid,
+                    ContentSegmentRecord.email_id,
+                    ContentSegmentRecord.ordinal_index,
+                    ContentSegmentRecord.safe_text_content,
+                ),
+            )
+        )
         .where(
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             or_(
@@ -682,7 +727,7 @@ async def get_email_thread(
 
     items = []
     for email in emails:
-        items.append(_email_detail_response(email))
+        items.append(_email_detail_response(email, include_attachments=True))
     return {"thread": items}
 
 
