@@ -197,6 +197,65 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
             for edge in result.edges
         )
 
+        first_email = await session.get(Email, segment.email_id)
+        other_email = Email(
+            user_id=user_id,
+            organization_id=organization_id,
+            message_id=f"<{uuid.uuid4().hex}@example.com>",
+            thread_id=first_email.thread_id,
+            sender="partner@example.com",
+            date=datetime.datetime.now(datetime.timezone.utc),
+            body="Follow-up with an attachment",
+        )
+        session.add(other_email)
+        await session.flush()
+        other_attachment = Attachment(
+            email_id=other_email.id, filename="parties.txt", content="Vendor: Partner Ltd",
+        )
+        session.add(other_attachment)
+        await session.flush()
+        source_uid = f"attachment:{other_attachment.id}"
+        other_node = ContentNodeRecord(
+            content_node_uid=f"node-{uuid.uuid4().hex[:16]}",
+            email_id=other_email.id,
+            attachment_id=other_attachment.id,
+            source_kind="attachment",
+            source_record_uid=source_uid,
+            parent_node_uid=None,
+            node_kind="document",
+            node_path="/document[1]",
+            ordinal_index=1,
+            display_label="parties.txt",
+            safe_text_content=other_attachment.content,
+            content_hash=uuid.uuid4().hex,
+        )
+        session.add(other_node)
+        await session.flush()
+        other_segment = ContentSegmentRecord(
+            content_segment_uid=f"seg-{uuid.uuid4().hex[:16]}",
+            email_id=other_email.id,
+            attachment_id=other_attachment.id,
+            content_node_id=other_node.content_node_id,
+            source_kind="attachment",
+            source_record_uid=source_uid,
+            segment_kind="paragraph",
+            segment_path="/document[1]/paragraph[1]",
+            ordinal_index=1,
+            safe_text_content=other_attachment.content,
+            content_hash=uuid.uuid4().hex,
+            word_count=3,
+        )
+        session.add(other_segment)
+        await session.flush()
+        await persist_project_graph_projection(
+            session,
+            extraction=extract_attachment_facts([_source_segment(other_segment)]),
+            user_id=user_id,
+            organization_id=organization_id,
+            workspace_id=f"workspace-{organization_id}",
+        )
+        await session.commit()
+
         owner = AuthContext(
             user_id=user_id, role="member", organization_id=organization_id,
             group_ids=(), workspace_id=f"workspace-{organization_id}",
@@ -218,6 +277,14 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
             and item.evidence_excerpt == segment.safe_text_content
             for item in first.facts + second.facts
         )
+        thread_page = await get_attachment_facts(
+            segment.email_id, include_thread=True, limit=10, offset=0,
+            db=session, auth_context=owner,
+        )
+        assert {item.email_id for item in thread_page.facts} == {
+            segment.email_id, other_email.id,
+        }
+        assert len(thread_page.facts) == 3
 
         other_user = AuthContext(
             user_id="different-user", role="member", organization_id=organization_id,

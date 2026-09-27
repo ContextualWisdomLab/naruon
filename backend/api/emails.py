@@ -215,6 +215,7 @@ class EmailDetailResponse(BaseModel):
 
 class AttachmentFactItem(BaseModel):
     object_uid: str
+    email_id: int
     attachment_id: int
     fact_kind: str
     value: str
@@ -673,19 +674,39 @@ async def get_email(
 @router.get("/attachment-facts/{email_id}", response_model=AttachmentFactPage)
 async def get_attachment_facts(
     email_id: int,
+    include_thread: bool = False,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(get_auth_context),
 ):
-    owned_email_id = await db.scalar(
-        select(Email.id).where(
+    owned_email = await db.scalar(
+        select(Email).where(
             Email.id == email_id,
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
         )
     )
-    if owned_email_id is None:
+    if owned_email is None:
         raise HTTPException(status_code=404, detail="Email not found")
+
+    email_ids = [email_id]
+    if include_thread:
+        lookup_values = thread_lookup_values(canonical_thread_key(owned_email))
+        email_ids = list(
+            (
+                await db.scalars(
+                    select(Email.id).where(
+                        *Email.owner_filters(
+                            auth_context.user_id, auth_context.organization_id
+                        ),
+                        or_(
+                            Email.thread_id.in_(lookup_values),
+                            Email.message_id.in_(lookup_values),
+                        ),
+                    )
+                )
+            ).all()
+        )
 
     result = await db.execute(
         select(ProjectGraphObjectRecord, ContentSegmentRecord)
@@ -695,13 +716,13 @@ async def get_attachment_facts(
             == ProjectGraphObjectRecord.primary_content_segment_id,
         )
         .where(
-            ProjectGraphObjectRecord.email_id == email_id,
+            ProjectGraphObjectRecord.email_id.in_(email_ids),
             ProjectGraphObjectRecord.user_id == auth_context.user_id,
             ProjectGraphObjectRecord.organization_id == auth_context.organization_id,
             ProjectGraphObjectRecord.workspace_id == auth_context.workspace_id,
             ProjectGraphObjectRecord.object_type == "attachment_fact",
             ProjectGraphObjectRecord.attachment_id.is_not(None),
-            ContentSegmentRecord.email_id == email_id,
+            ContentSegmentRecord.email_id == ProjectGraphObjectRecord.email_id,
             ContentSegmentRecord.attachment_id
             == ProjectGraphObjectRecord.attachment_id,
             ContentSegmentRecord.source_kind == "attachment",
@@ -715,6 +736,7 @@ async def get_attachment_facts(
         facts=[
             AttachmentFactItem(
                 object_uid=fact.object_uid,
+                email_id=fact.email_id,
                 attachment_id=fact.attachment_id,
                 fact_kind=str((fact.attributes_json or {}).get("fact_kind", "")),
                 value=str((fact.attributes_json or {}).get("value", "")),
