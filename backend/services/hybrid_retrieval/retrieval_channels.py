@@ -235,4 +235,6 @@ def build_dense_attachment_statement(
         owner_filters=owner_filters,
         candidate_limit=candidate_limit,
     )
-    return statement.join(Email, Attachment.email_id == Email.id)
+    return statement.join(Email, Attachment.email_id == Email.id).where(
+        Attachment.parse_status == "parsed"
+    )

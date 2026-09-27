@@ -44,6 +44,7 @@ from db.models import (
 )
 from db.session import get_db, get_readonly_db
 from main import app
+from services.hybrid_retrieval.retrieval_channels import build_dense_attachment_statement
 
 pytestmark = pytest.mark.postgres
 
@@ -411,9 +412,14 @@ async def test_content_segments_and_project_objects_are_searched(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "parse_status",
-    ["unsupported_content_type", "pdf_dom_recognition_pending", "pdf_dom_recognition_failed"],
+    [
+        "unsupported_content_type",
+        "pdf_dom_recognition_pending",
+        "pdf_dom_recognition_failed",
+        "parsed",
+    ],
 )
-async def test_unparsed_attachment_is_searchable_by_filename_only_for_owner(
+async def test_attachment_search_excludes_unparsed_source_and_preserves_owner_scope(
     dev_auth_dependency_overrides,
     hybrid_search_db_override,
     hybrid_search_sessionmaker,
@@ -422,6 +428,11 @@ async def test_unparsed_attachment_is_searchable_by_filename_only_for_owner(
     owner = f"attachment-owner-{uuid.uuid4().hex}"
     other = f"attachment-other-{uuid.uuid4().hex}"
     filename = f"fallback{uuid.uuid4().hex[:12]}.pdf"
+    content = (
+        "Parsed attachment text"
+        if parse_status == "parsed"
+        else "JVBERi1zeW50aGV0aWMtc291cmNl"
+    )
     async with hybrid_search_sessionmaker() as session:
         emails = [
             _make_email(
@@ -438,15 +449,30 @@ async def test_unparsed_attachment_is_searchable_by_filename_only_for_owner(
             Attachment(
                 email_id=email.id,
                 filename=filename,
-                content="JVBERi1zeW50aGV0aWMtc291cmNl",
+                content=content,
                 content_type="application/pdf",
                 parse_status=parse_status,
                 parse_content_type="application/pdf",
                 parser_key="none",
+                embedding=_unit_embedding_vector(0),
             )
             for email in emails
         )
         await session.commit()
+
+        dense_results = await session.execute(
+            build_dense_attachment_statement(
+                _unit_embedding_vector(0),
+                [Email.user_id == owner, Email.organization_id == "org-acme"],
+                10,
+            )
+        )
+        dense_rows = dense_results.all()
+        assert [row.email_id for row in dense_rows] == (
+            [emails[0].id] if parse_status == "parsed" else []
+        )
+        if dense_rows:
+            assert dense_rows[0].matched_text == content
 
     async with _client(user_id=owner, organization_id="org-acme") as client:
         results = await _search(client, filename.removesuffix(".pdf"))
