@@ -350,6 +350,23 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
             )
         assert denied.value.status_code == 404
 
+        segment.safe_text_content = "Total: $999"
+        await session.commit()
+        with pytest.raises(HTTPException) as stale_text:
+            await get_attachment_facts(
+                segment.email_id, limit=10, offset=0, db=session, auth_context=owner,
+            )
+        assert stale_text.value.status_code == 409
+
+        segment.safe_text_content = attachment.content
+        fact.source_segment_uids = ["wrong-segment"]
+        await session.commit()
+        with pytest.raises(HTTPException) as stale_citation:
+            await get_attachment_facts(
+                segment.email_id, limit=10, offset=0, db=session, auth_context=owner,
+            )
+        assert stale_citation.value.status_code == 409
+
 
 @pytest.mark.asyncio
 async def test_attachment_fact_failure_rolls_back_email_and_retry_is_idempotent(

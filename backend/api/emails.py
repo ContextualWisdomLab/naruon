@@ -7,6 +7,7 @@ from db.session import get_db
 from db.models import ContentSegmentRecord, Email, ProjectGraphObjectRecord
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
+import hashlib
 import time
 from typing import Literal
 from services.email_client import (
@@ -732,6 +733,15 @@ async def get_attachment_facts(
         .limit(limit + 1)
     )
     rows = result.all()
+    for fact, segment in rows[:limit]:
+        source_hash = hashlib.sha256(
+            segment.safe_text_content.encode("utf-8", errors="surrogatepass")
+        ).hexdigest()
+        if (
+            fact.source_segment_uids != [segment.content_segment_uid]
+            or (fact.attributes_json or {}).get("source_segment_hash") != source_hash
+        ):
+            raise HTTPException(status_code=409, detail="Attachment evidence unavailable")
     return AttachmentFactPage(
         facts=[
             AttachmentFactItem(
