@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
 from db.models import (
+    Attachment,
     Base,
     ContentNodeRecord,
     ContentSegmentRecord,
@@ -31,6 +32,7 @@ from services.project_graph import (
     extract_project_semantics,
     persist_project_graph_projection,
 )
+from services.project_graph.extractors import extract_attachment_facts
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -102,9 +104,78 @@ async def test_project_graph_projection_persists_source_cited_objects_and_edges(
         assert persisted_object.attributes_json["source_record_uid"] == (
             segment.source_record_uid
         )
-        assert persisted_edge.target_object_id == persisted_object.project_graph_object_id
+        assert (
+            persisted_edge.target_object_id == persisted_object.project_graph_object_id
+        )
         assert persisted_edge.source_uid == f"segment:{segment.content_segment_uid}"
         assert persisted_edge.source_segment_uids == [segment.content_segment_uid]
+
+
+@pytest_asyncio.fixture(scope="function")
+async def isolated_fact_sessionmaker():
+    schema = f"attachment_fact_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(settings.DATABASE_URL)
+    scoped_engine = create_async_engine(
+        settings.DATABASE_URL,
+        connect_args={"server_settings": {"search_path": f"{schema},public"}},
+        execution_options={"schema_translate_map": {None: schema}},
+    )
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f"CREATE SCHEMA {schema}"))
+        async with scoped_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield async_sessionmaker(scoped_engine, expire_on_commit=False)
+    finally:
+        await scoped_engine.dispose()
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
+    isolated_fact_sessionmaker,
+):
+    user_id = f"fact-user-{uuid.uuid4().hex}"
+    organization_id = f"org-fact-{uuid.uuid4().hex[:12]}"
+    async with isolated_fact_sessionmaker() as session:
+        segment = await _seed_source_segment(
+            session,
+            user_id=user_id,
+            organization_id=organization_id,
+        )
+        attachment = Attachment(
+            email_id=segment.email_id,
+            filename="invoice.txt",
+            content="Total: ₩1,200,000",
+        )
+        session.add(attachment)
+        await session.flush()
+        segment.attachment_id = attachment.id
+        segment.source_kind = "attachment"
+        segment.source_record_uid = f"attachment:{attachment.id}"
+        segment.safe_text_content = "Total: ₩1,200,000"
+        extraction = extract_attachment_facts([_source_segment(segment)])
+
+        result = await persist_project_graph_projection(
+            session,
+            extraction=extraction,
+            user_id=user_id,
+            organization_id=organization_id,
+            workspace_id=f"workspace-{organization_id}",
+        )
+        await session.commit()
+
+        assert len(result.objects) == len(result.edges) == 1
+        fact = result.objects[0]
+        assert fact.attachment_id == attachment.id
+        assert fact.email_id == segment.email_id
+        assert fact.user_id == user_id
+        assert fact.organization_id == organization_id
+        assert fact.source_segment_uids == [segment.content_segment_uid]
+        assert fact.attributes_json["fact_kind"] == "amount"
+        assert result.edges[0].target_object_id == fact.project_graph_object_id
 
 
 @pytest.mark.asyncio
@@ -211,14 +282,14 @@ async def test_project_graph_projection_upserts_existing_records(
         await session.commit()
 
         object_count = await session.scalar(
-            select(func.count()).select_from(ProjectGraphObjectRecord).where(
-                ProjectGraphObjectRecord.user_id == user_id
-            )
+            select(func.count())
+            .select_from(ProjectGraphObjectRecord)
+            .where(ProjectGraphObjectRecord.user_id == user_id)
         )
         edge_count = await session.scalar(
-            select(func.count()).select_from(ProjectGraphEdgeRecord).where(
-                ProjectGraphEdgeRecord.user_id == user_id
-            )
+            select(func.count())
+            .select_from(ProjectGraphEdgeRecord)
+            .where(ProjectGraphEdgeRecord.user_id == user_id)
         )
         persisted_objects = (
             await session.scalars(
@@ -285,7 +356,9 @@ async def test_project_graph_correction_records_before_after_and_updates_project
 
         assert persisted_object is not None
         assert persisted_object.status_code == "approved"
-        assert persisted_object.title == "Requirement: confirmed checkout retry guidance"
+        assert (
+            persisted_object.title == "Requirement: confirmed checkout retry guidance"
+        )
         assert persisted_correction is not None
         assert persisted_correction.before_json["status_code"] == "candidate"
         assert persisted_correction.after_json["status_code"] == "approved"

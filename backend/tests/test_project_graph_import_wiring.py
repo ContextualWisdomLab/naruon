@@ -11,6 +11,11 @@ import pytest
 from unittest.mock import AsyncMock
 
 import services.email_import_service as import_service
+from services.content_graph import parse_content
+from services.project_graph.extractors import extract_attachment_facts
+from services.project_graph.models import ProjectObjectType
+from services.project_graph.models import ProjectSourceSegment
+from services.project_graph.project_registration import _candidate_groups
 
 
 def _segment(uid: str, text: str, ordinal: int = 0):
@@ -129,3 +134,111 @@ async def test_projection_swallows_failure_and_rolls_back(monkeypatch):
     )
 
     session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_attachment_facts_persist_without_optional_project_extraction(
+    monkeypatch,
+):
+    persist_mock = AsyncMock()
+    project_mock = AsyncMock(
+        side_effect=AssertionError("project extraction must stay off")
+    )
+    monkeypatch.setattr(
+        import_service, "persist_project_graph_projection", persist_mock
+    )
+    monkeypatch.setattr(
+        import_service, "_extract_project_semantics_for_import", project_mock
+    )
+    session = AsyncMock()
+    attachment = _segment(
+        "attachment-segment",
+        "Invoice date: 2026-09-27\nTotal: ₩1,200,000\nVendor: Acme Ltd\nCommitment: Pay by Friday",
+    )
+    attachment.source_kind = "attachment"
+    body = _segment("body-segment", "Total: $999")
+
+    await import_service._persist_project_graph_projection(
+        session,
+        [body, attachment],
+        user_id="owner",
+        organization_id="org",
+        include_project_semantics=False,
+    )
+
+    extraction = persist_mock.await_args.kwargs["extraction"]
+    assert len(extraction.objects) == len(extraction.edges) == 4
+    assert {obj.attributes["fact_kind"] for obj in extraction.objects} == {
+        "date",
+        "amount",
+        "party",
+        "commitment",
+    }
+    assert all(
+        obj.object_type is ProjectObjectType.ATTACHMENT_FACT
+        for obj in extraction.objects
+    )
+    assert all(
+        obj.source_segment_uids == ("attachment-segment",) for obj in extraction.objects
+    )
+    assert all(
+        edge.source_uid == "segment:attachment-segment" for edge in extraction.edges
+    )
+    assert len({obj.uid for obj in extraction.objects}) == 4
+    project_mock.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_attachment_fact_rejects_invalid_or_unlabelled_values(monkeypatch):
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(
+        import_service, "persist_project_graph_projection", persist_mock
+    )
+    segment = _segment(
+        "attachment-segment",
+        "Due date: 2026-02-30\nAmount: 12345\nSomebody promised $10\nVendor: ",
+    )
+    segment.source_kind = "attachment"
+    await import_service._persist_project_graph_projection(
+        AsyncMock(),
+        [segment],
+        user_id="owner",
+        organization_id="org",
+        include_project_semantics=False,
+    )
+    persist_mock.assert_not_awaited()
+
+
+def test_attachment_facts_do_not_create_project_candidates():
+    fact = types.SimpleNamespace(
+        object_type=ProjectObjectType.ATTACHMENT_FACT.value,
+        email_id=1,
+    )
+    assert _candidate_groups([fact], scope=types.SimpleNamespace()) == ()
+
+
+def test_parsed_attachment_segments_produce_cited_literal_facts():
+    parsed = parse_content(
+        source_kind="attachment",
+        source_record_uid="attachment:test",
+        content="Invoice date: 2026-09-27\nTotal: ₩1,200,000",
+        content_type="text/plain",
+        display_name="invoice.txt",
+    )
+    segments = [
+        ProjectSourceSegment(
+            content_segment_uid=item.content_segment_uid,
+            source_kind=item.source_kind,
+            source_record_uid=item.source_record_uid,
+            safe_text_content=item.safe_text_content,
+        )
+        for item in parsed.segments
+    ]
+    result = extract_attachment_facts(segments)
+    assert {obj.attributes["fact_kind"] for obj in result.objects} == {
+        "date", "amount"
+    }, [(item.segment_kind, item.safe_text_content) for item in parsed.segments]
+    assert {obj.source_segment_uids[0] for obj in result.objects} <= {
+        item.content_segment_uid for item in parsed.segments
+    }

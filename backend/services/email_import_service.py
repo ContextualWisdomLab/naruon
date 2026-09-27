@@ -41,9 +41,11 @@ from services.embedding import (
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
 from services.project_graph import (
+    ProjectSemanticExtractionResult,
     ProjectSourceSegment,
     persist_project_graph_projection,
 )
+from services.project_graph.extractors import extract_attachment_facts
 from services.project_graph.extractor_registry import (
     KgExtractorContext,
     run_extraction,
@@ -798,6 +800,7 @@ async def _persist_project_graph_projection(
     user_id: str,
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
+    include_project_semantics: bool = True,
 ) -> None:
     """Best-effort projection of imported content segments into the project graph.
 
@@ -809,9 +812,19 @@ async def _persist_project_graph_projection(
     if not source_segments:
         return
     try:
-        extraction = await _extract_project_semantics_for_import(
-            source_segments, embedding_provider=embedding_provider
-        )
+        facts = extract_attachment_facts(source_segments)
+        if include_project_semantics:
+            project = await _extract_project_semantics_for_import(
+                source_segments, embedding_provider=embedding_provider
+            )
+            extraction = ProjectSemanticExtractionResult(
+                objects=project.objects + facts.objects,
+                edges=project.edges + facts.edges,
+                extractor_name=project.extractor_name,
+                extractor_version=project.extractor_version,
+            )
+        else:
+            extraction = facts
         if not extraction.objects:
             return
         workspace_id = (
@@ -901,11 +914,7 @@ async def _import_single_eml(
         fitted_embeddings=fitted_embeddings,
     )
 
-    project_source_segments = (
-        _project_source_segments(email_obj)
-        if settings.PROJECT_GRAPH_EXTRACTION_ENABLED
-        else []
-    )
+    project_source_segments = _project_source_segments(email_obj)
 
     session.add(email_obj)
     try:
@@ -928,6 +937,7 @@ async def _import_single_eml(
         user_id=user_id,
         organization_id=organization_id,
         embedding_provider=embedding_provider,
+        include_project_semantics=settings.PROJECT_GRAPH_EXTRACTION_ENABLED,
     )
 
     return EmailImportItemResult(

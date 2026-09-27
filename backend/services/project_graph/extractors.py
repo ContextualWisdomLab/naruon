@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import datetime
 import re
 from dataclasses import dataclass
 from typing import Iterable
@@ -283,6 +284,104 @@ def extract_project_semantics(
         edges=tuple(edges),
         extractor_name=EXTRACTOR_NAME,
         extractor_version=EXTRACTOR_VERSION,
+    )
+
+
+_FACT_LABEL_RE = re.compile(
+    r"(?<!\S)(?P<label>invoice date|due date|date|계약일|납기일|청구일|"
+    r"amount|total|금액|합계|party|vendor|customer|당사자|공급자|고객|"
+    r"commitment|약속|확약)\s*[:：]\s*",
+    re.IGNORECASE,
+)
+_FACT_DATE_RE = re.compile(r"^(20\d{2})[-./](\d{1,2})[-./](\d{1,2})$")
+_FACT_AMOUNT_RE = re.compile(
+    r"^(?:[₩$€£]\s*\d[\d,]*(?:\.\d{1,2})?|"
+    r"(?:USD|KRW|EUR|GBP)\s+\d[\d,]*(?:\.\d{1,2})?|"
+    r"\d[\d,]*(?:\.\d{1,2})?\s*원)$",
+    re.IGNORECASE,
+)
+_FACT_LABELS = {
+    "date": "date",
+    "due date": "date",
+    "invoice date": "date",
+    "계약일": "date",
+    "납기일": "date",
+    "청구일": "date",
+    "amount": "amount",
+    "total": "amount",
+    "금액": "amount",
+    "합계": "amount",
+    "party": "party",
+    "vendor": "party",
+    "customer": "party",
+    "당사자": "party",
+    "공급자": "party",
+    "고객": "party",
+    "commitment": "commitment",
+    "약속": "commitment",
+    "확약": "commitment",
+}
+
+
+def extract_attachment_facts(
+    segments: Iterable[ProjectSourceSegment],
+) -> ProjectSemanticExtractionResult:
+    """Promote only literal, labelled attachment facts with exact segment citations."""
+    objects: list[ProjectSemanticObject] = []
+    edges: list[ProjectSemanticEdge] = []
+    for segment in segments:
+        if segment.source_kind != "attachment":
+            continue
+        matches = list(_FACT_LABEL_RE.finditer(segment.safe_text_content))
+        for index, match in enumerate(matches):
+            label = match["label"].casefold()
+            kind = _FACT_LABELS[label]
+            end = matches[index + 1].start() if index + 1 < len(matches) else None
+            value = segment.safe_text_content[match.end() : end].strip()
+            if not value or len(value) > 160:
+                continue
+            if kind == "date":
+                date_match = _FACT_DATE_RE.fullmatch(value)
+                if date_match is None:
+                    continue
+                try:
+                    datetime.date(*map(int, date_match.groups()))
+                except ValueError:
+                    continue
+            elif kind == "amount" and _FACT_AMOUNT_RE.fullmatch(value) is None:
+                continue
+            fact_text = f"{match['label']}: {value}"
+            digest = hashlib.sha256(
+                f"{segment.content_segment_uid}|{match.start()}|{fact_text}".encode(
+                    "utf-8"
+                )
+            ).hexdigest()[:20]
+            fact = ProjectSemanticObject(
+                uid=f"attachment_fact:{digest}",
+                object_type=ProjectObjectType.ATTACHMENT_FACT,
+                title=fact_text[:240],
+                summary=fact_text,
+                source_segment_uids=(segment.content_segment_uid,),
+                confidence=0.9,
+                extractor_name="literal_attachment_fact",
+                extractor_version="1",
+                attributes={"fact_kind": kind, "label": match["label"], "value": value},
+            )
+            objects.append(fact)
+            edges.append(
+                ProjectSemanticEdge(
+                    source_uid=f"segment:{segment.content_segment_uid}",
+                    target_uid=fact.uid,
+                    edge_type="segment_evidences_attachment_fact",
+                    confidence=fact.confidence,
+                    source_segment_uids=fact.source_segment_uids,
+                )
+            )
+    return ProjectSemanticExtractionResult(
+        objects=tuple(objects),
+        edges=tuple(edges),
+        extractor_name="literal_attachment_fact",
+        extractor_version="1",
     )
 
 
