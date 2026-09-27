@@ -289,6 +289,29 @@ describe("/api runtime proxy route", () => {
       target_url:
         "https://api.naruon.net/api/events/sources?visibility_scope=personal&after=caldoc_123",
     });
+    const reconcile = await POST(
+      new NextRequest(
+        "https://frontend.naruon.net/api/events/relations/reconcile?visibility_scope=personal&mode=dependencies&after=event_123",
+        { method: "POST", headers: { Cookie: `naruon_session=${SIGNED_SESSION_TOKEN}`, Origin: "https://frontend.naruon.net" }, body: "{}" },
+      ),
+      { params: Promise.resolve({ path: ["events", "relations", "reconcile"] }) },
+    );
+    await expect(reconcile.json()).resolves.toEqual({
+      target_url: "https://api.naruon.net/api/events/relations/reconcile?visibility_scope=personal&mode=dependencies&after=event_123",
+    });
+    const invalidMode = await POST(
+      new NextRequest(
+        "https://frontend.naruon.net/api/events/relations/reconcile?mode=anything",
+        { method: "POST", headers: { Cookie: `naruon_session=${SIGNED_SESSION_TOKEN}`, Origin: "https://frontend.naruon.net" }, body: "{}" },
+      ),
+      { params: Promise.resolve({ path: ["events", "relations", "reconcile"] }) },
+    );
+    expect(invalidMode.status).toBe(400);
+    const wrongPath = await GET(
+      new NextRequest("https://frontend.naruon.net/api/tasks?mode=dependencies"),
+      { params: Promise.resolve({ path: ["tasks"] }) },
+    );
+    expect(wrongPath.status).toBe(400);
   });
 
   it("rejects state-changing requests when both Origin and Referer are absent", async () => {
