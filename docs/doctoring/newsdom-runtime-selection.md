@@ -3,7 +3,7 @@
 Naruon's default `newsdom` compose profile builds the supplier's API-only
 Dockerfile. Its `/health` response proves liveness, not PDF recognition.
 Compose uses `/ready`, which requires both parser authentication and an available
-MinerU runtime. The supplier at `072ea5dbfa616eb4113843a64abee71982b9aaa9`
+MinerU runtime. The supplier at `927ff2dec160a00ed11ec045727a422ff7ba4cbd`
 provides `Dockerfile.nvidia` with MinerU 3.4.4.
 
 On a Linux amd64 host with an NVIDIA GPU and NVIDIA Container Toolkit, select
@@ -56,24 +56,25 @@ the flags alone is not inference acceptance.
 
 ## Supplier security prerequisite
 
-The selected immutable supplier commit is the dependency-only artifact from
-canonical security PR newsdom-api #822, before later mixed changes. Its parser,
-authentication, Dockerfiles and test workflow are byte-identical to supplier
-`develop@539528f9667524f6b65de0ee7b8b21fbdd97c380`; only its dependency repair
-and associated tests/documentation are adopted. Supplier develop's runtime
-lock still reports five known AnyIO/pypdf vulnerabilities and is not the
-selected build source. PR #822 remains draft and has not received protected
-merge acceptance. This pin is a review candidate, not deployment authorization
-or inherited current-head approval. Validate the selected lock and API boundary
-separately before deployment; the GPU build and actual OCR remain unverified.
+The selected immutable supplier commit is canonical security PR newsdom-api
+#822's current head `927ff2dec160a00ed11ec045727a422ff7ba4cbd`. Its lock retains
+security-fixed AnyIO 4.14.2 and pypdf 6.18.0. The supplier owner branch remains
+unchanged. Its additional form-field bounds are preserved; qualifying review
+and protected supplier acceptance remain pending.
 
-Validation receipts for this candidate: the selected API runtime lock reports
-zero known vulnerabilities (the supplier main lock reports five); consumer
-Compose/hygiene tests pass 23/23 and client/PDF-contract tests pass 21/21.
-Supplier main's selected auth/readiness tests pass 58/58, but those results do
-not transfer to the changed dependency lock. On the selected security artifact,
-warnings-as-errors currently stops test collection in four modules: Starlette
-1.3.1 references AnyIO 4.15.1's deprecated `anyio.abc.BlockingPortal` alias.
-No warning filter was added. Supplier dependency compatibility, GPU image
-build/MinerU transitive dependencies, real model execution, and independent
-protected acceptance remain unverified.
+Validation on this exact supplier source and lock: 486 tests pass with warnings
+as errors and 100% production branch coverage; exported API runtime requirements
+report zero known vulnerabilities. The strict test command applies no warning
+suppression, independently from the supplier workflow's existing filter.
+
+Historical evidence is narrower: supplier develop's runtime lock reports five
+known AnyIO/pypdf vulnerabilities. The previously selected `072ea5db` artifact
+used AnyIO 4.15.1 and failed strict collection in four modules because Starlette
+1.3.1 referenced its deprecated BlockingPortal alias. The current owner already
+repaired that compatibility; its PR body still describes the previous lock and
+must not override the actual current files. A separate Starlette 1.7.0 experiment
+passed 485 tests but is not adopted, because the owner's existing fix suffices.
+
+This pin remains a review candidate. The GPU image build, MinerU transitive
+packages/model execution, real OCR, and independent protected acceptance are
+unverified. Dependency/API tests do not establish those outcomes.

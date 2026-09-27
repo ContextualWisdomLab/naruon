@@ -49,7 +49,7 @@ services:
       - newsdom
     build:
       # Commit-pinned for reproducible builds; bump deliberately.
-      context: https://github.com/ContextualWisdomLab/newsdom-api.git#072ea5dbfa616eb4113843a64abee71982b9aaa9
+      context: https://github.com/ContextualWisdomLab/newsdom-api.git#927ff2dec160a00ed11ec045727a422ff7ba4cbd
       dockerfile: Dockerfile
     # Keep the authenticated parser on the internal network. Configure the same
     # token in the organization's NewsDOM provider registry; never publish it.

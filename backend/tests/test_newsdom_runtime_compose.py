@@ -87,5 +87,5 @@ def test_compose_forwards_existing_extraction_settings(configured):
     }
     assert "/ready" in newsdom["healthcheck"]["test"][1]
     assert newsdom["build"]["context"].endswith(
-        "#072ea5dbfa616eb4113843a64abee71982b9aaa9"
+        "#927ff2dec160a00ed11ec045727a422ff7ba4cbd"
     )
