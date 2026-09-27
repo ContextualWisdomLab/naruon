@@ -41,6 +41,7 @@ from services.embedding import (
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
 from services.project_graph import (
+    ProjectObjectType,
     ProjectSemanticExtractionResult,
     ProjectSourceSegment,
     persist_project_graph_projection,
@@ -835,7 +836,24 @@ async def _persist_project_graph_projection(
                     extractor_version=project.extractor_version,
                 )
             else:
-                extraction = project
+                excluded = {
+                    obj.uid
+                    for obj in project.objects
+                    if obj.object_type is ProjectObjectType.ATTACHMENT_FACT
+                }
+                extraction = ProjectSemanticExtractionResult(
+                    objects=tuple(
+                        obj for obj in project.objects if obj.uid not in excluded
+                    ),
+                    edges=tuple(
+                        edge
+                        for edge in project.edges
+                        if edge.source_uid not in excluded
+                        and edge.target_uid not in excluded
+                    ),
+                    extractor_name=project.extractor_name,
+                    extractor_version=project.extractor_version,
+                )
         else:
             extraction = extract_attachment_facts(source_segments)
         if not extraction.objects:

@@ -783,3 +783,110 @@ async def test_import_selection_orchestrator_falls_back_when_unconfigured(monkey
 
     assert result is keyword_result
     llm_mock.assert_not_awaited()
+
+
+@pytest.mark.parametrize("invalid", [None, "body", "many", "excerpt", "value", "kind"])
+def test_inferred_attachment_fact_requires_verbatim_evidence(invalid):
+    from dataclasses import replace
+    import hashlib
+
+    segment = replace(
+        _segment("seg1", "Acme will deliver on 2026-10-01."),
+        source_kind="attachment",
+        source_record_uid="attachment:91",
+    )
+    fields = dict(
+        object_type="attachment_fact",
+        title="Delivery commitment",
+        summary="Acme will deliver on 2026-10-01.",
+        source_segment_uids=["seg1"],
+        confidence=0.8,
+        fact_kind="commitment",
+        fact_value="will deliver on 2026-10-01",
+        evidence_excerpt="Acme will deliver on 2026-10-01.",
+    )
+    if invalid == "body":
+        segment = replace(segment, source_kind="email_body")
+    elif invalid == "many":
+        fields["source_segment_uids"] = ["seg1", "seg1"]
+    elif invalid == "excerpt":
+        fields["evidence_excerpt"] = "Invented evidence"
+    elif invalid == "value":
+        fields["fact_value"] = "2027-01-01"
+    elif invalid == "kind":
+        fields["fact_kind"] = "approved"
+    result = llm_extractor._validated_objects(
+        _payload(llm_extractor.ExtractedObjectPayload(**fields)), {"seg1": segment}
+    )
+    if invalid:
+        assert result == []
+    else:
+        assert len(result) == 1
+        fact = result[0][1]
+        assert fact.attributes["validation_status"] == "inferred_unverified"
+        assert fact.attributes["value"] == fields["fact_value"]
+        assert (
+            fact.attributes["source_segment_hash"]
+            == hashlib.sha256(
+                segment.safe_text_content.encode("utf-8", errors="surrogatepass")
+            ).hexdigest()
+        )
+
+
+@pytest.mark.asyncio
+async def test_import_excludes_inferred_attachment_facts_and_incident_edges(
+    monkeypatch,
+):
+    from services.project_graph.models import (
+        ProjectSemanticEdge,
+        ProjectSemanticExtractionResult,
+        ProjectSemanticObject,
+    )
+
+    def obj(uid, kind):
+        return ProjectSemanticObject(
+            uid=uid,
+            object_type=kind,
+            title=uid,
+            summary=uid,
+            source_segment_uids=("seg1",),
+            confidence=0.8,
+            extractor_name="test",
+            extractor_version="1",
+        )
+
+    project = ProjectSemanticExtractionResult(
+        objects=(
+            obj("fact", ProjectObjectType.ATTACHMENT_FACT),
+            obj("requirement", ProjectObjectType.REQUIREMENT),
+        ),
+        edges=(
+            ProjectSemanticEdge("segment:seg1", "fact", "evidence", 0.8, ("seg1",)),
+            ProjectSemanticEdge("fact", "requirement", "relates_to", 0.8, ("seg1",)),
+            ProjectSemanticEdge(
+                "segment:seg1", "requirement", "evidence", 0.8, ("seg1",)
+            ),
+        ),
+        extractor_name="test",
+        extractor_version="1",
+    )
+    monkeypatch.setattr(
+        import_service,
+        "_extract_project_semantics_for_import",
+        AsyncMock(return_value=project),
+    )
+    persist = AsyncMock()
+    monkeypatch.setattr(import_service, "persist_project_graph_projection", persist)
+    session = types.SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    await import_service._persist_project_graph_projection(
+        session,
+        [_segment("seg1", "text")],
+        user_id="u",
+        organization_id="o",
+        include_attachment_facts=False,
+    )
+    extraction = persist.await_args.kwargs["extraction"]
+    assert [item.uid for item in extraction.objects] == ["requirement"]
+    assert [(edge.source_uid, edge.target_uid) for edge in extraction.edges] == [
+        ("segment:seg1", "requirement")
+    ]
