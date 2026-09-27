@@ -859,6 +859,9 @@ class TicketTask(Base):
     )
 
     related_email: Mapped["Email | None"] = relationship(back_populates="ticket_tasks")
+    thread_dismissals: Mapped[list["TicketTaskThreadDismissal"]] = relationship(
+        back_populates="ticket_task", cascade="all, delete-orphan"
+    )
 
 
 class TicketTaskThreadDismissal(Base):
@@ -880,6 +883,7 @@ class TicketTaskThreadDismissal(Base):
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
     )
+    ticket_task: Mapped["TicketTask"] = relationship(back_populates="thread_dismissals")
 
 
 Index(
