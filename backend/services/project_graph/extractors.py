@@ -375,7 +375,15 @@ def extract_attachment_facts(
                 attributes={
                     "fact_kind": kind,
                     "label": match["label"],
+                    "label_locale": (
+                        "ko" if re.search(r"[가-힣]", match["label"]) else "en"
+                    ),
                     "value": value,
+                    "validation_status": (
+                        "format_validated"
+                        if kind in {"date", "amount"}
+                        else "literal_unverified"
+                    ),
                     "source_segment_hash": source_segment_hash,
                 },
             )
