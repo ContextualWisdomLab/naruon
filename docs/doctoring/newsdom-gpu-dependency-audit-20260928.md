@@ -102,3 +102,44 @@ The first unguarded helper failed because Python spawn re-executed parsing durin
 child-process bootstrap. Moving execution under a `__main__` guard fixed that
 local helper defect; the original failure log is retained. No warning suppression,
 assertion relaxation, inference deadline, or elapsed-time cancellation was added.
+
+
+## Actual OCR serialization across supplier and consumer
+
+The saved actual OCR content list was replayed through supplier PR #958's exact
+`65696f393224a1e08ab42fff5151cbf3639a8a4e` DOM builder. Page dimensions came from
+the original synthetic PDF's media boxes; native page indices supplied page
+numbers. Pages `[1, 2, 3]` and empty page 2 are preserved. Its dependency lock
+and Dockerfiles match canonical security head `927ff2dec160a00ed11ec045727a422ff7ba4cbd`.
+This supplier revision passes 487 tests with warnings as errors and 100% branch
+coverage.
+
+The resulting JSON then passed Naruon's real normalization and recognition-record
+builder at `5df00208d15528ccfc029f7bef385bef267c1c81`. Each exact Korean amount/date
+quote appears in exactly one segment; segment text hashes, source ownership and
+nonempty segment identifiers are checked. The recognized text's full-source hash
+is checked independently. Empty pages remain in supplier DOM; normalization emits
+content sections only on pages 1 and 3. This does not claim persisted page-number
+metadata, a deployed HTTP adapter, a database write, live LLM extraction, or GPU
+recognition.
+
+The two stages use separate existing project environments and JSON serialization;
+no package was installed into the shared consumer environment. Initial helper
+attempts failed on a missing PDF dependency and required settings. A sanitized
+process with fresh policy-valid ephemeral settings fixed the helper setup, without
+relaxing authentication validators or making a database connection.
+
+Additional scratch artifacts under `/tmp/newsdom-mineru4-runtime-20260928`:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| verify_dom_projection.py | ed72d5a64d8f4e90a309a4106f1d8179b2748c67c93b19ae0e88e1bca6814b28 |
+| verify_naruon_projection.py | d5970ad8c4c3c031c896ca6aceef070614fc35218580c19ac192aa00e738d629 |
+| actual-supplier-dom.json | 7c5abcfd5754d6da307b7c3626529a761051385b90ebfc661e6231f81f1dc526 |
+| actual-naruon-segments.json | d09f52f5278f6b030bbc66e5a6fef398a3d15ef974077e3f6da869c980871dc6 |
+
+Naruon's runtime pin now carries this blank-page successor and the Next.js 16.3.6
+security follow-up. Their combined Compose/hygiene/dependency contracts pass
+27 tests with warnings as errors. The supplier GPU dependency audit remains a
+separate failing legacy-runtime condition; the replay is no substitute for the
+missing MinerU 4 adapter and deployment acceptance.
