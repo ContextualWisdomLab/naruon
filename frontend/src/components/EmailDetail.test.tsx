@@ -465,6 +465,146 @@ describe("EmailDetail", () => {
     expect(cards.find((card) => card.getAttribute("aria-label") === "답장 초안")?.querySelector('textarea[aria-label="답장 초안"]')).not.toBeNull();
   });
 
+  it("shows cited thread judgments and warns when only part of the evidence was used", async () => {
+    const email: TestEmail = {
+      id: 31, message_id: "first@example.com", thread_id: "decision-thread",
+      sender: "first@example.com", recipients: "user@example.com",
+      subject: "Delivery date", date: "2026-05-17T10:00:00Z", body: "Monday",
+    };
+    const second = { ...email, id: 32, message_id: "second@example.com", date: "2026-05-18T10:00:00Z", body: "Tuesday" };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/31")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/thread/decision-thread")) return Promise.resolve(jsonResponse({ thread: [email, second], tasks: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
+      if (url.endsWith("/api/emails/thread-judgment")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ thread_id: "decision-thread" });
+        return Promise.resolve(jsonResponse({
+          status: "ready", evidence_limited: true,
+          evidence: [
+            { uid: "first-segment", email_id: 31, excerpt: "Monday" },
+            { uid: "second-segment", email_id: 32, excerpt: "Tuesday" },
+          ],
+          objects: [{ uid: "issue-1", title: "Delivery issue", evidence_segment_uid: "first-segment" }],
+          judgment: {
+            current_state: { text: "Dates conflict", evidence_segment_uids: ["first-segment", "second-segment"], linked_task_uids: [], linked_object_uids: ["issue-1"] },
+            judgment_point: null, recommended_action: null,
+            blocking_dependencies: [], unresolved_commitments: [],
+            tensions: [{ description: "Dates remain unresolved", first_evidence_segment_uids: ["first-segment"], second_evidence_segment_uids: ["second-segment"] }],
+          },
+        }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={31} />); });
+    await flushAsyncWork();
+    const card = container.querySelector<HTMLElement>('article[aria-label="판단 카드"]');
+    const create = Array.from(card?.querySelectorAll("button") ?? []).find((button) => button.textContent?.includes("대화 판단 카드"));
+    await act(async () => { create?.click(); });
+    await waitForCondition(() => card?.textContent?.includes("Dates conflict") ?? false);
+    expect(card?.textContent).toContain("엇갈리는 내용");
+    expect(card?.textContent).toContain("연결 정보: Delivery issue");
+    expect(card?.textContent).toContain("중요한 내용은 원문에서 확인해 주세요");
+    const evidence = card?.querySelectorAll('details > summary');
+    expect(evidence).toHaveLength(4);
+    expect(evidence?.[0]?.textContent).not.toBe(evidence?.[1]?.textContent);
+    await act(async () => { (evidence?.[0] as HTMLElement | undefined)?.click(); });
+    expect((evidence?.[0]?.parentElement as HTMLDetailsElement | undefined)?.open).toBe(true);
+    expect(card?.textContent).toContain("Monday");
+    expect(card?.textContent).toContain("원문 메일로 이동");
+    const original = evidence?.[0]?.parentElement?.querySelector('button');
+    await act(async () => { original?.click(); });
+    expect(document.activeElement?.id).toBe('msg-31');
+  });
+
+  it("does not restore a stale judgment after its linked task is detached", async () => {
+    const email: TestEmail = {
+      id: 41,
+      message_id: "judgment-race@example.com",
+      thread_id: "judgment-race",
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Judgment race",
+      date: "2026-09-27T10:00:00Z",
+      body: "Original state",
+    };
+    const task = {
+      id: "judgment-task",
+      title: "Task used by judgment",
+      status: "open",
+      created_at: "2026-09-27T10:01:00Z",
+      link_confidence: 1,
+      related_thread_id: email.thread_id,
+    };
+    const judgmentResponse = deferred<ReturnType<typeof jsonResponse>>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/41")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/thread/judgment-race")) {
+        return Promise.resolve(jsonResponse({ thread: [email], tasks: [task] }));
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
+      }
+      if (url.endsWith("/api/emails/thread-judgment")) return judgmentResponse.promise;
+      if (url.endsWith("/api/tasks/judgment-task") && init?.method === "PATCH") {
+        return Promise.resolve(jsonResponse({ id: task.id }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={41} />); });
+    await waitForCondition(() => container?.textContent?.includes(task.title) ?? false);
+
+    const create = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("대화 판단 카드"),
+    );
+    await act(async () => { create?.click(); });
+    await waitForCondition(() => fetchMock.mock.calls.some(([input]) =>
+      String(input).endsWith("/api/emails/thread-judgment"),
+    ));
+
+    const detach = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("이 대화에서 제외"),
+    );
+    await act(async () => { detach?.click(); });
+    await waitForCondition(() => !(container?.textContent?.includes(task.title) ?? true));
+
+    await act(async () => {
+      judgmentResponse.resolve(jsonResponse({
+        status: "ready",
+        evidence_limited: false,
+        evidence: [{ uid: "segment-1", email_id: 41, excerpt: "Original state" }],
+        objects: [],
+        judgment: {
+          current_state: {
+            text: "Stale task-linked result",
+            evidence_segment_uids: ["segment-1"],
+            linked_task_uids: [task.id],
+            linked_object_uids: [],
+          },
+          judgment_point: null,
+          recommended_action: null,
+          blocking_dependencies: [],
+          unresolved_commitments: [],
+          tensions: [],
+        },
+      }));
+      await judgmentResponse.promise;
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).not.toContain("Stale task-linked result");
+    expect(container.textContent).toContain("대화 판단 카드 만들기");
+  });
+
   it("opens an accessible source drawer from the source chip and records source evidence events", async () => {
     const email: TestEmail = {
       id: 23,
@@ -546,6 +686,14 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    await act(async () => { sourceButton?.click(); });
+    const openOriginal = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('스레드 원문으로 이동'),
+    );
+    await act(async () => { openOriginal?.click(); });
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement?.id).toBe('msg-23');
   });
 
   it("lets users create tasks from visible execution items in the email detail", async () => {

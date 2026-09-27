@@ -187,7 +187,10 @@ export function SourceDrawer({
           {onOpenOriginal ? (
             <button
               type="button"
-              onClick={onOpenOriginal}
+              onClick={() => {
+                previousFocusRef.current = null;
+                onOpenOriginal();
+              }}
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <ExternalLink className="size-3.5" aria-hidden="true" />
