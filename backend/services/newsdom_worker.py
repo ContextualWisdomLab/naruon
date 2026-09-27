@@ -17,9 +17,13 @@ import logging
 import random
 from collections.abc import Awaitable, Callable
 
-from sqlalchemy import bindparam, func, select
+from sqlalchemy import bindparam, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+from core.config import settings
+from services.attachment_fact_worker import infer_attachment_facts
+from services.project_graph.llm_extractor import LLM_EXTRACTOR_VERSION
 
 from db.models import (
     Attachment,
@@ -48,6 +52,11 @@ from services.newsdom_pdf_recognition import (
     recognize_pdf_dom,
     resolve_newsdom_config_from_db,
 )
+from services.project_graph import (
+    ProjectSourceSegment,
+    persist_project_graph_projection,
+)
+from services.project_graph.extractors import extract_attachment_facts
 
 logger = logging.getLogger(__name__)
 _sysrand = random.SystemRandom()
@@ -111,6 +120,7 @@ def apply_recognition_to_attachment(
     records: PdfDomRecognitionRecords,
 ) -> None:
     """Land recognized PDF DOM records onto an attachment (text + graph)."""
+    attachment.fact_extractor_version = None
     attachment.content = records.parse_text
     attachment.parse_content_type = PDF_PARSE_CONTENT_TYPE
     attachment.parser_key = PDF_PARSER_KEY
@@ -241,7 +251,7 @@ async def process_pending_attachment(
         return RESULT_PENDING
 
     try:
-        await recognize_attachment_pdf(
+        records = await recognize_attachment_pdf(
             email=email,
             attachment=attachment,
             pdf_bytes=pdf_bytes,
@@ -266,6 +276,27 @@ async def process_pending_attachment(
             exc,
         )
         return RESULT_FAILED
+    facts = extract_attachment_facts(
+        ProjectSourceSegment(
+            content_segment_uid=segment.content_segment_uid,
+            source_kind=segment.source_kind,
+            source_record_uid=segment.source_record_uid,
+            safe_text_content=segment.safe_text_content,
+            heading_path=segment.heading_path,
+            segment_path=segment.segment_path,
+            ordinal_index=segment.ordinal_index,
+        )
+        for segment in records.parse_result.segments
+    )
+    if facts.objects:
+        await session.flush()
+        await persist_project_graph_projection(
+            session,
+            extraction=facts,
+            user_id=email.user_id,
+            organization_id=email.organization_id,
+            workspace_id=f"workspace-{email.organization_id or email.user_id}",
+        )
     return RESULT_RECOGNIZED
 
 
@@ -388,6 +419,8 @@ class NewsdomRecognitionWorker:
         self._request_fn = request_fn
         self._config_resolver = config_resolver
         self._task: asyncio.Task | None = None
+        self._fact_task: asyncio.Task | None = None
+        self._fact_cursor: int | None = None
         self._is_running = False
         self._attachment_cursor: int | None = None
         self._document_cursor: str | None = None
@@ -399,6 +432,7 @@ class NewsdomRecognitionWorker:
             return
         self._is_running = True
         self._task = asyncio.create_task(self._run_loop())
+        self._fact_task = asyncio.create_task(self._run_fact_loop())
         logger.info("NewsdomRecognitionWorker started.")
 
     async def stop(self) -> None:
@@ -406,13 +440,58 @@ class NewsdomRecognitionWorker:
         if not self._is_running:
             return
         self._is_running = False
-        if self._task:
-            self._task.cancel()
+        tasks = [task for task in (self._task, self._fact_task) if task]
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
             try:
-                await self._task
+                await task
             except asyncio.CancelledError:
                 logger.debug("NewsdomRecognitionWorker cancellation acknowledged.")
         logger.info("NewsdomRecognitionWorker stopped.")
+
+    async def _run_fact_loop(self) -> None:
+        """Process durable inference independently of the recognition lease."""
+        while self._is_running:
+            try:
+                if (
+                    settings.PROJECT_GRAPH_EXTRACTION_ENABLED
+                    and settings.PROJECT_GRAPH_EXTRACTOR in {"llm", "orchestrator"}
+                ):
+                    async with AsyncSessionLocal() as session:
+                        statement = select(Attachment.id).where(
+                            Attachment.parse_status == "parsed",
+                            or_(
+                                Attachment.fact_extractor_version.is_(None),
+                                Attachment.fact_extractor_version
+                                != LLM_EXTRACTOR_VERSION,
+                            ),
+                            Attachment.content_segments.any(
+                                ContentSegmentRecord.source_kind == "attachment"
+                            ),
+                        )
+                        if self._fact_cursor is not None:
+                            statement = statement.where(
+                                Attachment.id > self._fact_cursor
+                            )
+                        ids = (
+                            await session.scalars(
+                                statement.order_by(Attachment.id).limit(1)
+                            )
+                        ).all()
+                    self._fact_cursor = ids[-1] if ids else None
+                    for attachment_id in ids:
+                        # ponytail: replicas may duplicate inference; the short final
+                        # row lock and completion marker prevent duplicate writes.
+                        await infer_attachment_facts(attachment_id)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                logger.warning("Attachment inference deferred after failure.")
+            try:
+                await asyncio.sleep(self.interval_seconds)
+            except asyncio.CancelledError:
+                return
 
     async def _run_loop(self) -> None:
         """Run jittered recognition sweeps until stopped."""
@@ -492,7 +571,12 @@ class NewsdomRecognitionWorker:
             statement = statement.where(Attachment.id > after_id)
         return (
             statement.order_by(Attachment.id)
-            .options(selectinload(Attachment.email))
+            .options(
+                selectinload(Attachment.email).selectinload(Email.content_nodes),
+                selectinload(Attachment.email).selectinload(Email.content_segments),
+                selectinload(Attachment.content_nodes),
+                selectinload(Attachment.content_segments),
+            )
             .limit(self.batch_limit)
         )
 

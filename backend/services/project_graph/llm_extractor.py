@@ -47,10 +47,11 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 LLM_EXTRACTOR_NAME = "llm_grounded_project_graph"
-LLM_EXTRACTOR_VERSION = "2026.07.13.1"
+LLM_EXTRACTOR_VERSION = "2026.09.27.4"
 
 _MAX_SEGMENTS_PER_REQUEST = 40
 _MAX_SEGMENT_TEXT_CHARS = 2000
+_MAX_EVIDENCE_EXCERPT_CHARS = 240
 _MAX_TITLE_CHARS = 240
 _MAX_RELATIONS_PER_REQUEST = 200
 _ALLOWED_TYPE_VALUES = {member.value for member in ProjectObjectType}
@@ -88,6 +89,9 @@ class ExtractedObjectPayload(BaseModel):
     # objects before their persisted uid exists. Optional for backward
     # compatibility; when omitted the object's position supplies the handle.
     local_key: str = ""
+    fact_kind: str = ""
+    fact_value: str = ""
+    evidence_excerpt: str = ""
 
 
 class ExtractedRelationPayload(BaseModel):
@@ -111,6 +115,11 @@ def _system_instruction() -> str:
         f"Allowed object_type values: {allowed}. "
         "Every object MUST cite one or more source_segment_uids copied "
         "verbatim from the input segments that directly evidence it. "
+        "For attachment_fact, cite exactly one attachment segment and provide "
+        "fact_kind (date, amount, party, or commitment), fact_value (at most 160 "
+        "characters), and evidence_excerpt (at most 240 characters). Both the "
+        "value and excerpt must be verbatim text from that segment; the value "
+        "must occur within the excerpt. These are unverified candidates. "
         "Give each object a unique local_key (a short string) so you can "
         "reference it in relations. "
         "Optionally return relations that connect two objects you extracted, "
@@ -130,12 +139,17 @@ def _system_instruction() -> str:
     )
 
 
-def _segments_json(segments: list[ProjectSourceSegment]) -> str:
+def _segments_json(
+    segments: list[ProjectSourceSegment], *, text_offset: int = 0
+) -> str:
     payload = [
         {
             "content_segment_uid": segment.content_segment_uid,
             "heading_path": segment.heading_path,
-            "text": segment.safe_text_content[:_MAX_SEGMENT_TEXT_CHARS],
+            "source_kind": segment.source_kind,
+            "text": segment.safe_text_content[
+                text_offset : text_offset + _MAX_SEGMENT_TEXT_CHARS
+            ],
         }
         for segment in segments
     ]
@@ -183,6 +197,8 @@ def _object_uid(object_type: str, title: str, primary_segment_uid: str) -> str:
 def _validated_objects(
     payload: ExtractionPayload,
     segments_by_uid: dict[str, ProjectSourceSegment],
+    *,
+    text_offset: int = 0,
 ) -> list[tuple[str, ProjectSemanticObject]]:
     """Return ``(local_key, object)`` pairs for every grounded object.
 
@@ -211,13 +227,45 @@ def _validated_objects(
         if not title or not summary:
             continue
         primary = segments_by_uid[cited[0]]
+        fact_attributes = {}
+        if candidate.object_type == ProjectObjectType.ATTACHMENT_FACT.value:
+            value = candidate.fact_value.strip()
+            excerpt = candidate.evidence_excerpt.strip()
+            if (
+                len(cited) != 1
+                or primary.source_kind != "attachment"
+                or candidate.fact_kind not in {"date", "amount", "party", "commitment"}
+                or not 0 < len(value) <= 160
+                or not 0 < len(excerpt) <= _MAX_EVIDENCE_EXCERPT_CHARS
+                or excerpt
+                not in primary.safe_text_content[
+                    text_offset : text_offset + _MAX_SEGMENT_TEXT_CHARS
+                ]
+                or value not in excerpt
+            ):
+                continue
+            fact_attributes = {
+                "fact_kind": candidate.fact_kind,
+                "value": value,
+                "evidence_excerpt": excerpt,
+                "validation_status": "inferred_unverified",
+                "source_segment_hash": hashlib.sha256(
+                    primary.safe_text_content.encode("utf-8", errors="surrogatepass")
+                ).hexdigest(),
+            }
         confidence = min(max(candidate.confidence, 0.0), 1.0)
         local_key = candidate.local_key.strip() or f"__object_{position}"
         objects.append(
             (
                 local_key,
                 ProjectSemanticObject(
-                    uid=_object_uid(candidate.object_type, title, cited[0]),
+                    uid=_object_uid(
+                        candidate.object_type,
+                        f"{title}|{candidate.fact_kind}|{candidate.fact_value.strip()}"
+                        if fact_attributes
+                        else title,
+                        cited[0],
+                    ),
                     object_type=ProjectObjectType(candidate.object_type),
                     title=title,
                     summary=summary,
@@ -231,6 +279,7 @@ def _validated_objects(
                         "heading_path": primary.heading_path,
                         "segment_path": primary.segment_path,
                         "ordinal_index": primary.ordinal_index,
+                        **fact_attributes,
                     },
                 ),
             )
@@ -334,7 +383,7 @@ async def extract_project_semantics_llm(
 ) -> ProjectSemanticExtractionResult:
     segment_list = [
         segment for segment in segments if segment.safe_text_content.strip()
-    ][:_MAX_SEGMENTS_PER_REQUEST]
+    ]
     if not segment_list:
         return ProjectSemanticExtractionResult(
             objects=(),
@@ -343,23 +392,57 @@ async def extract_project_semantics_llm(
             extractor_version=LLM_EXTRACTOR_VERSION,
         )
 
-    payload = await _call_llm(
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        segments_json=_segments_json(segment_list),
-    )
-    segments_by_uid = {
-        segment.content_segment_uid: segment for segment in segment_list
-    }
-    objects_with_keys = _validated_objects(payload, segments_by_uid)
-    objects = [semantic_object for _, semantic_object in objects_with_keys]
-    objects_by_local_key = _index_objects_by_local_key(objects_with_keys)
-    edges = _evidence_edges(objects)
-    edges.extend(_relation_edges(payload.relations, objects_by_local_key))
+    objects = []
+    edges = []
+    for offset in range(0, len(segment_list), _MAX_SEGMENTS_PER_REQUEST):
+        batch = segment_list[offset : offset + _MAX_SEGMENTS_PER_REQUEST]
+        longest = max(len(segment.safe_text_content) for segment in batch)
+        # Overlap preserves every permitted excerpt crossing a window boundary.
+        step = _MAX_SEGMENT_TEXT_CHARS - _MAX_EVIDENCE_EXCERPT_CHARS + 1
+        for text_offset in range(
+            0, max(1, longest - _MAX_EVIDENCE_EXCERPT_CHARS + 1), step
+        ):
+            window = [
+                segment
+                for segment in batch
+                if segment.safe_text_content[
+                    text_offset : text_offset + _MAX_SEGMENT_TEXT_CHARS
+                ].strip()
+            ]
+            if not window:
+                continue
+            payload = await _call_llm(
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                segments_json=_segments_json(window, text_offset=text_offset),
+            )
+            segments_by_uid = {
+                segment.content_segment_uid: segment for segment in window
+            }
+            objects_with_keys = _validated_objects(
+                payload, segments_by_uid, text_offset=text_offset
+            )
+            batch_objects = [
+                semantic_object for _, semantic_object in objects_with_keys
+            ]
+            objects_by_local_key = _index_objects_by_local_key(objects_with_keys)
+            objects.extend(batch_objects)
+            edges.extend(_evidence_edges(batch_objects))
+            edges.extend(_relation_edges(payload.relations, objects_by_local_key))
     return ProjectSemanticExtractionResult(
-        objects=tuple(objects),
-        edges=tuple(edges),
+        objects=tuple({obj.uid: obj for obj in objects}.values()),
+        edges=tuple(
+            {
+                (
+                    edge.source_uid,
+                    edge.target_uid,
+                    edge.edge_type,
+                    edge.source_segment_uids,
+                ): edge
+                for edge in edges
+            }.values()
+        ),
         extractor_name=LLM_EXTRACTOR_NAME,
         extractor_version=LLM_EXTRACTOR_VERSION,
     )

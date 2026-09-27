@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 
 class ProjectObjectType(str, Enum):
+    ATTACHMENT_FACT = "attachment_fact"
     PROJECT_CANDIDATE = "project_candidate"
     REQUIREMENT = "requirement"
     FEATURE = "feature"

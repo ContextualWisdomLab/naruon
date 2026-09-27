@@ -41,9 +41,12 @@ from services.embedding import (
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
 from services.project_graph import (
+    ProjectObjectType,
+    ProjectSemanticExtractionResult,
     ProjectSourceSegment,
     persist_project_graph_projection,
 )
+from services.project_graph.extractors import extract_attachment_facts
 from services.project_graph.extractor_registry import (
     KgExtractorContext,
     run_extraction,
@@ -251,6 +254,11 @@ def _session_uses_postgresql(session: AsyncSession) -> bool:
     return getattr(getattr(bind, "dialect", None), "name", None) == "postgresql"
 
 
+def _owner_import_lock_key(user_id: str, organization_id: str) -> str:
+    payload = f"{user_id}\x00{organization_id}".encode("utf-8", errors="surrogatepass")
+    return hashlib.sha256(payload).hexdigest()
+
+
 async def _acquire_owner_import_quota_lock(
     session: AsyncSession, *, user_id: str, organization_id: str
 ) -> bool:
@@ -258,7 +266,7 @@ async def _acquire_owner_import_quota_lock(
         return False
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -277,7 +285,7 @@ async def _release_owner_import_quota_lock(
 ) -> None:
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -459,7 +467,9 @@ def _append_email_content_graph(
 ) -> None:
     body_parse_result = parse_content(
         source_kind="email_body",
-        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        source_record_uid=_content_graph_source_record_uid(
+            "email", email_obj.user_id, email_obj.organization_id or "", message_id
+        ),
         content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
         content_type=str(parsed.get("body_content_type") or "text/plain"),
         display_name="Email body",
@@ -487,6 +497,8 @@ def _append_email_content_graph(
             source_kind="attachment",
             source_record_uid=_content_graph_source_record_uid(
                 "attachment",
+                email_obj.user_id,
+                email_obj.organization_id or "",
                 message_id,
                 str(attachment_index),
                 attachment_obj.filename,
@@ -798,6 +810,8 @@ async def _persist_project_graph_projection(
     user_id: str,
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
+    include_project_semantics: bool = True,
+    include_attachment_facts: bool = True,
 ) -> None:
     """Best-effort projection of imported content segments into the project graph.
 
@@ -809,9 +823,39 @@ async def _persist_project_graph_projection(
     if not source_segments:
         return
     try:
-        extraction = await _extract_project_semantics_for_import(
-            source_segments, embedding_provider=embedding_provider
-        )
+        if include_project_semantics:
+            project = await _extract_project_semantics_for_import(
+                source_segments, embedding_provider=embedding_provider
+            )
+            if include_attachment_facts:
+                facts = extract_attachment_facts(source_segments)
+                extraction = ProjectSemanticExtractionResult(
+                    objects=project.objects + facts.objects,
+                    edges=project.edges + facts.edges,
+                    extractor_name=project.extractor_name,
+                    extractor_version=project.extractor_version,
+                )
+            else:
+                excluded = {
+                    obj.uid
+                    for obj in project.objects
+                    if obj.object_type is ProjectObjectType.ATTACHMENT_FACT
+                }
+                extraction = ProjectSemanticExtractionResult(
+                    objects=tuple(
+                        obj for obj in project.objects if obj.uid not in excluded
+                    ),
+                    edges=tuple(
+                        edge
+                        for edge in project.edges
+                        if edge.source_uid not in excluded
+                        and edge.target_uid not in excluded
+                    ),
+                    extractor_name=project.extractor_name,
+                    extractor_version=project.extractor_version,
+                )
+        else:
+            extraction = extract_attachment_facts(source_segments)
         if not extraction.objects:
             return
         workspace_id = (
@@ -901,14 +945,20 @@ async def _import_single_eml(
         fitted_embeddings=fitted_embeddings,
     )
 
-    project_source_segments = (
-        _project_source_segments(email_obj)
-        if settings.PROJECT_GRAPH_EXTRACTION_ENABLED
-        else []
-    )
+    project_source_segments = _project_source_segments(email_obj)
 
     session.add(email_obj)
     try:
+        facts = extract_attachment_facts(project_source_segments)
+        if facts.objects:
+            await session.flush()
+            await persist_project_graph_projection(
+                session,
+                extraction=facts,
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=f"workspace-{organization_id or user_id}",
+            )
         await session.commit()
     except Exception:
         await session.rollback()
@@ -922,13 +972,15 @@ async def _import_single_eml(
             reason_code="database_commit_failed",
         )
 
-    await _persist_project_graph_projection(
-        session,
-        project_source_segments,
-        user_id=user_id,
-        organization_id=organization_id,
-        embedding_provider=embedding_provider,
-    )
+    if settings.PROJECT_GRAPH_EXTRACTION_ENABLED:
+        await _persist_project_graph_projection(
+            session,
+            project_source_segments,
+            user_id=user_id,
+            organization_id=organization_id,
+            embedding_provider=embedding_provider,
+            include_attachment_facts=False,
+        )
 
     return EmailImportItemResult(
         filename=display_filename,

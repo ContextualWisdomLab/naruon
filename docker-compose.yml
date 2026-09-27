@@ -41,21 +41,34 @@ services:
   # sidecar. Bring it up intentionally with:
   #   docker compose --profile newsdom up
   # (or COMPOSE_PROFILES=newsdom).
+  # This default image is API-only and needs an external MinerU executable.
+  # For Linux NVIDIA recognition, also use docker-compose.newsdom-nvidia.yml;
+  # see docs/doctoring/newsdom-runtime-selection.md.
   newsdom:
     profiles:
       - newsdom
     build:
       # Commit-pinned for reproducible builds; bump deliberately.
-      context: https://github.com/ContextualWisdomLab/newsdom-api.git#6558a4238b1614c39f7e96a961815747ac4d49ef
+      context: https://github.com/ContextualWisdomLab/newsdom-api.git#65696f393224a1e08ab42fff5151cbf3639a8a4e
       dockerfile: Dockerfile
-    # No host `ports` mapping: the sidecar has no authentication on /parse, so
-    # it must stay on the internal compose network only. The backend reaches it
-    # via the service name (ALLOWED_NEWSDOM_HOSTS: newsdom). Do not publish it
-    # to the host.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    # MinerU persists downloaded models and mineru.json in the nonroot home.
+    volumes:
+      - newsdom-model-cache:/home/newsdom
+    # Keep the authenticated parser on the internal network. Configure the same
+    # token in the organization's NewsDOM provider registry; never publish it.
+    environment:
+      NEWSDOM_API_TOKEN: ${NEWSDOM_API_TOKEN:-}
+      NEWSDOM_AUTH_MODE: required
+      NEWSDOM_RUNTIME_PROFILE: production
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/ready').status==200 else 1)\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,6 +85,9 @@ services:
       DEBUG: "false"
       ALLOW_LOCAL_LLM_PROVIDERS: "true"
       ALLOWED_LLM_BASE_URL_HOSTS: ollama
+      PROJECT_GRAPH_EXTRACTION_ENABLED: ${PROJECT_GRAPH_EXTRACTION_ENABLED:-false}
+      PROJECT_GRAPH_EXTRACTOR: ${PROJECT_GRAPH_EXTRACTOR:-keyword}
+      PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: ${PROJECT_GRAPH_ORCHESTRATOR_BASE_URL:-}
       # NewsDOM sidecar allowlist. The actual base_url + bearer token are
       # configured per-organization in the database (NewsdomProvider), NOT here;
       # this only authorizes the container hostname for the SSRF-safe client.
@@ -122,3 +138,4 @@ services:
 
 volumes:
   postgres-data:
+  newsdom-model-cache:
