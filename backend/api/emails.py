@@ -767,12 +767,18 @@ async def get_attachment_facts(
     )
     rows = result.all()
     for fact, segment in rows[:limit]:
+        stored_excerpt = (fact.attributes_json or {}).get("evidence_excerpt")
         source_hash = hashlib.sha256(
             segment.safe_text_content.encode("utf-8", errors="surrogatepass")
         ).hexdigest()
         if (
             fact.source_segment_uids != [segment.content_segment_uid]
             or (fact.attributes_json or {}).get("source_segment_hash") != source_hash
+            or (stored_excerpt is not None and (
+                not isinstance(stored_excerpt, str)
+                or not 0 < len(stored_excerpt) <= 240
+                or stored_excerpt not in segment.safe_text_content
+            ))
         ):
             raise HTTPException(
                 status_code=409, detail="Attachment evidence unavailable"
@@ -789,7 +795,10 @@ async def get_attachment_facts(
                 fact_kind=str((fact.attributes_json or {}).get("fact_kind", "")),
                 value=str((fact.attributes_json or {}).get("value", "")),
                 source_segment_uid=segment.content_segment_uid,
-                evidence_excerpt=_safe_email_body(segment.safe_text_content)[:240],
+                evidence_excerpt=_safe_email_body(
+                    (fact.attributes_json or {}).get("evidence_excerpt")
+                    or segment.safe_text_content
+                )[:240],
             )
             for fact, segment in rows[:limit]
         ],
