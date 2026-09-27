@@ -63,8 +63,16 @@ def email_search_document_expression():
     )
 
 
+def attachment_search_text_expression():
+    return (
+        func.coalesce(Attachment.filename, "")
+        + " "
+        + func.coalesce(Attachment.content, "")
+    )
+
+
 def attachment_search_document_expression():
-    return func.search_normalized_text(Attachment.content)
+    return func.search_normalized_text(attachment_search_text_expression())
 
 
 def content_segment_search_document_expression():
@@ -107,9 +115,7 @@ def _lexical_scored_statement(
     )
     # ``document <->> query`` = 1 - word_similarity(query, document);
     # kNN-ordering form served by the GiST trigram indexes.
-    lexical_distance = document_expression.op("<->>")(
-        normalized_query_expression
-    )
+    lexical_distance = document_expression.op("<->>")(normalized_query_expression)
     return (
         select(
             *_candidate_columns(matched_text_column, result_kind),
@@ -138,7 +144,7 @@ def build_lexical_attachment_statement(
     normalized_query: str, owner_filters, candidate_limit: int
 ) -> Select:
     statement = _lexical_scored_statement(
-        matched_text_column=Attachment.content,
+        matched_text_column=attachment_search_text_expression(),
         result_kind=ATTACHMENT_RESULT_KIND,
         document_expression=attachment_search_document_expression(),
         normalized_query=normalized_query,
@@ -173,9 +179,7 @@ def build_lexical_project_object_statement(
         owner_filters=owner_filters,
         candidate_limit=candidate_limit,
     )
-    return statement.join(
-        Email, ProjectGraphObjectRecord.email_id == Email.id
-    ).where(
+    return statement.join(Email, ProjectGraphObjectRecord.email_id == Email.id).where(
         ProjectGraphObjectRecord.status_code.not_in(
             _EXCLUDED_PROJECT_OBJECT_STATUS_CODES
         )
