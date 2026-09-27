@@ -240,13 +240,14 @@ async def test_runner_manager_records_durable_signal_events(monkeypatch):
         capture_connector_signal_event,
     )
 
+    websocket = _AcceptOnlyWebSocket()
     await runner_ws.manager.connect(
-        _AcceptOnlyWebSocket(),
+        websocket,
         "org-acme:registered",
         _auth_context(),
     )
-    await runner_ws.manager.touch("org-acme:registered")
-    await runner_ws.manager.disconnect("org-acme:registered")
+    await runner_ws.manager.touch("org-acme:registered", websocket)
+    await runner_ws.manager.disconnect("org-acme:registered", websocket)
 
     assert [event["state_code"] for event in recorded_events] == [
         "connected",
@@ -271,13 +272,13 @@ async def test_runner_response_stays_on_its_dispatch_connection():
         commands.append(json.loads(message))
         sent.set()
 
-    manager.active_connections["org-a:registered"] = SimpleNamespace(
-        send_text=capture_command
-    )
+    socket_a = SimpleNamespace(send_text=capture_command)
+    socket_b = SimpleNamespace()
+    manager.active_connections["org-a:registered"] = socket_a
     manager.connection_records["org-a:registered"] = runner_ws.RunnerConnectionRecord(
         organization_id="org-a", workspace_id="workspace-org-a", connected_at="now"
     )
-    manager.active_connections["org-b:registered"] = SimpleNamespace()
+    manager.active_connections["org-b:registered"] = socket_b
     manager.connection_records["org-b:registered"] = runner_ws.RunnerConnectionRecord(
         organization_id="org-b", workspace_id="workspace-org-b", connected_at="now"
     )
@@ -297,12 +298,29 @@ async def test_runner_response_stays_on_its_dispatch_connection():
     await asyncio.wait_for(sent.wait(), timeout=5)
     request_id = commands[0]["request_id"]
     forged = json.dumps({"request_id": request_id, "status": "success"})
-    assert not await manager.handle_runner_message("org-b:registered", forged)
+    assert not await manager.handle_runner_message("org-b:registered", socket_b, forged)
     assert not dispatched.done()
     assert request_id != "caller-id"
     valid = json.dumps({"request_id": request_id, "status": "success"})
-    assert await manager.handle_runner_message("org-a:registered", valid)
+    assert await manager.handle_runner_message("org-a:registered", socket_a, valid)
     assert await dispatched == json.loads(valid)
+
+
+@pytest.mark.asyncio
+async def test_old_runner_socket_cannot_remove_replacement_connection():
+    manager = runner_ws.ConnectionManager()
+    first = _AcceptOnlyWebSocket()
+    replacement = _AcceptOnlyWebSocket()
+    await manager.connect(first, "org-acme:registered", _auth_context())
+    await manager.connect(replacement, "org-acme:registered", _auth_context())
+
+    await manager.disconnect("org-acme:registered", first)
+
+    assert manager.active_connections["org-acme:registered"] is replacement
+    assert (
+        manager.snapshot("org-acme", "workspace-org-acme").connection_state
+        == "connected"
+    )
 
 
 @pytest.mark.asyncio

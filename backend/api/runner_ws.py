@@ -95,7 +95,9 @@ class ConnectionManager:
             detail_text="outbound runner socket connected",
         )
 
-    async def disconnect(self, connection_key: str):
+    async def disconnect(self, connection_key: str, websocket: WebSocket):
+        if self.active_connections.get(connection_key) is not websocket:
+            return
         record = self.connection_records.pop(connection_key, None)
         if connection_key in self.active_connections:
             del self.active_connections[connection_key]
@@ -115,7 +117,9 @@ class ConnectionManager:
                 detail_text="outbound runner socket disconnected",
             )
 
-    async def touch(self, connection_key: str):
+    async def touch(self, connection_key: str, websocket: WebSocket):
+        if self.active_connections.get(connection_key) is not websocket:
+            return
         record = self.connection_records.get(connection_key)
         if record:
             self.last_seen_by_org[record.organization_id] = _utc_now_iso()
@@ -216,7 +220,11 @@ class ConnectionManager:
         finally:
             self.pending_responses.pop(request_id, None)
 
-    async def handle_runner_message(self, connection_key: str, data: str) -> bool:
+    async def handle_runner_message(
+        self, connection_key: str, websocket: WebSocket, data: str
+    ) -> bool:
+        if self.active_connections.get(connection_key) is not websocket:
+            return False
         try:
             payload = json.loads(data)
         except json.JSONDecodeError:
@@ -479,11 +487,11 @@ async def runner_endpoint(websocket: WebSocket, token: str):
     try:
         while True:
             data = await websocket.receive_text()
-            await manager.touch(connection_key)
-            if await manager.handle_runner_message(connection_key, data):
+            await manager.touch(connection_key, websocket)
+            if await manager.handle_runner_message(connection_key, websocket, data):
                 continue
             await websocket.send_text(f"Naruon ack: {data}")
     except WebSocketDisconnect:
         pass
     finally:
-        await manager.disconnect(connection_key)
+        await manager.disconnect(connection_key, websocket)
