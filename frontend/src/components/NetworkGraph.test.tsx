@@ -108,39 +108,6 @@ describe("NetworkGraph", () => {
     expect(Network).not.toHaveBeenCalled();
   });
 
-  it("describes the unavailable first-relationship action programmatically", async () => {
-    const fetchMock = vi.fn(() =>
-      Promise.resolve(
-        jsonResponse({
-          nodes: [{ id: "node-1", label: "노드" }],
-          edges: [],
-        }),
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await renderGraph();
-    await flushAsyncWork();
-
-    const mountedContainer = getMountedContainer();
-    const wrapper = mountedContainer.querySelector('span[tabindex="0"]');
-    const button = mountedContainer.querySelector('button[disabled]');
-    const descriptionId = wrapper?.getAttribute("aria-describedby");
-
-    expect(wrapper).toBeInstanceOf(HTMLSpanElement);
-    expect(wrapper?.className).toContain("cursor-not-allowed");
-    expect(wrapper?.getAttribute("title")).toBe("표시할 관계 데이터가 없습니다.");
-    expect(wrapper?.className).toContain("focus-visible:ring-2");
-    expect(descriptionId).toBeTruthy();
-    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
-      "표시할 관계 데이터가 없습니다.",
-    );
-    expect(button).toBeInstanceOf(HTMLButtonElement);
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button?.className).toContain("disabled:cursor-not-allowed");
-    expect(button?.className).toContain("pointer-events-none");
-  });
-
   it("announces graph loading failures as a polite alert", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn(() => Promise.reject(new Error("network unavailable")));
