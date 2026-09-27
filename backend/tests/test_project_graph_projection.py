@@ -1,6 +1,7 @@
 import datetime
 import uuid
 from dataclasses import replace
+from email.message import EmailMessage
 
 import pytest
 import pytest_asyncio
@@ -37,6 +38,7 @@ from services.project_graph import (
     persist_project_graph_projection,
 )
 from services.project_graph.extractors import extract_attachment_facts
+import services.email_import_service as import_service
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -343,6 +345,100 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
                 auth_context=other_user,
             )
         assert denied.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_attachment_fact_failure_rolls_back_email_and_retry_is_idempotent(
+    isolated_fact_sessionmaker,
+    monkeypatch,
+    tmp_path,
+):
+    user_id = f"fact-user-{uuid.uuid4().hex}"
+    organization_id = f"org-fact-{uuid.uuid4().hex[:12]}"
+    message_id = f"<{uuid.uuid4().hex}@example.com>"
+    message = EmailMessage()
+    message["Message-ID"] = message_id
+    message["Date"] = "Sun, 27 Sep 2026 10:00:00 +0000"
+    message["From"] = "partner@example.com"
+    message["To"] = "owner@example.com"
+    message["Subject"] = "Invoice"
+    message.set_content("Please see attached invoice.")
+    message.add_attachment(
+        "Invoice date: 2026-09-27\nTotal: $1,200",
+        subtype="plain",
+        filename="invoice.txt",
+    )
+    eml_path = tmp_path / "invoice.eml"
+    eml_path.write_bytes(message.as_bytes())
+
+    real_persist = import_service.persist_project_graph_projection
+    attempts = 0
+
+    async def fail_once(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            await real_persist(*args, **kwargs)
+            raise RuntimeError("injected projection failure")
+        return await real_persist(*args, **kwargs)
+
+    monkeypatch.setattr(import_service, "persist_project_graph_projection", fail_once)
+    monkeypatch.setattr(
+        import_service.settings, "PROJECT_GRAPH_EXTRACTION_ENABLED", False
+    )
+    async with isolated_fact_sessionmaker() as session:
+
+        async def import_once():
+            return await import_service._import_single_eml(
+                session,
+                eml_path=eml_path,
+                display_filename="invoice.eml",
+                user_id=user_id,
+                organization_id=organization_id,
+            )
+
+        failed = await import_once()
+        assert failed.status == "failed"
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(Email).where(Email.user_id == user_id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ProjectGraphObjectRecord)
+                .where(
+                    ProjectGraphObjectRecord.user_id == user_id,
+                    ProjectGraphObjectRecord.object_type == "attachment_fact",
+                )
+            )
+            == 0
+        )
+
+        imported = await import_once()
+        assert imported.status == "imported"
+        duplicate = await import_once()
+        assert duplicate.status == "skipped_duplicate"
+        assert attempts == 2
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(Email).where(Email.user_id == user_id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ProjectGraphObjectRecord)
+                .where(
+                    ProjectGraphObjectRecord.user_id == user_id,
+                    ProjectGraphObjectRecord.object_type == "attachment_fact",
+                )
+            )
+            == 2
+        )
 
 
 @pytest.mark.asyncio

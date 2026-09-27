@@ -801,6 +801,7 @@ async def _persist_project_graph_projection(
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
     include_project_semantics: bool = True,
+    include_attachment_facts: bool = True,
 ) -> None:
     """Best-effort projection of imported content segments into the project graph.
 
@@ -812,19 +813,22 @@ async def _persist_project_graph_projection(
     if not source_segments:
         return
     try:
-        facts = extract_attachment_facts(source_segments)
         if include_project_semantics:
             project = await _extract_project_semantics_for_import(
                 source_segments, embedding_provider=embedding_provider
             )
-            extraction = ProjectSemanticExtractionResult(
-                objects=project.objects + facts.objects,
-                edges=project.edges + facts.edges,
-                extractor_name=project.extractor_name,
-                extractor_version=project.extractor_version,
-            )
+            if include_attachment_facts:
+                facts = extract_attachment_facts(source_segments)
+                extraction = ProjectSemanticExtractionResult(
+                    objects=project.objects + facts.objects,
+                    edges=project.edges + facts.edges,
+                    extractor_name=project.extractor_name,
+                    extractor_version=project.extractor_version,
+                )
+            else:
+                extraction = project
         else:
-            extraction = facts
+            extraction = extract_attachment_facts(source_segments)
         if not extraction.objects:
             return
         workspace_id = (
@@ -918,6 +922,16 @@ async def _import_single_eml(
 
     session.add(email_obj)
     try:
+        facts = extract_attachment_facts(project_source_segments)
+        if facts.objects:
+            await session.flush()
+            await persist_project_graph_projection(
+                session,
+                extraction=facts,
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=f"workspace-{organization_id or user_id}",
+            )
         await session.commit()
     except Exception:
         await session.rollback()
@@ -931,14 +945,15 @@ async def _import_single_eml(
             reason_code="database_commit_failed",
         )
 
-    await _persist_project_graph_projection(
-        session,
-        project_source_segments,
-        user_id=user_id,
-        organization_id=organization_id,
-        embedding_provider=embedding_provider,
-        include_project_semantics=settings.PROJECT_GRAPH_EXTRACTION_ENABLED,
-    )
+    if settings.PROJECT_GRAPH_EXTRACTION_ENABLED:
+        await _persist_project_graph_projection(
+            session,
+            project_source_segments,
+            user_id=user_id,
+            organization_id=organization_id,
+            embedding_provider=embedding_provider,
+            include_attachment_facts=False,
+        )
 
     return EmailImportItemResult(
         filename=display_filename,
