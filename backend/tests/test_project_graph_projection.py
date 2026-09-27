@@ -439,6 +439,15 @@ async def test_attachment_fact_persists_owner_and_exact_attachment_citation(
         )
         assert first.next_offset == 1
         assert second.next_offset is None
+        assert all(item.validation_status == "format_validated"
+                   for item in first.facts + second.facts)
+        fact.attributes_json = {**fact.attributes_json, "validation_status": "inferred_unverified"}
+        await session.commit()
+        candidate_page = await get_attachment_facts(
+            segment.email_id, limit=10, offset=0, db=session, auth_context=owner,
+        )
+        assert next(item for item in candidate_page.facts
+                    if item.object_uid == fact.object_uid).validation_status == "inferred_unverified"
         assert {item.fact_kind for item in first.facts + second.facts} == {
             "date", "amount"
         }

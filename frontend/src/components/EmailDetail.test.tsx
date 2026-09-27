@@ -368,7 +368,7 @@ describe("EmailDetail", () => {
       if (url.includes("/api/emails/attachment-facts/31?")) return jsonResponse({
         facts: [{ object_uid: "fact-1", email_id: 31, attachment_id: 91,
           fact_kind: "amount", value: "$1,200", source_segment_uid: "segment-2",
-          evidence_excerpt: "Total: $1,200" }],
+          validation_status: "inferred_unverified", evidence_excerpt: "Total: $1,200" }],
         next_offset: null,
       });
       if (url.endsWith("/api/emails/attachments/91/segments/segment-2")) {
@@ -392,6 +392,7 @@ describe("EmailDetail", () => {
     root = createRoot(container);
     await act(async () => { root?.render(<EmailDetail emailId={31} />); });
     await flushAsyncWork();
+    expect(container.textContent).toContain("추론 후보 · 확인 필요");
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/emails/thread/"))).toBe(true);
     expect(container.querySelector("#attachment-segment-segment-1")).toBeNull();
 

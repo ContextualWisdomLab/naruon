@@ -38,6 +38,7 @@ type EmailData = ThreadEmailData & {
 };
 
 type AttachmentFact = {
+  validation_status?: string;
   object_uid: string;
   email_id: number;
   attachment_id: number;
@@ -982,6 +983,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                             )}
                             {threadFacts.filter((fact) => fact.email_id === msg.id && fact.attachment_id === attachment.attachment_id).map((fact) => (
                               <div key={fact.object_uid} className="border-l-2 border-primary/40 pl-3 text-sm">
+                                {fact.validation_status === 'inferred_unverified' && <p className="text-xs text-muted-foreground">추론 후보 · 확인 필요</p>}
                                 <p className="break-words"><span className="font-medium">문서에서 추출한 {factLabels[fact.fact_kind] ?? '내용'}:</span> {toMailBodyText(fact.value)}</p>
                                 <a href={`#attachment-segment-${encodeURIComponent(fact.source_segment_uid)}`} onClick={(event) => void openSourceSegment(event, attachment.attachment_id, fact.source_segment_uid)} aria-label={`${toMailDisplayText(attachment.filename, '첨부파일')}의 ${factLabels[fact.fact_kind] ?? '내용'} 원문 근거 보기`} className="text-primary underline">원문 근거 보기</a>
                                 <p className="break-words text-xs text-muted-foreground">{toMailBodyText(fact.evidence_excerpt)}</p>

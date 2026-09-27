@@ -247,6 +247,7 @@ class EmailDetailResponse(BaseModel):
 
 
 class AttachmentFactItem(BaseModel):
+    validation_status: str = "unverified"
     object_uid: str
     email_id: int
     attachment_id: int
@@ -782,6 +783,9 @@ async def get_attachment_facts(
                 object_uid=fact.object_uid,
                 email_id=fact.email_id,
                 attachment_id=fact.attachment_id,
+                validation_status=str(
+                    (fact.attributes_json or {}).get("validation_status", "unverified")
+                ),
                 fact_kind=str((fact.attributes_json or {}).get("fact_kind", "")),
                 value=str((fact.attributes_json or {}).get("value", "")),
                 source_segment_uid=segment.content_segment_uid,
