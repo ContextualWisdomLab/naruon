@@ -41,6 +41,9 @@ services:
   # sidecar. Bring it up intentionally with:
   #   docker compose --profile newsdom up
   # (or COMPOSE_PROFILES=newsdom).
+  # This default image is API-only and needs an external MinerU executable.
+  # For Linux NVIDIA recognition, also use docker-compose.newsdom-nvidia.yml;
+  # see docs/doctoring/newsdom-runtime-selection.md.
   newsdom:
     profiles:
       - newsdom

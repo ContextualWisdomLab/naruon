@@ -17,6 +17,8 @@ Configure the organization's NewsDOM provider through Naruon's existing
 provider registry. Starting the service alone does not configure a provider.
 The override inherits the full supplier commit pin and internal network;
 it adds no host port mapping. Keep the unauthenticated parser private.
+The override's healthcheck requires the MinerU executable as well as API
+liveness. This checks installation, not model availability or inference.
 
 This configuration requires NVIDIA hardware; it is not a Mac or CPU runtime.
 Models may need download/cache provisioning. Validate recognition using a
