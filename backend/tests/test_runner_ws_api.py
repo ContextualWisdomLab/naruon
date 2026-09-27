@@ -324,6 +324,51 @@ async def test_old_runner_socket_cannot_remove_replacement_connection():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("replace", [True, False])
+async def test_pending_response_fails_when_dispatch_socket_is_lost(replace):
+    manager = runner_ws.ConnectionManager()
+    sent = asyncio.Event()
+    commands = []
+
+    async def capture_command(message):
+        commands.append(json.loads(message))
+        sent.set()
+
+    first = SimpleNamespace(
+        accept=_AcceptOnlyWebSocket().accept, send_text=capture_command
+    )
+    replacement = _AcceptOnlyWebSocket()
+    key = "org-acme:registered"
+    await manager.connect(first, key, _auth_context())
+    dispatched = asyncio.create_task(
+        manager.dispatch_command(
+            "org-acme",
+            "workspace-org-acme",
+            {"action": "write_caldav"},
+            schedule_retry=False,
+        )
+    )
+    await asyncio.wait_for(sent.wait(), timeout=5)
+    request_id = commands[0]["request_id"]
+
+    if replace:
+        await manager.connect(replacement, key, _auth_context())
+        assert not await manager.handle_runner_message(
+            key,
+            replacement,
+            json.dumps({"request_id": request_id, "status": "success"}),
+        )
+    else:
+        await manager.disconnect(key, first)
+    assert not await manager.handle_runner_message(
+        key, first, json.dumps({"request_id": request_id, "status": "success"})
+    )
+    assert (await asyncio.wait_for(dispatched, timeout=1))[
+        "error_code"
+    ] == "runner_not_connected"
+
+
+@pytest.mark.asyncio
 async def test_runner_endpoint_disconnects_on_send_errors(monkeypatch):
     async def registered_key(token: str, auth_context: AuthContext) -> str:
         assert token == "nrn_registered-token"

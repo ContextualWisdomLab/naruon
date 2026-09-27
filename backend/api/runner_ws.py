@@ -61,7 +61,7 @@ class ConnectionManager:
         self.last_seen_by_org: dict[str, str] = {}
         self.last_disconnect_by_org: dict[str, str] = {}
         self.pending_responses: dict[
-            str, tuple[str, asyncio.Future[dict[str, Any]]]
+            str, tuple[str, WebSocket, asyncio.Future[dict[str, Any]]]
         ] = {}
 
     async def connect(
@@ -75,7 +75,10 @@ class ConnectionManager:
         if not organization_id:
             raise _policy_violation()
         now = _utc_now_iso()
+        previous = self.active_connections.get(connection_key)
         self.active_connections[connection_key] = ws
+        if previous is not None and previous is not ws:
+            self._fail_pending_for_socket(previous)
         self.connection_records[connection_key] = RunnerConnectionRecord(
             organization_id=organization_id,
             workspace_id=auth_context.workspace_id,
@@ -98,6 +101,7 @@ class ConnectionManager:
     async def disconnect(self, connection_key: str, websocket: WebSocket):
         if self.active_connections.get(connection_key) is not websocket:
             return
+        self._fail_pending_for_socket(websocket)
         record = self.connection_records.pop(connection_key, None)
         if connection_key in self.active_connections:
             del self.active_connections[connection_key]
@@ -165,7 +169,11 @@ class ConnectionManager:
         outbound_command["request_id"] = request_id
         loop = asyncio.get_running_loop()
         response_future: asyncio.Future[dict[str, Any]] = loop.create_future()
-        self.pending_responses[request_id] = (connection_key, response_future)
+        self.pending_responses[request_id] = (
+            connection_key,
+            connection,
+            response_future,
+        )
         try:
             await connection.send_text(
                 json.dumps(outbound_command, separators=(",", ":"), sort_keys=True)
@@ -237,8 +245,12 @@ class ConnectionManager:
         pending = self.pending_responses.get(request_id)
         if pending is None:
             return False
-        expected_connection_key, response_future = pending
-        if expected_connection_key != connection_key or response_future.done():
+        expected_connection_key, expected_socket, response_future = pending
+        if (
+            expected_connection_key != connection_key
+            or expected_socket is not websocket
+            or response_future.done()
+        ):
             return False
         response_future.set_result(payload)
         record = self.connection_records.get(connection_key)
@@ -286,10 +298,15 @@ class ConnectionManager:
         self.connection_records.clear()
         self.last_seen_by_org.clear()
         self.last_disconnect_by_org.clear()
-        for _, response_future in self.pending_responses.values():
+        for _, _, response_future in self.pending_responses.values():
             if not response_future.done():
                 response_future.cancel()
         self.pending_responses.clear()
+
+    def _fail_pending_for_socket(self, websocket: WebSocket):
+        for _, expected_socket, response_future in self.pending_responses.values():
+            if expected_socket is websocket and not response_future.done():
+                response_future.set_result(dispatch_error("runner_not_connected"))
 
     def _active_connection_for_scope(
         self, organization_id: str, workspace_id: str
