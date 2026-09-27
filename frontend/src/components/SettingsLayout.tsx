@@ -101,6 +101,7 @@ interface AccountConfig {
   pop3_port: number | null;
   pop3_username: string | null;
   has_pop3_password: boolean;
+  personal_reference_address: string | null;
   oauth_client_id: string | null;
   oauth_redirect_uri: string | null;
   has_oauth_client_secret: boolean;
@@ -119,6 +120,7 @@ interface AccountConfigUpdate {
   pop3_port: number | null;
   pop3_username: string | null;
   pop3_password?: string;
+  personal_reference_address: string | null;
   oauth_client_id: string | null;
   oauth_client_secret?: string;
   oauth_redirect_uri: string | null;
@@ -164,6 +166,7 @@ interface AccountFormState {
   pop3Server: string;
   pop3Port: string;
   pop3Username: string;
+  personalReferenceAddress: string;
   oauthClientId: string;
   oauthRedirectUri: string;
 }
@@ -194,6 +197,7 @@ const emptyAccountForm: AccountFormState = {
   pop3Server: '',
   pop3Port: '',
   pop3Username: '',
+  personalReferenceAddress: '',
   oauthClientId: '',
   oauthRedirectUri: '',
 };
@@ -236,6 +240,7 @@ function toAccountForm(config: AccountConfig): AccountFormState {
     pop3Server: config.pop3_server ?? '',
     pop3Port: config.pop3_port?.toString() ?? '',
     pop3Username: config.pop3_username ?? '',
+    personalReferenceAddress: config.personal_reference_address ?? '',
     oauthClientId: config.oauth_client_id ?? '',
     oauthRedirectUri: config.oauth_redirect_uri ?? '',
   };
@@ -265,6 +270,7 @@ function buildAccountUpdate(form: AccountFormState, secrets: AccountSecretFormVa
     pop3_server: optionalText(form.pop3Server),
     pop3_port: optionalPort(form.pop3Port),
     pop3_username: optionalText(form.pop3Username),
+    personal_reference_address: optionalText(form.personalReferenceAddress),
     oauth_client_id: optionalText(form.oauthClientId),
     oauth_redirect_uri: optionalText(form.oauthRedirectUri),
   };
@@ -1367,6 +1373,14 @@ export function SettingsLayout() {
                       <div className="space-y-2">
                         <label htmlFor="pop3-password" className="text-sm font-bold text-muted-foreground">POP3 secret</label>
                         <input id="pop3-password" ref={pop3PasswordInputRef} name="pop3_password" type="password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_pop3_password ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                      </div>
+                    </section>
+
+                    <section aria-label="개인 메일 주소" className="grid gap-3 border-t border-border pt-5">
+                      <div className="space-y-2">
+                        <label htmlFor="personal-reference-address" className="text-sm font-bold text-muted-foreground">개인 메일 주소</label>
+                        <input id="personal-reference-address" name="personal_reference_address" type="email" value={accountForm.personalReferenceAddress} onChange={(event) => updateAccountField('personalReferenceAddress', event.target.value)} placeholder="me@example.com" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                        <p className="text-xs text-muted-foreground">본인만 사용하는 주소를 입력하세요. 이 주소로 자신에게 보낸 메일은 개인 자료로 보관합니다. 공유 메일함 주소는 입력하지 마세요. 비워 두면 자동 분류하지 않습니다.</p>
                       </div>
                     </section>
 

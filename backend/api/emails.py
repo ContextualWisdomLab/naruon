@@ -19,7 +19,6 @@ from services.reply_tracking_service import (
     check_missing_replies,
     configured_email_addresses,
     message_is_from_user,
-    message_is_self_sent,
     thread_requires_reply,
 )
 from services.threading_service import normalize_message_id
@@ -178,6 +177,7 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
         thread_id=canonical_thread_key(email),
         in_reply_to=email.in_reply_to,
         references=email.references,
+        is_personal_reference=email.is_personal_reference is True,
     )
 
 
@@ -209,6 +209,7 @@ class EmailDetailResponse(BaseModel):
     body: str
     in_reply_to: str | None = None
     references: str | None = None
+    is_personal_reference: bool = False
     requires_reply: bool = False
     schedule_conflict: bool = False
 
@@ -367,7 +368,7 @@ async def get_emails(
                 email=email,
                 thread_id=group_key,
                 reply_count=reply_counts[group_key],
-                is_self_sent=message_is_self_sent(email, user_addresses),
+                is_self_sent=email.is_personal_reference is True,
                 requires_reply=thread_requires_reply(
                     list(reversed(thread_messages[group_key])), user_addresses
                 ),

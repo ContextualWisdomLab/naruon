@@ -6,12 +6,13 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from db.models import (
     ContentSegmentRecord,
+    Email,
     ProjectGraphCorrectionRecord,
     ProjectGraphEdgeRecord,
     ProjectGraphObjectRecord,
@@ -510,7 +511,9 @@ async def _load_project_objects(
     statement = (
         select(ProjectGraphObjectRecord)
         .options(selectinload(ProjectGraphObjectRecord.email))
+        .join(Email, ProjectGraphObjectRecord.email_id == Email.id)
         .where(ProjectGraphObjectRecord.workspace_id == scope.workspace_id)
+        .where(*_email_visible_to_scope(scope))
     )
     statement = _apply_scope_filter(statement, ProjectGraphObjectRecord, scope)
     statement = statement.order_by(
@@ -532,18 +535,40 @@ async def _load_project_edges(
         return ()
     statement = (
         select(ProjectGraphEdgeRecord)
+        .join(
+            ContentSegmentRecord,
+            ProjectGraphEdgeRecord.primary_content_segment_id
+            == ContentSegmentRecord.content_segment_id,
+        )
+        .join(Email, ContentSegmentRecord.email_id == Email.id)
         .where(ProjectGraphEdgeRecord.workspace_id == scope.workspace_id)
+        .where(*_email_visible_to_scope(scope))
         .where(
             or_(
-                ProjectGraphEdgeRecord.source_uid.in_(object_uids),
-                ProjectGraphEdgeRecord.target_uid.in_(object_uids),
+                and_(
+                    ProjectGraphEdgeRecord.source_uid.in_(object_uids),
+                    ProjectGraphEdgeRecord.target_uid.in_(object_uids),
+                ),
+                and_(
+                    ProjectGraphEdgeRecord.source_uid
+                    == "segment:" + ContentSegmentRecord.content_segment_uid,
+                    ProjectGraphEdgeRecord.target_uid.in_(object_uids),
+                ),
             )
         )
     )
     statement = _apply_scope_filter(statement, ProjectGraphEdgeRecord, scope)
     statement = statement.order_by(ProjectGraphEdgeRecord.edge_type.asc())
     result = await session.execute(statement)
-    return tuple(result.scalars().all())
+    edges = tuple(result.scalars().all())
+    citations = await _load_citation_map(
+        session, _edge_segment_uids(edges), scope=scope
+    )
+    return tuple(
+        edge
+        for edge in edges
+        if all(uid in citations for uid in edge.source_segment_uids)
+    )
 
 
 async def _load_citation_map(
@@ -586,6 +611,23 @@ def _apply_scope_filter(statement, model, scope: ProjectGraphQueryScope):
     return statement.where(model.user_id == scope.user_id, organization_filter)
 
 
+def _email_visible_to_scope(scope: ProjectGraphQueryScope):
+    organization_filter = (
+        Email.organization_id == scope.organization_id
+        if scope.organization_id is not None
+        else Email.organization_id.is_(None)
+    )
+    if scope.can_read_organization_scope and scope.organization_id is not None:
+        return (
+            organization_filter,
+            or_(
+                Email.user_id == scope.user_id,
+                Email.is_personal_reference.is_(False),
+            ),
+        )
+    return (organization_filter, Email.user_id == scope.user_id)
+
+
 def _segment_matches_scope(
     segment: ContentSegmentRecord,
     scope: ProjectGraphQueryScope,
@@ -603,7 +645,10 @@ def _segment_matches_scope(
     if email.organization_id != scope.organization_id:
         return False
     if scope.can_read_organization_scope and scope.organization_id is not None:
-        return True
+        return (
+            email.user_id == scope.user_id
+            or email.is_personal_reference is False
+        )
     return email.user_id == scope.user_id
 
 

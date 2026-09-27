@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_db
@@ -35,9 +35,25 @@ class TenantConfigUpdate(BaseModel):
     pop3_port: int | None = None
     pop3_username: str | None = None
     pop3_password: str | None = None
+    personal_reference_address: str | None = None
     oauth_client_id: str | None = None
     oauth_client_secret: str | None = None
     oauth_redirect_uri: str | None = None
+
+    @field_validator("personal_reference_address")
+    @classmethod
+    def validate_personal_reference_address(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        address = value.strip().lower()
+        if (
+            len(address) > 254
+            or address.count("@") != 1
+            or any(ord(char) < 33 or ord(char) == 127 or char in ",<>;" for char in address)
+            or not all(address.split("@"))
+        ):
+            raise ValueError("Enter one email address")
+        return address
 
 class TenantConfigResponse(BaseModel):
     user_id: str
@@ -53,6 +69,7 @@ class TenantConfigResponse(BaseModel):
     pop3_port: int | None
     pop3_username: str | None
     has_pop3_password: bool
+    personal_reference_address: str | None
     oauth_client_id: str | None
     oauth_redirect_uri: str | None
     has_oauth_client_secret: bool
@@ -73,6 +90,7 @@ def _tenant_config_response(config) -> TenantConfigResponse:
         pop3_port=config.pop3_port,
         pop3_username=config.pop3_username,
         has_pop3_password=bool(config.pop3_password),
+        personal_reference_address=config.personal_reference_address,
         oauth_client_id=config.oauth_client_id,
         oauth_redirect_uri=config.oauth_redirect_uri,
         has_oauth_client_secret=bool(config.oauth_client_secret),

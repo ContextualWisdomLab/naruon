@@ -84,6 +84,7 @@ def _candidate_columns(matched_text_column, result_kind: str):
         Email.subject.label("subject"),
         Email.sender.label("sender"),
         Email.date.label("date"),
+        Email.is_personal_reference.label("is_personal_reference"),
         _thread_key_expression().label("thread_key"),
         matched_text_column.label("matched_text"),
         cast(literal(result_kind), String).label("result_kind"),

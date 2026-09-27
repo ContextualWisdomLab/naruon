@@ -45,6 +45,11 @@ def configured_email_addresses(tenant_config: object | None) -> set[str]:
     return addresses
 
 
+def personal_reference_addresses(tenant_config: object | None) -> set[str]:
+    address = getattr(tenant_config, "personal_reference_address", None)
+    return {address} if address else set()
+
+
 def message_sender_address(email_message: Email) -> str:
     return _parse_single_address(email_message.sender or "")
 

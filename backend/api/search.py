@@ -74,6 +74,7 @@ class SearchResultItem(BaseModel):
     snippet: str
     thread_id: str | None = None
     reply_count: int = 1
+    is_personal_reference: bool = False
     score: float
     result_kind: str | None = None
     evidence_kinds: list[str] = Field(default_factory=list)
@@ -145,6 +146,7 @@ class EmailCandidateEvidence:
     sender: str
     date: datetime.datetime
     thread_key: str | None
+    is_personal_reference: bool = False
     best_word_similarity: float | None = None
     best_cosine_distance: float | None = None
     channel_ranks: dict[str, int] = dataclasses.field(default_factory=dict)
@@ -222,6 +224,9 @@ def merge_candidate_rows(
                     sender=row.sender,
                     date=row.date,
                     thread_key=row.thread_key,
+                    is_personal_reference=(
+                        getattr(row, "is_personal_reference", None) is True
+                    ),
                 )
                 candidates[email_id] = evidence
             evidence.observe_row(
@@ -273,6 +278,7 @@ def build_search_result_items(
                 reply_count=reply_counts_by_thread_key.get(
                     candidate.thread_key or "", 1
                 ),
+                is_personal_reference=candidate.is_personal_reference,
                 score=fused_score,
                 result_kind=candidate.primary_result_kind,
                 evidence_kinds=sorted(candidate.evidence_kinds),

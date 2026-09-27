@@ -228,7 +228,7 @@ describe("EmailList", () => {
     expect(container.textContent).toContain("보낸 메일");
     expect(container.textContent).toContain("답변 추적");
     expect(container.textContent).toContain("응답 대기 중");
-    expect(container.textContent).toContain("지식 정리");
+    expect(container.textContent).toContain("개인 자료");
   });
 
   it("renders untrusted email fields as plain display text without markup", async () => {

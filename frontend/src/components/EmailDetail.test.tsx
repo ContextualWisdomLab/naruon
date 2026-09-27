@@ -121,6 +121,47 @@ describe("EmailDetail", () => {
     clearRecordedProductEvents();
   });
 
+  it("shows a personal reference as stored material without reply actions", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/31")) {
+        return Promise.resolve(jsonResponse({
+          id: 31,
+          message_id: "<personal-note@example.com>",
+          subject: "Travel note",
+          sender: "me@example.com",
+          body: "Booking details",
+          date: "2026-09-27T00:00:00Z",
+          thread_id: "personal-note",
+          is_personal_reference: true,
+        }));
+      }
+      if (url.endsWith("/api/emails/thread/personal-note")) {
+        return Promise.resolve(jsonResponse({ thread: [] }));
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "Travel note", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root?.render(<EmailDetail emailId={31} actionCommand={{ id: 1, action: "reply-draft" }} />));
+    await waitForCondition(() => container?.textContent?.includes("Booking details") ?? false);
+
+    expect(container.textContent).toContain("개인 자료");
+    expect(container.textContent).not.toContain("스레드 전체");
+    expect(container.textContent).not.toContain("답장 주소:");
+    expect(container.textContent).not.toContain("답장은 선택된 메시지를 기준으로 작성됩니다.");
+    expect(container.querySelector("#reply-draft")).toBeNull();
+    expect(container.textContent).not.toContain("답장 보내기");
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/emails/thread/"))).toBe(false);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/llm/draft"))).toBe(false);
+  });
+
   it("translates email content when the Translate button is clicked", async () => {
     const translation = deferred<Response>();
 

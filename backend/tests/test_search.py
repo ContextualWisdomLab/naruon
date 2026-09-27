@@ -563,6 +563,33 @@ def test_build_search_result_items_orders_dedupes_and_limits():
     assert results[0].reply_count == 1
 
 
+def test_search_result_keeps_personal_reference_marker():
+    from api.search import build_search_result_items, merge_candidate_rows
+
+    row = MockLexicalRow(7, "Private note", "me@example.com", "booking", 0.9)
+    row.is_personal_reference = True
+    settings = _make_fusion_settings()
+    candidates = merge_candidate_rows([("lexical_email", [row])], settings)
+
+    results = build_search_result_items(
+        candidates, settings, limit=1, reply_counts_by_thread_key={}
+    )
+
+    assert results[0].is_personal_reference is True
+    assert results[0].source_message_id == "<test@example.com>"
+
+
+def test_search_channels_select_personal_reference_marker():
+    from services.hybrid_retrieval.retrieval_channels import (
+        build_lexical_email_statement,
+    )
+
+    statement = build_lexical_email_statement(
+        "note", (), candidate_limit=3
+    )
+    assert "email_records.is_personal_reference" in str(statement)
+
+
 def test_build_search_result_items_truncates_long_snippets():
     from api.search import build_search_result_items, merge_candidate_rows
 

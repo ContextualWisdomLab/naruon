@@ -187,6 +187,8 @@ class OntologyService:
         owner_addresses: Iterable[str] | None = None,
         source_email: Email | None = None,
     ):
+        if email_data.get("is_automated_or_list"):
+            return None
         owner_address_list = _owner_address_list(owner_addresses)
         if not owner_address_list and "@" in str(user_id):
             owner_address_list = [str(user_id)]
