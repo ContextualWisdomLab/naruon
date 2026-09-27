@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,35 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_pii_masker():
+    from api.tools import pii_masker_handler
+
+    # Normal case with phone and RRN
+    result = await pii_masker_handler(
+        {"text": "제 번호는 010-1234-5678 이고 주민번호는 900101-1234567 입니다."}
+    )
+    assert (
+        result["masked_text"]
+        == "제 번호는 ***-****-**** 이고 주민번호는 ******-******* 입니다."
+    )
+
+    # Case with no PII
+    result2 = await pii_masker_handler({"text": "여기는 민감한 정보가 없습니다."})
+    assert result2["masked_text"] == "여기는 민감한 정보가 없습니다."
+
+    # Case with another format
+    result3 = await pii_masker_handler(
+        {"text": "Phone: 02-987-6543, ID: 991231 2345678"}
+    )
+    assert result3["masked_text"] == "Phone: ***-****-****, ID: ******-*******"
+
+    # Case with foreigner RRN and 1588 numbers
+    result4 = await pii_masker_handler({"text": "외국인 번호는 990101-5234567 이고 고객센터는 1588-1588 입니다. 0505-123-4567도 가능합니다."})
+    assert result4["masked_text"] == "외국인 번호는 ******-******* 이고 고객센터는 ***-****-**** 입니다. ***-****-****도 가능합니다."
+
+    # Case to ensure generic numbers are not masked
+    result5 = await pii_masker_handler({"text": "내 계좌번호는 1234567890 이고 주문번호는 20231024 입니다."})
+    assert result5["masked_text"] == "내 계좌번호는 1234567890 이고 주문번호는 20231024 입니다."
