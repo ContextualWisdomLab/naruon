@@ -84,8 +84,8 @@ describe("email threading UI helpers", () => {
   });
 
   it("returns a stable label for invalid or missing dates", () => {
-    expect(formatEmailDate(undefined)).toBe("Unknown date");
-    expect(formatEmailDate("not-a-date")).toBe("Unknown date");
+    expect(formatEmailDate(undefined)).toBe("날짜 없음");
+    expect(formatEmailDate("not-a-date")).toBe("날짜 없음");
   });
 
   it("encodes reserved characters in thread URLs", () => {
@@ -121,7 +121,7 @@ describe("email threading UI helpers", () => {
 
   it("returns formatted date for a valid date string", () => {
     const testDate = "2026-04-27T10:00:00Z";
-    expect(formatEmailDate(testDate)).toBe(new Date(testDate).toLocaleString());
+    expect(formatEmailDate(testDate)).toBe(new Date(testDate).toLocaleString("ko-KR"));
   });
 
   it("returns relative thread URL if apiUrl is empty", () => {
