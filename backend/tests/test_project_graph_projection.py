@@ -1,5 +1,6 @@
 import datetime
 import base64
+import asyncio
 import uuid
 from dataclasses import replace
 from email.message import EmailMessage
@@ -460,6 +461,65 @@ async def test_attachment_fact_failure_rolls_back_email_and_retry_is_idempotent(
             )
             == 2
         )
+
+        second_user = f"fact-user-{uuid.uuid4().hex}"
+        second_owner = await import_service._import_single_eml(
+            session,
+            eml_path=eml_path,
+            display_filename="invoice.eml",
+            user_id=second_user,
+            organization_id=organization_id,
+        )
+        assert second_owner.status == "imported"
+        assert await session.scalar(
+            select(func.count()).select_from(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.user_id == second_user,
+                ProjectGraphObjectRecord.object_type == "attachment_fact",
+            )
+        ) == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_same_owner_import_keeps_one_email_and_fact(
+    isolated_fact_sessionmaker,
+):
+    user_id = f"fact-user-{uuid.uuid4().hex}"
+    organization_id = f"org-fact-{uuid.uuid4().hex[:12]}"
+    message = EmailMessage()
+    message["Message-ID"] = f"<{uuid.uuid4().hex}@example.com>"
+    message["Date"] = "Sun, 27 Sep 2026 10:00:00 +0000"
+    message["From"] = "partner@example.com"
+    message["To"] = "owner@example.com"
+    message["Subject"] = "Invoice"
+    message.set_content("Please see attached invoice.")
+    message.add_attachment("Total: $1,200", subtype="plain", filename="invoice.txt")
+    upload = import_service.EmailImportUpload("invoice.eml", message.as_bytes())
+
+    async def import_once():
+        async with isolated_fact_sessionmaker() as session:
+            return await import_service.import_email_uploads(
+                session,
+                uploads=[upload],
+                user_id=user_id,
+                organization_id=organization_id,
+            )
+
+    results = await asyncio.wait_for(
+        asyncio.gather(import_once(), import_once()), timeout=20
+    )
+    assert sorted((item.imported_count, item.skipped_count) for item in results) == [
+        (0, 1), (1, 0)
+    ]
+    async with isolated_fact_sessionmaker() as session:
+        assert await session.scalar(
+            select(func.count()).select_from(Email).where(Email.user_id == user_id)
+        ) == 1
+        assert await session.scalar(
+            select(func.count()).select_from(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.user_id == user_id,
+                ProjectGraphObjectRecord.object_type == "attachment_fact",
+            )
+        ) == 1
 
 
 @pytest.mark.asyncio
