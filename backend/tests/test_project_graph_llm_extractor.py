@@ -29,6 +29,20 @@ def _payload(
     return llm_extractor.ExtractionPayload(objects=list(objects))
 
 
+def test_project_llm_cannot_forge_literal_attachment_facts():
+    segment = _segment("seg1", "Total: ₩1,200,000")
+    payload = _payload(
+        llm_extractor.ExtractedObjectPayload(
+            object_type="attachment_fact",
+            title="Total: ₩1,200,000",
+            summary="Total: ₩1,200,000",
+            source_segment_uids=["seg1"],
+            confidence=0.9,
+        )
+    )
+    assert llm_extractor._validated_objects(payload, {"seg1": segment}) == []
+
+
 @pytest.mark.asyncio
 async def test_grounded_objects_are_mapped_with_citations(monkeypatch):
     monkeypatch.setattr(
@@ -266,10 +280,10 @@ async def test_grounded_relations_link_extracted_objects(monkeypatch):
     )
 
     feature = next(o for o in result.objects if o.object_type.value == "feature")
-    requirement = next(o for o in result.objects if o.object_type.value == "requirement")
-    relation_edges = [
-        edge for edge in result.edges if edge.edge_type == "implements"
-    ]
+    requirement = next(
+        o for o in result.objects if o.object_type.value == "requirement"
+    )
+    relation_edges = [edge for edge in result.edges if edge.edge_type == "implements"]
     assert len(relation_edges) == 1
     relation_edge = relation_edges[0]
     assert relation_edge.source_uid == feature.uid
@@ -280,8 +294,7 @@ async def test_grounded_relations_link_extracted_objects(monkeypatch):
     assert 0.0 <= relation_edge.confidence <= 1.0
     # Segment evidence edges are still emitted alongside the relation edges.
     assert any(
-        edge.edge_type == "segment_evidences_project_object"
-        for edge in result.edges
+        edge.edge_type == "segment_evidences_project_object" for edge in result.edges
     )
 
 
@@ -310,8 +323,7 @@ async def test_relations_with_unknown_type_are_dropped(monkeypatch):
     )
 
     assert all(
-        edge.edge_type == "segment_evidences_project_object"
-        for edge in result.edges
+        edge.edge_type == "segment_evidences_project_object" for edge in result.edges
     )
 
 
@@ -366,8 +378,7 @@ async def test_relations_to_ungrounded_objects_are_dropped(monkeypatch):
     # unknown key) cannot resolve to two grounded objects and is dropped too.
     assert len(result.objects) == 1
     assert all(
-        edge.edge_type == "segment_evidences_project_object"
-        for edge in result.edges
+        edge.edge_type == "segment_evidences_project_object" for edge in result.edges
     )
 
 
@@ -571,9 +582,7 @@ async def test_decided_by_relation_preserves_direction(monkeypatch):
         o for o in result.objects if o.object_type.value == "requirement"
     )
     decision = next(o for o in result.objects if o.object_type.value == "decision")
-    decided_by_edges = [
-        edge for edge in result.edges if edge.edge_type == "decided_by"
-    ]
+    decided_by_edges = [edge for edge in result.edges if edge.edge_type == "decided_by"]
     assert len(decided_by_edges) == 1
     edge = decided_by_edges[0]
     assert edge.source_uid == requirement.uid
@@ -604,9 +613,7 @@ async def test_supersedes_relation_links_two_decisions(monkeypatch):
         _two_decision_segments(), api_key="key", model="gpt-test"
     )
 
-    supersedes_edges = [
-        edge for edge in result.edges if edge.edge_type == "supersedes"
-    ]
+    supersedes_edges = [edge for edge in result.edges if edge.edge_type == "supersedes"]
     assert len(supersedes_edges) == 1
     edge = supersedes_edges[0]
     assert set(edge.source_segment_uids) == {"seg1", "seg2"}
@@ -641,8 +648,7 @@ async def test_decision_relation_synonym_outside_vocabulary_is_dropped(monkeypat
     )
 
     assert all(
-        edge.edge_type == "segment_evidences_project_object"
-        for edge in result.edges
+        edge.edge_type == "segment_evidences_project_object" for edge in result.edges
     )
 
 
@@ -716,11 +722,16 @@ async def test_import_selection_defaults_to_keyword(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_import_selection_routes_through_orchestrator_when_configured(monkeypatch):
+async def test_import_selection_routes_through_orchestrator_when_configured(
+    monkeypatch,
+):
     llm_mock = AsyncMock(return_value="orchestrator-result")
     _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=Mock())
     monkeypatch.setattr(
-        import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
+        import_service.settings,
+        "PROJECT_GRAPH_EXTRACTOR",
+        "orchestrator",
+        raising=False,
     )
     monkeypatch.setattr(
         import_service.settings,
@@ -738,9 +749,7 @@ async def test_import_selection_routes_through_orchestrator_when_configured(monk
 
     assert result == "orchestrator-result"
     # Extraction is routed at the orchestrator endpoint, not the raw provider.
-    assert (
-        llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
-    )
+    assert llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
 
 
 @pytest.mark.asyncio
@@ -751,7 +760,10 @@ async def test_import_selection_orchestrator_falls_back_when_unconfigured(monkey
         monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_result)
     )
     monkeypatch.setattr(
-        import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
+        import_service.settings,
+        "PROJECT_GRAPH_EXTRACTOR",
+        "orchestrator",
+        raising=False,
     )
     monkeypatch.setattr(
         import_service.settings,
@@ -769,3 +781,218 @@ async def test_import_selection_orchestrator_falls_back_when_unconfigured(monkey
 
     assert result is keyword_result
     llm_mock.assert_not_awaited()
+
+
+@pytest.mark.parametrize("invalid", [None, "body", "many", "excerpt", "value", "kind"])
+def test_inferred_attachment_fact_requires_verbatim_evidence(invalid):
+    from dataclasses import replace
+    import hashlib
+
+    segment = replace(
+        _segment("seg1", "Acme will deliver on 2026-10-01."),
+        source_kind="attachment",
+        source_record_uid="attachment:91",
+    )
+    fields = dict(
+        object_type="attachment_fact",
+        title="Delivery commitment",
+        summary="Acme will deliver on 2026-10-01.",
+        source_segment_uids=["seg1"],
+        confidence=0.8,
+        fact_kind="commitment",
+        fact_value="will deliver on 2026-10-01",
+        evidence_excerpt="Acme will deliver on 2026-10-01.",
+    )
+    if invalid == "body":
+        segment = replace(segment, source_kind="email_body")
+    elif invalid == "many":
+        fields["source_segment_uids"] = ["seg1", "seg1"]
+    elif invalid == "excerpt":
+        fields["evidence_excerpt"] = "Invented evidence"
+    elif invalid == "value":
+        fields["fact_value"] = "2027-01-01"
+    elif invalid == "kind":
+        fields["fact_kind"] = "approved"
+    result = llm_extractor._validated_objects(
+        _payload(llm_extractor.ExtractedObjectPayload(**fields)), {"seg1": segment}
+    )
+    if invalid:
+        assert result == []
+    else:
+        assert len(result) == 1
+        fact = result[0][1]
+        assert fact.attributes["validation_status"] == "inferred_unverified"
+        assert fact.attributes["value"] == fields["fact_value"]
+        assert (
+            fact.attributes["source_segment_hash"]
+            == hashlib.sha256(
+                segment.safe_text_content.encode("utf-8", errors="surrogatepass")
+            ).hexdigest()
+        )
+
+
+@pytest.mark.asyncio
+async def test_import_excludes_inferred_attachment_facts_and_incident_edges(
+    monkeypatch,
+):
+    from services.project_graph.models import (
+        ProjectSemanticEdge,
+        ProjectSemanticExtractionResult,
+        ProjectSemanticObject,
+    )
+
+    def obj(uid, kind):
+        return ProjectSemanticObject(
+            uid=uid,
+            object_type=kind,
+            title=uid,
+            summary=uid,
+            source_segment_uids=("seg1",),
+            confidence=0.8,
+            extractor_name="test",
+            extractor_version="1",
+        )
+
+    project = ProjectSemanticExtractionResult(
+        objects=(
+            obj("fact", ProjectObjectType.ATTACHMENT_FACT),
+            obj("requirement", ProjectObjectType.REQUIREMENT),
+        ),
+        edges=(
+            ProjectSemanticEdge("segment:seg1", "fact", "evidence", 0.8, ("seg1",)),
+            ProjectSemanticEdge("fact", "requirement", "relates_to", 0.8, ("seg1",)),
+            ProjectSemanticEdge(
+                "segment:seg1", "requirement", "evidence", 0.8, ("seg1",)
+            ),
+        ),
+        extractor_name="test",
+        extractor_version="1",
+    )
+    monkeypatch.setattr(
+        import_service,
+        "_extract_project_semantics_for_import",
+        AsyncMock(return_value=project),
+    )
+    persist = AsyncMock()
+    monkeypatch.setattr(import_service, "persist_project_graph_projection", persist)
+    session = types.SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    await import_service._persist_project_graph_projection(
+        session,
+        [_segment("seg1", "text")],
+        user_id="u",
+        organization_id="o",
+        include_attachment_facts=False,
+    )
+    extraction = persist.await_args.kwargs["extraction"]
+    assert [item.uid for item in extraction.objects] == ["requirement"]
+    assert [(edge.source_uid, edge.target_uid) for edge in extraction.edges] == [
+        ("segment:seg1", "requirement")
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_second", [False, True])
+async def test_all_attachment_segments_are_processed_in_bounded_requests(
+    monkeypatch, fail_second
+):
+    import json
+    from dataclasses import replace
+
+    segments = [
+        replace(
+            _segment(f"attachment-{i}", "Acme will deliver."), source_kind="attachment"
+        )
+        for i in range(llm_extractor._MAX_SEGMENTS_PER_REQUEST + 1)
+    ]
+    batches = []
+
+    async def call(**kwargs):
+        batch = json.loads(kwargs["segments_json"])["segments"]
+        batches.append([segment["content_segment_uid"] for segment in batch])
+        if fail_second and len(batches) == 2:
+            raise RuntimeError("Synthetic provider failure")
+        return _payload(
+            llm_extractor.ExtractedObjectPayload(
+                object_type="attachment_fact",
+                title="Delivery",
+                summary="Acme will deliver.",
+                source_segment_uids=[batch[-1]["content_segment_uid"]],
+                confidence=0.8,
+                fact_kind="commitment",
+                fact_value="will deliver",
+                evidence_excerpt="Acme will deliver.",
+            )
+        )
+
+    monkeypatch.setattr(llm_extractor, "_call_llm", call)
+    if fail_second:
+        with pytest.raises(RuntimeError, match="Synthetic provider failure"):
+            await llm_extractor.extract_project_semantics_llm(
+                segments, api_key="synthetic", model="synthetic"
+            )
+    else:
+        result = await llm_extractor.extract_project_semantics_llm(
+            segments, api_key="synthetic", model="synthetic"
+        )
+        assert len(result.objects) == 2
+        assert result.objects[-1].source_segment_uids == (
+            segments[-1].content_segment_uid,
+        )
+    assert [uid for batch in batches for uid in batch] == [
+        segment.content_segment_uid for segment in segments
+    ]
+    assert all(
+        len(batch) <= llm_extractor._MAX_SEGMENTS_PER_REQUEST for batch in batches
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote_start,padding", [(1900, 222), (2400, 222), (1900, 0)])
+async def test_long_attachment_quotes_keep_original_citation_and_hash(
+    monkeypatch, quote_start, padding
+):
+    import hashlib
+    import json
+    from dataclasses import replace
+
+    quote = "Acme will deliver." + "z" * padding
+    assert len(quote) <= 240
+    text = "x" * quote_start + quote + "y" * 2000
+    segment = replace(_segment("long-attachment", text), source_kind="attachment")
+    requests = []
+
+    async def call(**kwargs):
+        entries = json.loads(kwargs["segments_json"])["segments"]
+        requests.append(entries)
+        return _payload(
+            *[
+                llm_extractor.ExtractedObjectPayload(
+                    object_type="attachment_fact",
+                    title="Delivery",
+                    summary="Acme will deliver.",
+                    source_segment_uids=[entry["content_segment_uid"]],
+                    confidence=0.7 + len(requests) / 100,
+                    fact_kind="commitment",
+                    fact_value="will deliver",
+                    evidence_excerpt=quote,
+                )
+                for entry in entries
+                if quote in entry["text"]
+            ]
+        )
+
+    monkeypatch.setattr(llm_extractor, "_call_llm", call)
+    result = await llm_extractor.extract_project_semantics_llm(
+        [segment], api_key="synthetic", model="synthetic"
+    )
+    assert len(result.objects) == len(result.edges) == 1
+    fact = result.objects[0]
+    assert result.edges[0].confidence == fact.confidence
+    assert fact.source_segment_uids == (segment.content_segment_uid,)
+    assert fact.attributes["evidence_excerpt"] == quote
+    assert (
+        fact.attributes["source_segment_hash"]
+        == hashlib.sha256(text.encode()).hexdigest()
+    )
+    assert all(len(entry["text"]) <= 2000 for request in requests for entry in request)
+    assert requests[-1][0]["text"].endswith("y" * 100)
