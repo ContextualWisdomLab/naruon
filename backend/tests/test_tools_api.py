@@ -1233,3 +1233,11 @@ async def test_pii_masker():
         {"text": "Phone: 02-987-6543, ID: 991231 2345678"}
     )
     assert result3["masked_text"] == "Phone: ***-****-****, ID: ******-*******"
+
+    # Case with foreigner RRN and 1588 numbers
+    result4 = await pii_masker_handler({"text": "외국인 번호는 990101-5234567 이고 고객센터는 1588-1588 입니다. 0505-123-4567도 가능합니다."})
+    assert result4["masked_text"] == "외국인 번호는 ******-******* 이고 고객센터는 ***-****-**** 입니다. ***-****-****도 가능합니다."
+
+    # Case to ensure generic numbers are not masked
+    result5 = await pii_masker_handler({"text": "내 계좌번호는 1234567890 이고 주문번호는 20231024 입니다."})
+    assert result5["masked_text"] == "내 계좌번호는 1234567890 이고 주문번호는 20231024 입니다."

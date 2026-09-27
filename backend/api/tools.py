@@ -755,8 +755,8 @@ registry.register(
 )
 
 
-_PHONE_PATTERN = re.compile(r"(?<!\d)\d{2,3}[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)")
-_RRN_PATTERN = re.compile(r"(?<!\d)\d{6}[-.\s]?[1-4]\d{6}(?!\d)")
+_PHONE_PATTERN = re.compile(r"(?<!\d)(?:\d{2,4}[-.\s]\d{3,4}[-.\s]\d{4}|\d{4}[-.\s]\d{4})(?!\d)")
+_RRN_PATTERN = re.compile(r"(?<!\d)\d{6}[-.\s]?[1-8]\d{6}(?!\d)")
 
 
 async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
