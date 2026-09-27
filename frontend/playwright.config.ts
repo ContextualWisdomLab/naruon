@@ -27,7 +27,7 @@ export default defineConfig({
           POSTCSS_WORKERS: '1',
           DISABLE_POSTCSS_WORKERS: 'true',
         },
-        port: devServerPort,
+        url: devServerUrl,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
       },

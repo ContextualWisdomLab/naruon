@@ -3,8 +3,9 @@ from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import selectinload
 from db.session import get_db
-from db.models import ContentSegmentRecord, Email, ProjectGraphObjectRecord
+from db.models import Attachment, ContentSegmentRecord, Email, ProjectGraphObjectRecord
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import hashlib
@@ -166,7 +167,9 @@ def _email_list_item(
     )
 
 
-def _email_detail_response(email: Email) -> "EmailDetailResponse":
+def _email_detail_response(
+    email: Email, *, include_attachments: bool = False
+) -> "EmailDetailResponse":
     return EmailDetailResponse(
         id=email.id,
         message_id=email.message_id,
@@ -179,6 +182,17 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
         thread_id=canonical_thread_key(email),
         in_reply_to=email.in_reply_to,
         references=email.references,
+        attachment_evidence=[
+            ThreadAttachmentResponse(
+                attachment_id=attachment.id,
+                filename=_safe_email_display_text(attachment.filename),
+                parse_status=attachment.parse_status,
+                segments=[],
+            )
+            for attachment in email.attachments
+        ]
+        if include_attachments
+        else [],
     )
 
 
@@ -198,6 +212,23 @@ class EmailListItem(BaseModel):
     schedule_conflict: bool = False
 
 
+class ThreadAttachmentSegmentResponse(BaseModel):
+    uid: str
+    text: str
+
+
+class AttachmentSegmentPage(BaseModel):
+    segments: list[ThreadAttachmentSegmentResponse]
+    next_offset: int | None
+
+
+class ThreadAttachmentResponse(BaseModel):
+    attachment_id: int
+    filename: str
+    parse_status: str
+    segments: list[ThreadAttachmentSegmentResponse]
+
+
 class EmailDetailResponse(BaseModel):
     id: int
     message_id: str
@@ -212,9 +243,11 @@ class EmailDetailResponse(BaseModel):
     references: str | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
+    attachment_evidence: list[ThreadAttachmentResponse] = Field(default_factory=list)
 
 
 class AttachmentFactItem(BaseModel):
+    validation_status: str = "unverified"
     object_uid: str
     email_id: int
     attachment_id: int
@@ -734,24 +767,38 @@ async def get_attachment_facts(
     )
     rows = result.all()
     for fact, segment in rows[:limit]:
+        stored_excerpt = (fact.attributes_json or {}).get("evidence_excerpt")
         source_hash = hashlib.sha256(
             segment.safe_text_content.encode("utf-8", errors="surrogatepass")
         ).hexdigest()
         if (
             fact.source_segment_uids != [segment.content_segment_uid]
             or (fact.attributes_json or {}).get("source_segment_hash") != source_hash
+            or (stored_excerpt is not None and (
+                not isinstance(stored_excerpt, str)
+                or not 0 < len(stored_excerpt) <= 240
+                or stored_excerpt not in segment.safe_text_content
+            ))
         ):
-            raise HTTPException(status_code=409, detail="Attachment evidence unavailable")
+            raise HTTPException(
+                status_code=409, detail="Attachment evidence unavailable"
+            )
     return AttachmentFactPage(
         facts=[
             AttachmentFactItem(
                 object_uid=fact.object_uid,
                 email_id=fact.email_id,
                 attachment_id=fact.attachment_id,
+                validation_status=str(
+                    (fact.attributes_json or {}).get("validation_status", "unverified")
+                ),
                 fact_kind=str((fact.attributes_json or {}).get("fact_kind", "")),
                 value=str((fact.attributes_json or {}).get("value", "")),
                 source_segment_uid=segment.content_segment_uid,
-                evidence_excerpt=_safe_email_body(segment.safe_text_content)[:240],
+                evidence_excerpt=_safe_email_body(
+                    (fact.attributes_json or {}).get("evidence_excerpt")
+                    or segment.safe_text_content
+                )[:240],
             )
             for fact, segment in rows[:limit]
         ],
@@ -769,8 +816,12 @@ async def get_email_thread(
 ):
     # Ensure auth context validates the request payload and scopes access
     lookup_values = thread_lookup_values(thread_id)
+    attachment_loader = selectinload(Email.attachments).load_only(
+        Attachment.id, Attachment.filename, Attachment.parse_status
+    )
     result = await db.execute(
         select(Email)
+        .options(attachment_loader)
         .where(
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             or_(
@@ -785,8 +836,90 @@ async def get_email_thread(
 
     items = []
     for email in emails:
-        items.append(_email_detail_response(email))
+        items.append(_email_detail_response(email, include_attachments=True))
     return {"thread": items}
+
+
+async def _get_owned_attachment(
+    db: AsyncSession, auth_context: AuthContext, attachment_id: int
+) -> Attachment:
+    attachment = await db.scalar(
+        select(Attachment)
+        .join(Email, Attachment.email_id == Email.id)
+        .where(
+            Attachment.id == attachment_id,
+            *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
+        )
+    )
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    return attachment
+
+
+@router.get(
+    "/attachments/{attachment_id}/segments", response_model=AttachmentSegmentPage
+)
+async def get_attachment_segments(
+    attachment_id: int,
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    auth_context: AuthContext = Depends(get_auth_context),
+):
+    attachment = await _get_owned_attachment(db, auth_context, attachment_id)
+    segments = (
+        await db.scalars(
+            select(ContentSegmentRecord)
+            .where(
+                ContentSegmentRecord.attachment_id == attachment.id,
+                ContentSegmentRecord.email_id == attachment.email_id,
+                ContentSegmentRecord.source_kind == "attachment",
+            )
+            .order_by(
+                ContentSegmentRecord.ordinal_index,
+                ContentSegmentRecord.content_segment_id,
+            )
+            .offset(offset)
+            .limit(limit + 1)
+        )
+    ).all()
+    return AttachmentSegmentPage(
+        segments=[
+            ThreadAttachmentSegmentResponse(
+                uid=segment.content_segment_uid,
+                text=_safe_email_body(segment.safe_text_content),
+            )
+            for segment in segments[:limit]
+        ],
+        next_offset=offset + limit if len(segments) > limit else None,
+    )
+
+
+@router.get(
+    "/attachments/{attachment_id}/segments/{segment_uid}",
+    response_model=ThreadAttachmentSegmentResponse,
+)
+async def get_attachment_segment(
+    attachment_id: int,
+    segment_uid: str,
+    db: AsyncSession = Depends(get_db),
+    auth_context: AuthContext = Depends(get_auth_context),
+):
+    attachment = await _get_owned_attachment(db, auth_context, attachment_id)
+    segment = await db.scalar(
+        select(ContentSegmentRecord).where(
+            ContentSegmentRecord.attachment_id == attachment.id,
+            ContentSegmentRecord.email_id == attachment.email_id,
+            ContentSegmentRecord.source_kind == "attachment",
+            ContentSegmentRecord.content_segment_uid == segment_uid,
+        )
+    )
+    if segment is None:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    return ThreadAttachmentSegmentResponse(
+        uid=segment.content_segment_uid,
+        text=_safe_email_body(segment.safe_text_content),
+    )
 
 
 class SendEmailRequest(BaseModel):

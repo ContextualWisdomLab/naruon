@@ -42,12 +42,12 @@ function buildReferences(email: ThreadEmailData): string | undefined {
 }
 
 export function formatEmailDate(value?: string | null): string {
-  if (!value) return "Unknown date";
+  if (!value) return "날짜 없음";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
+  if (Number.isNaN(date.getTime())) return "날짜 없음";
 
-  return date.toLocaleString();
+  return date.toLocaleString("ko-KR");
 }
 
 export function buildThreadUrl(apiUrl: string, threadId: string): string {
