@@ -27,7 +27,8 @@ def test_nvidia_runtime_probe_requires_mineru(binary, expected):
 
 
 @pytest.mark.parametrize("configured", [False, True])
-def test_compose_forwards_existing_extraction_settings(configured):
+@pytest.mark.parametrize("nvidia", [False, True])
+def test_compose_forwards_existing_extraction_settings(configured, nvidia):
     import json
     import os
     import shutil
@@ -66,6 +67,7 @@ def test_compose_forwards_existing_extraction_settings(configured):
             "/dev/null",
             "-f",
             "docker-compose.yml",
+            *(["-f", "docker-compose.newsdom-nvidia.yml"] if nvidia else []),
             "config",
             "--format",
             "json",
@@ -85,7 +87,17 @@ def test_compose_forwards_existing_extraction_settings(configured):
         "NEWSDOM_AUTH_MODE": "required",
         "NEWSDOM_RUNTIME_PROFILE": "production",
     }
-    assert "/ready" in newsdom["healthcheck"]["test"][1]
+    assert "/ready" in newsdom["healthcheck"]["test"][-1]
     assert newsdom["build"]["context"].endswith(
-        "#927ff2dec160a00ed11ec045727a422ff7ba4cbd"
+        "#65696f393224a1e08ab42fff5151cbf3639a8a4e"
+    )
+
+    assert newsdom["read_only"] is True
+    assert "no-new-privileges:true" in newsdom["security_opt"]
+    assert "/tmp" in newsdom["tmpfs"]
+    assert any(
+        mount["type"] == "volume"
+        and mount["source"] == "newsdom-model-cache"
+        and mount["target"] == "/home/newsdom"
+        for mount in newsdom["volumes"]
     )
