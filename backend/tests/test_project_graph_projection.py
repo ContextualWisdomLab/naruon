@@ -1,5 +1,6 @@
 import datetime
 import uuid
+from dataclasses import replace
 
 import pytest
 import pytest_asyncio
@@ -146,6 +147,52 @@ async def isolated_fact_sessionmaker():
             async with admin_engine.begin() as conn:
                 await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_project_graph_uid_collision_does_not_transfer_object_ownership(
+    isolated_fact_sessionmaker,
+):
+    first_user = f"fact-user-{uuid.uuid4().hex}"
+    second_user = f"fact-user-{uuid.uuid4().hex}"
+    organization_id = f"org-fact-{uuid.uuid4().hex[:12]}"
+    workspace_id = f"workspace-{organization_id}"
+    async with isolated_fact_sessionmaker() as session:
+        first_segment = await _seed_source_segment(
+            session, user_id=first_user, organization_id=organization_id
+        )
+        first_segment_id = first_segment.content_segment_id
+        original = extract_project_semantics([_source_segment(first_segment)]).objects[0]
+        first_extraction = ProjectSemanticExtractionResult(
+            objects=(original,), edges=(), extractor_name="test", extractor_version="1"
+        )
+        await persist_project_graph_projection(
+            session, extraction=first_extraction, user_id=first_user,
+            organization_id=organization_id, workspace_id=workspace_id,
+        )
+        await session.commit()
+
+        second_segment = await _seed_source_segment(
+            session, user_id=second_user, organization_id=organization_id
+        )
+        colliding = replace(
+            original, source_segment_uids=(second_segment.content_segment_uid,)
+        )
+        second_extraction = replace(first_extraction, objects=(colliding,))
+        with pytest.raises(ValueError, match="different scope"):
+            await persist_project_graph_projection(
+                session, extraction=second_extraction, user_id=second_user,
+                organization_id=organization_id, workspace_id=workspace_id,
+            )
+        await session.rollback()
+
+        persisted = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == original.uid
+            )
+        )
+        assert persisted.user_id == first_user
+        assert persisted.primary_content_segment_id == first_segment_id
 
 
 @pytest.mark.asyncio

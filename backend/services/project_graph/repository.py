@@ -172,6 +172,12 @@ class ProjectGraphRepository:
                 )
                 self._session.add(record)
             else:
+                if (
+                    record.user_id != user_id
+                    or record.organization_id != organization_id
+                    or record.workspace_id != workspace_id
+                ):
+                    raise ValueError("Project graph object belongs to a different scope")
                 record.user_id = user_id
                 record.organization_id = organization_id
                 record.workspace_id = workspace_id
