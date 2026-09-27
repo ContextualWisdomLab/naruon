@@ -144,3 +144,18 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "undici@8.9.0",
     ):
         assert exact_lock_entry in package_records
+
+
+def test_next_og_advisory_security_floor() -> None:
+    """GHSA-vcvr-r3jv-pc5j affects Next.js 16.2.x through 16.3.5."""
+    package = json.loads(read_repo_text("frontend/package.json"))
+    lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+    importer = lock["importers"]["."]
+    for group, name in (("dependencies", "next"), ("devDependencies", "eslint-config-next")):
+        version = package[group][name]
+        assert re.fullmatch(r"16\.\d+\.\d+", version), "require a stable exact Next.js 16 pin"
+        assert tuple(map(int, version.split("."))) >= (16, 3, 6)
+        resolution = importer_resolution(importer, group, name)
+        assert resolution["specifier"] == version
+        assert resolution["version"].split("(", 1)[0] == version
+        assert f"{name}@{version}" in lock["packages"]
