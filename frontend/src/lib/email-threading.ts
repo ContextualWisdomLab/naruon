@@ -1,3 +1,10 @@
+
+export interface AttachmentData {
+  filename: string;
+  content_type?: string;
+  parse_status?: string;
+}
+
 export interface ThreadEmailData {
   id: number;
   subject: string | null;
@@ -9,6 +16,7 @@ export interface ThreadEmailData {
   message_id?: string | null;
   in_reply_to?: string | null;
   references?: string | null;
+  attachments?: AttachmentData[];
 }
 
 export interface ReplyPayload {

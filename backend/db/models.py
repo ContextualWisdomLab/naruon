@@ -807,7 +807,7 @@ class Email(Base):
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
     attachments: Mapped[list["Attachment"]] = relationship(
-        back_populates="email", cascade="all, delete-orphan"
+        back_populates="email", cascade="all, delete-orphan", order_by="Attachment.id"
     )
     content_nodes: Mapped[list["ContentNodeRecord"]] = relationship(
         back_populates="email", cascade="all, delete-orphan"

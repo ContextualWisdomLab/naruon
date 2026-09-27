@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Paperclip } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -73,6 +73,21 @@ function getThreadEventId(email: EmailData) {
 
 function getMessageEventId(email: EmailData) {
   return email.message_id || `email-${email.id}`;
+}
+
+function getAttachmentParseStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case 'parsed':
+      return '분석 완료';
+    case 'pdf_dom_recognition_pending':
+      return '분석 중';
+    case 'unsupported_content_type':
+      return '지원되지 않는 형식';
+    case 'parse_size_limit_exceeded':
+      return '크기 제한으로 분석 불가';
+    default:
+      return '분석 상태 확인 필요';
+  }
 }
 
 function nowMs() {
@@ -570,6 +585,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeEmailSender = toMailDisplayText(email.sender, '보낸 사람');
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
+  const safeAttachments = (email.attachments ?? []).map((file) => ({
+    filename: toMailDisplayText(file.filename, '첨부파일'),
+    contentType: toMailDisplayText(file.content_type, '알 수 없는 형식'),
+    parseStatus: getAttachmentParseStatusLabel(file.parse_status),
+  }));
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
 
@@ -608,7 +628,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
   return (
     <div className="flex h-full flex-col bg-card">
-      <div className="flex items-start bg-gradient-to-br from-card via-card to-primary/5 p-6">
+      <div className="flex flex-col items-start bg-gradient-to-br from-card via-card to-primary/5 p-6">
         <div className="flex w-full items-start gap-4 text-sm">
           <Avatar className="h-11 w-11 border border-primary/10 bg-primary/10 text-primary shadow-sm">
             <AvatarFallback>{safeEmailSender ? safeEmailSender.charAt(0).toUpperCase() : 'U'}</AvatarFallback>
@@ -647,6 +667,22 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             )}
           </div>
         </div>
+
+        {/* 첨부파일 Rail */}
+        {safeAttachments.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2 w-full">
+            {safeAttachments.map((file, idx) => (
+              <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm">
+                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                <span className="font-medium truncate max-w-[150px]">{file.filename}</span>
+                <span className="text-muted-foreground/70 text-[10px]">{file.contentType}</span>
+                <span className="text-muted-foreground/70 text-[10px]" aria-label={`파싱 상태: ${file.parseStatus}`}>
+                  {file.parseStatus}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <Separator />
       <ScrollArea className="flex-1">
