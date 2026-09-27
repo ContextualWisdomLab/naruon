@@ -284,3 +284,29 @@ Backend fact owner [#1795](https://github.com/ContextualWisdomLab/naruon/pull/17
 Consumer [#1793](https://github.com/ContextualWisdomLab/naruon/pull/1793) ordinary-merged that exact prerequisite without rewriting history at two-parent commit `36aafa2976ab26fffbdb998cb82ea956ae765262`. Fresh #1795→#1793 comparison is 5 commits ahead, 0 behind, with exactly the four consumer-owned files `backend/api/emails.py`, `backend/tests/test_emails_api.py`, `frontend/src/components/EmailDetail.test.tsx`, and `frontend/src/components/EmailDetail.tsx`. The backend invariant therefore remains canonical in #1795 while #1793 consumes it through real ancestry rather than copied source.
 
 Both PRs remain Draft/mergeable. #1795's cancelled exact-head core workflows were re-run and #1793 generated fresh exact-head workflows; all are nonterminal. The historical CHANGES_REQUESTED review on #1795 is not a current-head approval. The existing eight-locale, browser/AT/touch/responsive, offline/permission/read-only/stale/conflict/reload, large-data p95, protected PostgreSQL prerequisite, terminal Checks, and independent-review FAIL/PENDING gates remain unchanged.
+
+
+### Attachment fact provenance and consumer UI exact-head update — 2026-09-27
+
+Canonical attachment-fact owner [#1795](https://github.com/ContextualWisdomLab/naruon/pull/1795) now points to exact `168fc550ff7c4e295452dec6bbb2966ecce9fb6d`. The current generation is an ordinary descendant of `606c01325fa7c64c9c6696f049a5d0590d6ba226`: it keeps tenant/workspace ownership checks, commits immediate attachment facts with the imported email, persists deferred-PDF facts before worker commit, binds each candidate to the exact source-segment SHA-256, rejects stale read evidence, scopes import identifiers and PostgreSQL owner locks, and now carries `label_locale` plus `validation_status` metadata. These are source-contract observations, not protected acceptance.
+
+Consumer [#1793](https://github.com/ContextualWisdomLab/naruon/pull/1793) now points to exact `c758e11061279ed37342f708488fcca71ef7a11f`. GitHub comparison from parent `#1795@168fc550…` is **10 commits ahead / 0 behind** and changes exactly the four consumer-owned paths `backend/api/emails.py`, `backend/tests/test_emails_api.py`, `frontend/src/components/EmailDetail.test.tsx`, and `frontend/src/components/EmailDetail.tsx`. The parent contract is therefore consumed through real ancestry, not copied into a sibling. The UI deliberately changed the Korean label from “confirmed” to “extracted from document,” but it remains hard-coded Korean presentation text; it is not eight-locale delivery evidence.
+
+A focused local command was attempted against predecessor exact `81e46c1dc0a565c943f9fbb1379e16ec0cc91af3`:
+
+`DISABLE_BACKGROUND_WORKERS=1 PYTHONWARNINGS=error PYTHONPATH=. python -m pytest -q tests/test_project_graph_projection.py tests/test_project_graph_import_wiring.py tests/test_emails_api.py`
+
+Pytest exited before collection because the execution image lacks `starlette`. Reconstructing the locked environment with `uv sync --locked --offline` also stopped because `langchain-text-splitters==1.1.2` was absent from the local cache and external package retrieval was unavailable. This is **environment BLOCKED / product tests NOT RUN**, never PASS or product FAIL; current-head `168fc550…` supersedes the attempted generation in any case.
+
+| Concern | Exact-head evidence | Gate |
+|---|---|---|
+| Determinism / owner semantics | #1795 source binds owner scope, exact source UID/hash and explicit validation status; #1793 is a real descendant | Source Partial PASS; execution NOT RUN |
+| Persistence / rollback / recovery | Immediate and deferred transaction regressions exist in source | Real PostgreSQL bootstrap, rollback/retry and worker lifecycle execution PENDING |
+| Structured exact alternative | API/list UI exposes fact kind, exact value, excerpt and source-segment anchor | Contract source Partial PASS; hosted/browser evidence PENDING |
+| Accessibility / interaction | Native source links plus loading/error/retry/pagination source paths exist | Real pointer/touch/keyboard/AT, focus and reduced-motion evidence FAIL |
+| Responsive / states | No current-head desktop/mobile/intermediate captures | loading/empty/error/offline/permission/read-only/stale/conflict/retry/busy and screenshots FAIL/PARTIAL |
+| Locales | Backend metadata distinguishes current ko/en extraction labels; UI label is hard-coded Korean | ko/en/ja/zh/vi/es/de/fr resource, wrapping, CJK/expansion and fallback evidence FAIL |
+| Large data / lifecycle | No current-head representative measurement | median/p95, abort/unmount/race cleanup FAIL |
+| Hosted admission | #1795 runs `36292823728–36292823914`; #1793 runs `36292881961–36292882126` | All queued/pending; independent current-head approval absent |
+
+Both PRs remain **Draft / Proposed / Merge HOLD**. The cancelled predecessor runs on `81e46c1d…` and `8ee25886…` do not transfer to the new exact heads, and queued/pending runs are not passing evidence.
