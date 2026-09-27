@@ -46,8 +46,12 @@ function jsonResponse(body: unknown) {
 describe("SettingsLayout", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
+  let failAccountConfigLoad = false;
+  let failAccountConfigSave = false;
 
   beforeEach(() => {
+    failAccountConfigLoad = false;
+    failAccountConfigSave = false;
     oidcMocks.getOidcBrowserConfig.mockReturnValue({
       issuerUrl: "https://login.example.com/realms/naruon",
       clientId: "naruon-web",
@@ -246,6 +250,9 @@ describe("SettingsLayout", () => {
           ]);
         }
         if (String(input) === "/api/accounts/config" && init?.method === "PUT") {
+          if (failAccountConfigSave) {
+            return Promise.reject(new Error("계정 설정 저장 실패"));
+          }
           const body = JSON.parse(String(init.body));
           return jsonResponse({
             user_id: "default",
@@ -267,6 +274,9 @@ describe("SettingsLayout", () => {
           });
         }
         if (String(input) === "/api/accounts/config") {
+          if (failAccountConfigLoad) {
+            return Promise.reject(new Error("계정 설정 조회 실패"));
+          }
           return jsonResponse({
             user_id: "default",
             smtp_server: "smtp.example.com",
@@ -491,6 +501,54 @@ describe("SettingsLayout", () => {
     });
   });
 
+  it("announces session loading before enabling logout", async () => {
+    oidcMocks.getOidcBrowserConfig.mockReturnValue(null);
+    const defaultFetch = vi.mocked(fetch);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/auth/session") {
+        return new Promise<Response>(() => undefined);
+      }
+      return defaultFetch(input, init);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+    });
+
+    const developerTab = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "개발자",
+    );
+    await act(async () => {
+      developerTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
+    const loginButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "OIDC 로그인");
+    const loginReason = container.querySelector('#oidc-login-availability');
+    expect(loginButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(loginReason?.className).not.toContain("sr-only");
+    expect(loginReason?.textContent).toBe("OIDC 로그인을 사용하려면 관리자에게 OIDC 설정을 요청하세요.");
+    expect(logoutButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(logoutButton?.getAttribute("aria-describedby")).toBe("oidc-logout-availability");
+    const logoutReason = container.querySelector('#oidc-logout-availability');
+    expect(logoutReason?.className).not.toContain("sr-only");
+    expect(logoutReason?.textContent).toBe("로그인 세션을 확인하는 중입니다. 잠시만 기다려 주세요.");
+    logoutButton?.focus();
+    expect(document.activeElement).toBe(logoutButton);
+
+    await act(async () => {
+      logoutButton?.click();
+      await Promise.resolve();
+    });
+    expect(oidcMocks.clearOidcSession).not.toHaveBeenCalled();
+  });
+
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -596,6 +654,64 @@ describe("SettingsLayout", () => {
     expect(putBody).not.toHaveProperty("pop3_password");
     expect(putBody).not.toHaveProperty("oauth_client_secret");
     expect(container.textContent).toContain("계정 설정을 저장했습니다");
+  });
+
+  it("announces an account configuration load error instead of a loading state", async () => {
+    failAccountConfigLoad = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    expect(saveButton?.getAttribute("aria-describedby")).toBe("account-save-availability");
+    const accountReason = container.querySelector('#account-save-availability');
+    expect(accountReason?.className).not.toContain("sr-only");
+    expect(accountReason?.textContent).toBe("계정 설정을 불러오지 못했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.");
+    expect(container.textContent).not.toContain("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+  });
+
+  it("keeps account saving available after a save failure", async () => {
+    failAccountConfigSave = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    const accountForm = container.querySelector('form');
+    await act(async () => {
+      accountForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const updatedSaveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    expect(container.textContent).toContain("API request failed");
+    expect(updatedSaveButton?.getAttribute("aria-disabled")).toBeNull();
+    expect(updatedSaveButton?.getAttribute("aria-describedby")).toBeNull();
   });
 
   it("loads and saves AI model registry entries without public identity headers or secret replay", async () => {
