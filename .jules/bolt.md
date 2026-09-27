@@ -34,3 +34,7 @@
 ## 2026-09-26 - useMemo on email lists can be ineffective if dependencies update frequently
 **Learning:** A reviewer rejected the `useMemo` optimization for mapping email arrays because the dependencies (`emails` or `selectedEmailId`) invalidate during common operations (e.g., email selection), rendering the caching ineffective and preserving the O(N) rendering cost.
 **Action:** When a reviewer explicitly rejects an optimization like `useMemo` due to rapid dependency invalidation, log the failure and explore alternative architectural approaches like virtualization, rather than reapplying the rejected optimization.
+
+## 2026-09-27 - Aborting ineffective micro-optimizations
+**Learning:** Even if a potential performance improvement seems structurally sound (like `useMemo`), if previous PRs or code reviewers have already explicitly rejected it because it provides no real-world benefit or the dependencies invalidate too frequently, it must not be re-submitted.
+**Action:** Always heed PR review rejections regarding performance optimizations. If no alternative measurable improvement can be identified cleanly within bounds (e.g., virtualization is too complex for a <50 line fix), stop the task and do not create or re-submit a PR.
