@@ -243,3 +243,10 @@ Canonical product backend writer [naruon#1795](https://github.com/ContextualWisd
 | UI consumption | #1793/#1792 remain separate product lanes | No cross-boundary truth transfer; released contract/ACL required |
 
 Do not merge until #1794 is integrated through its owner path, executable negative fixtures cover the FAIL rows, and exact-head hosted security/schema/database gates plus current independent review are terminal.
+
+
+### Attachment stack current-head correction — 2026-09-27
+
+The cited-fact owner advanced ordinarily to [#1795 `831911acc2d8b2f7399319ae3c8a3d16d358460c`](https://github.com/ContextualWisdomLab/naruon/pull/1795), adding owned-thread retrieval and `email_id` to the response contract. The UI owner advanced to [#1793 `924dddb6c6121874ae9c2618e9b41ca393f28cb0`](https://github.com/ContextualWisdomLab/naruon/pull/1793), was retargeted to #1795's branch, and ordinary-merged that exact parent while preserving both backend fact contracts and the four-file UI delta. This removes the unprotected sibling dependency without closing either PR.
+
+#1793 remains Draft and inherits #1795 as a prerequisite. Its new cited-fact UI adds loading, error/retry, pagination, per-message placement and exact source-segment links, but keeps Korean copy and fact labels in component source. The earlier eight-locale, real-browser/AT/touch/responsive, offline/permission/read-only/stale/conflict, reload, large-data p95, current-head hosted checks and independent-review FAIL/PENDING rows remain authoritative. #1795 remains Draft with #1794 protected PostgreSQL acceptance and the domain/persistence/idempotency/recovery rows still pending.
