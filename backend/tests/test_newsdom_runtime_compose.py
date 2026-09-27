@@ -13,11 +13,63 @@ def test_nvidia_runtime_probe_requires_mineru(binary, expected):
         (Path(__file__).parents[2] / "docker-compose.newsdom-nvidia.yml").read_text()
     )
     command = configuration["services"]["newsdom"]["healthcheck"]["test"][3]
-    with patch("shutil.which", return_value=binary), patch(
-        "urllib.request.urlopen"
-    ) as request:
+    with (
+        patch("shutil.which", return_value=binary),
+        patch("urllib.request.urlopen") as request,
+    ):
         request.return_value.status = 200
         with pytest.raises(SystemExit) as result:
             exec(command)
         assert result.value.code == expected
         assert request.called == bool(binary)
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_compose_forwards_existing_extraction_settings(configured):
+    import json
+    import os
+    import shutil
+    import subprocess
+
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("Docker Compose CLI unavailable")
+    environment = {
+        "PATH": os.environ["PATH"],
+        "POSTGRES_PASSWORD": "synthetic",
+        "AUTH_SESSION_HMAC_SECRET": "synthetic",
+        "ENCRYPTION_KEY": "synthetic",
+    }
+    expected = {
+        "PROJECT_GRAPH_EXTRACTION_ENABLED": "false",
+        "PROJECT_GRAPH_EXTRACTOR": "keyword",
+        "PROJECT_GRAPH_ORCHESTRATOR_BASE_URL": "",
+        "ALLOWED_LLM_BASE_URL_HOSTS": "ollama",
+    }
+    if configured:
+        expected.update(
+            PROJECT_GRAPH_EXTRACTION_ENABLED="true",
+            PROJECT_GRAPH_EXTRACTOR="orchestrator",
+            PROJECT_GRAPH_ORCHESTRATOR_BASE_URL="http://orchestrator:8000/v1",
+        )
+        environment.update(expected)
+    result = subprocess.run(
+        [
+            docker,
+            "compose",
+            "--env-file",
+            "/dev/null",
+            "-f",
+            "docker-compose.yml",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=Path(__file__).parents[2],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    actual = json.loads(result.stdout)["services"]["backend"]["environment"]
+    assert {key: actual[key] for key in expected} == expected

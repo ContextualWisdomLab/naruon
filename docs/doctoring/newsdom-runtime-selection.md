@@ -26,3 +26,26 @@ nonconfidential PDF, then verify the resulting source segments and citations
 before accepting the deployment. Compose validation does not prove model
 availability, OCR quality, or successful inference. A CPU deployment still
 needs a reviewed MinerU runtime supplied to the API image.
+
+## Attachment inference configuration
+
+After deploying the attachment-inference worker, configure the existing
+organization-scoped LLM provider and select extraction through the backend's
+Compose environment. The default remains disabled with the keyword selector.
+For orchestrator routing, set these existing variables in the deployment `.env`:
+
+```dotenv
+PROJECT_GRAPH_EXTRACTION_ENABLED=true
+PROJECT_GRAPH_EXTRACTOR=orchestrator
+PROJECT_GRAPH_ORCHESTRATOR_BASE_URL=http://orchestrator:8000/v1
+```
+
+Use the actual deployed, trusted endpoint. The base Compose configuration permits
+only the local Ollama provider host; a different provider requires a reviewed
+deployment override that explicitly allowlists its hostname. The example does
+not deploy an orchestrator service or grant network access. Provider
+credentials remain in the scoped registry. Compose previously omitted these
+variables, so host `.env` settings never reached the backend. Recreate the backend
+through the normal deployment procedure after changing its environment. Validate
+recognized segments and inferred candidates with exact source citations; enabling
+the flags alone is not inference acceptance.

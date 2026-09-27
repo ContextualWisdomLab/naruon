@@ -75,6 +75,9 @@ services:
       DEBUG: "false"
       ALLOW_LOCAL_LLM_PROVIDERS: "true"
       ALLOWED_LLM_BASE_URL_HOSTS: ollama
+      PROJECT_GRAPH_EXTRACTION_ENABLED: ${PROJECT_GRAPH_EXTRACTION_ENABLED:-false}
+      PROJECT_GRAPH_EXTRACTOR: ${PROJECT_GRAPH_EXTRACTOR:-keyword}
+      PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: ${PROJECT_GRAPH_ORCHESTRATOR_BASE_URL:-}
       # NewsDOM sidecar allowlist. The actual base_url + bearer token are
       # configured per-organization in the database (NewsdomProvider), NOT here;
       # this only authorizes the container hostname for the SSRF-safe client.
