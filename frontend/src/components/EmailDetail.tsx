@@ -278,12 +278,18 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
           },
         };
       });
+      setFactsError(null);
       setSourceFocusUid(segmentUid);
-    } catch {
+    } catch (error) {
       if (requestId !== threadRequestIdRef.current) return;
-      setThreadFacts([]);
-      setFactsNextOffset(null);
-      setFactsError('원문 근거가 변경됐습니다. 다시 불러와 주세요.');
+      const status = (error as { status?: number }).status;
+      if (status === 404 || status === 409) {
+        setThreadFacts([]);
+        setFactsNextOffset(null);
+        setFactsError('원문 근거를 확인할 수 없습니다. 다시 불러와 주세요.');
+      } else {
+        setFactsError('원문을 불러오지 못했습니다. 근거 링크를 다시 눌러 주세요.');
+      }
     }
   }, []);
 

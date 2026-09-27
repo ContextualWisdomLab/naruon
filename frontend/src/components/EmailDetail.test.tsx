@@ -354,6 +354,7 @@ describe("EmailDetail", () => {
 
   it("loads attachment segments on open and retrieves an exact cited segment", async () => {
     let pageRequests = 0;
+    let sourceRequests = 0;
     const email = {
       id: 31, message_id: "<attachment@example.com>", thread_id: "attachment-thread",
       sender: "sender@example.com", recipients: "user@example.com", subject: "Invoice",
@@ -371,6 +372,7 @@ describe("EmailDetail", () => {
         next_offset: null,
       });
       if (url.endsWith("/api/emails/attachments/91/segments/segment-2")) {
+        if (++sourceRequests === 1) return new Response(null, { status: 503 });
         return jsonResponse({ uid: "segment-2", text: "Total: $1,200" });
       }
       if (url.includes("/api/emails/attachments/91/segments?")) {
@@ -409,6 +411,11 @@ describe("EmailDetail", () => {
     const sourceLink = container.querySelector<HTMLAnchorElement>('a[href="#attachment-segment-segment-2"]');
     await act(async () => { sourceLink?.click(); });
     await flushAsyncWork();
+    expect(container.textContent).toContain("근거 링크를 다시 눌러 주세요.");
+    expect(container.contains(sourceLink)).toBe(true);
+    await act(async () => { sourceLink?.click(); });
+    await flushAsyncWork();
+    expect(container.textContent).not.toContain("근거 링크를 다시 눌러 주세요.");
     expect(container.querySelector("#attachment-segment-segment-2")?.textContent).toBe("Total: $1,200");
     expect(document.activeElement?.id).toBe("attachment-segment-segment-2");
 
