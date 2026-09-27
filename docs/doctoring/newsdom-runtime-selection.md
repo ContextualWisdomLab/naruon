@@ -6,8 +6,10 @@ Compose uses `/ready`, which requires both parser authentication and an availabl
 MinerU runtime. The supplier at `927ff2dec160a00ed11ec045727a422ff7ba4cbd`
 provides `Dockerfile.nvidia` with MinerU 3.4.4.
 
-On a Linux amd64 host with an NVIDIA GPU and NVIDIA Container Toolkit, select
-the existing runtime image:
+The existing MinerU 3.4.4 runtime fails the combined GPU dependency audit.
+See [the audit and migration requirement](newsdom-gpu-dependency-audit-20260928.md).
+The following reproduces its Linux NVIDIA configuration; deployment acceptance
+requires the migrated, audited runtime and real OCR verification:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.newsdom-nvidia.yml \
