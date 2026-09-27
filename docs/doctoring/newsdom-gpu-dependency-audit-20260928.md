@@ -68,3 +68,37 @@ The independent existing DOM defect that omitted model-declared blank pages is r
 - Legacy audit: `beb837c0daad728c7b9189dcb718576978395916ee57e21f352c676dfb222e64` (local scratch receipt; reproduce before acceptance).
 - 4.x hashed resolution: `1b5cb0b178c603cbb16c8dd5f4daccc9e7e5a377668f8959d4c53377732bf14d` (local scratch receipt; reproduce before acceptance).
 - 4.x audit: `6409ebfe316fb6d95636e6c41b2d01caa2ad0811e68e7b2a34e6edca64a5e1ce` (local scratch receipt; reproduce before acceptance).
+
+
+## Actual macOS CPU raster OCR
+
+The isolated 4.0.7 runtime completed native `tier="advanced"`, `ocr_mode="ocr"`,
+`page_range="all"` inference through an explicit loopback llama.cpp VLM server.
+The input is a synthetic three-page image PDF without embedded text, with a
+blank second page. Exact assertions passed for `계약 금액: 1,200원` and
+`납기: 2026년 10월 1일`, page indices `[0, 1, 2]`, and the empty middle page.
+Native inference reported 1235.62 seconds; the guarded verification exited zero.
+The content list contains text on pages 0 and 2; the middle JSON preserves page 1.
+
+This revises the earlier tier assumption: advanced with the tested explicit VLM
+also recognizes this Korean fixture. It does not prove all language selections,
+all documents, the supplier adapter, Linux NVIDIA execution, or deployment.
+Title spacing differs from the rendered source, so this is not exact transcription
+of every character. Model files were downloaded at immutable revisions and
+verified against publisher hashes; those hashes do not establish training quality.
+The owned loopback server was stopped after terminal verification.
+
+Scratch evidence under `/tmp/newsdom-mineru4-runtime-20260928`:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| synthetic-korean.pdf | b91c289f5dc106fda436361ea6ecdea71282c2643f9283285756fae964626cf0 |
+| run_korean_ocr.py | df1d8c4a246b1c06a918e33202d68287730abdd5426cfa33972a03295dc75698 |
+| actual-middle.json | 1826cdaadce6670ee4045bb9cfe0b0ed98cbbe7e314e1a074a794e0af19d3580 |
+| actual-content-list.json | ac42a1f8f8ac714b81a80efef25c75b0238ea86270f1098ebb7784b23c9fad9a |
+| model-receipts.json | 55e3f8a54fd5d1459545f8ce85a08ddd1597d761be357d1ccb32a08a64604564 |
+
+The first unguarded helper failed because Python spawn re-executed parsing during
+child-process bootstrap. Moving execution under a `__main__` guard fixed that
+local helper defect; the original failure log is retained. No warning suppression,
+assertion relaxation, inference deadline, or elapsed-time cancellation was added.
