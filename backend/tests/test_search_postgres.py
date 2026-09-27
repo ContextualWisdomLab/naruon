@@ -19,6 +19,9 @@ import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+
 import httpx
 import pytest
 import pytest_asyncio
@@ -32,6 +35,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
 from db.models import (
+    Attachment,
     Base,
     ContentNodeRecord,
     ContentSegmentRecord,
@@ -40,6 +44,7 @@ from db.models import (
 )
 from db.session import get_db, get_readonly_db
 from main import app
+from services.hybrid_retrieval.retrieval_channels import build_dense_attachment_statement
 
 pytestmark = pytest.mark.postgres
 
@@ -48,6 +53,12 @@ _MIGRATION_PATH = (
     / "alembic"
     / "versions"
     / "0010_language_agnostic_search.py"
+)
+_ATTACHMENT_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic"
+    / "versions"
+    / "0018_attachment_filename_search.py"
 )
 
 
@@ -60,36 +71,71 @@ def _load_search_migration_module():
     return module
 
 
+def _load_attachment_search_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "migration_0018_attachment_filename_search", _ATTACHMENT_MIGRATION_PATH
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 async def _apply_language_agnostic_search_ddl(conn) -> None:
     migration_module = _load_search_migration_module()
     await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
     await conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
     await conn.execute(text(migration_module._NORMALIZE_FUNCTION_DDL))
-    for create_index_statement in (
-        migration_module._TRIGRAM_INDEX_STATEMENTS.values()
-    ):
+    for create_index_statement in migration_module._TRIGRAM_INDEX_STATEMENTS.values():
         await conn.execute(text(create_index_statement))
+    attachment_migration = _load_attachment_search_migration_module()
+
+    def upgrade(sync_connection):
+        with patch.object(
+            attachment_migration,
+            "op",
+            Operations(MigrationContext.configure(sync_connection)),
+        ):
+            attachment_migration.upgrade()
+
+    await conn.run_sync(upgrade)
 
 
 @pytest_asyncio.fixture(scope="function")
 async def hybrid_search_sessionmaker():
-    engine = create_async_engine(settings.DATABASE_URL)
+    schema = f"hybrid_search_{uuid.uuid4().hex[:12]}"
+    root_engine = create_async_engine(settings.DATABASE_URL)
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        connect_args={"server_settings": {"search_path": f"{schema},public"}},
+    )
+    schema_created = False
     try:
+        try:
+            async with root_engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
+                await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        except (
+            InvalidAuthorizationSpecificationError,
+            InvalidPasswordError,
+            OperationalError,
+            OSError,
+        ) as exc:
+            pytest.skip(f"PostgreSQL smoke database unavailable: {exc}")
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(Base.metadata.create_all, checkfirst=False)
             await _apply_language_agnostic_search_ddl(conn)
         yield async_sessionmaker(engine, expire_on_commit=False)
-    except (
-        InvalidAuthorizationSpecificationError,
-        InvalidPasswordError,
-        OperationalError,
-        OSError,
-    ) as exc:
-        pytest.skip(f"PostgreSQL smoke database unavailable: {exc}")
     finally:
         await engine.dispose()
+        if schema_created:
+            async with root_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        await root_engine.dispose()
 
 
 @pytest.fixture
@@ -333,9 +379,7 @@ async def test_vietnamese_matches_across_nfc_nfd_and_without_diacritics(
         decomposed_results = await _search(client, decomposed_query)
         ascii_results = await _search(client, ascii_query)
 
-    assert seeded.vietnamese_email_id in [
-        item["id"] for item in decomposed_results
-    ]
+    assert seeded.vietnamese_email_id in [item["id"] for item in decomposed_results]
     assert seeded.vietnamese_email_id in [item["id"] for item in ascii_results]
 
 
@@ -366,6 +410,113 @@ async def test_content_segments_and_project_objects_are_searched(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "parse_status",
+    [
+        "unsupported_content_type",
+        "pdf_dom_recognition_pending",
+        "pdf_dom_recognition_failed",
+        "parsed",
+    ],
+)
+async def test_attachment_search_excludes_unparsed_source_and_preserves_owner_scope(
+    dev_auth_dependency_overrides,
+    hybrid_search_db_override,
+    hybrid_search_sessionmaker,
+    parse_status,
+):
+    owner = f"attachment-owner-{uuid.uuid4().hex}"
+    other = f"attachment-other-{uuid.uuid4().hex}"
+    filename = f"fallback{uuid.uuid4().hex[:12]}.pdf"
+    content = (
+        "Parsed attachment text"
+        if parse_status == "parsed"
+        else "JVBERi1zeW50aGV0aWMtc291cmNl"
+    )
+    async with hybrid_search_sessionmaker() as session:
+        emails = [
+            _make_email(
+                user_id=user_id,
+                organization_id="org-acme",
+                subject="File",
+                body="Attached.",
+            )
+            for user_id in (owner, other)
+        ]
+        session.add_all(emails)
+        await session.flush()
+        session.add_all(
+            Attachment(
+                email_id=email.id,
+                filename=filename,
+                content=content,
+                content_type="application/pdf",
+                parse_status=parse_status,
+                parse_content_type="application/pdf",
+                parser_key="none",
+                embedding=_unit_embedding_vector(0),
+            )
+            for email in emails
+        )
+        await session.commit()
+
+        dense_results = await session.execute(
+            build_dense_attachment_statement(
+                _unit_embedding_vector(0),
+                [Email.user_id == owner, Email.organization_id == "org-acme"],
+                10,
+            )
+        )
+        dense_rows = dense_results.all()
+        assert [row.email_id for row in dense_rows] == (
+            [emails[0].id] if parse_status == "parsed" else []
+        )
+        if dense_rows:
+            assert dense_rows[0].matched_text == content
+
+    async with _client(user_id=owner, organization_id="org-acme") as client:
+        results = await _search(client, filename.removesuffix(".pdf"))
+
+    assert [item["id"] for item in results] == [emails[0].id]
+    assert results[0]["result_kind"] == "attachment_content"
+    assert filename in results[0]["snippet"]
+    assert "JVBERi1zeW50aGV0aWMtc291cmNl" not in results[0]["snippet"]
+
+
+@pytest.mark.asyncio
+async def test_attachment_filename_index_migration_roundtrip(
+    hybrid_search_sessionmaker,
+):
+    migration = _load_attachment_search_migration_module()
+    async with hybrid_search_sessionmaker() as session:
+        connection = await session.connection()
+
+        def check_indexes(sync_connection):
+            with patch.object(
+                migration, "op", Operations(MigrationContext.configure(sync_connection))
+            ):
+                migration.downgrade()
+                old_index = sync_connection.execute(
+                    text(
+                        "SELECT pg_get_indexdef(to_regclass('ix_email_attachments_content_trgm'))"
+                    )
+                ).scalar_one()
+                assert "search_normalized_text(content)" in old_index
+                migration.upgrade()
+                new_index = sync_connection.execute(
+                    text(
+                        "SELECT pg_get_indexdef(to_regclass('ix_email_attachments_content_trgm'))"
+                    )
+                ).scalar_one()
+                assert "coalesce(filename" in new_index.lower()
+                assert "coalesce(content" in new_index.lower()
+                assert "USING gist" in new_index
+                assert "siglen='256'" in new_index
+
+        await connection.run_sync(check_indexes)
+
+
+@pytest.mark.asyncio
 async def test_search_results_are_owner_scoped(
     dev_auth_dependency_overrides,
     hybrid_search_db_override,
@@ -381,11 +532,10 @@ async def test_search_results_are_owner_scoped(
     assert results  # the owner sees their own emails
     async with hybrid_search_sessionmaker() as session:
         other_user_email_ids = {
-            row for (row,) in (
+            row
+            for (row,) in (
                 await session.execute(
-                    text(
-                        "SELECT id FROM email_records WHERE user_id = :user_id"
-                    ),
+                    text("SELECT id FROM email_records WHERE user_id = :user_id"),
                     {"user_id": seeded.other_user_id},
                 )
             ).all()
@@ -439,9 +589,7 @@ async def test_dense_channel_fuses_with_lexical_channel(
             return_value=[_unit_embedding_vector(0)],
         ),
     ):
-        async with _client(
-            user_id=user_id, organization_id=organization_id
-        ) as client:
+        async with _client(user_id=user_id, organization_id=organization_id) as client:
             results = await _search(client, "semantic planning query")
 
     result_ids = [item["id"] for item in results]
