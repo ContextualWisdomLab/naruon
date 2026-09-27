@@ -9,7 +9,7 @@ services:
         - CMD
         - python3
         - -c
-        - "import shutil,urllib.request,sys; sys.exit(0 if shutil.which('mineru') and urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"
+        - "import shutil,urllib.request,sys; sys.exit(0 if shutil.which('mineru') and urllib.request.urlopen('http://localhost:8000/ready').status == 200 else 1)"
     deploy:
       resources:
         reservations:

@@ -22,6 +22,8 @@ def test_nvidia_runtime_probe_requires_mineru(binary, expected):
             exec(command)
         assert result.value.code == expected
         assert request.called == bool(binary)
+        if binary:
+            request.assert_called_once_with("http://localhost:8000/ready")
 
 
 @pytest.mark.parametrize("configured", [False, True])
@@ -53,10 +55,13 @@ def test_compose_forwards_existing_extraction_settings(configured):
             PROJECT_GRAPH_ORCHESTRATOR_BASE_URL="http://orchestrator:8000/v1",
         )
         environment.update(expected)
+        environment["NEWSDOM_API_TOKEN"] = "synthetic-parser-token"
     result = subprocess.run(
         [
             docker,
             "compose",
+            "--profile",
+            "newsdom",
             "--env-file",
             "/dev/null",
             "-f",
@@ -73,3 +78,14 @@ def test_compose_forwards_existing_extraction_settings(configured):
     )
     actual = json.loads(result.stdout)["services"]["backend"]["environment"]
     assert {key: actual[key] for key in expected} == expected
+
+    newsdom = json.loads(result.stdout)["services"]["newsdom"]
+    assert newsdom["environment"] == {
+        "NEWSDOM_API_TOKEN": "synthetic-parser-token" if configured else "",
+        "NEWSDOM_AUTH_MODE": "required",
+        "NEWSDOM_RUNTIME_PROFILE": "production",
+    }
+    assert "/ready" in newsdom["healthcheck"]["test"][1]
+    assert newsdom["build"]["context"].endswith(
+        "#072ea5dbfa616eb4113843a64abee71982b9aaa9"
+    )
