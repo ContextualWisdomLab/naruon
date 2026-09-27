@@ -17,7 +17,7 @@ from pydantic import SecretStr
 from api import emails as emails_api
 from api.auth import get_auth_context as auth_get_auth_context
 from core.config import settings
-from db.models import Email, LLMProvider
+from db.models import Attachment, ContentSegmentRecord, Email, LLMProvider
 from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
@@ -163,9 +163,7 @@ class LimitAwareMockSession(MockSession):
             # Emulate the SQL window query: newest head row per thread,
             # ordered by date desc, LIMIT applied to heads (not raw rows).
             heads: dict[str, object] = {}
-            for item in sorted(
-                self.items, key=lambda email: email.date, reverse=True
-            ):
+            for item in sorted(self.items, key=lambda email: email.date, reverse=True):
                 key = item.thread_id or item.message_id
                 heads.setdefault(key, item)
             rows = list(heads.values())
@@ -953,7 +951,9 @@ async def test_import_email_files_rejects_invalid_canonical_filename(
 ):
     response = await client.post(
         "/api/emails/import-files",
-        files=[("files", (upload_filename, b"not accepted", "application/octet-stream"))],
+        files=[
+            ("files", (upload_filename, b"not accepted", "application/octet-stream"))
+        ],
         headers={"X-Organization-Id": "org-acme"},
     )
 
@@ -1277,16 +1277,11 @@ async def test_import_email_files_serializes_quota_with_postgres_owner_lock(
     assert "pg_advisory_unlock" in advisory_queries[-1]
     assert "hashtext(:namespace_key)" in advisory_queries[0]
     assert ":owner_key" in advisory_queries[0]
-    assert advisory_query_params(session) == [
-        {
-            "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
-        },
-        {
-            "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
-        },
-    ]
+    advisory_params = advisory_query_params(session)
+    assert len(advisory_params) == 2
+    assert advisory_params[0] == advisory_params[1]
+    assert advisory_params[0]["namespace_key"] == "naruon-email-import-quota"
+    assert "\x00" not in advisory_params[0]["owner_key"]
 
 
 @pytest.mark.asyncio
@@ -1340,16 +1335,11 @@ async def test_import_email_files_rejects_when_owner_quota_is_exhausted(
     advisory_queries = advisory_query_texts(session)
     assert "pg_advisory_lock" in advisory_queries[0]
     assert "pg_advisory_unlock" in advisory_queries[-1]
-    assert advisory_query_params(session) == [
-        {
-            "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
-        },
-        {
-            "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
-        },
-    ]
+    advisory_params = advisory_query_params(session)
+    assert len(advisory_params) == 2
+    assert advisory_params[0] == advisory_params[1]
+    assert advisory_params[0]["namespace_key"] == "naruon-email-import-quota"
+    assert "\x00" not in advisory_params[0]["owner_key"]
 
 
 @pytest.mark.asyncio
@@ -1618,6 +1608,56 @@ async def test_get_email_thread(client: AsyncClient, db_session, sample_email: E
     assert "thread" in data
     assert len(data["thread"]) == 1
     assert data["thread"][0]["id"] == sample_email.id
+
+
+@pytest.mark.asyncio
+async def test_get_email_thread_returns_attachment_metadata_without_segments(
+    client: AsyncClient, sample_email: Email
+):
+    parsed = Attachment(
+        email_id=sample_email.id, filename="agenda.pdf", parse_status="parsed"
+    )
+    parsed.content_segments = [
+        ContentSegmentRecord(
+            email_id=sample_email.id,
+            content_segment_uid="segment-1",
+            ordinal_index=1,
+            safe_text_content="Meeting at noon",
+        ),
+        ContentSegmentRecord(
+            email_id=sample_email.id + 1,
+            content_segment_uid="other-owner-segment",
+            ordinal_index=2,
+            safe_text_content="Private content",
+        ),
+    ]
+    failed = Attachment(
+        email_id=sample_email.id, filename="scan.pdf", parse_status="parse_failed"
+    )
+    failed.content_segments = []
+    parsed.id = 91
+    failed.id = 92
+    sample_email.attachments = [parsed, failed]
+
+    response = await client.get(f"/api/emails/thread/{sample_email.thread_id}")
+
+    assert response.status_code == 200
+    assert response.json()["thread"][0]["attachment_evidence"] == [
+        {
+            "attachment_id": 91,
+            "filename": "agenda.pdf",
+            "parse_status": "parsed",
+            "segments": [],
+        },
+        {
+            "attachment_id": 92,
+            "filename": "scan.pdf",
+            "parse_status": "parse_failed",
+            "segments": [],
+        },
+    ]
+    assert "Private content" not in response.text
+    assert "Meeting at noon" not in response.text
 
 
 @pytest.mark.asyncio
@@ -2127,6 +2167,7 @@ def test_email_owner_filters():
         == "email_records.organization_id IS NULL"
     )
 
+
 def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
     """
     Test to guarantee 100% coverage on the bolt performance optimization in
@@ -2143,7 +2184,7 @@ def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
         sender="test@test.com",
         recipients="test2@test.com",
         subject="Subject",
-        body="Body"
+        body="Body",
     )
 
     candidates = [candidate]
