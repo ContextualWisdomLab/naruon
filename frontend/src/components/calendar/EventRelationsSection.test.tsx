@@ -22,6 +22,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
   const relation = {
     relation_uid: 'erel_1',
     relation_type: 'candidate',
+    evidence_code: 'occupied_interval_overlap',
     enabler_event_uid: null,
     confidence: null,
     corrected: false,
@@ -36,10 +37,15 @@ it('shows cited source links and saves a relation correction in one click', asyn
       citations: [{ segment_uid: 'segment_2', label: '시작', excerpt: '20260927T103000Z' }],
     },
   };
+  const reciprocal = {
+    ...relation,
+    relation_uid: 'erel_2',
+    evidence_code: 'reciprocal_ical_dependency',
+  };
   const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ next_cursor: null });
   vi.spyOn(apiClient, 'get').mockImplementation(async (path) => (
     path === '/api/events/relations?visibility_scope=organization'
-      ? { items: [relation], next_cursor: null }
+      ? { items: [relation, reciprocal], next_cursor: null }
       : { items: [], next_cursor: null }
   ));
   const patch = vi.spyOn(apiClient, 'patch').mockImplementation(async (_path, body) => ({
@@ -54,7 +60,7 @@ it('shows cited source links and saves a relation correction in one click', asyn
     await Promise.resolve();
   });
   expect(post).toHaveBeenCalledTimes(4);
-  expect(container.querySelectorAll('a[href^="/mail?id="]')).toHaveLength(1);
+  expect(container.querySelectorAll('a[href^="/mail?id="]')).toHaveLength(2);
   expect(container.querySelector('a[href="/api/events/sources/doc_13"]')).not.toBeNull();
   expect(container.textContent).toContain('20260927T100000Z');
   expect(container.textContent).toContain('원본 상태: 확정');
@@ -62,6 +68,8 @@ it('shows cited source links and saves a relation correction in one click', asyn
   expect(container.textContent).toContain('원본 장소: Conference Hall');
   expect(container.textContent).toContain('시간이 겹침');
   expect(container.textContent).toContain('시간만 확인됨 · 관계 판단 전');
+  expect(container.textContent).toContain('선행 관계 확인 필요');
+  expect(container.textContent).toContain('원본 일정이 서로를 선행 일정으로 지정함');
 
   const correction = [...container.querySelectorAll('button')].find(
     (button) => button.textContent === '별개 일정',

@@ -906,11 +906,19 @@ async def _reconcile_event_dependencies(
             if len(candidates) != 1:
                 continue
             enabler = candidates[0]
-            if (
-                enabler.event_uid == dependent.event_uid
-                or enabler.starts_at >= dependent.starts_at
-            ):
+            if enabler.event_uid == dependent.event_uid:
                 continue
+            reciprocal = any(
+                item["target_uid"] == dependent.source_event_key
+                for item in enabler.dependency_evidence
+            )
+            relation_type = "candidate" if reciprocal else "enables"
+            evidence_code = (
+                "reciprocal_ical_dependency"
+                if reciprocal
+                else "explicit_ical_dependency"
+            )
+            enabler_uid = None if reciprocal else enabler.event_uid
             source_uid, target_uid = sorted((enabler.event_uid, dependent.event_uid))
             relation_uid = (
                 "erel_"
@@ -933,10 +941,10 @@ async def _reconcile_event_dependencies(
                     organization_id=auth_context.organization_id,
                     workspace_id=auth_context.workspace_id,
                     visibility_scope=visibility_scope,
-                    relation_type="enables",
-                    enabler_event_uid=enabler.event_uid,
+                    relation_type=relation_type,
+                    enabler_event_uid=enabler_uid,
                     confidence=None,
-                    evidence_code="explicit_ical_dependency",
+                    evidence_code=evidence_code,
                     source_segment_uids=source_segment_uids,
                     created_at=datetime.datetime.now(datetime.timezone.utc),
                 )
@@ -946,13 +954,15 @@ async def _reconcile_event_dependencies(
                         EventRelationRecord.target_event_uid,
                     ],
                     set_={
-                        "relation_type": "enables",
-                        "enabler_event_uid": enabler.event_uid,
-                        "evidence_code": "explicit_ical_dependency",
+                        "relation_type": relation_type,
+                        "enabler_event_uid": enabler_uid,
+                        "evidence_code": evidence_code,
                         "source_segment_uids": source_segment_uids,
                     },
                     where=and_(
-                        EventRelationRecord.relation_type == "candidate",
+                        EventRelationRecord.relation_type.in_(
+                            ("candidate", "enables") if reciprocal else ("candidate",)
+                        ),
                         EventRelationRecord.corrected_at.is_(None),
                     ),
                 )

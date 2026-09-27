@@ -239,12 +239,12 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             dependencies_ics = (
                 "BEGIN:VCALENDAR\nVERSION:2.0\n"
                 "BEGIN:VEVENT\nUID:early@example.com\n"
-                "DTSTART:20260928T100000Z\nDTEND:20260928T123000Z\n"
-                "SUMMARY:Early\nEND:VEVENT\n"
+                "DTSTART:20260928T121500Z\nDTEND:20260928T124500Z\n"
+                "SUMMARY:Prerequisite\nEND:VEVENT\n"
                 "BEGIN:VEVENT\nUID:later@example.com\n"
                 "DTSTART:20260928T120000Z\nDTEND:20260928T130000Z\n"
                 "RELATED-TO;RELTYPE=DEPENDS-ON:early@example.com\n"
-                "SUMMARY:Later\nEND:VEVENT\nEND:VCALENDAR"
+                "SUMMARY:Dependent\nEND:VEVENT\nEND:VCALENDAR"
             )
             await upload_calendar_source(
                 CalendarSourceUploadRequest(
@@ -266,7 +266,7 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             assert relation.enabler_event_uid == next(
                 event.event_uid
                 for event in (relation.source, relation.target)
-                if event.title == "Early"
+                if event.title == "Prerequisite"
             )
             assert any(
                 citation.label == "선행 일정"
@@ -294,7 +294,7 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
                     enabler_event_uid=next(
                         event.event_uid
                         for event in (relation.source, relation.target)
-                        if event.title == "Later"
+                        if event.title == "Dependent"
                     ),
                 ),
                 "personal",
@@ -536,6 +536,42 @@ async def test_calendar_document_relations_keep_source_and_owner_boundary():
             with pytest.raises(HTTPException) as invalid_cursor:
                 await list_event_relations("organization", owner, session, "bad")
             assert invalid_cursor.value.status_code == 422
+            mutual = await upload_calendar_source(
+                CalendarSourceUploadRequest(
+                    ics_text=(
+                        "BEGIN:VCALENDAR\nVERSION:2.0\n"
+                        "BEGIN:VEVENT\nUID:mutual-a@example.com\n"
+                        "DTSTART:20261003T080000Z\nDTEND:20261003T090000Z\n"
+                        "RELATED-TO;RELTYPE=DEPENDS-ON:mutual-b@example.com\n"
+                        "SUMMARY:Mutual A\nEND:VEVENT\n"
+                        "BEGIN:VEVENT\nUID:mutual-b@example.com\n"
+                        "DTSTART:20261003T100000Z\nDTEND:20261003T110000Z\n"
+                        "RELATED-TO;RELTYPE=DEPENDS-ON:mutual-a@example.com\n"
+                        "SUMMARY:Mutual B\nEND:VEVENT\nEND:VCALENDAR"
+                    ),
+                    visibility_scope="personal",
+                ),
+                owner,
+                session,
+            )
+            await reconcile_event_relations(
+                "personal", owner, session, mode="dependencies"
+            )
+            mutual_ids = {event.event_uid for event in mutual}
+            mutual_relation = next(
+                item
+                for item in (
+                    await list_event_relations("personal", owner, session)
+                ).items
+                if {item.source_event_uid, item.target_event_uid} == mutual_ids
+            )
+            assert mutual_relation.relation_type == "candidate"
+            assert mutual_relation.enabler_event_uid is None
+            assert mutual_relation.evidence_code == "reciprocal_ical_dependency"
+            assert all(
+                any(citation.label == "선행 일정" for citation in event.citations)
+                for event in (mutual_relation.source, mutual_relation.target)
+            )
     finally:
         await scoped_engine.dispose()
         async with root_engine.begin() as connection:

@@ -92,13 +92,14 @@ ledger. It stores cited time overlaps as unresolved `candidate` relations with
 no numeric confidence; overlap alone does not prove a commitment conflict.
 For an explicit `RELATED-TO;RELTYPE=DEPENDS-ON` UID, it stores a directional
 `enables` relation when the referenced event is unambiguous in the
-owner-visible scope and starts before the dependent event. Explicit source
-evidence upgrades an uncorrected time-overlap candidate; a human correction
+owner-visible scope. The source assertion determines direction regardless of
+the events' relative start times. Reciprocal assertions remain an unresolved
+`candidate` with both source citations rather than choosing a direction.
+Explicit source evidence upgrades an uncorrected time-overlap candidate; a human correction
 still wins. RFC 9253 defines `DEPENDS-ON` as a dependency in some manner, not
 a finish-to-start schedule. The resulting `enables` verdict reports the
 source assertion, not proof that one event has finished or permission to move
-either event. Equal or reversed start order remains unclassified until the
-source relation semantics can be checked more fully. The correction audit
+either event. The correction audit
 records direction changes. The draft does not supply authenticated
 CalDAV inbound sync, lodging or approval adapters, shared-entity classification,
 or evaluated automatic `unrelated` verdicts. The existing CalDAV account sync

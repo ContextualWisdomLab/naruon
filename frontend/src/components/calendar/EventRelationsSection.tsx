@@ -22,6 +22,7 @@ interface EventRelation {
   relation_type: RelationType;
   enabler_event_uid: string | null;
   confidence: number | null;
+  evidence_code: string;
   corrected: boolean;
   source: EventSource;
   target: EventSource;
@@ -357,8 +358,8 @@ export function EventRelationsSection() {
         <article key={relation.relation_uid} className="mt-4 border-t border-border pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">{relation.scope === 'personal' ? '개인' : '조직'}</span>
-            <span className="font-semibold">{labels[relation.relation_type]}</span>
-            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : relation.relation_type === 'enables' ? '원본 일정의 선행 관계 기준' : '시간만 확인됨 · 관계 판단 전'}</span>
+            <span className="font-semibold">{relation.relation_type === 'candidate' && relation.evidence_code === 'reciprocal_ical_dependency' ? '선행 관계 확인 필요' : labels[relation.relation_type]}</span>
+            <span className="text-xs text-muted-foreground">{relation.corrected ? '직접 수정함' : relation.relation_type === 'enables' ? '원본 일정의 선행 관계 기준' : relation.evidence_code === 'reciprocal_ical_dependency' ? '원본 일정이 서로를 선행 일정으로 지정함' : '시간만 확인됨 · 관계 판단 전'}</span>
           </div>
           {relation.relation_type === 'enables' && relation.enabler_event_uid ? (
             <p className="mt-2 text-xs text-muted-foreground">{relation.enabler_event_uid === relation.source.event_uid ? relation.source.title : relation.target.title} → {relation.enabler_event_uid === relation.source.event_uid ? relation.target.title : relation.source.title}</p>
