@@ -20,7 +20,13 @@ Trivy 0.74.0 reports six vulnerabilities on the baseline and zero on the repaire
 Frontend tests: initial concurrent build/test invocation timed out in one existing 5-second UI test (436 passed). With the same unchanged timeouts and code, the repeat passes all 437 tests in 51 files. Do not interpret the first invocation as green. Lock resolution also emitted registry latency and pre-existing ESLint 9 deprecation warnings; the subsequent frozen install completed successfully.
 
 
-## Advisory-specific follow-up, 2026-09-28
+## Advisory-specific follow-up, 2026-09-27 UTC
+
+This follow-up was recorded in commit `3fc5ebcbd22e24f05cfd978fbd22c2d8c16fb63a`
+at 2026-09-27 17:41:16 UTC (2026-09-28 02:41:16 Asia/Seoul). The checks
+below had completed before that record; the former date-only heading used
+Asia/Seoul. The subsequent PR #1799 review was submitted at
+2026-09-27 18:11:06 UTC on `cf9124f1c834f9343dee8f6e9d10be5a5d0c7242`.
 
 [GHSA-vcvr-r3jv-pc5j](https://github.com/vercel/next.js/security/advisories/GHSA-vcvr-r3jv-pc5j)
 affects Next.js `>=16.2.0,<16.3.6`; the primary advisory identifies 16.3.6 as
