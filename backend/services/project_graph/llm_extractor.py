@@ -47,7 +47,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 LLM_EXTRACTOR_NAME = "llm_grounded_project_graph"
-LLM_EXTRACTOR_VERSION = "2026.09.27.1"
+LLM_EXTRACTOR_VERSION = "2026.09.27.2"
 
 _MAX_SEGMENTS_PER_REQUEST = 40
 _MAX_SEGMENT_TEXT_CHARS = 2000
@@ -373,7 +373,7 @@ async def extract_project_semantics_llm(
 ) -> ProjectSemanticExtractionResult:
     segment_list = [
         segment for segment in segments if segment.safe_text_content.strip()
-    ][:_MAX_SEGMENTS_PER_REQUEST]
+    ]
     if not segment_list:
         return ProjectSemanticExtractionResult(
             objects=(),
@@ -382,18 +382,23 @@ async def extract_project_semantics_llm(
             extractor_version=LLM_EXTRACTOR_VERSION,
         )
 
-    payload = await _call_llm(
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        segments_json=_segments_json(segment_list),
-    )
-    segments_by_uid = {segment.content_segment_uid: segment for segment in segment_list}
-    objects_with_keys = _validated_objects(payload, segments_by_uid)
-    objects = [semantic_object for _, semantic_object in objects_with_keys]
-    objects_by_local_key = _index_objects_by_local_key(objects_with_keys)
-    edges = _evidence_edges(objects)
-    edges.extend(_relation_edges(payload.relations, objects_by_local_key))
+    objects = []
+    edges = []
+    for offset in range(0, len(segment_list), _MAX_SEGMENTS_PER_REQUEST):
+        batch = segment_list[offset : offset + _MAX_SEGMENTS_PER_REQUEST]
+        payload = await _call_llm(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            segments_json=_segments_json(batch),
+        )
+        segments_by_uid = {segment.content_segment_uid: segment for segment in batch}
+        objects_with_keys = _validated_objects(payload, segments_by_uid)
+        batch_objects = [semantic_object for _, semantic_object in objects_with_keys]
+        objects_by_local_key = _index_objects_by_local_key(objects_with_keys)
+        objects.extend(batch_objects)
+        edges.extend(_evidence_edges(batch_objects))
+        edges.extend(_relation_edges(payload.relations, objects_by_local_key))
     return ProjectSemanticExtractionResult(
         objects=tuple(objects),
         edges=tuple(edges),
