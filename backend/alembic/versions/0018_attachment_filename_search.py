@@ -24,7 +24,7 @@ def upgrade() -> None:
         "email_attachments",
         [
             text(
-                "(search_normalized_text(coalesce(filename, '') || ' ' || coalesce(content, ''))) gist_trgm_ops(siglen=256)"
+                "(search_normalized_text(coalesce(filename, '') || ' ' || CASE WHEN parse_status = 'parsed' THEN coalesce(content, '') ELSE '' END)) gist_trgm_ops(siglen=256)"
             )
         ],
         postgresql_using="gist",

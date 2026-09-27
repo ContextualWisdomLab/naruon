@@ -19,7 +19,7 @@ segments and project-graph objects gain embeddings with the batch
 embedding work routed through contextual-orchestrator).
 """
 
-from sqlalchemy import Select, String, cast, func, literal, select
+from sqlalchemy import Select, String, case, cast, func, literal, select
 
 from db.models import (
     Attachment,
@@ -67,7 +67,10 @@ def attachment_search_text_expression():
     return (
         func.coalesce(Attachment.filename, "")
         + " "
-        + func.coalesce(Attachment.content, "")
+        + case(
+            (Attachment.parse_status == "parsed", func.coalesce(Attachment.content, "")),
+            else_="",
+        )
     )
 
 

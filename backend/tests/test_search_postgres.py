@@ -409,10 +409,15 @@ async def test_content_segments_and_project_objects_are_searched(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "parse_status",
+    ["unsupported_content_type", "pdf_dom_recognition_pending", "pdf_dom_recognition_failed"],
+)
 async def test_unparsed_attachment_is_searchable_by_filename_only_for_owner(
     dev_auth_dependency_overrides,
     hybrid_search_db_override,
     hybrid_search_sessionmaker,
+    parse_status,
 ):
     owner = f"attachment-owner-{uuid.uuid4().hex}"
     other = f"attachment-other-{uuid.uuid4().hex}"
@@ -433,9 +438,9 @@ async def test_unparsed_attachment_is_searchable_by_filename_only_for_owner(
             Attachment(
                 email_id=email.id,
                 filename=filename,
-                content="",
+                content="JVBERi1zeW50aGV0aWMtc291cmNl",
                 content_type="application/pdf",
-                parse_status="unsupported_content_type",
+                parse_status=parse_status,
                 parse_content_type="application/pdf",
                 parser_key="none",
             )
@@ -449,6 +454,7 @@ async def test_unparsed_attachment_is_searchable_by_filename_only_for_owner(
     assert [item["id"] for item in results] == [emails[0].id]
     assert results[0]["result_kind"] == "attachment_content"
     assert filename in results[0]["snippet"]
+    assert "JVBERi1zeW50aGV0aWMtc291cmNl" not in results[0]["snippet"]
 
 
 @pytest.mark.asyncio
