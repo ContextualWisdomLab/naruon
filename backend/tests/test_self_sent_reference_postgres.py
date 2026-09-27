@@ -20,7 +20,9 @@ from services.hybrid_retrieval.retrieval_channels import (
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_self_note_rollback_and_same_message_across_owners(monkeypatch, caplog):
+async def test_self_note_rollback_and_same_message_across_owners(
+    monkeypatch, caplog, tmp_path
+):
     schema = f"e1_reference_{uuid.uuid4().hex[:12]}"
     root_engine = create_async_engine(settings.DATABASE_URL)
     scoped_engine = create_async_engine(
@@ -210,6 +212,35 @@ async def test_self_note_rollback_and_same_message_across_owners(monkeypatch, ca
             ).all()
             assert [row.email_id for row in body_hits] == [first_email_id]
             assert [row.email_id for row in attachment_hits] == [first_email_id]
+
+        from services.email_import_service import _import_single_eml
+
+        eml_path = tmp_path / "self-note.eml"
+        eml_path.write_bytes(
+            b"From: owner@example.com\nTo: owner@example.com\n"
+            b"Subject: Imported note\nMessage-ID: <imported-note@example.com>\n\n"
+            b"Remember the booking.\n"
+        )
+        async with sessions() as session:
+            result = await _import_single_eml(
+                session,
+                eml_path=eml_path,
+                display_filename=eml_path.name,
+                user_id="owner-c",
+                organization_id="org-1",
+                owner_addresses={"owner@example.com"},
+            )
+            assert result.status == "imported"
+            imported = (
+                await session.execute(select(Email).where(Email.user_id == "owner-c"))
+            ).scalar_one()
+            assert imported.is_personal_reference is True
+            task = (
+                await session.execute(
+                    select(TicketTask).where(TicketTask.user_id == "owner-c")
+                )
+            ).scalar_one()
+            assert task.related_email_id == imported.id
     finally:
         await scoped_engine.dispose()
         async with root_engine.begin() as connection:
