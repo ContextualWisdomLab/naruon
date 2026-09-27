@@ -822,7 +822,7 @@ export function SettingsLayout() {
     <div className="flex h-full min-w-0 min-h-0 bg-background text-foreground flex-col overflow-x-hidden">
       <header className="flex h-20 shrink-0 items-center border-b border-border bg-card px-4 md:px-8 overflow-hidden">
         <h1 className="text-xl md:text-2xl font-bold flex shrink-0 items-center gap-3">
-          <Settings className="size-6 text-primary" />
+          <Settings className="size-6 text-primary"  aria-hidden="true" />
           <span className="sm:hidden">설정</span>
           <span className="hidden sm:inline">설정</span>
         </h1>
@@ -858,7 +858,7 @@ export function SettingsLayout() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${activeTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
               >
-                <tab.icon className="size-4" /> {tab.id}
+                <tab.icon className="size-4" aria-hidden="true" /> {tab.id}
               </button>
             ))}
           </div>
@@ -978,7 +978,7 @@ export function SettingsLayout() {
                               </dl>
                             </div>
                             <div className="flex shrink-0 items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-bold text-muted-foreground">
-                              <CheckCircle2 className="size-3.5 text-primary" />
+                              <CheckCircle2 className="size-3.5 text-primary"  aria-hidden="true" />
                               {provider.fingerprint ? `Key ${provider.fingerprint}` : '로컬 credential 없음'}
                             </div>
                           </div>
@@ -1002,7 +1002,7 @@ export function SettingsLayout() {
                     className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
                   >
                     <div className="flex items-center gap-3 border-b border-border pb-4">
-                      <div className="rounded-xl bg-blue-100 p-2.5"><Bot className="size-5 text-blue-700" /></div>
+                      <div className="rounded-xl bg-blue-100 p-2.5"><Bot className="size-5 text-blue-700"  aria-hidden="true" /></div>
                       <div>
                         <h3 className="font-bold text-lg">상용 API 모델 등록</h3>
                         <p className="text-xs text-muted-foreground">OpenAI, Anthropic 등의 API 연동</p>
@@ -1059,7 +1059,7 @@ export function SettingsLayout() {
                     className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
                   >
                     <div className="flex items-center gap-3 border-b border-border pb-4">
-                      <div className="rounded-xl bg-emerald-100 p-2.5"><Cpu className="size-5 text-emerald-700" /></div>
+                      <div className="rounded-xl bg-emerald-100 p-2.5"><Cpu className="size-5 text-emerald-700"  aria-hidden="true" /></div>
                       <div>
                         <h3 className="font-bold text-lg">로컬 모델 등록</h3>
                         <p className="text-xs text-muted-foreground">Ollama, vLLM 등의 자체 호스팅 모델 연동</p>
@@ -1102,7 +1102,7 @@ export function SettingsLayout() {
 
                 <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
                   <div className="flex items-center gap-3 border-b border-border pb-4">
-                    <div className="rounded-xl bg-purple-100 p-2.5"><Network className="size-5 text-purple-700" aria-hidden="true" /></div>
+                    <div className="rounded-xl bg-purple-100 p-2.5"><Network className="size-5 text-purple-700"  aria-hidden="true" /></div>
                     <div>
                       <h3 className="font-bold text-lg">임베딩 모델 지정</h3>
                       <p className="text-sm text-muted-foreground mt-1">벡터 스토어 및 RAG 구축을 위한 기본 임베딩 모델을 선택합니다.</p>
@@ -1198,7 +1198,7 @@ export function SettingsLayout() {
                       <article key={protocol.label} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                       <div className="flex items-start gap-3">
                         <div className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary">
-                          <Mail className="size-5 text-primary" />
+                          <Mail className="size-5 text-primary"  aria-hidden="true" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
@@ -1443,7 +1443,7 @@ export function SettingsLayout() {
                       title={runnerRotating ? "등록 토큰을 회전 중입니다" : "등록 토큰을 회전합니다"}
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} aria-hidden="true" />
+                      <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`}  aria-hidden="true" />
                       {runnerRotating ? '회전 중' : '등록 토큰 회전'}
                     </button>
                   </div>
@@ -1499,7 +1499,7 @@ export function SettingsLayout() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="flex items-center gap-2 font-bold text-lg">
-                        <Activity className="size-5 text-teal-600" aria-hidden="true" />
+                        <Activity className="size-5 text-teal-600"  aria-hidden="true" />
                         Connector 상태와 APM 신호
                       </h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -1606,7 +1606,7 @@ export function SettingsLayout() {
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Shield className="size-5 text-blue-500" aria-hidden="true" />
+                        <Shield className="size-5 text-blue-500"  aria-hidden="true" />
                         <h3 className="font-bold text-lg">OIDC 인증 세션</h3>
                       </div>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -1659,22 +1659,22 @@ export function SettingsLayout() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                   <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <Monitor className="size-8 text-orange-500 mb-2" />
+                    <Monitor className="size-8 text-orange-500 mb-2"  aria-hidden="true" />
                     <h3 className="font-bold text-lg">Grafana 대시보드</h3>
                     <p className="text-sm text-muted-foreground">OpenTelemetry 기반의 APM, 트래픽 메트릭 및 시스템 자원 모니터링을 확인합니다.</p>
                   </a>
                   <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <Shield className="size-8 text-blue-500 mb-2" aria-hidden="true" />
+                    <Shield className="size-8 text-blue-500 mb-2"  aria-hidden="true" />
                     <h3 className="font-bold text-lg">Keycloak 관리 콘솔</h3>
                     <p className="text-sm text-muted-foreground">OIDC 프로바이더, SSO 인증, 역할 기반 접근 제어(RBAC)를 구성합니다.</p>
                   </a>
                   <a href="http://localhost:3100" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <AlertCircle className="size-8 text-slate-500 mb-2" />
+                    <AlertCircle className="size-8 text-slate-500 mb-2"  aria-hidden="true" />
                     <h3 className="font-bold text-lg">Loki 로그 서버</h3>
                     <p className="text-sm text-muted-foreground">분산 아키텍처 환경의 컨테이너 로그 및 어플리케이션 에러 로그를 검색합니다.</p>
                   </a>
                   <a href="http://localhost:3200" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <RefreshCw className="size-8 text-teal-500 mb-2" aria-hidden="true" />
+                    <RefreshCw className="size-8 text-teal-500 mb-2"  aria-hidden="true" />
                     <h3 className="font-bold text-lg">Tempo 분산 추적</h3>
                     <p className="text-sm text-muted-foreground">FastAPI의 엔드포인트 지연율 및 MSA 구성요소 간의 호출 트레이스를 시각화합니다.</p>
                   </a>
