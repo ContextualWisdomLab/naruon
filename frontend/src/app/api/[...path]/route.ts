@@ -129,6 +129,8 @@ function safeBackendQuery(searchParams: URLSearchParams, path: string[]): string
   let paramCount = 0;
   const attachmentFactsPath = path.length === 3 && path[0] === "emails"
     && path[1] === "attachment-facts" && /^\d+$/u.test(path[2]);
+  const attachmentSegmentsPath = path.length === 4 && path[0] === "emails"
+    && path[1] === "attachments" && /^\d+$/u.test(path[2]) && path[3] === "segments";
 
   for (const [name, value] of searchParams) {
     paramCount += 1;
@@ -136,7 +138,8 @@ function safeBackendQuery(searchParams: URLSearchParams, path: string[]): string
       throw new InvalidProxyQueryError("Too many query parameters");
     }
     if (!ALLOWED_BACKEND_QUERY_PARAMS.has(name)
-      && !(attachmentFactsPath && ATTACHMENT_FACT_QUERY_PARAMS.has(name))) {
+      && !(attachmentFactsPath && ATTACHMENT_FACT_QUERY_PARAMS.has(name))
+      && !(attachmentSegmentsPath && name === "offset")) {
       throw new InvalidProxyQueryError(`Unsupported query parameter: ${name}`);
     }
     if (seenNames.has(name)) {

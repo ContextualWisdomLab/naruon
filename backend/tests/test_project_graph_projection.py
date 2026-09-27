@@ -19,7 +19,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
 from api.auth import AuthContext
-from api.emails import get_attachment_facts
+from api.emails import (
+    get_attachment_facts,
+    get_attachment_segment,
+    get_attachment_segments,
+    get_email_thread,
+)
 from db.models import (
     Attachment,
     Base,
@@ -155,6 +160,102 @@ async def isolated_fact_sessionmaker():
             async with admin_engine.begin() as conn:
                 await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_attachment_segment_pages_keep_exact_owner_scoped_citations(
+    isolated_fact_sessionmaker,
+):
+    user_id = f"segment-user-{uuid.uuid4().hex}"
+    organization_id = f"org-segment-{uuid.uuid4().hex[:12]}"
+    async with isolated_fact_sessionmaker() as session:
+        seed = await _seed_source_segment(
+            session, user_id=user_id, organization_id=organization_id
+        )
+        email = await session.get(Email, seed.email_id)
+        attachment = Attachment(
+            email_id=email.id, filename="invoice.txt", content="", parse_status="parsed"
+        )
+        session.add(attachment)
+        await session.flush()
+        node = ContentNodeRecord(
+            content_node_uid=f"node-{uuid.uuid4().hex[:16]}",
+            email_id=email.id,
+            attachment_id=attachment.id,
+            source_kind="attachment",
+            source_record_uid=f"attachment:{attachment.id}",
+            node_kind="document",
+            node_path="/document[1]",
+            ordinal_index=1,
+            safe_text_content="",
+            content_hash=uuid.uuid4().hex,
+        )
+        session.add(node)
+        await session.flush()
+        segment_uids = [f"seg-{uuid.uuid4().hex[:16]}" for _ in range(3)]
+        for index, uid in enumerate(segment_uids, start=1):
+            session.add(
+                ContentSegmentRecord(
+                    content_segment_uid=uid,
+                    email_id=email.id,
+                    attachment_id=attachment.id,
+                    content_node_id=node.content_node_id,
+                    source_kind="attachment",
+                    source_record_uid=f"attachment:{attachment.id}",
+                    segment_kind="paragraph",
+                    segment_path=f"/document[1]/paragraph[{index}]",
+                    ordinal_index=index,
+                    safe_text_content=f"Invoice line {index}",
+                    content_hash=uuid.uuid4().hex,
+                    word_count=3,
+                )
+            )
+        await session.commit()
+
+        owner = AuthContext(
+            user_id=user_id,
+            role="member",
+            organization_id=organization_id,
+            group_ids=(),
+            workspace_id=f"workspace-{organization_id}",
+        )
+        compact = await get_email_thread(
+            email.thread_id, db=session, auth_context=owner
+        )
+        assert compact["thread"][0].attachment_evidence[0].segments == []
+
+        first = await get_attachment_segments(
+            attachment.id, limit=2, offset=0, db=session, auth_context=owner
+        )
+        assert [item.uid for item in first.segments] == segment_uids[:2]
+        assert first.next_offset == 2
+        second = await get_attachment_segments(
+            attachment.id, limit=2, offset=2, db=session, auth_context=owner
+        )
+        assert [item.uid for item in second.segments] == segment_uids[2:]
+        assert second.next_offset is None
+        exact = await get_attachment_segment(
+            attachment.id, segment_uids[2], db=session, auth_context=owner
+        )
+        assert exact.text == "Invoice line 3"
+
+        other = AuthContext(
+            user_id=f"other-{user_id}",
+            role="member",
+            organization_id=organization_id,
+            group_ids=(),
+            workspace_id=f"workspace-{organization_id}",
+        )
+        with pytest.raises(HTTPException) as denied:
+            await get_attachment_segment(
+                attachment.id, segment_uids[2], db=session, auth_context=other
+            )
+        assert denied.value.status_code == 404
+        with pytest.raises(HTTPException) as denied_page:
+            await get_attachment_segments(
+                attachment.id, limit=2, offset=0, db=session, auth_context=other
+            )
+        assert denied_page.value.status_code == 404
 
 
 @pytest.mark.asyncio

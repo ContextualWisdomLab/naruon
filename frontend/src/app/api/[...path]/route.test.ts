@@ -301,6 +301,19 @@ describe("/api runtime proxy route", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("forwards owned attachment segment pages", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) =>
+      Response.json({ target_url: String(input) }),
+    ));
+    const segments = await GET(
+      new NextRequest("https://frontend.naruon.net/api/emails/attachments/91/segments?limit=100&offset=100"),
+      { params: Promise.resolve({ path: ["emails", "attachments", "91", "segments"] }) },
+    );
+    await expect(segments.json()).resolves.toEqual({
+      target_url: "https://api.naruon.net/api/emails/attachments/91/segments?limit=100&offset=100",
+    });
+  });
+
   it("rejects state-changing requests when both Origin and Referer are absent", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

@@ -258,7 +258,7 @@ describe("EmailDetail", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/emails/31")) return jsonResponse(email);
-      if (url.endsWith("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [{
+      if (url.includes("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [{
         ...email,
         attachment_evidence: [
           { attachment_id: 91, filename: "agenda.pdf", parse_status: "parsed", segments: [{ uid: "segment-1", text: "Meeting at noon" }] },
@@ -321,7 +321,7 @@ describe("EmailDetail", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/emails/31")) return jsonResponse(email);
-      if (url.endsWith("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [email] });
+      if (url.includes("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [email] });
       if (url.includes("/api/emails/attachment-facts/31?")) {
         const offset = new URL(url, "http://test").searchParams.get("offset");
         if (offset === "0") return jsonResponse({
@@ -350,6 +350,65 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
     expect(container.textContent).not.toContain("문서에서 추출한 금액: $1,200");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("첨부 내용이 변경됐습니다.");
+  });
+
+  it("loads attachment segments on open and retrieves an exact cited segment", async () => {
+    const email = {
+      id: 31, message_id: "<attachment@example.com>", thread_id: "attachment-thread",
+      sender: "sender@example.com", recipients: "user@example.com", subject: "Invoice",
+      date: "2026-05-17T09:00:00Z", body: "Please review",
+      attachment_evidence: [{ attachment_id: 91, filename: "invoice.txt", parse_status: "parsed", segments: [] }],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/31")) return jsonResponse(email);
+      if (url.includes("/api/emails/thread/attachment-thread")) return jsonResponse({ thread: [email] });
+      if (url.includes("/api/emails/attachment-facts/31?")) return jsonResponse({
+        facts: [{ object_uid: "fact-1", email_id: 31, attachment_id: 91,
+          fact_kind: "amount", value: "$1,200", source_segment_uid: "segment-2",
+          evidence_excerpt: "Total: $1,200" }],
+        next_offset: null,
+      });
+      if (url.endsWith("/api/emails/attachments/91/segments/segment-2")) {
+        return jsonResponse({ uid: "segment-2", text: "Total: $1,200" });
+      }
+      if (url.includes("/api/emails/attachments/91/segments?")) {
+        const offset = new URL(url, "http://test").searchParams.get("offset");
+        return jsonResponse(offset === "0"
+          ? { segments: [{ uid: "segment-1", text: "Invoice date: 2026-05-17" }], next_offset: 1 }
+          : { segments: [{ uid: "segment-2", text: "Total: $1,200" }], next_offset: null });
+      }
+      if (url.endsWith("/api/llm/summarize")) return jsonResponse({ summary: "Summary", action_items: [] });
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={31} />); });
+    await flushAsyncWork();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/emails/thread/"))).toBe(true);
+    expect(container.querySelector("#attachment-segment-segment-1")).toBeNull();
+
+    const details = container.querySelector("details")!;
+    await act(async () => {
+      details.open = true;
+      details.dispatchEvent(new Event("toggle", { bubbles: true }));
+    });
+    await flushAsyncWork();
+    expect(container.querySelector("#attachment-segment-segment-1")?.textContent).toBe("Invoice date: 2026-05-17");
+
+    const sourceLink = container.querySelector<HTMLAnchorElement>('a[href="#attachment-segment-segment-2"]');
+    await act(async () => { sourceLink?.click(); });
+    await flushAsyncWork();
+    expect(container.querySelector("#attachment-segment-segment-2")?.textContent).toBe("Total: $1,200");
+    expect(document.activeElement?.id).toBe("attachment-segment-segment-2");
+
+    const more = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("첨부 내용 더 보기"));
+    await act(async () => { more?.click(); });
+    await flushAsyncWork();
+    expect(container.querySelectorAll("#attachment-segment-segment-2")).toHaveLength(1);
   });
 
   it("keeps the latest conversation when an older thread request resolves late", async () => {
@@ -395,8 +454,8 @@ describe("EmailDetail", () => {
         const url = String(input);
         if (url.endsWith("/api/emails/1")) return emailAResponse.promise;
         if (url.endsWith("/api/emails/2")) return emailBResponse.promise;
-        if (url.endsWith("/api/emails/thread/thread-a")) return threadAResponse.promise;
-        if (url.endsWith("/api/emails/thread/thread-b")) return threadBResponse.promise;
+        if (url.includes("/api/emails/thread/thread-a")) return threadAResponse.promise;
+        if (url.includes("/api/emails/thread/thread-b")) return threadBResponse.promise;
         if (url.endsWith("/api/llm/summarize")) {
           return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
         }
@@ -429,7 +488,7 @@ describe("EmailDetail", () => {
 
     await waitForCondition(() =>
       fetchMock.mock.calls.some(([input]) =>
-        String(input).endsWith("/api/emails/thread/thread-b"),
+        String(input).includes("/api/emails/thread/thread-b"),
       ),
     );
 
@@ -536,7 +595,7 @@ describe("EmailDetail", () => {
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/emails/23")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/emails/thread/source-thread")) return Promise.resolve(jsonResponse({ thread: [email] }));
+      if (url.includes("/api/emails/thread/source-thread")) return Promise.resolve(jsonResponse({ thread: [email] }));
       if (url.endsWith("/api/llm/summarize")) {
         return Promise.resolve(jsonResponse({
           summary: "근거 원본을 확인해야 하는 맥락 종합입니다.",
@@ -711,7 +770,7 @@ describe("EmailDetail", () => {
       const url = String(input);
       if (url.endsWith("/api/emails/1")) return threadedEmailResponse.promise;
       if (url.endsWith("/api/emails/3")) return standaloneEmailResponse.promise;
-      if (url.endsWith("/api/emails/thread/thread-a")) return threadResponse.promise;
+      if (url.includes("/api/emails/thread/thread-a")) return threadResponse.promise;
       if (url.endsWith("/api/llm/summarize")) {
         return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
       }
@@ -735,7 +794,7 @@ describe("EmailDetail", () => {
 
     await waitForCondition(() =>
       fetchMock.mock.calls.some(([input]) =>
-        String(input).endsWith("/api/emails/thread/thread-a"),
+        String(input).includes("/api/emails/thread/thread-a"),
       ),
     );
 
@@ -1150,7 +1209,7 @@ describe("EmailDetail", () => {
       const url = String(input);
       if (url.endsWith("/api/emails/16")) return Promise.resolve(jsonResponse(email));
       if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
-      if (url.endsWith("/api/emails/thread/thread-err")) return Promise.reject(new Error("Thread err"));
+      if (url.includes("/api/emails/thread/thread-err")) return Promise.reject(new Error("Thread err"));
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -1185,7 +1244,7 @@ describe("EmailDetail", () => {
       const url = String(input);
       if (url.endsWith("/api/emails/17")) return Promise.resolve(jsonResponse(email));
       if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
-      if (url.endsWith("/api/emails/thread/thread-err2")) {
+      if (url.includes("/api/emails/thread/thread-err2")) {
         callCount++;
         if (callCount === 1) return Promise.reject(new Error("Thread err"));
         return Promise.resolve(jsonResponse({ thread: [email] }));

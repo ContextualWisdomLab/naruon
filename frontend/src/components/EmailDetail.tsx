@@ -48,6 +48,15 @@ type AttachmentFact = {
 };
 
 type AttachmentFactPage = { facts: AttachmentFact[]; next_offset: number | null };
+type AttachmentSegment = { uid: string; text: string };
+type AttachmentSegmentPage = { segments: AttachmentSegment[]; next_offset: number | null };
+type AttachmentSegmentState = {
+  segments: AttachmentSegment[];
+  nextOffset: number | null;
+  loaded: boolean;
+  loading: boolean;
+  error: string | null;
+};
 
 const factLabels: Record<string, string> = {
   date: '날짜', amount: '금액', party: '당사자', commitment: '약속',
@@ -140,6 +149,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [factsNextOffset, setFactsNextOffset] = useState<number | null>(null);
   const [factsLoading, setFactsLoading] = useState(false);
   const [factsError, setFactsError] = useState<string | null>(null);
+  const [attachmentSegments, setAttachmentSegments] = useState<Record<number, AttachmentSegmentState>>({});
+  const [sourceFocusUid, setSourceFocusUid] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<string>('');
   const [translation, setTranslation] = useState<string | null>(null);
@@ -196,6 +207,94 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     }
   }, []);
 
+  const fetchAttachmentPage = useCallback(async (attachmentId: number, requestId: number, offset: number) => {
+    setAttachmentSegments((previous) => ({
+      ...previous,
+      [attachmentId]: {
+        segments: previous[attachmentId]?.segments ?? [],
+        nextOffset: previous[attachmentId]?.nextOffset ?? null,
+        loaded: previous[attachmentId]?.loaded ?? false,
+        loading: true,
+        error: null,
+      },
+    }));
+    try {
+      const page = await apiClient.get<AttachmentSegmentPage>(
+        `/api/emails/attachments/${attachmentId}/segments?limit=100&offset=${offset}`,
+      );
+      if (requestId !== threadRequestIdRef.current) return;
+      setAttachmentSegments((previous) => {
+        const existing = previous[attachmentId]?.segments ?? [];
+        const seen = new Set(existing.map((segment) => segment.uid));
+        return {
+          ...previous,
+          [attachmentId]: {
+            segments: [...existing, ...page.segments.filter((segment) => !seen.has(segment.uid))],
+            nextOffset: page.next_offset,
+            loaded: true,
+            loading: false,
+            error: null,
+          },
+        };
+      });
+    } catch {
+      if (requestId !== threadRequestIdRef.current) return;
+      setAttachmentSegments((previous) => ({
+        ...previous,
+        [attachmentId]: {
+          ...previous[attachmentId],
+          segments: previous[attachmentId]?.segments ?? [],
+          nextOffset: previous[attachmentId]?.nextOffset ?? null,
+          loaded: previous[attachmentId]?.loaded ?? false,
+          loading: false,
+          error: '첨부 내용을 불러오지 못했습니다.',
+        },
+      }));
+    }
+  }, []);
+
+  const openSourceSegment = useCallback(async (
+    event: React.MouseEvent<HTMLAnchorElement>, attachmentId: number, segmentUid: string,
+  ) => {
+    if (document.getElementById(`attachment-segment-${segmentUid}`)) return;
+    event.preventDefault();
+    const requestId = threadRequestIdRef.current;
+    try {
+      const segment = await apiClient.get<AttachmentSegment>(
+        `/api/emails/attachments/${attachmentId}/segments/${encodeURIComponent(segmentUid)}`,
+      );
+      if (requestId !== threadRequestIdRef.current) return;
+      setAttachmentSegments((previous) => {
+        const state = previous[attachmentId];
+        const segments = state?.segments ?? [];
+        return {
+          ...previous,
+          [attachmentId]: {
+            segments: segments.some((item) => item.uid === segment.uid) ? segments : [...segments, segment],
+            nextOffset: state?.nextOffset ?? null,
+            loaded: state?.loaded ?? false,
+            loading: false,
+            error: null,
+          },
+        };
+      });
+      setSourceFocusUid(segmentUid);
+    } catch {
+      if (requestId !== threadRequestIdRef.current) return;
+      setThreadFacts([]);
+      setFactsNextOffset(null);
+      setFactsError('원문 근거가 변경됐습니다. 다시 불러와 주세요.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sourceFocusUid) return;
+    const target = document.getElementById(`attachment-segment-${sourceFocusUid}`);
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'center' });
+    setSourceFocusUid(null);
+  }, [attachmentSegments, sourceFocusUid]);
+
   const fetchThread = useCallback(async (currentEmail: EmailData) => {
     const requestId = threadRequestIdRef.current + 1;
     threadRequestIdRef.current = requestId;
@@ -206,6 +305,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     setFactsNextOffset(null);
     setFactsLoading(false);
     setFactsError(null);
+    setAttachmentSegments({});
+    setSourceFocusUid(null);
 
     if (!currentEmail.thread_id) {
       if (isLatestThreadRequest()) {
@@ -221,7 +322,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       if (!isLatestThreadRequest()) return;
       const messages = threadJson.thread || [];
       setThreadEmails(messages);
-      if (messages.some((message) => message.attachment_evidence?.some((attachment) => attachment.segments.length > 0))) {
+      if (messages.some((message) => message.attachment_evidence?.some((attachment) => attachment.parse_status === 'parsed'))) {
         void fetchFactPage(currentEmail.id, requestId, 0);
       }
     } catch (err) {
@@ -844,29 +945,48 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     </div>
                   )}
                   <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
-                  {msg.attachment_evidence?.map((attachment, index) => (
-                    <details key={`${attachment.filename}-${index}`} className="mt-3 border-t border-border pt-3 text-sm">
-                      <summary className="cursor-pointer break-words font-medium">첨부: {toMailDisplayText(attachment.filename, '이름 없는 첨부파일')}</summary>
-                      {attachment.segments.length > 0 ? (
-                        <div className="mt-2 space-y-2 pl-4">
-                          {attachment.segments.map((segment) => (
-                            <p id={`attachment-segment-${segment.uid}`} key={segment.uid} tabIndex={-1} className="whitespace-pre-wrap break-words">{toMailBodyText(segment.text)}</p>
-                          ))}
-                          {threadFacts.filter((fact) => fact.email_id === msg.id && fact.attachment_id === attachment.attachment_id).map((fact) => (
-                            <div key={fact.object_uid} className="border-l-2 border-primary/40 pl-3 text-sm">
-                              <p className="break-words"><span className="font-medium">문서에서 추출한 {factLabels[fact.fact_kind] ?? '내용'}:</span> {toMailBodyText(fact.value)}</p>
-                              <a href={`#attachment-segment-${encodeURIComponent(fact.source_segment_uid)}`} aria-label={`${toMailDisplayText(attachment.filename, '첨부파일')}의 ${factLabels[fact.fact_kind] ?? '내용'} 원문 근거 보기`} className="text-primary underline">원문 근거 보기</a>
-                              <p className="break-words text-xs text-muted-foreground">{toMailBodyText(fact.evidence_excerpt)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-2 pl-4 text-muted-foreground">
-                          {attachment.parse_status.endsWith('_pending') ? '첨부 내용을 준비하고 있습니다.' : '표시할 수 있는 내용이 없습니다.'}
-                        </p>
-                      )}
-                    </details>
-                  ))}
+                  {msg.attachment_evidence?.map((attachment, index) => {
+                    const page = attachmentSegments[attachment.attachment_id];
+                    const segments = page?.segments ?? attachment.segments;
+                    return (
+                      <details
+                        key={`${attachment.filename}-${index}`}
+                        className="mt-3 border-t border-border pt-3 text-sm"
+                        onToggle={(event) => {
+                          if (event.currentTarget.open && attachment.parse_status === 'parsed'
+                            && attachment.segments.length === 0 && !page?.loaded && !page?.loading) {
+                            void fetchAttachmentPage(attachment.attachment_id, threadRequestIdRef.current, 0);
+                          }
+                        }}
+                      >
+                        <summary className="cursor-pointer break-words font-medium">첨부: {toMailDisplayText(attachment.filename, '이름 없는 첨부파일')}</summary>
+                        {attachment.parse_status === 'parsed' || segments.length > 0 ? (
+                          <div className="mt-2 space-y-2 pl-4">
+                            {segments.map((segment) => (
+                              <p id={`attachment-segment-${segment.uid}`} key={segment.uid} tabIndex={-1} className="whitespace-pre-wrap break-words">{toMailBodyText(segment.text)}</p>
+                            ))}
+                            {page?.loading && <p role="status">첨부 내용을 불러오는 중입니다...</p>}
+                            {page?.error && <p role="alert">{page.error}</p>}
+                            {page?.loaded && segments.length === 0 && <p className="text-muted-foreground">표시할 수 있는 내용이 없습니다.</p>}
+                            {page?.nextOffset !== null && page?.nextOffset !== undefined && (
+                              <Button size="sm" variant="outline" disabled={page.loading} onClick={() => fetchAttachmentPage(attachment.attachment_id, threadRequestIdRef.current, page.nextOffset!)}>첨부 내용 더 보기</Button>
+                            )}
+                            {threadFacts.filter((fact) => fact.email_id === msg.id && fact.attachment_id === attachment.attachment_id).map((fact) => (
+                              <div key={fact.object_uid} className="border-l-2 border-primary/40 pl-3 text-sm">
+                                <p className="break-words"><span className="font-medium">문서에서 추출한 {factLabels[fact.fact_kind] ?? '내용'}:</span> {toMailBodyText(fact.value)}</p>
+                                <a href={`#attachment-segment-${encodeURIComponent(fact.source_segment_uid)}`} onClick={(event) => void openSourceSegment(event, attachment.attachment_id, fact.source_segment_uid)} aria-label={`${toMailDisplayText(attachment.filename, '첨부파일')}의 ${factLabels[fact.fact_kind] ?? '내용'} 원문 근거 보기`} className="text-primary underline">원문 근거 보기</a>
+                                <p className="break-words text-xs text-muted-foreground">{toMailBodyText(fact.evidence_excerpt)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 pl-4 text-muted-foreground">
+                            {attachment.parse_status.endsWith('_pending') ? '첨부 내용을 준비하고 있습니다.' : '표시할 수 있는 내용이 없습니다.'}
+                          </p>
+                        )}
+                      </details>
+                    );
+                  })}
                 </div>
               ))}
             </div>
