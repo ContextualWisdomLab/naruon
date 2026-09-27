@@ -52,3 +52,24 @@ its response reported core quota remaining zero; GraphQL PR state remained
 readable. Quota exhaustion explains the observation failure, not queued jobs.
 Do not cancel/restart model runs or reduce inference time budgets based on this
 missing evidence.
+
+## PDF runtime root cause verified against supplier source
+
+Naruon's compose build pins NewsDOM `6558a4238b1614c39f7e96a961815747ac4d49ef`.
+That exact tree's Dockerfile runs `uv sync --frozen --no-dev`; its project
+requirements contain no MinerU runtime. The parser calls `run_mineru`, whose
+missing executable raises `MineruRuntimeUnavailableError`; `main.py` maps it
+to HTTP 503. `/health` only returns a liveness response and does not verify
+MinerU. Thus a healthy container from this recipe is insufficient evidence of
+PDF readiness. No NewsDOM container or local MinerU executable was present
+in the inspected local environment.
+
+Supplier `main` at `d5683aa971332392005fe2a94e826931e4d5b568` installs a
+`mineru` extra and sets `NEWSDOM_MINERU_BIN`. This is evidence that the supplier
+has a runtime packaging path, not authorization to replace the pin: that tree
+uses different dependency versions (including MinerU 3.0.9) from the pinned
+newer development tree. A blind switch could regress dependency/security and
+response contracts. Next action: reconcile the runtime packaging delta with
+the current supplier development tree, validate its frozen lock/image and
+PDF response, then update Naruon's full commit pin. Preserve the internal-only
+network exposure of the unauthenticated parse service.
