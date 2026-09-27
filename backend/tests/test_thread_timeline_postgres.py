@@ -5,9 +5,14 @@ import uuid
 from unittest.mock import patch
 
 import pytest
+from asyncpg.exceptions import (
+    InvalidAuthorizationSpecificationError,
+    InvalidPasswordError,
+)
 from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.auth import AuthContext
@@ -27,9 +32,19 @@ async def test_thread_tasks_stay_with_their_email_owner():
         connect_args={"server_settings": {"search_path": f"{schema},public"}},
     )
     now = datetime.datetime(2026, 9, 27, tzinfo=datetime.timezone.utc)
+    schema_created = False
     try:
-        async with root_engine.begin() as connection:
-            await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        try:
+            async with root_engine.begin() as connection:
+                await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        except (
+            InvalidAuthorizationSpecificationError,
+            InvalidPasswordError,
+            OperationalError,
+            OSError,
+        ) as exc:
+            pytest.skip(f"PostgreSQL smoke database unavailable: {exc}")
         async with scoped_engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all, checkfirst=False)
 
@@ -205,6 +220,9 @@ async def test_thread_tasks_stay_with_their_email_owner():
             assert [task.id for task in after.tasks] == ["owned-task"]
     finally:
         await scoped_engine.dispose()
-        async with root_engine.begin() as connection:
-            await connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        if schema_created:
+            async with root_engine.begin() as connection:
+                await connection.execute(
+                    text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+                )
         await root_engine.dispose()
