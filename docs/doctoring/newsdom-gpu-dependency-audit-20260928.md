@@ -38,6 +38,18 @@ Primary migration contract: [MinerU 4.0 release](https://github.com/opendatalab/
 
 The 4.x candidate is not yet implemented in NewsDOM. These audits exclude base OS/image vulnerabilities, actual GPU/driver execution, model quality, and live OCR. Existing 3.4.4 runtime fails the dependency acceptance described above. No deployment or protected acceptance is claimed.
 
+### Source-verified compatibility gaps in 4.0.7
+
+The official PyPI wheel was checked against its published SHA-256 before reading these modules:
+
+- `mineru/parser/mineru_parser.py`: constructor and analysis calls carry tier, OCR mode, image analysis and VLM configuration, but no OCR language selection. Source SHA-256: `ee26543dc29856996dbbfe52629fec66c7ac63f0035340aebfc639a56b8da648`.
+- `mineru/model/runtime/hybrid.py`: `HybridLocalModelContext.get_ocr_model` passes literal `lang="ch"` to the atomic OCR model. Its constructor has device and small-backend parameters only. Existing NewsDOM's explicit `korean`, Arabic and other script-family requests therefore cannot be preserved by simply replacing its CLI with this public parser. Source SHA-256: `cb925a1f0c6f1c81dcff31fbb9e596806fc4fd520b8c2d0ee5618924042e6404`.
+- Public `mineru.render.render_content_list` preserves `page_idx` and can replace custom block serialization. Its shared renderer converts normalized 0–1 bounding boxes to 0–1000 integer coordinates; those values must not be interpreted as physical page units without conversion. Shared-renderer source SHA-256: `6134e696525937c1441d90ac4c813a8cff47464a6c175bfaa4d391dbc8d0e2f3`.
+
+Next implementation must thread validated language selection through the actual OCR model context, preserve coordinate units and select every page. Do not silently ignore language, substitute text-only parsing for OCR, or declare the 142-package audit sufficient runtime acceptance.
+
+The independent existing DOM defect that omitted model-declared blank pages is repaired in [newsdom-api #958](https://github.com/ContextualWisdomLab/newsdom-api/pull/958), stacked on security-owner #822. At `65696f393224a1e08ab42fff5151cbf3639a8a4e`, 487 tests pass with warnings as errors and 100% production branch coverage. That synthetic regression proves DOM page preservation, not OCR quality or protected merge acceptance.
+
 ## Local evidence digests
 
 - Legacy hashed resolution: `65ad54a98596eebcf98e832c79170901181109db64e1daf0f7f52e93c85c79e1` (local scratch receipt; reproduce before acceptance).
