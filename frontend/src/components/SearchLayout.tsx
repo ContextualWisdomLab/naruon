@@ -49,6 +49,7 @@ type SearchResultItem = {
 
 const EVIDENCE_KIND_LABELS: Record<string, string> = {
   email_body: "본문",
+  email_subject: "제목",
   attachment_content: "첨부",
   content_segment: "문서 구절",
   project_graph_object: "프로젝트 항목",

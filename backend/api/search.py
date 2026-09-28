@@ -164,6 +164,14 @@ class EmailCandidateEvidence:
         cosine_distance: float | None,
         fusion_settings: FusionSettings,
     ) -> None:
+        if (
+            channel_name == LEXICAL_EMAIL_CHANNEL
+            and result_kind == "email_body"
+            and not (matched_text or "").strip()
+            and (self.subject or "").strip()
+        ):
+            result_kind = "email_subject"
+            matched_text = self.subject
         existing_rank = self.channel_ranks.get(channel_name)
         if existing_rank is None or one_based_rank < existing_rank:
             self.channel_ranks[channel_name] = one_based_rank

@@ -577,6 +577,27 @@ def test_build_search_result_items_truncates_long_snippets():
     assert results[0].snippet == ("A" * 200) + "..."
 
 
+def test_subject_only_search_result_keeps_visible_source_evidence():
+    from api.search import (
+        _answer_context_emails,
+        build_search_result_items,
+        merge_candidate_rows,
+    )
+
+    fusion_settings = _make_fusion_settings()
+    rows = [MockLexicalRow(1, "Quarterly budget", "a@example.com", "", 0.9)]
+    candidates = merge_candidate_rows([("lexical_email", rows)], fusion_settings)
+
+    result = build_search_result_items(
+        candidates, fusion_settings, limit=1, reply_counts_by_thread_key={}
+    )[0]
+
+    assert result.snippet == "Quarterly budget"
+    assert result.result_kind == "email_subject"
+    assert result.evidence_kinds == ["email_subject"]
+    assert _answer_context_emails(candidates, fusion_settings, limit=1)[0]["content"] == "Quarterly budget"
+
+
 def test_build_search_result_items_drops_below_minimum_score():
     from api.search import build_search_result_items, merge_candidate_rows
 
