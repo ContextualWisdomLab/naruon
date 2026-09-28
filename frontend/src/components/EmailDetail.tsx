@@ -16,6 +16,7 @@ import {
   buildReplyPayload,
   formatEmailDate,
   getConversationMessages,
+  getReplyEvidence,
   type ThreadEmailData,
 } from "@/lib/email-threading";
 import { toMailBodyText, toMailDisplayText } from "@/lib/mail-text";
@@ -773,6 +774,22 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     </div>
                   </div>
                   {msg.id === email.id && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">선택된 메시지</Badge>}
+                  {(() => {
+                    const evidence = getReplyEvidence(msg, conversationMessages);
+                    if (!evidence) return null;
+                    const description = evidence.state === "conflicting"
+                        ? "회신 정보가 서로 다른 메일을 가리켜 관계를 확인해야 합니다."
+                        : evidence.state === "incomplete"
+                          ? "회신 정보가 너무 길어 관계를 확인하지 못했습니다."
+                        : "현재 대화에서 가리키는 메일을 찾지 못했습니다.";
+                    return (
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        메일 원문의 회신 정보: {evidence.targetEmailId
+                          ? <a href={`#msg-${evidence.targetEmailId}`} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">회신 정보가 가리키는 메일 보기</a>
+                          : description}
+                      </p>
+                    );
+                  })()}
                   {msg.id === email.id && translationError && (
                     <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
                       {translationError}

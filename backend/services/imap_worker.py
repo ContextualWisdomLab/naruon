@@ -86,6 +86,8 @@ async def process_fetched_email(
         sender=sender,
         recipients=recipients,
         subject=subject,
+        in_reply_to=email_data.get("in_reply_to"),
+        references=email_data.get("references"),
         date=persisted_date,
         body=email_data.get("body", ""),
         is_read=is_read,

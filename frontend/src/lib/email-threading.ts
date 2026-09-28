@@ -19,6 +19,55 @@ export interface ReplyPayload {
   references?: string;
 }
 
+export type ReplyEvidence = {
+  source: "In-Reply-To" | "References" | "In-Reply-To, References";
+  state: "found" | "missing" | "conflicting" | "incomplete";
+  targetEmailId?: number;
+};
+
+function headerMessageIds(value?: string | null): string[] {
+  if (!value) return [];
+  const bounded = value.slice(0, 8192);
+  const tokens = bounded.match(/<[^>]+>/g) ?? bounded.split(/\s+/);
+  return tokens
+    .map((token) => token.replace(/^<|>$/g, "").replace(/\s+/g, ""))
+    .filter(Boolean);
+}
+
+export function getReplyEvidence(
+  email: ThreadEmailData,
+  threadEmails: ThreadEmailData[],
+): ReplyEvidence | null {
+  const replyIds = headerMessageIds(email.in_reply_to);
+  const references = headerMessageIds(email.references);
+  const hasReply = Boolean(email.in_reply_to?.trim());
+  const hasReferences = Boolean(email.references?.trim());
+  if (!hasReply && !hasReferences) return null;
+
+  const referenceId = references.at(-1);
+  const source = hasReply && hasReferences
+    ? "In-Reply-To, References"
+    : hasReply ? "In-Reply-To" : "References";
+  if (
+    (email.in_reply_to?.length ?? 0) > 8192 ||
+    (email.references?.length ?? 0) > 8192 ||
+    replyIds.length > 64 || references.length > 64 || (!replyIds.length && !references.length)
+  ) {
+    return { source, state: "incomplete" };
+  }
+  if (replyIds.length > 1 || (replyIds.length && referenceId && replyIds[0] !== referenceId)) {
+    return { source, state: "conflicting" };
+  }
+
+  const targetId = replyIds[0] ?? referenceId;
+  const target = targetId && threadEmails.find((candidate) =>
+    candidate.id !== email.id && headerMessageIds(candidate.message_id).includes(targetId),
+  );
+  return target
+    ? { source, state: "found", targetEmailId: target.id }
+    : { source, state: "missing" };
+}
+
 function extractMailbox(value: string): string {
   const angleMatch = value.match(/<([^>]+)>/);
   return (angleMatch?.[1] ?? value).trim();
