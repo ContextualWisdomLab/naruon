@@ -197,7 +197,7 @@ async def assign_thread_id(
     existing_candidates = []
     # Optimization: Use a set for O(1) membership checks to prevent O(n^2) deduplication of candidates
     seen = set()
-    for candidate in (*in_reply_to_ids, *references):
+    for candidate in (*in_reply_to_ids, *reversed(references)):
         if candidate not in seen:
             seen.add(candidate)
             existing_candidates.append(candidate)

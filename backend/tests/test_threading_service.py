@@ -93,6 +93,42 @@ async def test_existing_parent_thread_id_wins_over_deterministic_fallback():
 
 
 @pytest.mark.asyncio
+async def test_references_only_prefers_immediate_parent_over_older_root():
+    session = _SequentialSession(
+        [
+            [
+                ("<root@example.com>", "root-thread"),
+                ("<parent@example.com>", "parent-thread"),
+            ]
+        ]
+    )
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": None,
+            "references": "<root@example.com> <parent@example.com>",
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert thread_id == "parent-thread"
+
+    missing_parent = _SequentialSession([[("<root@example.com>", "root-thread")]])
+    thread_id = await assign_thread_id(
+        missing_parent,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": None,
+            "references": "<root@example.com> <parent@example.com>",
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert thread_id == "root-thread"
+
+
+@pytest.mark.asyncio
 async def test_existing_legacy_bracketed_thread_id_is_normalized():
     session = _SequentialSession([[("<root@example.com>", "<root@example.com>")]])
 
