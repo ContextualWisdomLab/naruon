@@ -185,7 +185,8 @@ class EmailCandidateEvidence:
             or cosine_distance < self.best_cosine_distance
         ):
             self.best_cosine_distance = cosine_distance
-        self.evidence_kinds.add(result_kind)
+        if (matched_text or "").strip():
+            self.evidence_kinds.add(result_kind)
 
         row_score = fuse_channel_scores(
             word_similarity_score=word_similarity_score,
@@ -193,7 +194,7 @@ class EmailCandidateEvidence:
             channel_ranks={channel_name: one_based_rank},
             settings=fusion_settings,
         )
-        if row_score > self._primary_row_score:
+        if (matched_text or "").strip() and row_score > self._primary_row_score:
             self._primary_row_score = row_score
             self.primary_result_kind = result_kind
             self.primary_matched_text = matched_text or ""

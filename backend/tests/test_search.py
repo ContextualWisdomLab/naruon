@@ -586,7 +586,10 @@ def test_subject_only_search_result_keeps_visible_source_evidence():
 
     fusion_settings = _make_fusion_settings()
     rows = [MockLexicalRow(1, "Quarterly budget", "a@example.com", "", 0.9)]
-    candidates = merge_candidate_rows([("lexical_email", rows)], fusion_settings)
+    dense_rows = [MockDenseRow(1, "Quarterly budget", "a@example.com", "", 0.1)]
+    candidates = merge_candidate_rows(
+        [("lexical_email", rows), ("dense_email", dense_rows)], fusion_settings
+    )
 
     result = build_search_result_items(
         candidates, fusion_settings, limit=1, reply_counts_by_thread_key={}
