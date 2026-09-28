@@ -206,13 +206,15 @@ async def assign_thread_id(
     references, incomplete_references = _bounded_reference_ids(
         email_data.get("references")
     )
+    message_id = normalize_message_id(email_data.get("message_id"))
     if (
         incomplete_reply
         or incomplete_references
+        or (message_id is not None and message_id in (*in_reply_to_ids, *references))
         or len(in_reply_to_ids) > 1
         or (in_reply_to_ids and references and references[-1] != in_reply_to_ids[0])
     ):
-        return normalize_message_id(email_data.get("message_id")) or uuid.uuid4().hex
+        return message_id or uuid.uuid4().hex
 
     existing_candidates = []
     # Optimization: Use a set for O(1) membership checks to prevent O(n^2) deduplication of candidates
@@ -245,9 +247,8 @@ async def assign_thread_id(
             if candidate not in ambiguous_ids:
                 return candidate
 
-    msg_id = normalize_message_id(email_data.get("message_id"))
-    if msg_id:
-        return msg_id
+    if message_id:
+        return message_id
 
     return uuid.uuid4().hex
 

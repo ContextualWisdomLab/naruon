@@ -725,7 +725,13 @@ async def get_email_thread(
             and not edge.incomplete
         ]
         last_reference = max(references, key=lambda edge: edge.ordinal).target_message_id if references else None
-        if len(replies) > 1 or (replies and last_reference and last_reference not in replies):
+        self_id = normalize_message_id(source_edges[0].source_message_id)
+        self_reference = any(
+            edge.target_message_id == self_id
+            for edge in source_edges
+            if not edge.detached_at and not edge.incomplete
+        )
+        if self_reference or len(replies) > 1 or (replies and last_reference and last_reference not in replies):
             conflicting_email_ids.add(source_email_id)
     target_ids = {
         edge.target_message_id

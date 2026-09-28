@@ -160,6 +160,28 @@ async def test_thread_view_resolves_late_parent_without_cross_owner_match():
                 for edge in item.thread_evidence
             ]
             assert ambiguous_states == ["conflicting", "conflicting"]
+
+            self_reply = message("owner", "<self@example.com>", "self reply")
+            self_reply.references = "<root@example.com> <self@example.com>"
+            self_reply.thread_id = await assign_thread_id(
+                AsyncAdapter(session),
+                {
+                    "message_id": self_reply.message_id,
+                    "references": self_reply.references,
+                },
+                user_id="owner",
+                organization_id="org",
+            )
+            assert self_reply.thread_id == "self@example.com"
+            session.add(self_reply)
+            session.add_all(email_thread_evidence(self_reply))
+            session.commit()
+            self_view = await get_email_thread(
+                "self@example.com", AsyncAdapter(session), auth
+            )
+            self_edges = self_view["thread"][0].thread_evidence
+            assert all(edge.state == "conflicting" for edge in self_edges)
+            assert all(edge.target_email_id is None for edge in self_edges)
     finally:
         engine.dispose()
 
