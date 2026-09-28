@@ -281,6 +281,39 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             await adapter.commit()
             assert reply.thread_id == child.thread_id == "parent@example.com"
 
+            grandchild = await process_fetched_email(
+                adapter,
+                message(
+                    "grandchild@example.com",
+                    "child@example.com",
+                    "<parent@example.com> <reply@example.com> <child@example.com>",
+                ),
+                "owner",
+                "org",
+            )
+            duplicate_child = Email(
+                user_id="owner",
+                organization_id="org",
+                message_id="child@example.com",
+                thread_id="elsewhere@example.com",
+                sender="sender@example.com",
+                recipients="owner@example.com",
+                subject="Duplicate Message-ID",
+                body="other conversation",
+                date=when,
+            )
+            session.add(duplicate_child)
+            await adapter.commit()
+            ambiguous_reply = await process_fetched_email(
+                adapter,
+                message("ambiguous-reply@example.com", "child@example.com", "")
+                | {"references": None},
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            assert ambiguous_reply.thread_id == "ambiguous-reply@example.com"
+
             conflicting = await process_fetched_email(
                 adapter,
                 message(
@@ -329,6 +362,8 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             await adapter.commit()
             assert parent.thread_id == "root@example.com"
             assert reply.thread_id == child.thread_id == "root@example.com"
+            assert grandchild.thread_id == "parent@example.com"
+            assert duplicate_child.thread_id == "elsewhere@example.com"
             assert conflicting.thread_id == "other@example.com"
             assert ambiguous.thread_id == "parent@example.com"
             assert detached.thread_id == "detached@example.com"
@@ -338,6 +373,15 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
                 parent.id,
                 reply.id,
                 child.id,
+            }
+            unresolved_view = await get_email_thread(
+                "parent@example.com", adapter, auth
+            )
+            grandchild_item = next(
+                item for item in unresolved_view["thread"] if item.id == grandchild.id
+            )
+            assert "ambiguous" in {
+                edge.state for edge in grandchild_item.thread_evidence
             }
     finally:
         engine.dispose()

@@ -8,7 +8,7 @@ from services.email_parser import EmailData
 
 import hashlib
 import datetime
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 
 _THREAD_LOCK_NAMESPACE = "naruon-email-thread-evidence"
 
@@ -117,6 +117,7 @@ async def _find_existing_thread_ids(
     *,
     user_id: str,
     organization_id: str | None,
+    ambiguous_ids: set[str] | None = None,
 ) -> dict[str, str]:
     if not message_ids:
         return {}
@@ -136,12 +137,22 @@ async def _find_existing_thread_ids(
         )
     )
 
+    rows = result.all()
+    counts = Counter(
+        normalized
+        for message_id, _ in rows
+        if (normalized := normalize_message_id(message_id))
+    )
+    if ambiguous_ids is not None:
+        ambiguous_ids.update(
+            message_id for message_id, count in counts.items() if count > 1
+        )
     thread_ids_by_message_id: dict[str, str] = {}
-    for message_id, thread_id in result.all():
+    for message_id, thread_id in rows:
         if not thread_id:
             continue
         normalized_message_id = normalize_message_id(message_id)
-        if normalized_message_id:
+        if normalized_message_id and counts[normalized_message_id] == 1:
             thread_ids_by_message_id[normalized_message_id] = (
                 normalize_message_id(thread_id) or thread_id
             )
@@ -176,24 +187,24 @@ async def assign_thread_id(
             existing_candidates.append(candidate)
 
     if existing_candidates:
+        ambiguous_ids: set[str] = set()
         thread_ids_by_message_id = await _find_existing_thread_ids(
             session,
             existing_candidates,
             user_id=user_id,
             organization_id=organization_id,
+            ambiguous_ids=ambiguous_ids,
         )
         for candidate in existing_candidates:
             thread_id = thread_ids_by_message_id.get(candidate)
             if thread_id:
                 return thread_id
 
-    # If the parent/root has not been imported yet, use the oldest known ancestor
-    # as the deterministic thread root so later imports converge on one thread.
-    if references:
-        return references[0]
-
-    if in_reply_to_ids:
-        return in_reply_to_ids[0]
+        # If the parent/root has not been imported yet, use the oldest known ancestor
+        # as the deterministic thread root so later imports converge on one thread.
+        for candidate in (*references, *in_reply_to_ids):
+            if candidate not in ambiguous_ids:
+                return candidate
 
     msg_id = normalize_message_id(email_data.get("message_id"))
     if msg_id:
@@ -249,7 +260,7 @@ def _direct_parent_id(edges: list[EmailThreadEdge]) -> str | None:
 
 
 def _thread_children(
-    emails: list[Email], edges: list[EmailThreadEdge]
+    emails: list[Email], edges: list[EmailThreadEdge], unique_parent_ids: set[str]
 ) -> dict[int, list[Email]]:
     by_message_id: dict[str, list[Email]] = defaultdict(list)
     for email in emails:
@@ -263,9 +274,32 @@ def _thread_children(
     for email in emails:
         parent_id = _direct_parent_id(edges_by_source[email.id])
         parents = by_message_id.get(parent_id or "", [])
-        if len(parents) == 1 and parents[0].id != email.id:
+        if (
+            parent_id in unique_parent_ids
+            and len(parents) == 1
+            and parents[0].id != email.id
+        ):
             children[parents[0].id].append(email)
     return children
+
+
+async def _unique_parent_ids(
+    session: AsyncSession,
+    emails: list[Email],
+    user_id: str,
+    organization_id: str | None,
+) -> set[str]:
+    ids = {normalize_message_id(email.message_id) for email in emails}
+    ids.discard(None)
+    lookup = ids | {f"<{value}>" for value in ids}
+    result = await session.execute(
+        select(Email.id, Email.message_id).where(
+            *Email.owner_filters(user_id, organization_id),
+            Email.message_id.in_(lookup),
+        )
+    )
+    counts = Counter(normalize_message_id(message_id) for _, message_id in result.all())
+    return {message_id for message_id, count in counts.items() if count == 1}
 
 
 def _move_thread_descendants(
@@ -289,12 +323,9 @@ async def reconcile_email_thread(session: AsyncSession, email: Email) -> None:
     if not message_id:
         return
     owner = Email.owner_filters(email.user_id, email.organization_id)
-    result = await session.execute(
-        select(Email.id).where(
-            *owner, Email.message_id.in_([message_id, f"<{message_id}>"])
-        )
-    )
-    if result.scalars().all() != [email.id]:
+    if message_id not in await _unique_parent_ids(
+        session, [email], email.user_id, email.organization_id
+    ):
         return
     result = await session.execute(
         select(EmailThreadEdge.source_email_id).where(
@@ -333,7 +364,11 @@ async def reconcile_email_thread(session: AsyncSession, email: Email) -> None:
             EmailThreadEdge.detached_at.is_(None),
         )
     )
-    children = _thread_children(emails, result.scalars().all())
+    children = _thread_children(
+        emails,
+        result.scalars().all(),
+        await _unique_parent_ids(session, emails, email.user_id, email.organization_id),
+    )
     # ponytail: scans only provisional thread groups; index direct-parent edges if groups grow large.
     for child in children[email.id]:
         _move_thread_descendants(child, children, new_thread)
@@ -385,7 +420,11 @@ async def detach_email_from_thread(
     if not source_edges:
         return 0
 
-    children = _thread_children(emails, active_edges)
+    children = _thread_children(
+        emails,
+        active_edges,
+        await _unique_parent_ids(session, emails, user_id, organization_id),
+    )
     moved = _move_thread_descendants(source, children, new_thread)
 
     now = datetime.datetime.now(datetime.timezone.utc)
