@@ -1,4 +1,4 @@
-"""Add is_read to emails (IMAP \\Seen read state).
+"""Add is_read to existing mail tables (IMAP \\Seen read state).
 
 Existing rows default to read so historical/file imports do not surface as unread.
 """
@@ -14,16 +14,22 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "emails",
-        sa.Column(
-            "is_read",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("true"),
-        ),
-    )
+    inspector = sa.inspect(op.get_bind())
+    for table in ("email_records", "emails"):
+        if inspector.has_table(table) and not any(
+            column["name"] == "is_read" for column in inspector.get_columns(table)
+        ):
+            op.add_column(
+                table,
+                sa.Column(
+                    "is_read",
+                    sa.Boolean(),
+                    nullable=False,
+                    server_default=sa.text("true"),
+                ),
+            )
 
 
 def downgrade() -> None:
-    op.drop_column("emails", "is_read")
+    # The column may have predated this idempotent revision; do not erase it.
+    pass
