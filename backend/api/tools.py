@@ -778,15 +778,15 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
 
     if algorithm == "md5":
         return {
-            "hash": hashlib.md5(
+            "hash": hashlib.md5(  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5
                 encoded_text
-            ).hexdigest()  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5
+            ).hexdigest()
         }
     elif algorithm == "sha1":
         return {
-            "hash": hashlib.sha1(
+            "hash": hashlib.sha1(  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
                 encoded_text
-            ).hexdigest()  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+            ).hexdigest()
         }
     elif algorithm == "sha512":
         return {"hash": hashlib.sha512(encoded_text).hexdigest()}
