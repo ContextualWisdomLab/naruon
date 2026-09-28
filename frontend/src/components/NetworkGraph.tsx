@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -160,7 +160,6 @@ import { apiClient } from '@/lib/api-client';
 export default function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
-  const unavailableRelationshipDescriptionId = useId();
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -390,30 +389,14 @@ export default function NetworkGraph() {
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <span
-            tabIndex={!firstEdge ? 0 : undefined}
-            aria-describedby={!firstEdge ? unavailableRelationshipDescriptionId : undefined}
-            title={!firstEdge ? "표시할 관계 데이터가 없습니다." : undefined}
-            className={
-              !firstEdge
-                ? "cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                : undefined
-            }
+          <button
+            type="button"
+            onClick={handleSelectFirstRelationship}
+            disabled={!firstEdge}
+            className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {!firstEdge && (
-              <span id={unavailableRelationshipDescriptionId} className="sr-only">
-                표시할 관계 데이터가 없습니다.
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={handleSelectFirstRelationship}
-              disabled={!firstEdge}
-              className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ${!firstEdge ? "pointer-events-none" : ""}`}
-            >
-              첫 관계 보기
-            </button>
-          </span>
+            첫 관계 보기
+          </button>
           <button
             type="button"
             onClick={handleZoomGraph}

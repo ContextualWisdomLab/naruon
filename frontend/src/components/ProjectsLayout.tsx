@@ -564,6 +564,49 @@ export function ProjectsLayout() {
     }
   }
 
+
+  // ⚡ Bolt: Wrap desktop projects list in useMemo to prevent O(N) re-renders
+  const projectsDesktopList = useMemo(() => (
+    <>
+      {projects.map((project) => (
+        <button
+          key={project.id}
+          type="button"
+          onClick={() => setSelectedProjectId(project.id)}
+          className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${activeProject.id === project.id ? 'border-primary/30 bg-secondary' : 'border-transparent hover:bg-secondary/50'}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-bold text-muted-foreground">{project.category}</span>
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${projectStatusClass[project.status]}`}>{project.status}</span>
+          </div>
+          <h3 className="mt-1 line-clamp-2 font-bold text-sm text-foreground">{project.title}</h3>
+          <div className="mt-3 flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border">
+              <div className={`h-full ${project.progress === 100 ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${project.progress}%` }} />
+            </div>
+            <span className="text-xs font-semibold text-muted-foreground">{project.progress}%</span>
+          </div>
+        </button>
+      ))}
+    </>
+  ), [projects, activeProject.id, setSelectedProjectId]);
+
+  // ⚡ Bolt: Wrap mobile projects list in useMemo to prevent O(N) re-renders
+  const projectsMobileList = useMemo(() => (
+    <>
+      {projects.map((project) => (
+        <button
+          key={project.id}
+          type="button"
+          onClick={() => setSelectedProjectId(project.id)}
+          className={`min-h-10 shrink-0 rounded-xl px-3 text-xs font-bold ${activeProject.id === project.id ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'}`}
+        >
+          {project.title}
+        </button>
+      ))}
+    </>
+  ), [projects, activeProject.id, setSelectedProjectId]);
+
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-x-hidden bg-background text-foreground">
       <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-r border-border bg-card lg:flex">
@@ -583,26 +626,7 @@ export function ProjectsLayout() {
           {loading ? (
             <div role="status" className="rounded-lg border border-border bg-background p-3 text-sm font-semibold text-muted-foreground">프로젝트 근거를 불러오는 중입니다.</div>
           ) : null}
-          {projects.map((project) => (
-            <button
-              key={project.id}
-              type="button"
-              onClick={() => setSelectedProjectId(project.id)}
-              className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${activeProject.id === project.id ? 'border-primary/30 bg-secondary' : 'border-transparent hover:bg-secondary/50'}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-bold text-muted-foreground">{project.category}</span>
-                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${projectStatusClass[project.status]}`}>{project.status}</span>
-              </div>
-              <h3 className="mt-1 line-clamp-2 font-bold text-sm text-foreground">{project.title}</h3>
-              <div className="mt-3 flex items-center gap-2">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border">
-                  <div className={`h-full ${project.progress === 100 ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${project.progress}%` }} />
-                </div>
-                <span className="text-xs font-semibold text-muted-foreground">{project.progress}%</span>
-              </div>
-            </button>
-          ))}
+          {projectsDesktopList}
         </div>
       </aside>
 
@@ -619,16 +643,7 @@ export function ProjectsLayout() {
           </div>
           <div className="flex min-w-0 flex-col gap-3 lg:items-end">
             <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
-              {projects.map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => setSelectedProjectId(project.id)}
-                  className={`min-h-10 shrink-0 rounded-xl px-3 text-xs font-bold ${activeProject.id === project.id ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'}`}
-                >
-                  {project.title}
-                </button>
-              ))}
+              {projectsMobileList}
             </div>
             <div className="flex overflow-x-auto rounded-md border border-border">
               {(['프로젝트 상세', '마일스톤', '의사결정 로그'] as ProjectViewMode[]).map((mode) => (
