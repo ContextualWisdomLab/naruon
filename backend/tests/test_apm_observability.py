@@ -47,6 +47,11 @@ def test_open_telemetry_setup_is_centralized_and_opt_in_by_default():
     assert "except Exception" in telemetry_source
 
 
+def test_product_runtime_does_not_install_its_own_otlp_exporter():
+    for path in ("backend/pyproject.toml", "backend/requirements.txt", "backend/requirements-hashes.txt"):
+        assert "opentelemetry-exporter-otlp==" not in (ROOT_DIR / path).read_text()
+
+
 def test_telemetry_does_not_instrument_without_explicit_config():
     from fastapi import FastAPI
     from core import telemetry
