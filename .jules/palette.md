@@ -80,6 +80,6 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
-## $(date +%Y-%m-%d) - 비동기 버튼 로딩 피드백 및 아이콘 접근성 강화
+## 2026-09-28 - 비동기 버튼 로딩 피드백 및 아이콘 접근성 강화
 **Learning:** 비동기 작업을 수행하는 버튼에서 텍스트가 변경되더라도, 시각적인 로딩 스피너(Loader2)가 없으면 사용자가 작업 진행 상태를 직관적으로 인지하기 어려울 수 있습니다. 또한, 장식용이나 의미가 텍스트로 전달되는 아이콘에 `aria-hidden="true"`를 누락하면 스크린 리더에서 불필요한 정보가 읽히는 접근성 문제가 발생합니다.
 **Action:** 비동기 버튼에는 항상 로딩 상태를 명확히 보여주는 스피너 애니메이션을 추가하고, 모든 아이콘에는 `aria-hidden="true"` 속성을 부여하여 접근성을 보장해야 합니다.
