@@ -5,6 +5,7 @@ import {
   buildReplyPayload,
   formatEmailDate,
   getConversationMessages,
+  getReplyEvidence,
 } from "./email-threading";
 
 const baseEmail = {
@@ -20,6 +21,24 @@ const baseEmail = {
 };
 
 describe("email threading UI helpers", () => {
+  it("shows source-backed reply evidence and keeps missing or conflicting targets explicit", () => {
+    const reply = {
+      ...baseEmail,
+      id: 2,
+      message_id: "<reply@example.com>",
+      in_reply_to: "<root@example.com>",
+    };
+    expect(getReplyEvidence(reply, [baseEmail, reply])).toEqual({
+      source: "In-Reply-To, References",
+      state: "found",
+      targetEmailId: 1,
+    });
+    expect(getReplyEvidence(reply, [reply])?.state).toBe("missing");
+    expect(getReplyEvidence({ ...reply, references: "<other@example.com>" }, [baseEmail, reply])?.state)
+      .toBe("conflicting");
+    expect(getReplyEvidence({ ...reply, references: "<root@example.com>".repeat(65) }, [baseEmail, reply])?.state)
+      .toBe("incomplete");
+  });
   it("builds a reply payload with safe recipient and threading headers", () => {
     expect(buildReplyPayload(baseEmail, "Thanks")).toEqual({
       to: "reply@example.com",
