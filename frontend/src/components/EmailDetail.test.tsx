@@ -176,6 +176,37 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("Original message");
   });
 
+  it.each([
+    { state: "ambiguous", description: "회신 정보와 일치하는 메일이 여럿 있어 관계를 확정하지 못했습니다." },
+    { state: "incomplete", description: "회신 정보가 불완전해 관계를 확인하지 못했습니다." },
+  ])("shows the stored $state relationship state", async ({ state, description }) => {
+    const email = {
+      id: 2, message_id: "reply@example.com", thread_id: "reply@example.com",
+      sender: "sender@example.com", recipients: "owner@example.com",
+      subject: "Reply", body: "Reply message", date: "2026-09-28T10:00:00Z",
+      in_reply_to: "<parent@example.com>",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/2")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/thread/reply%40example.com")) {
+        return Promise.resolve(jsonResponse({ thread: [{
+          ...email,
+          thread_evidence: [{ source: "in_reply_to", ordinal: 0, state, target_message_id: "parent@example.com", target_email_id: null }],
+        }] }));
+      }
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={2} />); });
+    await waitForCondition(() => container?.textContent?.includes(description) ?? false);
+    expect(container.textContent).toContain(description);
+  });
+
   it("translates email content when the Translate button is clicked", async () => {
     const translation = deferred<Response>();
 

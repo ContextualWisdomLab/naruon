@@ -57,6 +57,8 @@ describe("email threading UI helpers", () => {
     const resolved = { ...reply, thread_evidence: [{ ...reply.thread_evidence[0], state: "resolved" as const }] };
     expect(getReplyEvidence(resolved, [baseEmail, resolved])?.targetEmailId).toBe(1);
     expect(getReplyEvidence(resolved, [resolved])?.state).toBe("outside_thread");
+    const ambiguous = { ...reply, thread_evidence: [{ ...reply.thread_evidence[0], state: "ambiguous" as const, target_email_id: null }] };
+    expect(getReplyEvidence(ambiguous, [baseEmail, ambiguous])?.state).toBe("ambiguous");
   });
   it("builds a reply payload with safe recipient and threading headers", () => {
     expect(buildReplyPayload(baseEmail, "Thanks")).toEqual({

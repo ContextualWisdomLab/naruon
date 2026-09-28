@@ -28,7 +28,7 @@ export interface ReplyPayload {
 
 export type ReplyEvidence = {
   source: "In-Reply-To" | "References" | "In-Reply-To, References";
-  state: "found" | "missing" | "outside_thread" | "conflicting" | "incomplete" | "detached";
+  state: "found" | "missing" | "outside_thread" | "conflicting" | "ambiguous" | "incomplete" | "detached";
   targetEmailId?: number;
 };
 
@@ -57,9 +57,10 @@ export function getReplyEvidence(
       && active.some((edge) => edge.source === "references")
       ? "In-Reply-To, References"
       : selected.source === "in_reply_to" ? "In-Reply-To" : "References";
-    if (candidates.length > 1 || candidates.some((edge) => edge.state === "conflicting" || edge.state === "ambiguous")) {
+    if (candidates.length > 1 || candidates.some((edge) => edge.state === "conflicting")) {
       return { source, state: "conflicting" };
     }
+    if (candidates.some((edge) => edge.state === "ambiguous")) return { source, state: "ambiguous" };
     if (selected.state === "detached") return { source, state: "detached" };
     if (selected.state === "incomplete") return { source, state: "incomplete" };
     if (selected.state === "unresolved") return { source, state: "missing" };

@@ -806,12 +806,14 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     if (!evidence) return null;
                     const description = evidence.state === "conflicting"
                         ? "회신 정보가 서로 다른 메일을 가리켜 관계를 확인해야 합니다."
+                        : evidence.state === "ambiguous"
+                          ? "회신 정보와 일치하는 메일이 여럿 있어 관계를 확정하지 못했습니다."
                         : evidence.state === "detached"
                           ? "사용자가 이 관계를 해제했습니다."
                         : evidence.state === "outside_thread"
                           ? "가리키는 메일이 보관함에 있지만 현재 대화에는 보이지 않습니다."
                         : evidence.state === "incomplete"
-                          ? "회신 정보가 너무 길어 관계를 확인하지 못했습니다."
+                          ? "회신 정보가 불완전해 관계를 확인하지 못했습니다."
                         : "현재 대화에서 가리키는 메일을 찾지 못했습니다.";
                     return (
                       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
