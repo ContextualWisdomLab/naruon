@@ -2,7 +2,7 @@ import uuid
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import bindparam, func, select
-from db.models import Email, EmailThreadEvidenceRecord
+from db.models import Email, EmailThreadEvidenceRecord, canonical_message_id_expression
 from services.email_parser import EmailData
 
 
@@ -130,18 +130,10 @@ async def _find_existing_thread_ids(
     if not message_ids:
         return {}
 
-    target_ids: list[str] = []
-    seen_target_ids: set[str] = set()
-    for message_id in message_ids:
-        for target_id in (message_id, f"<{message_id}>"):
-            if target_id not in seen_target_ids:
-                seen_target_ids.add(target_id)
-                target_ids.append(target_id)
-
     result = await session.execute(
         select(Email.message_id, Email.thread_id).where(
             *Email.owner_filters(user_id, organization_id),
-            Email.message_id.in_(target_ids),
+            canonical_message_id_expression(Email.message_id).in_(message_ids),
         )
     )
 
@@ -306,11 +298,10 @@ async def _unique_parent_ids(
 ) -> set[str]:
     ids = {normalize_message_id(email.message_id) for email in emails}
     ids.discard(None)
-    lookup = ids | {f"<{value}>" for value in ids}
     result = await session.execute(
         select(Email.id, Email.message_id).where(
             *Email.owner_filters(user_id, organization_id),
-            Email.message_id.in_(lookup),
+            canonical_message_id_expression(Email.message_id).in_(ids),
         )
     )
     counts = Counter(normalize_message_id(message_id) for _, message_id in result.all())

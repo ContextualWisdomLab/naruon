@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
-from db.models import Email, EmailThreadEvidenceRecord
+from db.models import Email, EmailThreadEvidenceRecord, canonical_message_id_expression
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -679,17 +679,24 @@ async def get_email_thread(
 ):
     # Ensure auth context validates the request payload and scopes access
     lookup_values = thread_lookup_values(thread_id)
+    canonical_id = normalize_message_id(thread_id) or thread_id
     result = await db.execute(
         select(Email)
         .where(
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             or_(
-                Email.thread_id.in_(lookup_values), Email.message_id.in_(lookup_values)
+                Email.thread_id.in_(lookup_values),
+                canonical_message_id_expression(Email.message_id) == canonical_id,
             ),
         )
         .order_by(Email.date.asc())
     )
     emails = result.scalars().all()
+    matches = [
+        email for email in emails if normalize_message_id(email.message_id) == canonical_id
+    ]
+    if len(matches) > 1:
+        emails = [email for email in emails if email.thread_id in lookup_values]
     if not emails:
         raise HTTPException(status_code=404, detail="Thread not found")
 
@@ -721,10 +728,9 @@ async def get_email_thread(
         if len(replies) > 1 or (replies and last_reference and last_reference not in replies):
             conflicting_email_ids.add(source_email_id)
     target_ids = {
-        value
+        edge.target_message_id
         for edge in edges
         if edge.target_message_id and not edge.incomplete
-        for value in thread_lookup_values(edge.target_message_id)
     }
     targets_by_message_id: dict[str, list[int]] = defaultdict(list)
     if target_ids:
@@ -733,7 +739,7 @@ async def get_email_thread(
                 *Email.owner_filters(
                     auth_context.user_id, auth_context.organization_id
                 ),
-                Email.message_id.in_(target_ids),
+                canonical_message_id_expression(Email.message_id).in_(target_ids),
             )
         )
         for target_email_id, target_message_id in target_result.all():

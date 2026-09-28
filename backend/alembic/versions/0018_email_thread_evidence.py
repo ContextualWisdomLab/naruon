@@ -17,6 +17,7 @@ depends_on = None
 
 _TABLE = "email_thread_evidence"
 _BRACKETED = re.compile(r"<([^>]+)>")
+_CANONICAL_INDEX = "ix_email_records_owner_canonical_message_id"
 
 
 def _target_ids(raw: str) -> list[str | None]:
@@ -35,6 +36,18 @@ def _target_ids(raw: str) -> list[str | None]:
 
 def upgrade() -> None:
     connection = op.get_bind()
+    message_id = sa.column("message_id", sa.String())
+    canonical_id = message_id
+    for whitespace in (" ", "\t", "\r", "\n", "\v", "\f"):
+        canonical_id = sa.func.replace(
+            canonical_id, sa.literal_column(f"'{whitespace}'"), sa.literal_column("''")
+        )
+    op.create_index(
+        _CANONICAL_INDEX,
+        "email_records",
+        ["user_id", "organization_id", sa.func.trim(canonical_id, sa.literal_column("'<>'"))],
+        if_not_exists=True,
+    )
     if not sa.inspect(connection).has_table(_TABLE):
         op.create_table(
             _TABLE,
@@ -149,6 +162,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index(_CANONICAL_INDEX, table_name="email_records")
     op.drop_index("ix_email_thread_evidence_owner_target", table_name=_TABLE)
     op.drop_index("ix_email_thread_evidence_source_email_id", table_name=_TABLE)
     op.drop_table(_TABLE)

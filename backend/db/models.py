@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    literal_column,
 )
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -821,6 +822,21 @@ class Email(Base):
     ticket_tasks: Mapped[list["TicketTask"]] = relationship(
         back_populates="related_email", cascade="all, delete-orphan"
     )
+
+
+def canonical_message_id_expression(column):
+    expression = column
+    for whitespace in (" ", "\t", "\r", "\n", "\v", "\f"):
+        expression = func.replace(expression, literal_column(f"'{whitespace}'"), literal_column("''"))
+    return func.trim(expression, literal_column("'<>'"))
+
+
+Index(
+    "ix_email_records_owner_canonical_message_id",
+    Email.user_id,
+    Email.organization_id,
+    canonical_message_id_expression(Email.message_id),
+)
 
 
 class EmailThreadEvidenceRecord(Base):

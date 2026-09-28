@@ -24,6 +24,7 @@ from db.models import (
     ContentSegmentRecord,
     Email,
     KnowledgeGraphEdgeRecord,
+    canonical_message_id_expression,
 )
 from services.archive import extract_backup_async
 from services.batch_embedding_service import (
@@ -223,17 +224,16 @@ async def _find_existing_email(
     message_id: str,
     fingerprint: str,
 ) -> Email | None:
-    message_lookup_values = {message_id, f"<{message_id}>"}
     result = await session.execute(
         select(Email).where(
             *Email.owner_filters(user_id, organization_id),
             or_(
-                Email.message_id.in_(message_lookup_values),
+                canonical_message_id_expression(Email.message_id) == message_id,
                 Email.fingerprint == fingerprint,
             ),
-        )
+        ).order_by(Email.id)
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 async def _owner_email_import_count(

@@ -21,11 +21,16 @@ from api.emails import get_email_thread
 from db.models import Base, Email, EmailThreadEvidenceRecord
 from services.email_import_service import (
     _acquire_owner_import_quota_lock,
+    _find_existing_email,
     _import_single_eml,
     _release_owner_import_quota_lock,
 )
 from services.imap_worker import process_fetched_email
-from services.threading_service import detach_email_from_thread, email_thread_evidence
+from services.threading_service import (
+    assign_thread_id,
+    detach_email_from_thread,
+    email_thread_evidence,
+)
 
 
 @pytest.mark.asyncio
@@ -71,9 +76,15 @@ async def test_thread_view_resolves_late_parent_without_cross_owner_match():
             assert len(initial["thread"]) == 1
             assert initial["thread"][0].thread_evidence[0].state == "unresolved"
 
-            owner_parent = message("owner", "<parent@example.com>", "owner parent")
+            owner_parent = message("owner", "<parent@ example.com>", "owner parent")
+            owner_parent.thread_id = "root@example.com"
             session.add(owner_parent)
             session.commit()
+            assert await assign_thread_id(
+                AsyncAdapter(session),
+                {"message_id": "<next@example.com>", "in_reply_to": "<parent@example.com>"},
+                user_id="owner", organization_id="org",
+            ) == "root@example.com"
             updated = await get_email_thread(
                 "parent@example.com", AsyncAdapter(session), auth
             )
@@ -85,6 +96,41 @@ async def test_thread_view_resolves_late_parent_without_cross_owner_match():
             )
             assert evidence.state == "resolved"
             assert evidence.target_email_id == owner_parent.id
+            assert await _find_existing_email(
+                AsyncAdapter(session),
+                user_id="owner",
+                organization_id="org",
+                message_id="parent@example.com",
+                fingerprint="unused",
+            ) == owner_parent
+
+            duplicate_parent = message("owner", "parent@example.com", "duplicate parent")
+            duplicate_parent.thread_id = "unrelated@example.com"
+            session.add(duplicate_parent)
+            session.commit()
+            duplicated_view = await get_email_thread(
+                "parent@example.com", AsyncAdapter(session), auth
+            )
+            assert {item.id for item in duplicated_view["thread"]} == {reply.id}
+            duplicate_evidence = next(
+                item.thread_evidence[0]
+                for item in duplicated_view["thread"]
+                if item.id == reply.id
+            )
+            assert duplicate_evidence.state == "ambiguous"
+            assert duplicate_evidence.target_email_id is None
+            assert await _find_existing_email(
+                AsyncAdapter(session),
+                user_id="owner",
+                organization_id="org",
+                message_id="parent@example.com",
+                fingerprint="unused",
+            ) is not None
+            assert await assign_thread_id(
+                AsyncAdapter(session),
+                {"message_id": "<later@example.com>", "in_reply_to": "<parent@example.com>"},
+                user_id="owner", organization_id="org",
+            ) == "later@example.com"
 
             ambiguous = message("owner", "<ambiguous@example.com>", "ambiguous reply")
             ambiguous.in_reply_to = "<parent@example.com> <other@example.com>"
@@ -295,7 +341,7 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             duplicate_child = Email(
                 user_id="owner",
                 organization_id="org",
-                message_id="<child@example.com>",
+                message_id="<child@ example.com>",
                 thread_id="elsewhere@example.com",
                 sender="sender@example.com",
                 recipients="owner@example.com",
@@ -493,6 +539,11 @@ def test_thread_evidence_migration_backfills_existing_headers():
                 ("references", "root@example.com", 0),
                 ("references", "parent@example.com", 0),
             ]
+            indexes = connection.execute(text("PRAGMA index_list(email_records)")).all()
+            assert any(
+                row[1] == "ix_email_records_owner_canonical_message_id"
+                for row in indexes
+            )
     finally:
         engine.dispose()
 
