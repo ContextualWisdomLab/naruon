@@ -52,6 +52,7 @@ from services.threading_service import (
     assign_thread_id,
     email_thread_evidence,
     lock_email_thread_owner,
+    reconcile_email_thread,
     generate_email_fingerprint,
     normalize_message_id,
 )
@@ -914,6 +915,8 @@ async def _import_single_eml(
     for edge in email_thread_evidence(email_obj):
         session.add(edge)
     try:
+        await session.flush()
+        await reconcile_email_thread(session, email_obj)
         await session.commit()
     except Exception:
         await session.rollback()

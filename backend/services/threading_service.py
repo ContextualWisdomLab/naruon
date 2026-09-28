@@ -26,20 +26,24 @@ async def lock_email_thread_owner(
     if dialect != "postgresql":
         return
     await session.execute(
-        select(func.pg_advisory_xact_lock(
-            func.hashtext(bindparam("lock_namespace")),
-            func.hashtext(bindparam("lock_owner")),
-        )),
+        select(
+            func.pg_advisory_xact_lock(
+                func.hashtext(bindparam("lock_namespace")),
+                func.hashtext(bindparam("lock_owner")),
+            )
+        ),
         {
             "lock_namespace": _THREAD_LOCK_NAMESPACE,
             "lock_owner": f"{user_id}\x00{organization_id or ''}",
         },
     )
 
+
 # ⚡ Bolt Optimization: Pre-compile reference extraction regex
 # Impact: Eliminates redundant inline compilation/caching overhead during repetitive
 # email header processing, yielding a measurable speedup when handling long reference lists.
 REFERENCE_PATTERN = re.compile(r"<([^>]+)>")
+
 
 def generate_email_fingerprint(
     subject: str | None,
@@ -219,6 +223,118 @@ def email_thread_evidence(email: Email) -> list[EmailThreadEdge]:
     return edges
 
 
+def _direct_parent_id(edges: list[EmailThreadEdge]) -> str | None:
+    if any(edge.incomplete for edge in edges):
+        return None
+    replies = {
+        edge.target_message_id
+        for edge in edges
+        if edge.evidence_source == "in_reply_to"
+    }
+    references = [edge for edge in edges if edge.evidence_source == "references"]
+    last_reference = (
+        max(references, key=lambda edge: edge.ordinal).target_message_id
+        if references
+        else None
+    )
+    if len(replies) > 1 or (
+        replies and last_reference and last_reference not in replies
+    ):
+        return None
+    return next(iter(replies)) if replies else last_reference
+
+
+def _thread_children(
+    emails: list[Email], edges: list[EmailThreadEdge]
+) -> dict[int, list[Email]]:
+    by_message_id: dict[str, list[Email]] = defaultdict(list)
+    for email in emails:
+        message_id = normalize_message_id(email.message_id)
+        if message_id:
+            by_message_id[message_id].append(email)
+    edges_by_source: dict[int, list[EmailThreadEdge]] = defaultdict(list)
+    for edge in edges:
+        edges_by_source[edge.source_email_id].append(edge)
+    children: dict[int, list[Email]] = defaultdict(list)
+    for email in emails:
+        parent_id = _direct_parent_id(edges_by_source[email.id])
+        parents = by_message_id.get(parent_id or "", [])
+        if len(parents) == 1 and parents[0].id != email.id:
+            children[parents[0].id].append(email)
+    return children
+
+
+def _move_thread_descendants(
+    source: Email, children: dict[int, list[Email]], thread_id: str
+) -> int:
+    moved: set[int] = set()
+    queue = deque([source])
+    while queue:
+        email = queue.popleft()
+        if email.id in moved:
+            continue
+        moved.add(email.id)
+        email.thread_id = thread_id
+        queue.extend(children[email.id])
+    return len(moved)
+
+
+async def reconcile_email_thread(session: AsyncSession, email: Email) -> None:
+    """Join replies imported before their direct parent, inside the import transaction."""
+    message_id = normalize_message_id(email.message_id)
+    if not message_id:
+        return
+    owner = Email.owner_filters(email.user_id, email.organization_id)
+    result = await session.execute(
+        select(Email.id).where(
+            *owner, Email.message_id.in_([message_id, f"<{message_id}>"])
+        )
+    )
+    if result.scalars().all() != [email.id]:
+        return
+    result = await session.execute(
+        select(EmailThreadEdge.source_email_id).where(
+            *EmailThreadEdge.owner_filters(email.user_id, email.organization_id),
+            EmailThreadEdge.target_message_id == message_id,
+            EmailThreadEdge.detached_at.is_(None),
+            EmailThreadEdge.incomplete.is_(False),
+        )
+    )
+    candidate_ids = result.scalars().all()
+    if not candidate_ids:
+        return
+    result = await session.execute(
+        select(Email).where(*owner, Email.id.in_(candidate_ids)).with_for_update()
+    )
+    candidates = result.scalars().all()
+    new_thread = normalize_message_id(email.thread_id) or email.thread_id
+    old_threads = {
+        normalize_message_id(candidate.thread_id) or candidate.thread_id
+        for candidate in candidates
+        if candidate.id != email.id and candidate.thread_id != new_thread
+    }
+    if not old_threads:
+        return
+    thread_keys = old_threads | {f"<{value}>" for value in old_threads}
+    result = await session.execute(
+        select(Email).where(*owner, Email.thread_id.in_(thread_keys)).with_for_update()
+    )
+    emails = result.scalars().all()
+    if email not in emails:
+        emails.append(email)
+    result = await session.execute(
+        select(EmailThreadEdge).where(
+            *EmailThreadEdge.owner_filters(email.user_id, email.organization_id),
+            EmailThreadEdge.source_email_id.in_([item.id for item in emails]),
+            EmailThreadEdge.detached_at.is_(None),
+        )
+    )
+    children = _thread_children(emails, result.scalars().all())
+    # ponytail: scans only provisional thread groups; index direct-parent edges if groups grow large.
+    for child in children[email.id]:
+        _move_thread_descendants(child, children, new_thread)
+
+
 async def detach_email_from_thread(
     session: AsyncSession,
     *,
@@ -230,9 +346,9 @@ async def detach_email_from_thread(
     """Detach one email and its unambiguous descendants, retaining the source evidence."""
     await lock_email_thread_owner(session, user_id, organization_id)
     result = await session.execute(
-        select(Email).where(
-            Email.id == email_id, *Email.owner_filters(user_id, organization_id)
-        ).with_for_update()
+        select(Email)
+        .where(Email.id == email_id, *Email.owner_filters(user_id, organization_id))
+        .with_for_update()
     )
     source = result.scalar_one_or_none()
     if source is None:
@@ -241,65 +357,32 @@ async def detach_email_from_thread(
     old_thread = normalize_message_id(source.thread_id) or source.thread_id
     new_thread = normalize_message_id(source.message_id) or f"email-{source.id}"
     result = await session.execute(
-        select(Email).where(
+        select(Email)
+        .where(
             *Email.owner_filters(user_id, organization_id),
             Email.thread_id.in_([old_thread, f"<{old_thread}>"]),
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     emails = result.scalars().all()
     if source not in emails:
         emails.append(source)
     result = await session.execute(
-        select(EmailThreadEdge).where(
+        select(EmailThreadEdge)
+        .where(
             *EmailThreadEdge.owner_filters(user_id, organization_id),
             EmailThreadEdge.source_email_id.in_([email.id for email in emails]),
             EmailThreadEdge.detached_at.is_(None),
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     active_edges = result.scalars().all()
     source_edges = [edge for edge in active_edges if edge.source_email_id == source.id]
     if not source_edges:
         return 0
 
-    by_message_id: dict[str, list[Email]] = defaultdict(list)
-    for email in emails:
-        message_id = normalize_message_id(email.message_id)
-        if message_id:
-            by_message_id[message_id].append(email)
-    edges_by_source: dict[int, list[EmailThreadEdge]] = defaultdict(list)
-    for edge in active_edges:
-        edges_by_source[edge.source_email_id].append(edge)
-
-    children: dict[int, list[Email]] = defaultdict(list)
-    for email in emails:
-        if email.id == source.id:
-            continue
-        evidence = edges_by_source[email.id]
-        replies = {
-            edge.target_message_id for edge in evidence
-            if edge.evidence_source == "in_reply_to" and not edge.incomplete
-        }
-        if replies:
-            parent_id = next(iter(replies)) if len(replies) == 1 else None
-        else:
-            references = [
-                edge for edge in evidence
-                if edge.evidence_source == "references" and not edge.incomplete
-            ]
-            parent_id = max(references, key=lambda edge: edge.ordinal).target_message_id if references else None
-        parents = by_message_id.get(parent_id or "", [])
-        if len(parents) == 1:
-            children[parents[0].id].append(email)
-
-    moved = set()
-    queue = deque([source])
-    while queue:
-        email = queue.popleft()
-        if email.id in moved:
-            continue
-        moved.add(email.id)
-        email.thread_id = new_thread
-        queue.extend(children[email.id])
+    children = _thread_children(emails, active_edges)
+    moved = _move_thread_descendants(source, children, new_thread)
 
     now = datetime.datetime.now(datetime.timezone.utc)
     for edge in source_edges:
@@ -307,4 +390,4 @@ async def detach_email_from_thread(
         edge.detached_by = user_id
         edge.detach_reason = reason
     await session.commit()
-    return len(moved)
+    return moved

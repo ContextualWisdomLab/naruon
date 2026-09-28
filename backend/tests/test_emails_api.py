@@ -234,6 +234,9 @@ class ImportRecordingSession(MockSession):
         self.added.append(item)
         self.items.append(item)
 
+    async def flush(self):
+        pass
+
     async def commit(self):
         self.commit_count += 1
 

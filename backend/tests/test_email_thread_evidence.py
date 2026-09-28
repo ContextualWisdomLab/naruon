@@ -117,6 +117,9 @@ async def test_detach_correction_moves_reply_subtree_and_survives_reimport():
             def add(self, item):
                 self.session.add(item)
 
+            async def flush(self):
+                self.session.flush()
+
             async def commit(self):
                 self.session.commit()
 
@@ -209,6 +212,129 @@ async def test_detach_correction_moves_reply_subtree_and_survives_reimport():
                 .state
                 == "detached"
             )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_late_ancestor_reconciles_previously_split_thread_keys():
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Email.__table__.create(engine)
+        EmailThreadEdge.__table__.create(engine)
+
+        class AsyncAdapter:
+            def __init__(self, session: Session):
+                self.session = session
+
+            async def execute(self, statement, params=None):
+                return self.session.execute(statement, params or {})
+
+            def add(self, item):
+                self.session.add(item)
+
+            async def flush(self):
+                self.session.flush()
+
+            async def commit(self):
+                self.session.commit()
+
+        when = datetime.datetime(2026, 9, 28, tzinfo=datetime.timezone.utc)
+
+        def message(message_id: str, parent: str, references: str):
+            return {
+                "message_id": f"<{message_id}>",
+                "in_reply_to": f"<{parent}>",
+                "references": references,
+                "sender": "sender@example.com",
+                "recipients": ["owner@example.com"],
+                "subject": message_id,
+                "body": message_id,
+                "date": when,
+            }
+
+        with Session(engine) as session:
+            adapter = AsyncAdapter(session)
+            reply = await process_fetched_email(
+                adapter,
+                message(
+                    "reply@example.com", "parent@example.com", "<parent@example.com>"
+                ),
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            child = await process_fetched_email(
+                adapter,
+                message(
+                    "child@example.com",
+                    "reply@example.com",
+                    "<parent@example.com> <reply@example.com>",
+                ),
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            assert reply.thread_id == child.thread_id == "parent@example.com"
+
+            conflicting = await process_fetched_email(
+                adapter,
+                message(
+                    "conflict@example.com", "parent@example.com", "<other@example.com>"
+                ),
+                "owner",
+                "org",
+            )
+            ambiguous = await process_fetched_email(
+                adapter,
+                message(
+                    "ambiguous@example.com",
+                    "parent@example.com",
+                    "<parent@example.com>",
+                )
+                | {"in_reply_to": "<parent@example.com> <other@example.com>"},
+                "owner",
+                "org",
+            )
+            detached = await process_fetched_email(
+                adapter,
+                message(
+                    "detached@example.com", "parent@example.com", "<parent@example.com>"
+                ),
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            assert (
+                await detach_email_from_thread(
+                    adapter,
+                    email_id=detached.id,
+                    user_id="owner",
+                    organization_id="org",
+                    reason="Manual correction",
+                )
+                == 1
+            )
+
+            parent = await process_fetched_email(
+                adapter,
+                message("parent@example.com", "root@example.com", "<root@example.com>"),
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            assert parent.thread_id == "root@example.com"
+            assert reply.thread_id == child.thread_id == "root@example.com"
+            assert conflicting.thread_id == "other@example.com"
+            assert ambiguous.thread_id == "parent@example.com"
+            assert detached.thread_id == "detached@example.com"
+            auth = AuthContext("owner", "member", "org", (), "workspace-owner")
+            view = await get_email_thread("root@example.com", adapter, auth)
+            assert {item.id for item in view["thread"]} == {
+                parent.id,
+                reply.id,
+                child.id,
+            }
     finally:
         engine.dispose()
 

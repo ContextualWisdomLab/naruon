@@ -22,6 +22,7 @@ from services.threading_service import (
     email_thread_evidence,
     generate_email_fingerprint,
     lock_email_thread_owner,
+    reconcile_email_thread,
 )
 
 
@@ -103,8 +104,9 @@ async def process_fetched_email(
     session.add(new_email)
     for edge in email_thread_evidence(new_email):
         session.add(edge)
+    await session.flush()
+    await reconcile_email_thread(session, new_email)
     if is_self_sent_email(new_email, owner_addresses):
-        await session.flush()
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)
     return new_email
 
@@ -227,7 +229,7 @@ class ImapSyncWorker:
                 config.user_id,
             )
             return 0
-        
+
         logger.info(
             "Connecting to IMAP server %s:%s for user %s",
             imap_server,
