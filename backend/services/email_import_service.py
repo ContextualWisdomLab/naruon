@@ -50,6 +50,8 @@ from services.project_graph.extractor_registry import (
 )
 from services.threading_service import (
     assign_thread_id,
+    email_thread_evidence,
+    lock_email_thread_owner,
     generate_email_fingerprint,
     normalize_message_id,
 )
@@ -860,6 +862,7 @@ async def _import_single_eml(
         )
 
     message_id = _message_id_for(parsed, content)
+    await lock_email_thread_owner(session, user_id, organization_id)
     parsed["message_id"] = message_id
     persisted_date = _utc_datetime(parsed.get("date"))
     fingerprint = _email_fingerprint(parsed, persisted_date)
@@ -908,6 +911,8 @@ async def _import_single_eml(
     )
 
     session.add(email_obj)
+    for edge in email_thread_evidence(email_obj):
+        session.add(edge)
     try:
         await session.commit()
     except Exception:

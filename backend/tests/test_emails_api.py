@@ -17,7 +17,7 @@ from pydantic import SecretStr
 from api import emails as emails_api
 from api.auth import get_auth_context as auth_get_auth_context
 from core.config import settings
-from db.models import Email, LLMProvider
+from db.models import Email, EmailThreadEdge, LLMProvider
 from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
@@ -96,6 +96,7 @@ class MockSession:
         llm_providers=None,
     ):
         self.items = items
+        self.thread_edges = []
         self.llm_providers = list(llm_providers or [])
         self.tenant_config = (
             MockTenantConfig()
@@ -126,6 +127,10 @@ class MockSession:
         if "tenant_configs" in query_text:
             rows = [] if self.tenant_config is None else [self.tenant_config]
             return MockResult(rows)
+        if "email_thread_evidence" in query_text:
+            return MockResult(self.thread_edges)
+        if "email_records.id, email_records.message_id" in query_text:
+            return MockResult([(email.id, email.message_id) for email in self.items])
         return MockResult(self.items)
 
     async def scalar(self, query):
@@ -1283,6 +1288,10 @@ async def test_import_email_files_serializes_quota_with_postgres_owner_lock(
             "owner_key": "testuser\x00org-acme",
         },
         {
+            "lock_namespace": "naruon-email-thread-evidence",
+            "lock_owner": "testuser\x00org-acme",
+        },
+        {
             "namespace_key": "naruon-email-import-quota",
             "owner_key": "testuser\x00org-acme",
         },
@@ -1621,6 +1630,76 @@ async def test_get_email_thread(client: AsyncClient, db_session, sample_email: E
 
 
 @pytest.mark.asyncio
+async def test_get_email_thread_exposes_persisted_header_evidence(
+    client: AsyncClient, db_session, sample_email: Email
+):
+    db_session.thread_edges = [
+        EmailThreadEdge(
+            id=31,
+            source_email_id=sample_email.id,
+            user_id="testuser",
+            organization_id=sample_email.organization_id,
+            source_message_id=sample_email.message_id,
+            target_message_id="parent@example.com",
+            evidence_source="in_reply_to",
+            ordinal=0,
+            incomplete=False,
+        )
+    ]
+    response = await client.get(f"/api/emails/thread/{sample_email.thread_id}")
+    assert response.status_code == 200
+    assert response.json()["thread"][0]["thread_evidence"] == [
+        {
+            "id": 31,
+            "source": "in_reply_to",
+            "ordinal": 0,
+            "target_message_id": "parent@example.com",
+            "target_email_id": None,
+            "state": "unresolved",
+            "detached_at": None,
+            "detached_by": None,
+            "detach_reason": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_email_thread_marks_conflicting_header_evidence(
+    client: AsyncClient, db_session, sample_email: Email
+):
+    db_session.thread_edges = [
+        EmailThreadEdge(
+            id=index,
+            source_email_id=sample_email.id,
+            user_id="testuser",
+            organization_id=sample_email.organization_id,
+            source_message_id=sample_email.message_id,
+            target_message_id=target,
+            evidence_source=source,
+            ordinal=0,
+            incomplete=False,
+        )
+        for index, source, target in (
+            (31, "in_reply_to", "parent@example.com"),
+            (32, "references", "other@example.com"),
+        )
+    ]
+    response = await client.get(f"/api/emails/thread/{sample_email.thread_id}")
+    assert response.status_code == 200
+    assert {edge["state"] for edge in response.json()["thread"][0]["thread_evidence"]} == {
+        "conflicting"
+    }
+
+
+@pytest.mark.asyncio
+async def test_detach_thread_requires_a_non_blank_reason(client: AsyncClient):
+    response = await client.post(
+        "/api/emails/1/thread/detach", json={"reason": "   "}
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_get_email_thread_returns_ui_safe_display_fields(
     client: AsyncClient, db_session, sample_email: Email
 ):
@@ -1764,7 +1843,10 @@ async def test_get_email_thread_query_is_scoped_to_current_user(
     )
 
     assert response.status_code == 200
-    assert_query_is_owner_scoped(session.queries[-1])
+    assert_query_is_owner_scoped(session.queries[0])
+    edge_query = compiled_query_text(session.queries[-1]).lower()
+    assert "email_thread_evidence.user_id" in edge_query
+    assert "email_thread_evidence.organization_id" in edge_query
 
 
 @patch("api.emails.send_email", return_value={"status": "simulated", "simulated": True})

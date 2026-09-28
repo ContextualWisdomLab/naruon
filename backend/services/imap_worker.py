@@ -17,7 +17,12 @@ from services.knowledge_extractor import (
     extract_knowledge_from_self_sent,
     is_self_sent_email,
 )
-from services.threading_service import assign_thread_id, generate_email_fingerprint
+from services.threading_service import (
+    assign_thread_id,
+    email_thread_evidence,
+    generate_email_fingerprint,
+    lock_email_thread_owner,
+)
 
 
 async def process_fetched_email(
@@ -28,6 +33,7 @@ async def process_fetched_email(
     owner_addresses: Iterable[str] | None = None,
     is_read: bool = True,
 ):
+    await lock_email_thread_owner(session, user_id, organization_id)
     subject = email_data.get("subject", "")
     date_obj = email_data.get("date")
     if hasattr(date_obj, "isoformat"):
@@ -95,6 +101,8 @@ async def process_fetched_email(
     )
 
     session.add(new_email)
+    for edge in email_thread_evidence(new_email):
+        session.add(edge)
     if is_self_sent_email(new_email, owner_addresses):
         await session.flush()
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)

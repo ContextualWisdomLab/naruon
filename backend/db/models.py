@@ -823,6 +823,52 @@ class Email(Base):
     )
 
 
+class EmailThreadEdge(Base):
+    __tablename__ = "email_thread_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_email_id", "evidence_source", "ordinal",
+            name="uq_email_thread_evidence_source_ordinal",
+        ),
+        Index(
+            "ix_email_thread_evidence_owner_target",
+            "user_id", "organization_id", "target_message_id",
+        ),
+    )
+
+    @classmethod
+    def owner_filters(cls, user_id: str, organization_id: str | None):
+        organization_filter = (
+            cls.organization_id == organization_id
+            if organization_id is not None
+            else cls.organization_id.is_(None)
+        )
+        return (cls.user_id == user_id, organization_filter)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_email_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_message_id: Mapped[str] = mapped_column(String, nullable=False)
+    target_message_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    evidence_source: Mapped[str] = mapped_column(String(16), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    incomplete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    detached_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    detached_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    detach_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    source_email: Mapped["Email"] = relationship("Email")
+
+
 class TicketTask(Base):
     __tablename__ = "ticket_tasks"
 

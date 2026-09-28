@@ -121,6 +121,61 @@ describe("EmailDetail", () => {
     clearRecordedProductEvents();
   });
 
+  it("detaches a mail relationship and reloads the corrected conversation", async () => {
+    const parent = {
+      id: 1, message_id: "parent@example.com", thread_id: "parent@example.com",
+      sender: "parent@example.com", recipients: "owner@example.com",
+      subject: "Original", body: "Original message", date: "2026-09-28T10:00:00Z",
+    };
+    const reply = {
+      ...parent,
+      id: 2, message_id: "reply@example.com", subject: "Reply", body: "Reply message",
+      in_reply_to: "<parent@example.com>",
+      thread_evidence: [{
+        id: 7, source: "in_reply_to", ordinal: 0, state: "resolved",
+        target_message_id: "parent@example.com", target_email_id: 1,
+      }],
+    };
+    let detached = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/2/thread/detach")) {
+        detached = true;
+        expect(JSON.parse(String(init?.body)).reason).toBe("사용자가 이 메일을 다른 대화로 분리함");
+        return Promise.resolve(jsonResponse({ detached_messages: 1 }));
+      }
+      if (url.endsWith("/api/emails/2")) {
+        return Promise.resolve(jsonResponse({ ...reply, thread_id: detached ? "reply@example.com" : "parent@example.com" }));
+      }
+      if (url.endsWith("/api/emails/thread/parent%40example.com")) {
+        return Promise.resolve(jsonResponse({ thread: [parent, reply] }));
+      }
+      if (url.endsWith("/api/emails/thread/reply%40example.com")) {
+        return Promise.resolve(jsonResponse({ thread: [{
+          ...reply, thread_id: "reply@example.com",
+          thread_evidence: [{ ...reply.thread_evidence[0], state: "detached" }],
+        }] }));
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={2} />); });
+    await waitForCondition(() => Boolean(container?.textContent?.includes("이 메일 관계 해제")));
+    const detachButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("이 메일 관계 해제"));
+    expect(detachButton).toBeDefined();
+    await act(async () => { detachButton?.click(); });
+    await waitForCondition(() => Boolean(container?.textContent?.includes("대화 관계를 해제했습니다.")));
+    expect(container.textContent).toContain("사용자가 이 관계를 해제했습니다.");
+    expect(container.textContent).not.toContain("Original message");
+  });
+
   it("translates email content when the Translate button is clicked", async () => {
     const translation = deferred<Response>();
 

@@ -115,6 +115,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [detailError, setDetailError] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [isDetaching, setIsDetaching] = useState(false);
+  const [correctionStatus, setCorrectionStatus] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<string>('');
   const [translation, setTranslation] = useState<string | null>(null);
@@ -187,6 +189,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setEmail(null);
       setThreadEmails([]);
       setThreadError(null);
+      setCorrectionStatus(null);
       setDetailError(null);
       setLlmData(null);
       setLlmError(null);
@@ -591,6 +594,29 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     setSourceDrawerOpen(false);
   };
 
+  const handleDetachThread = async (message: EmailData) => {
+    if (!email || isDetaching) return;
+    const selectedId = email.id;
+    setIsDetaching(true);
+    setCorrectionStatus(null);
+    try {
+      await apiClient.post(`/api/emails/${message.id}/thread/detach`, {
+        reason: "사용자가 이 메일을 다른 대화로 분리함",
+      });
+      const current = await apiClient.get<EmailData>(`/api/emails/${selectedId}`);
+      if (currentEmailIdRef.current !== selectedId) return;
+      setEmail(current);
+      await fetchThread(current);
+      setCorrectionStatus("대화 관계를 해제했습니다.");
+    } catch {
+      if (currentEmailIdRef.current === selectedId) {
+        setCorrectionStatus("대화 관계를 해제하지 못했습니다. 다시 시도해 주세요.");
+      }
+    } finally {
+      setIsDetaching(false);
+    }
+  };
+
   const handleDraftChange = (nextDraft: string) => {
     if (!draft && nextDraft && !activeDraftReplyIdRef.current) {
       const draftReplyId = createProductEventId("draft_reply");
@@ -764,6 +790,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 <Button size="sm" variant="outline" onClick={() => fetchThread(email)}>다시 시도</Button>
               </div>
             )}
+            {correctionStatus && <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{correctionStatus}</p>}
             <div className="space-y-4">
               {conversationMessages.map((msg) => (
                 <div id={`msg-${msg.id}`} key={msg.id} className={`rounded-2xl border p-4 text-card-foreground ${msg.id === email.id ? 'border-primary/60 bg-primary/5 shadow-sm' : 'border-border bg-background/60'}`} aria-current={msg.id === email.id ? "true" : undefined}>
@@ -779,15 +806,24 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     if (!evidence) return null;
                     const description = evidence.state === "conflicting"
                         ? "회신 정보가 서로 다른 메일을 가리켜 관계를 확인해야 합니다."
+                        : evidence.state === "detached"
+                          ? "사용자가 이 관계를 해제했습니다."
+                        : evidence.state === "outside_thread"
+                          ? "가리키는 메일이 보관함에 있지만 현재 대화에는 보이지 않습니다."
                         : evidence.state === "incomplete"
                           ? "회신 정보가 너무 길어 관계를 확인하지 못했습니다."
                         : "현재 대화에서 가리키는 메일을 찾지 못했습니다.";
                     return (
-                      <p className="mb-2 text-xs text-muted-foreground">
-                        메일 원문의 회신 정보: {evidence.targetEmailId
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <p>메일 원문의 회신 정보: {evidence.targetEmailId
                           ? <a href={`#msg-${evidence.targetEmailId}`} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">회신 정보가 가리키는 메일 보기</a>
-                          : description}
-                      </p>
+                          : description}</p>
+                        {msg.thread_evidence?.some((edge) => edge.state !== "detached") && (
+                          <Button type="button" size="sm" variant="outline" disabled={isDetaching} onClick={() => handleDetachThread(msg)}>
+                            이 메일 관계 해제
+                          </Button>
+                        )}
+                      </div>
                     );
                   })()}
                   {msg.id === email.id && translationError && (

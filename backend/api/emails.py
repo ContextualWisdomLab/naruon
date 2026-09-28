@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
-from db.models import Email
+from db.models import Email, EmailThreadEdge
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -22,7 +22,7 @@ from services.reply_tracking_service import (
     message_is_self_sent,
     thread_requires_reply,
 )
-from services.threading_service import normalize_message_id
+from services.threading_service import detach_email_from_thread, normalize_message_id
 from services.email_dedupe_service import (
     EmailDedupeCandidate,
     candidate_message_lookup_values,
@@ -197,6 +197,18 @@ class EmailListItem(BaseModel):
     schedule_conflict: bool = False
 
 
+class EmailThreadEvidenceResponse(BaseModel):
+    id: int
+    source: Literal["in_reply_to", "references"]
+    ordinal: int
+    target_message_id: str | None
+    target_email_id: int | None = None
+    state: Literal["resolved", "unresolved", "ambiguous", "conflicting", "incomplete", "detached"]
+    detached_at: datetime.datetime | None = None
+    detached_by: str | None = None
+    detach_reason: str | None = None
+
+
 class EmailDetailResponse(BaseModel):
     id: int
     message_id: str
@@ -211,6 +223,7 @@ class EmailDetailResponse(BaseModel):
     references: str | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
+    thread_evidence: list[EmailThreadEvidenceResponse] = Field(default_factory=list)
 
 
 class UniqueThreadCandidateRequest(BaseModel):
@@ -680,10 +693,117 @@ async def get_email_thread(
     if not emails:
         raise HTTPException(status_code=404, detail="Thread not found")
 
+    edge_result = await db.execute(
+        select(EmailThreadEdge).where(
+            *EmailThreadEdge.owner_filters(
+                auth_context.user_id, auth_context.organization_id
+            ),
+            EmailThreadEdge.source_email_id.in_([email.id for email in emails]),
+        )
+    )
+    edges = edge_result.scalars().all()
+    edges_by_email: dict[int, list[EmailThreadEdge]] = defaultdict(list)
+    for edge in edges:
+        edges_by_email[edge.source_email_id].append(edge)
+    conflicting_email_ids = set()
+    for source_email_id, source_edges in edges_by_email.items():
+        replies = {
+            edge.target_message_id for edge in source_edges
+            if edge.evidence_source == "in_reply_to" and not edge.detached_at
+            and not edge.incomplete
+        }
+        references = [
+            edge for edge in source_edges
+            if edge.evidence_source == "references" and not edge.detached_at
+            and not edge.incomplete
+        ]
+        last_reference = max(references, key=lambda edge: edge.ordinal).target_message_id if references else None
+        if len(replies) > 1 or (replies and last_reference and last_reference not in replies):
+            conflicting_email_ids.add(source_email_id)
+    target_ids = {
+        value
+        for edge in edges
+        if edge.target_message_id and not edge.incomplete
+        for value in thread_lookup_values(edge.target_message_id)
+    }
+    targets_by_message_id: dict[str, list[int]] = defaultdict(list)
+    if target_ids:
+        target_result = await db.execute(
+            select(Email.id, Email.message_id).where(
+                *Email.owner_filters(
+                    auth_context.user_id, auth_context.organization_id
+                ),
+                Email.message_id.in_(target_ids),
+            )
+        )
+        for target_email_id, target_message_id in target_result.all():
+            normalized = normalize_message_id(target_message_id)
+            if normalized:
+                targets_by_message_id[normalized].append(target_email_id)
+
+    evidence_by_email: dict[int, list[EmailThreadEvidenceResponse]] = defaultdict(list)
+    for edge in edges:
+        candidates = targets_by_message_id.get(edge.target_message_id or "", [])
+        state = (
+            "detached" if edge.detached_at else
+            "incomplete" if edge.incomplete else
+            "conflicting" if edge.source_email_id in conflicting_email_ids else
+            "ambiguous" if len(candidates) > 1 else
+            "resolved" if candidates else "unresolved"
+        )
+        evidence_by_email[edge.source_email_id].append(
+            EmailThreadEvidenceResponse(
+                id=edge.id,
+                source=edge.evidence_source,
+                ordinal=edge.ordinal,
+                target_message_id=edge.target_message_id,
+                target_email_id=candidates[0] if state == "resolved" else None,
+                state=state,
+                detached_at=edge.detached_at,
+                detached_by=edge.detached_by,
+                detach_reason=edge.detach_reason,
+            )
+        )
+
     items = []
     for email in emails:
-        items.append(_email_detail_response(email))
+        item = _email_detail_response(email)
+        item.thread_evidence = evidence_by_email[email.id]
+        items.append(item)
     return {"thread": items}
+
+
+class DetachThreadRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def non_blank_reason(cls, value: str) -> str:
+        reason = value.strip()
+        if not reason:
+            raise ValueError("A reason is required")
+        return reason
+
+
+@router.post("/{email_id}/thread/detach")
+async def detach_email_thread_endpoint(
+    email_id: int,
+    request: DetachThreadRequest,
+    db: AsyncSession = Depends(get_db),
+    auth_context: AuthContext = Depends(get_auth_context),
+):
+    moved = await detach_email_from_thread(
+        db,
+        email_id=email_id,
+        user_id=auth_context.user_id,
+        organization_id=auth_context.organization_id,
+        reason=request.reason,
+    )
+    if moved is None:
+        raise HTTPException(status_code=404, detail="Email not found")
+    if moved == 0:
+        raise HTTPException(status_code=409, detail="No active relationship to detach")
+    return {"detached_messages": moved}
 
 
 class SendEmailRequest(BaseModel):
