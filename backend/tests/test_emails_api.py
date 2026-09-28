@@ -1288,15 +1288,15 @@ async def test_import_email_files_serializes_quota_with_postgres_owner_lock(
     assert advisory_query_params(session) == [
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": "8:testuserSorg-acme",
         },
         {
             "lock_namespace": "naruon-email-thread-evidence",
-            "lock_owner": "testuser\x00org-acme",
+            "lock_owner": "8:testuserSorg-acme",
         },
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": "8:testuserSorg-acme",
         },
     ]
 
@@ -1355,11 +1355,11 @@ async def test_import_email_files_rejects_when_owner_quota_is_exhausted(
     assert advisory_query_params(session) == [
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": "8:testuserSorg-acme",
         },
         {
             "namespace_key": "naruon-email-import-quota",
-            "owner_key": "testuser\x00org-acme",
+            "owner_key": "8:testuserSorg-acme",
         },
     ]
 

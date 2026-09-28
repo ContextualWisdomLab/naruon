@@ -19,6 +19,10 @@ from core.config import settings
 from api.auth import AuthContext
 from api.emails import get_email_thread
 from db.models import Base, Email, EmailThreadEdge
+from services.email_import_service import (
+    _acquire_owner_import_quota_lock,
+    _release_owner_import_quota_lock,
+)
 from services.imap_worker import process_fetched_email
 from services.threading_service import detach_email_from_thread, email_thread_evidence
 
@@ -443,6 +447,12 @@ async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped():
         organization = f"org-{uuid.uuid4().hex}"
         when = datetime.datetime(2026, 9, 28, tzinfo=datetime.timezone.utc)
         async with sessions() as session:
+            assert await _acquire_owner_import_quota_lock(
+                session, user_id=owner, organization_id=organization
+            )
+            await _release_owner_import_quota_lock(
+                session, user_id=owner, organization_id=organization
+            )
             await process_fetched_email(
                 session,
                 {
@@ -545,6 +555,40 @@ async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped():
             )
             assert len(parents) == 1
             assert evidence[0].target_message_id == "parent@example.com"
+
+            split_reply = await process_fetched_email(
+                session,
+                {
+                    "message_id": "<split-reply@example.com>",
+                    "in_reply_to": "<late-parent@example.com>",
+                    "references": "<late-parent@example.com>",
+                    "sender": "sender@example.com",
+                    "recipients": ["owner@example.com"],
+                    "subject": "Split reply",
+                    "body": "split reply",
+                    "date": when,
+                },
+                owner,
+                organization,
+            )
+            await session.commit()
+            await process_fetched_email(
+                session,
+                {
+                    "message_id": "<late-parent@example.com>",
+                    "in_reply_to": "<late-root@example.com>",
+                    "references": "<late-root@example.com>",
+                    "sender": "sender@example.com",
+                    "recipients": ["owner@example.com"],
+                    "subject": "Late parent",
+                    "body": "late parent",
+                    "date": when,
+                },
+                owner,
+                organization,
+            )
+            await session.commit()
+            assert split_reply.thread_id == "late-root@example.com"
 
             await session.execute(
                 delete(Email).where(Email.user_id.in_((owner, other)))

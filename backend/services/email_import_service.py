@@ -51,6 +51,7 @@ from services.project_graph.extractor_registry import (
 from services.threading_service import (
     assign_thread_id,
     email_thread_evidence,
+    email_owner_lock_key,
     lock_email_thread_owner,
     reconcile_email_thread,
     generate_email_fingerprint,
@@ -261,7 +262,7 @@ async def _acquire_owner_import_quota_lock(
         return False
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": email_owner_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -280,7 +281,7 @@ async def _release_owner_import_quota_lock(
 ) -> None:
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": email_owner_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(

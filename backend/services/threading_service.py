@@ -13,6 +13,10 @@ from collections import defaultdict, deque
 _THREAD_LOCK_NAMESPACE = "naruon-email-thread-evidence"
 
 
+def email_owner_lock_key(user_id: str, organization_id: str | None) -> str:
+    return f"{len(user_id)}:{user_id}{'N' if organization_id is None else 'S' + organization_id}"
+
+
 async def lock_email_thread_owner(
     session: AsyncSession, user_id: str, organization_id: str | None
 ) -> None:
@@ -34,7 +38,7 @@ async def lock_email_thread_owner(
         ),
         {
             "lock_namespace": _THREAD_LOCK_NAMESPACE,
-            "lock_owner": f"{user_id}\x00{organization_id or ''}",
+            "lock_owner": email_owner_lock_key(user_id, organization_id),
         },
     )
 
