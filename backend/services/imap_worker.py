@@ -22,6 +22,7 @@ from services.threading_service import (
     email_thread_evidence,
     generate_email_fingerprint,
     lock_email_thread_owner,
+    normalize_message_id,
     reconcile_email_thread,
 )
 
@@ -87,7 +88,7 @@ async def process_fetched_email(
     new_email = Email(
         user_id=user_id,
         organization_id=organization_id or None,
-        message_id=email_data.get("message_id", ""),
+        message_id=normalize_message_id(email_data.get("message_id")) or "",
         thread_id=thread_id,
         fingerprint=fingerprint,
         sender=sender,

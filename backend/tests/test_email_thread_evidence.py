@@ -295,7 +295,7 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             duplicate_child = Email(
                 user_id="owner",
                 organization_id="org",
-                message_id="child@example.com",
+                message_id="<child@example.com>",
                 thread_id="elsewhere@example.com",
                 sender="sender@example.com",
                 recipients="owner@example.com",
@@ -404,6 +404,27 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             await adapter.commit()
             assert conflicting_existing.thread_id == "conflicting-existing@example.com"
             assert multiple_existing.thread_id == "multiple-existing@example.com"
+            folded_parent = await process_fetched_email(
+                adapter,
+                message(
+                    "folded@ example.com",
+                    "folded-root@example.com",
+                    "<folded-root@example.com>",
+                ),
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            folded_reply = await process_fetched_email(
+                adapter,
+                message("folded-reply@example.com", "folded@example.com", "")
+                | {"references": None},
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            assert folded_parent.message_id == "folded@example.com"
+            assert folded_reply.thread_id == "folded-root@example.com"
             auth = AuthContext("owner", "member", "org", (), "workspace-owner")
             conflict_view = await get_email_thread(
                 conflicting_existing.thread_id, adapter, auth
@@ -577,7 +598,8 @@ async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped(tmp_
                         select(EmailThreadEvidenceRecord)
                         .where(EmailThreadEvidenceRecord.source_email_id == reply.id)
                         .order_by(
-                            EmailThreadEvidenceRecord.evidence_source, EmailThreadEvidenceRecord.ordinal
+                            EmailThreadEvidenceRecord.evidence_source,
+                            EmailThreadEvidenceRecord.ordinal,
                         )
                     )
                 )
