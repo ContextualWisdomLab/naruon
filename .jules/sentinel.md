@@ -143,3 +143,8 @@
 **Vulnerability:** Kubernetes configurations referenced a container image (`docker.io/pgvector/pgvector:pg16`) from an untrusted registry (`docker.io`) and used a rolling version tag (`:pg16`), leading to KSV-0125 and Strix penetration test failures.
 **Learning:** Pulling images from untrusted registries with rolling tags can lead to supply chain attacks, as the underlying image could change to a compromised version without notice.
 **Prevention:** Ensure Kubernetes container images are explicitly pulled from approved registries (e.g., `ghcr.io/pgvector/pgvector`) and use immutable version tags (e.g., `:pg16-v0.5.0`) instead of rolling tags.
+
+## 2026-09-28 - [Fix Trivy Dependency Vulnerabilities]
+**Vulnerability:** The project contained vulnerable dependencies (`anyio`, `next`, `sharp`) causing CRITICAL and HIGH severity findings during Trivy filesystem scans.
+**Learning:** Using a `.trivyignore` file to suppress dependency vulnerabilities can cause CI failures for `CodeQL compatibility analysis`.
+**Prevention:** To resolve dependency vulnerabilities, always manually bump the affected package versions rather than ignoring them. For frontend dependencies, strictly pin the version in `package.json` by removing caret (`^`) prefixes, and ensure `pnpm install --frozen-lockfile` succeeds locally to prevent `[ERR_PNPM_OUTDATED_LOCKFILE]` errors during builds.
