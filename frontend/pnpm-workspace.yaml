@@ -21,3 +21,9 @@ overrides:
 
 patchedDependencies:
   minimatch@3.1.5: patches/minimatch@3.1.5.patch
+
+minimumReleaseAgeExclude:
+  - '@img/sharp-darwin-x64@0.35.5'
+  - '@img/sharp-linux-arm@0.35.5'
+  - '@img/sharp-linuxmusl-arm64@0.35.5'
+  - '@img/sharp-win32-x64@0.35.5'
