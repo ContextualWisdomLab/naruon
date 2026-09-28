@@ -48,21 +48,25 @@ def assert_dockerfile_stage_from(dockerfile: str, image: str, stage_alias: str) 
     pattern = (
         rf"^FROM {re.escape(image)}@sha256:[0-9a-f]{{64}} AS {re.escape(stage_alias)}$"
     )
-    assert re.search(pattern, dockerfile, flags=re.MULTILINE), (
-        f"missing pinned {image} stage alias {stage_alias}"
-    )
+    assert re.search(
+        pattern, dockerfile, flags=re.MULTILINE
+    ), f"missing pinned {image} stage alias {stage_alias}"
 
 
 def first_dockerfile_base_reference(dockerfile: str) -> str:
     """Return the first exact tag-and-digest Dockerfile base reference."""
-    first_from = re.search(r"^FROM (?P<declaration>.+)$", dockerfile, flags=re.MULTILINE)
+    first_from = re.search(
+        r"^FROM (?P<declaration>.+)$", dockerfile, flags=re.MULTILINE
+    )
     assert first_from is not None, "Dockerfile must declare a base image"
     match = re.fullmatch(
         r"(?P<reference>[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+"
         r"@sha256:[0-9a-f]{64})(?: AS [A-Za-z0-9._-]+)?",
         first_from.group("declaration"),
     )
-    assert match is not None, "Dockerfile first stage must use an exact tag-and-digest pin"
+    assert (
+        match is not None
+    ), "Dockerfile first stage must use an exact tag-and-digest pin"
     return match.group("reference")
 
 
@@ -80,9 +84,9 @@ def assert_oci_metadata_matches_first_base(dockerfile: str) -> None:
 def test_root_version_exists_and_is_initial_semver_release() -> None:
     version = read_repo_text("VERSION").strip()
 
-    assert re.fullmatch(r"\d+\.\d+\.\d+", version), (
-        f"VERSION is not valid SemVer: {version!r}"
-    )
+    assert re.fullmatch(
+        r"\d+\.\d+\.\d+", version
+    ), f"VERSION is not valid SemVer: {version!r}"
 
 
 def test_release_version_sources_are_synchronized() -> None:
@@ -239,9 +243,9 @@ def test_changelog_follows_keep_a_changelog_for_initial_korean_release() -> None
 
 
 def test_github_actions_are_pinned_to_exact_sha() -> None:
-    assert WORKFLOW_DIR.exists(), (
-        "required governance artifact is missing: .github/workflows"
-    )
+    assert (
+        WORKFLOW_DIR.exists()
+    ), "required governance artifact is missing: .github/workflows"
     governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
         WORKFLOW_DIR.glob("*.yaml")
     )
@@ -274,9 +278,9 @@ def test_github_actions_are_pinned_to_exact_sha() -> None:
 
 
 def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
-    assert WORKFLOW_DIR.exists(), (
-        "required governance artifact is missing: .github/workflows"
-    )
+    assert (
+        WORKFLOW_DIR.exists()
+    ), "required governance artifact is missing: .github/workflows"
     governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
         WORKFLOW_DIR.glob("*.yaml")
     )
@@ -313,9 +317,9 @@ def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
 
 
 def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
-    assert WORKFLOW_DIR.exists(), (
-        "required governance artifact is missing: .github/workflows"
-    )
+    assert (
+        WORKFLOW_DIR.exists()
+    ), "required governance artifact is missing: .github/workflows"
     governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
         WORKFLOW_DIR.glob("*.yaml")
     )
@@ -347,15 +351,20 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
 
     # Verify that UniqueKeyLoader is strictly a subclass of SafeLoader so that `# nosec B506`
     # suppression is genuinely justified according to PyYAML safety contracts.
-    assert issubclass(UniqueKeyLoader, yaml.SafeLoader), (
-        "UniqueKeyLoader must inherit from SafeLoader to suppress B506"
-    )
+    assert issubclass(
+        UniqueKeyLoader, yaml.SafeLoader
+    ), "UniqueKeyLoader must inherit from SafeLoader to suppress B506"
     # Ensure that Python object instantiation tags (like !!python/object) are safely
     # rejected rather than executed.
     with pytest.raises(yaml.constructor.ConstructorError):
-        yaml.load("!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader)  # nosec B506
+        yaml.load(
+            "!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader
+        )  # nosec B506
     # Ensure normal valid YAML loading still works
-    assert yaml.load("a: 1\nb: 2", Loader=UniqueKeyLoader) == {"a": 1, "b": 2}  # nosec B506
+    assert yaml.load("a: 1\nb: 2", Loader=UniqueKeyLoader) == {
+        "a": 1,
+        "b": 2,
+    }  # nosec B506
     # Ensure the duplicate key prevention still works
     with pytest.raises(AssertionError, match="duplicate mapping key 'a'"):
         yaml.load("a: 1\na: 2", Loader=UniqueKeyLoader)  # nosec B506
@@ -366,7 +375,9 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
             # We explicitly pass UniqueKeyLoader (which inherits from SafeLoader).
             # Bandit B506 blindly flags yaml.load() regardless of the Loader argument.
             # This is a verified false positive.
-            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)  # nosec B506
+            yaml.load(
+                workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader
+            )  # nosec B506
         except AssertionError as exc:
             duplicates.append(f"{workflow_path.relative_to(REPO_ROOT)}: {exc}")
 
@@ -629,7 +640,9 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
     ]
 
     for relative_path in central_workflow_paths + central_script_paths:
-        assert not (REPO_ROOT / relative_path).exists(), (
+        assert not (
+            REPO_ROOT / relative_path
+        ).exists(), (
             f"central review automation must not be copied locally: {relative_path}"
         )
 
@@ -725,8 +738,14 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "Platform:[[:space:]]+${platform}[[:space:]]*$" in workflow
     assert "Pinned Ollama manifest is missing %s" in workflow
     assert "linux/amd64 linux/arm64" in workflow
-    assert "sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061" not in workflow
-    assert "sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1" not in workflow
+    assert (
+        "sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
+        not in workflow
+    )
+    assert (
+        "sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1"
+        not in workflow
+    )
     assert "sbom: false" in workflow
     assert workflow.count("sbom: true") == 1
     assert "type=semver" in workflow
