@@ -1,5 +1,4 @@
 import uuid
-import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import bindparam, func, select
 from db.models import Email, EmailThreadEvidenceRecord, canonical_message_id_expression
@@ -41,12 +40,6 @@ async def lock_email_thread_owner(
             "lock_owner": email_owner_lock_key(user_id, organization_id),
         },
     )
-
-
-# ⚡ Bolt Optimization: Pre-compile reference extraction regex
-# Impact: Eliminates redundant inline compilation/caching overhead during repetitive
-# email header processing, yielding a measurable speedup when handling long reference lists.
-REFERENCE_PATTERN = re.compile(r"<([^>]+)>")
 
 
 def generate_email_fingerprint(
@@ -96,9 +89,44 @@ def extract_reference_ids(value: str | None) -> list[str]:
     if not value:
         return []
 
-    refs = REFERENCE_PATTERN.findall(str(value))
-    if not refs:
-        refs = str(value).split()
+    raw = str(value)
+    if "<" not in raw and ">" not in raw:
+        if "(" in raw or ")" in raw:
+            return []
+        refs = raw.split()
+    else:
+        refs = []
+        index = 0
+        while index < len(raw):
+            character = raw[index]
+            if character.isspace():
+                index += 1
+                continue
+            if character == "(":
+                depth = 1
+                index += 1
+                while index < len(raw) and depth:
+                    if raw[index] == "\\":
+                        index += 2
+                        continue
+                    if raw[index] == "(":
+                        depth += 1
+                    elif raw[index] == ")":
+                        depth -= 1
+                    index += 1
+                if depth:
+                    return []
+                continue
+            if character != "<":
+                return []
+            end = raw.find(">", index + 1)
+            if end < 0 or "<" in raw[index + 1 : end]:
+                return []
+            token = raw[index + 1 : end]
+            if not normalize_message_id(token):
+                return []
+            refs.append(token)
+            index = end + 1
 
     normalized_refs: list[str] = []
     # Optimization: Use a set for O(1) membership checks to avoid O(n^2) scaling on long reference lists

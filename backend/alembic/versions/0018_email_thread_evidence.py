@@ -5,7 +5,6 @@ Revises: 0017_merge_newsdom_carddav_heads
 """
 
 import datetime
-import re
 
 from alembic import op
 import sqlalchemy as sa
@@ -16,14 +15,49 @@ branch_labels = None
 depends_on = None
 
 _TABLE = "email_thread_evidence"
-_BRACKETED = re.compile(r"<([^>]+)>")
 _CANONICAL_INDEX = "ix_email_records_owner_canonical_message_id"
 
 
 def _target_ids(raw: str) -> list[str | None]:
     if len(raw) > 8192:
         return [None]
-    tokens = _BRACKETED.findall(raw) or raw.split()
+    if "<" not in raw and ">" not in raw:
+        if "(" in raw or ")" in raw:
+            return [None]
+        tokens = raw.split()
+    else:
+        tokens = []
+        index = 0
+        while index < len(raw):
+            character = raw[index]
+            if character.isspace():
+                index += 1
+                continue
+            if character == "(":
+                depth = 1
+                index += 1
+                while index < len(raw) and depth:
+                    if raw[index] == "\\":
+                        index += 2
+                        continue
+                    if raw[index] == "(":
+                        depth += 1
+                    elif raw[index] == ")":
+                        depth -= 1
+                    index += 1
+                if depth:
+                    return [None]
+                continue
+            if character != "<":
+                return [None]
+            end = raw.find(">", index + 1)
+            if end < 0 or "<" in raw[index + 1 : end]:
+                return [None]
+            token = raw[index + 1 : end]
+            if not "".join(token.split()):
+                return [None]
+            tokens.append(token)
+            index = end + 1
     ids = list(
         dict.fromkeys(
             value for token in tokens if (value := "".join(token.strip("<>").split()))

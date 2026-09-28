@@ -538,7 +538,11 @@ def test_thread_evidence_migration_backfills_existing_headers():
                 text(
                     "INSERT INTO email_records VALUES "
                     "(1, 'owner', 'org', 'reply@example.com', '<parent@example.com>', "
-                    "'<root@example.com> <parent@example.com>')"
+                    "'<root@example.com> <parent@example.com>'), "
+                    "(2, 'owner', 'org', 'malformed@example.com', "
+                    "'<parent@example.com> <other@example.com', NULL), "
+                    "(3, 'owner', 'org', 'comment@example.com', "
+                    "'(<fake@example.com> (nested)) <parent@example.com>', NULL)"
                 )
             )
             migration.op = Operations(MigrationContext.configure(connection))
@@ -546,14 +550,16 @@ def test_thread_evidence_migration_backfills_existing_headers():
             migration.upgrade()
             rows = connection.execute(
                 text(
-                    "SELECT evidence_source, target_message_id, incomplete "
-                    "FROM email_thread_evidence ORDER BY evidence_source, ordinal"
+                    "SELECT source_email_id, evidence_source, target_message_id, incomplete "
+                    "FROM email_thread_evidence ORDER BY source_email_id, evidence_source, ordinal"
                 )
             ).all()
             assert rows == [
-                ("in_reply_to", "parent@example.com", 0),
-                ("references", "root@example.com", 0),
-                ("references", "parent@example.com", 0),
+                (1, "in_reply_to", "parent@example.com", 0),
+                (1, "references", "root@example.com", 0),
+                (1, "references", "parent@example.com", 0),
+                (2, "in_reply_to", None, 1),
+                (3, "in_reply_to", "parent@example.com", 0),
             ]
             indexes = connection.execute(text("PRAGMA index_list(email_records)")).all()
             assert any(

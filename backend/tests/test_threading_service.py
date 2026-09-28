@@ -221,10 +221,9 @@ def test_extract_reference_ids_normalizes_folded_whitespace_and_dedupes():
     assert extract_reference_ids(header) == ["a@x.com", "b@x.com"]
 
 
-def test_extract_reference_ids_drops_bracketed_whitespace_only_ids():
-    # "< >" / "<\t>" are bracketed but whitespace-only: they normalize to nothing
-    # and must be dropped, not carried as empty thread candidates.
-    assert extract_reference_ids("< > <a@x.com> <\t>") == ["a@x.com"]
+def test_extract_reference_ids_rejects_partial_bracketed_headers():
+    assert extract_reference_ids("< > <a@x.com> <\t>") == []
+    assert extract_reference_ids("(<fake@x.com> (nested)) <a@x.com>") == ["a@x.com"]
 
 
 def test_extract_reference_ids_falls_back_to_whitespace_split_without_brackets():
@@ -399,6 +398,27 @@ async def test_oversized_reply_header_cannot_assign_a_thread_without_bounded_evi
             "in_reply_to": "<parent@example.com>" + " " * 8193,
             "references": None,
         },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert thread_id == "reply@example.com"
+    assert session.execute_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "header",
+    [
+        "<parent@example.com> <other@example.com",
+        "<parent@example.com> other@example.com",
+        "<parent@example.com> (unfinished comment",
+    ],
+)
+async def test_malformed_reply_header_cannot_choose_a_partial_parent(header):
+    session = _SequentialSession([[('parent@example.com', 'existing-thread')]])
+    thread_id = await assign_thread_id(
+        session,
+        {"message_id": "<reply@example.com>", "in_reply_to": header},
         user_id="testuser",
         organization_id="org-acme",
     )
