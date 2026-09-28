@@ -130,24 +130,6 @@ function resultTitle(result: SearchResultItem) {
   return result.subject?.trim() || "(제목 없음)";
 }
 
-function confidencePercent(score: number | undefined) {
-  if (typeof score !== "number" || !Number.isFinite(score)) return null;
-  const normalized = score <= 1 ? score * 100 : score;
-  return Math.max(0, Math.min(100, Math.round(normalized)));
-}
-
-function confidenceTone(percent: number | null) {
-  if (percent === null) return "border-slate-200 bg-slate-50 text-slate-600";
-  if (percent >= 90) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (percent >= 75) return "border-blue-200 bg-blue-50 text-blue-700";
-  if (percent >= 60) return "border-amber-200 bg-amber-50 text-amber-700";
-  return "border-red-200 bg-red-50 text-red-700";
-}
-
-function confidenceLabel(percent: number | null) {
-  return percent === null ? "신뢰도 미제공" : `신뢰도 ${percent}%`;
-}
-
 function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
@@ -287,12 +269,10 @@ function SenderDagPanel({
 const SearchResultItemComponent = memo(function SearchResultItemComponent({
   result,
   isActive,
-  confidence,
   onSelect,
 }: {
   result: SearchResultItem;
   isActive: boolean;
-  confidence: number | null;
   onSelect: (id: number) => void;
 }) {
   return (
@@ -335,11 +315,6 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
                 근거: {evidenceKindLabel(result.result_kind)}
               </span>
             ) : null}
-            <span
-              className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${confidenceTone(confidence)}`}
-            >
-              {confidenceLabel(confidence)}
-            </span>
           </div>
         </div>
       </div>
@@ -490,8 +465,6 @@ export function SearchLayout() {
     !relationshipError &&
     relationships.length === 0,
   );
-  const activeConfidence = confidencePercent(activeResult?.score);
-
   useEffect(() => {
     if (!activeResult || loading) return;
 
@@ -506,9 +479,8 @@ export function SearchLayout() {
       result_id: activeResult.id,
       result_type: "mail",
       rank_bucket: bucketSearchRank(resultIndex < 0 ? 0 : resultIndex),
-      confidence: activeConfidence,
     });
-  }, [activeConfidence, activeResult, filteredResults, loading]);
+  }, [activeResult, filteredResults, loading]);
 
   useEffect(() => {
     if (!activeOntologyUrl || !activeOntologySourceKey) return;
@@ -627,7 +599,6 @@ export function SearchLayout() {
             key={result.id}
             result={result}
             isActive={activeResult?.id === result.id}
-            confidence={confidencePercent(result.score)}
             onSelect={setActiveResultId}
           />
         ))
@@ -781,7 +752,7 @@ export function SearchLayout() {
                         </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold text-muted-foreground">
+                    <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold text-muted-foreground">
                       <div className="rounded-lg border border-border bg-background px-3 py-2">
                         <p className="text-foreground">
                           {activeResult.thread_id ? "연결됨" : "없음"}
@@ -793,12 +764,6 @@ export function SearchLayout() {
                           {activeResult.reply_count ?? 1}건
                         </p>
                         <p className="mt-1">답장 추적</p>
-                      </div>
-                      <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <p className="text-foreground">
-                          {activeConfidence === null ? "미제공" : `${activeConfidence}%`}
-                        </p>
-                        <p className="mt-1">신뢰도</p>
                       </div>
                     </div>
                   </div>
@@ -881,10 +846,6 @@ export function SearchLayout() {
                               <CornerDownRight className="size-3.5" aria-hidden="true" />
                               {activeResult.thread_id ? "스레드 근거 연결" : "단일 메일"}
                             </span>
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${confidenceTone(activeConfidence)}`}>
-                              <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                              {confidenceLabel(activeConfidence)}
-                            </span>
                           </div>
                         </div>
                       ) : null}
@@ -927,7 +888,7 @@ export function SearchLayout() {
                             <div>
                               <p className="text-sm font-black text-purple-900">판단 보조</p>
                               <p className="mt-2 text-sm leading-6 text-purple-900/80">
-                                이 화면의 AI/관계 정보는 검색 점수, 원본 메시지, 스레드 범위를 함께 보여주는 보조 근거입니다. 외부 실행은 사용자가 메일, 일정, 관계 캡처 액션을 명시적으로 선택할 때만 진행됩니다.
+                                이 화면의 AI/관계 정보는 원본 메시지와 스레드 범위를 함께 보여주는 보조 근거입니다. 외부 실행은 사용자가 메일, 일정, 관계 캡처 액션을 명시적으로 선택할 때만 진행됩니다.
                               </p>
                             </div>
                           </div>

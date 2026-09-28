@@ -160,7 +160,7 @@ describe("SearchPage", () => {
     expect(container.textContent).toContain("Q2 출시 계획 및 우선순위 조정");
     expect(container.textContent).toContain("thread-q2");
     expect(container.textContent).toContain("답장 3건");
-    expect(container.textContent).toContain("신뢰도 87%");
+    expect(container.textContent).not.toContain("신뢰도 87%");
     expect(container.textContent).toContain("증거 바인딩");
     expect(container.textContent).toContain("맥락 정보");
     expect(container.textContent).toContain("메일 열기");

@@ -157,6 +157,10 @@ describe("SearchLayout product events", () => {
     });
     await waitForCondition(() => container?.textContent?.includes("계약 검토 결과") ?? false);
     expect(container?.textContent).toContain("근거: 제목");
+    expect(container?.textContent).not.toContain("신뢰도");
+    expect(getRecordedProductEvents().find((event) =>
+      event.name === "context_search_result_opened" && event.payload.result_id === 101,
+    )?.payload).not.toHaveProperty("confidence");
 
     expect(getRecordedProductEvents().some((event) =>
       event.name === "context_search_submitted" &&
