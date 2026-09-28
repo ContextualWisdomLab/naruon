@@ -122,7 +122,7 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     )
     jsdom_resolution = importer_resolution(root_importer, "devDependencies", "jsdom")
     assert postcss_resolution == {"specifier": "8.5.24", "version": "8.5.24"}
-    assert jsdom_resolution == {"specifier": "^30.0.1", "version": "30.0.1"}
+    assert jsdom_resolution == {"specifier": "^30.0.1", "version": "30.1.1"}
 
     assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
@@ -139,7 +139,7 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
         "postcss@8.5.24",
-        "jsdom@30.0.1",
+        "jsdom@30.1.1",
         "brace-expansion@5.0.9",
         "undici@8.9.0",
     ):
