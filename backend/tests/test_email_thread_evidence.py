@@ -131,6 +131,19 @@ async def test_thread_view_resolves_late_parent_without_cross_owner_match():
                 {"message_id": "<later@example.com>", "in_reply_to": "<parent@example.com>"},
                 user_id="owner", organization_id="org",
             ) == "later@example.com"
+            root = message("owner", "root@example.com", "shared ancestor")
+            root.thread_id = "root@example.com"
+            session.add(root)
+            session.commit()
+            assert await assign_thread_id(
+                AsyncAdapter(session),
+                {
+                    "message_id": "<ambiguous-root-reply@example.com>",
+                    "in_reply_to": "<parent@example.com>",
+                    "references": "<root@example.com> <parent@example.com>",
+                },
+                user_id="owner", organization_id="org",
+            ) == "ambiguous-root-reply@example.com"
 
             ambiguous = message("owner", "<ambiguous@example.com>", "ambiguous reply")
             ambiguous.in_reply_to = "<parent@example.com> <other@example.com>"
@@ -353,8 +366,11 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             await adapter.commit()
             ambiguous_reply = await process_fetched_email(
                 adapter,
-                message("ambiguous-reply@example.com", "child@example.com", "")
-                | {"references": None},
+                message(
+                    "ambiguous-reply@example.com",
+                    "child@example.com",
+                    "<reply@example.com> <child@example.com>",
+                ),
                 "owner",
                 "org",
             )

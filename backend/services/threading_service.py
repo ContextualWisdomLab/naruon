@@ -203,6 +203,9 @@ async def assign_thread_id(
             organization_id=organization_id,
             ambiguous_ids=ambiguous_ids,
         )
+        direct_parent = in_reply_to_ids[0] if in_reply_to_ids else references[-1]
+        if direct_parent in ambiguous_ids:
+            return normalize_message_id(email_data.get("message_id")) or uuid.uuid4().hex
         for candidate in existing_candidates:
             thread_id = thread_ids_by_message_id.get(candidate)
             if thread_id:
