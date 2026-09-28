@@ -1,9 +1,7 @@
-import os
 from datetime import datetime, timezone
 from typing import Literal
-from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,22 +84,6 @@ class OperationalSignalsResponse(BaseModel):
     telemetry: TelemetryRuntime
     connector: ConnectorOperationalState
     signals: list[OperationalSignal]
-
-
-def _env_flag(name: str, default: bool = False) -> bool:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _endpoint_host(endpoint: str | None) -> str | None:
-    if not endpoint or not endpoint.strip():
-        return None
-    parsed = urlparse(endpoint.strip())
-    if not parsed.netloc:
-        return None
-    return parsed.netloc.rsplit("@", 1)[-1]
 
 
 def _datetime_to_utc_iso(value: datetime) -> str:
@@ -229,14 +211,14 @@ def _queue_depth(
     )
 
 
-def _telemetry_runtime() -> TelemetryRuntime:
-    otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-    otel_endpoint_configured = bool(otel_endpoint and otel_endpoint.strip())
+def _telemetry_runtime(request: Request) -> TelemetryRuntime:
+    receiver_host = getattr(request.app.state, "naruon_telemetry_receiver_host", None)
+    configured = bool(getattr(request.app.state, "naruon_telemetry_runtime", None))
     return TelemetryRuntime(
         prometheus_metrics_enabled=settings.ENABLE_PROMETHEUS_METRICS,
-        otel_traces_enabled=_env_flag("ENABLE_OTEL") and otel_endpoint_configured,
-        otel_endpoint_configured=otel_endpoint_configured,
-        otel_endpoint_host=_endpoint_host(otel_endpoint),
+        otel_traces_enabled=configured and bool(receiver_host),
+        otel_endpoint_configured=bool(receiver_host),
+        otel_endpoint_host=receiver_host,
     )
 
 
@@ -305,8 +287,8 @@ def _operational_signals(
             signal_key="otel_traces",
             display_name="OpenTelemetry traces",
             state=traces_state,
-            evidence_source="ENABLE_OTEL and OTEL_EXPORTER_OTLP_ENDPOINT",
-            detail="Trace export starts only when the OpenTelemetry flag and OTLP endpoint are both configured.",
+            evidence_source="active shared telemetry runtime",
+            detail="Trace export starts after the shared runtime is configured with an authenticated Collector.",
         ),
         OperationalSignal(
             signal_key="connector_heartbeat",
@@ -357,6 +339,7 @@ def _operational_signals(
 
 @router.get("/operational-signals", response_model=OperationalSignalsResponse)
 async def get_operational_signals(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(_check_org_admin),
 ):
@@ -381,7 +364,7 @@ async def get_operational_signals(
         organization_id,
         connector_workspace_id,
     )
-    telemetry = _telemetry_runtime()
+    telemetry = _telemetry_runtime(request)
     connector = _connector_state(
         organization_id,
         workspace_id,

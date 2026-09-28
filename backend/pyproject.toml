@@ -30,7 +30,6 @@ dependencies = [
   "opentelemetry-api==1.43.0",
   "opentelemetry-sdk==1.43.0",
   "opentelemetry-instrumentation-fastapi==0.64b0",
-  "opentelemetry-exporter-otlp==1.43.0",
   "protobuf==7.35.1",
   "setuptools==83.0.0",
   "wheel==0.47.0",
@@ -38,6 +37,11 @@ dependencies = [
   "PyJWT==2.13.0",
   "icalendar==7.2.0",
   "defusedxml==0.7.1",
+]
+
+[project.optional-dependencies]
+telemetry = [
+  "cwl-telemetry @ git+https://github.com/ContextualWisdomLab/cwl-telemetry.git@d0acfd06fc3a7a08a57aca245812b6dec221094d",
 ]
 
 [dependency-groups]

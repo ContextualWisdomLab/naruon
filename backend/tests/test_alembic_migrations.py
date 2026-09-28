@@ -1,3 +1,4 @@
+import runpy
 from pathlib import Path
 
 
@@ -420,6 +421,30 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
+
+
+def test_legacy_email_read_state_skips_fresh_schema(monkeypatch):
+    revision = runpy.run_path(
+        str(BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py")
+    )
+
+    class Result:
+        def scalar(self):
+            return None
+
+    class Connection:
+        def execute(self, statement):
+            assert "to_regclass('emails')" in str(statement)
+            return Result()
+
+    def unexpected_column_change(*_args):
+        raise AssertionError("fresh schema must not change a missing legacy table")
+
+    monkeypatch.setattr(revision["op"], "get_bind", lambda: Connection())
+    monkeypatch.setattr(revision["op"], "add_column", unexpected_column_change)
+    monkeypatch.setattr(revision["op"], "drop_column", unexpected_column_change)
+    revision["upgrade"]()
+    revision["downgrade"]()
 
 
 def test_merge_revision_reconciles_newsdom_provider_branch():

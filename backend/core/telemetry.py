@@ -1,82 +1,136 @@
+"""Naruon's explicit opt-in to the shared CWL telemetry runtime."""
+
 import logging
-import os
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+
+if TYPE_CHECKING:
+    from cwl_telemetry import TelemetryConfig
+
 
 logger = logging.getLogger(__name__)
 _TELEMETRY_STATE_KEY = "naruon_telemetry_configured"
+_TELEMETRY_RUNTIME_KEY = "naruon_telemetry_runtime"
+_TELEMETRY_RECEIVER_HOST_KEY = "naruon_telemetry_receiver_host"
+_TELEMETRY_ROUTES_KEY = "naruon_telemetry_routes"
+_TELEMETRY_MIDDLEWARE_KEY = "naruon_telemetry_middleware_installed"
+_HTTP_ACTIONS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 
 
-def _env_flag(name: str, default: bool = False) -> bool:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+def setup_telemetry(app: FastAPI, config: "TelemetryConfig | None" = None) -> None:
+    """Instrument the app only after an operator supplies validated SDK config."""
+    if not getattr(app.state, _TELEMETRY_MIDDLEWARE_KEY, False):
+        @app.middleware("http")
+        async def trace_request(request: Request, call_next):
+            runtime = getattr(request.app.state, _TELEMETRY_RUNTIME_KEY, None)
+            if runtime is None or not getattr(request.app.state, _TELEMETRY_STATE_KEY, False):
+                return await call_next(request)
+            from opentelemetry.context import attach, detach
 
+            parent = attach(runtime.extract_trace(request.headers))
+            try:
+                with runtime.tracer.start_as_current_span(
+                    "http_request",
+                    {"operation_code": "http_request", "bounded_context": "backend"},
+                ) as span:
+                    started = time.monotonic_ns()
+                    status_code = 500
+                    try:
+                        response = await call_next(request)
+                        if type(response.status_code) is int and 100 <= response.status_code <= 599:
+                            status_code = response.status_code
+                        return response
+                    finally:
+                        span.set_attribute("action", request.method.lower() if request.method in _HTTP_ACTIONS else "unknown")
+                        span.set_attribute("status", f"http_{status_code}")
+                        span.set_attribute("result", "success" if status_code < 400 else "failure")
+                        span.set_attribute("duration_ms", min(max((time.monotonic_ns() - started) / 1_000_000, 0), 1_000_000_000))
+                        route = request.scope.get("route")
+                        template = getattr(route, "path_format", None)
+                        routes = getattr(request.app.state, _TELEMETRY_ROUTES_KEY, frozenset())
+                        if isinstance(template, str) and template in routes:
+                            span.set_attribute("http_route", template)
+            finally:
+                detach(parent)
 
-def _otel_endpoint_has_hostname(endpoint: str) -> bool:
-    raw_endpoint = endpoint.strip()
-    if not raw_endpoint:
-        return False
-
-    parsed_endpoint = urlsplit(raw_endpoint)
-    if parsed_endpoint.netloc:
-        return parsed_endpoint.hostname is not None
-
-    if "://" in raw_endpoint:
-        return False
-
-    return urlsplit(f"//{raw_endpoint}").hostname is not None
-
-
-def setup_telemetry(app: FastAPI):
+        setattr(app.state, _TELEMETRY_MIDDLEWARE_KEY, True)
     if getattr(app.state, _TELEMETRY_STATE_KEY, False):
         logger.debug("OpenTelemetry instrumentation is already configured.")
         return
-
-    # Only set up tracing when ENABLE_OTEL is true and an OTLP endpoint is set.
-    enable_otel = _env_flag("ENABLE_OTEL")
-    otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-
-    if not enable_otel or not otel_endpoint:
+    if config is None:
         logger.info("OpenTelemetry is disabled.")
         return
 
-    if not _otel_endpoint_has_hostname(otel_endpoint):
-        logger.error(
-            "Invalid OTEL exporter endpoint URL: missing hostname; "
-            "continuing without tracing."
-        )
-        return
-
-    otlp_insecure = _env_flag("OTEL_EXPORTER_OTLP_INSECURE")
-
+    runtime = None
     try:
-        from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,
+        from cwl_telemetry import bootstrap
+
+        runtime = bootstrap(config)
+
+        setattr(app.state, _TELEMETRY_RUNTIME_KEY, runtime)
+        setattr(app.state, _TELEMETRY_ROUTES_KEY, config.route_templates)
+        setattr(
+            app.state,
+            _TELEMETRY_RECEIVER_HOST_KEY,
+            urlsplit(config.receiver).netloc if config.receiver else None,
         )
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        logger.info("Setting up OpenTelemetry export.")
-        resource = Resource(attributes={SERVICE_NAME: "naruon-backend"})
-
-        provider = TracerProvider(resource=resource)
-        trace.set_tracer_provider(provider)
-
-        otlp_exporter = OTLPSpanExporter(
-            endpoint=otel_endpoint,
-            insecure=otlp_insecure,
-        )
-        span_processor = BatchSpanProcessor(otlp_exporter)
-        provider.add_span_processor(span_processor)
-
-        FastAPIInstrumentor.instrument_app(app)
         setattr(app.state, _TELEMETRY_STATE_KEY, True)
         logger.info("OpenTelemetry instrumentation completed successfully.")
     except Exception:
-        logger.exception("OpenTelemetry setup failed; continuing without tracing.")
+        if runtime is not None:
+            runtime.shutdown()
+        logger.error("OpenTelemetry setup failed; continuing without tracing.")
+
+
+def _source_revision() -> str:
+    """Read the exact source revision sealed into the built image."""
+    for root in (Path(__file__).resolve().parents[1], Path(__file__).resolve().parents[2]):
+        candidate = root / ".source-revision"
+        if candidate.is_file():
+            return candidate.read_text(encoding="ascii").strip()
+    return ""
+
+
+async def activate_deployment_telemetry(app: FastAPI) -> None:
+    """Load the operator's encrypted receiver credential before serving requests."""
+    try:
+        from core.version import get_release_version
+        from db.models import TelemetryDeploymentConfig
+        from db.session import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            deployment = await session.get(TelemetryDeploymentConfig, 1)
+            if deployment is None or not deployment.enabled:
+                return
+            from cwl_telemetry import TelemetryConfig
+
+            routes = frozenset(
+                route.path_format for route in app.routes
+                if isinstance(getattr(route, "path_format", None), str)
+            )
+            config = TelemetryConfig(
+                service="naruon-backend", version=get_release_version(),
+                environment=deployment.environment, source_revision=_source_revision(),
+                receiver=deployment.receiver, token=deployment.bearer_token,
+                ca_file=deployment.ca_file,
+                operation_codes={"http_request"}, bounded_contexts={"backend"},
+                route_templates=routes,
+            )
+        setup_telemetry(app, config)
+    except Exception:
+        logger.error("OpenTelemetry configuration unavailable; continuing without tracing.")
+
+
+def shutdown_telemetry(app: FastAPI) -> None:
+    """Release the optional shared runtime and reset app telemetry state."""
+    runtime = getattr(app.state, _TELEMETRY_RUNTIME_KEY, None)
+    if runtime is not None:
+        runtime.shutdown()
+        setattr(app.state, _TELEMETRY_RUNTIME_KEY, None)
+        setattr(app.state, _TELEMETRY_RECEIVER_HOST_KEY, None)
+        setattr(app.state, _TELEMETRY_ROUTES_KEY, frozenset())
+        setattr(app.state, _TELEMETRY_STATE_KEY, False)
