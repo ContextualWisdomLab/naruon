@@ -21,6 +21,7 @@ from api.emails import get_email_thread
 from db.models import Base, Email, EmailThreadEdge
 from services.email_import_service import (
     _acquire_owner_import_quota_lock,
+    _import_single_eml,
     _release_owner_import_quota_lock,
 )
 from services.imap_worker import process_fetched_email
@@ -465,7 +466,7 @@ def test_reply_evidence_survives_a_real_local_database_round_trip():
 
 
 @pytest.mark.asyncio
-async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped():
+async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped(tmp_path):
     engine = create_async_engine(settings.DATABASE_URL)
     try:
         try:
@@ -634,6 +635,74 @@ async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped():
             await session.commit()
             assert split_reply.thread_id == "late-root@example.com"
 
+            eml_path = tmp_path / "file-reply.eml"
+            eml_path.write_bytes(
+                b"From: sender@example.com\r\n"
+                b"To: owner@example.com\r\n"
+                b"Date: Mon, 28 Sep 2026 00:00:00 +0000\r\n"
+                b"Subject: File reply\r\n"
+                b"Message-ID: <file-reply@example.com>\r\n"
+                b"In-Reply-To: <late-parent@example.com>\r\n"
+                b"References: <late-root@example.com> <late-parent@example.com>\r\n"
+                b"\r\nfile reply body\r\n"
+            )
+            imported = await _import_single_eml(
+                session,
+                eml_path=eml_path,
+                display_filename=eml_path.name,
+                user_id=owner,
+                organization_id=organization,
+            )
+            assert imported.status == "imported"
+            file_reply = (
+                await session.execute(
+                    select(Email).where(
+                        *Email.owner_filters(owner, organization),
+                        Email.message_id == "file-reply@example.com",
+                    )
+                )
+            ).scalar_one()
+            assert file_reply.thread_id == "late-root@example.com"
+            assert (
+                await detach_email_from_thread(
+                    session,
+                    email_id=file_reply.id,
+                    user_id=owner,
+                    organization_id=organization,
+                    reason="Incorrect relationship",
+                )
+                == 1
+            )
+            repeated = await _import_single_eml(
+                session,
+                eml_path=eml_path,
+                display_filename=eml_path.name,
+                user_id=owner,
+                organization_id=organization,
+            )
+            assert repeated.status == "skipped_duplicate"
+            assert file_reply.thread_id == "file-reply@example.com"
+            file_edges = (
+                (
+                    await session.execute(
+                        select(EmailThreadEdge).where(
+                            EmailThreadEdge.source_email_id == file_reply.id,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert len(file_edges) == 3
+            assert all(
+                edge.detached_at is not None
+                and edge.detached_by == owner
+                and edge.detach_reason == "Incorrect relationship"
+                for edge in file_edges
+            )
+
+            await session.delete(file_reply)
+            await session.flush()
             await session.execute(
                 delete(Email).where(Email.user_id.in_((owner, other)))
             )
