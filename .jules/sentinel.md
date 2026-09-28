@@ -138,3 +138,8 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
+
+## 2026-09-28 - [Fix Untrusted Container Image]
+**Vulnerability:** Kubernetes configurations referenced a container image (`docker.io/pgvector/pgvector:pg16`) from an untrusted registry (`docker.io`) and used a rolling version tag (`:pg16`), leading to KSV-0125 and Strix penetration test failures.
+**Learning:** Pulling images from untrusted registries with rolling tags can lead to supply chain attacks, as the underlying image could change to a compromised version without notice.
+**Prevention:** Ensure Kubernetes container images are explicitly pulled from approved registries (e.g., `ghcr.io/pgvector/pgvector`) and use immutable version tags (e.g., `:pg16-v0.5.0`) instead of rolling tags.
