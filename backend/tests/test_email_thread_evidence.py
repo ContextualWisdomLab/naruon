@@ -365,10 +365,52 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             assert reply.thread_id == child.thread_id == "root@example.com"
             assert grandchild.thread_id == "parent@example.com"
             assert duplicate_child.thread_id == "elsewhere@example.com"
-            assert conflicting.thread_id == "other@example.com"
-            assert ambiguous.thread_id == "parent@example.com"
+            assert conflicting.thread_id == "conflict@example.com"
+            assert ambiguous.thread_id == "ambiguous@example.com"
             assert detached.thread_id == "detached@example.com"
+            unrelated = Email(
+                user_id="owner",
+                organization_id="org",
+                message_id="unrelated@example.com",
+                thread_id="unrelated@example.com",
+                sender="sender@example.com",
+                recipients="owner@example.com",
+                subject="Unrelated",
+                body="unrelated",
+                date=when,
+            )
+            session.add(unrelated)
+            await adapter.commit()
+            conflicting_existing = await process_fetched_email(
+                adapter,
+                message(
+                    "conflicting-existing@example.com",
+                    "parent@example.com",
+                    "<unrelated@example.com>",
+                ),
+                "owner",
+                "org",
+            )
+            multiple_existing = await process_fetched_email(
+                adapter,
+                message("multiple-existing@example.com", "parent@example.com", "")
+                | {
+                    "in_reply_to": "<parent@example.com> <unrelated@example.com>",
+                    "references": None,
+                },
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            assert conflicting_existing.thread_id == "conflicting-existing@example.com"
+            assert multiple_existing.thread_id == "multiple-existing@example.com"
             auth = AuthContext("owner", "member", "org", (), "workspace-owner")
+            conflict_view = await get_email_thread(
+                conflicting_existing.thread_id, adapter, auth
+            )
+            assert {
+                edge.state for edge in conflict_view["thread"][0].thread_evidence
+            } == {"conflicting"}
             view = await get_email_thread("root@example.com", adapter, auth)
             assert {item.id for item in view["thread"]} == {
                 parent.id,

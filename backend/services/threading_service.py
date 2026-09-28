@@ -111,6 +111,14 @@ def extract_reference_ids(value: str | None) -> list[str]:
     return normalized_refs
 
 
+def _bounded_reference_ids(value: str | None) -> tuple[list[str], bool]:
+    if not value:
+        return [], False
+    ids = extract_reference_ids(value) if len(value) <= 8192 else []
+    incomplete = not ids or len(ids) > 64 or any(len(item) > 512 for item in ids)
+    return ([] if incomplete else ids), incomplete
+
+
 async def _find_existing_thread_ids(
     session: AsyncSession,
     message_ids: list[str],
@@ -170,13 +178,21 @@ async def assign_thread_id(
     Determine the thread_id for a new email based on in_reply_to and references.
     If no existing match is found, generate a new thread_id.
     """
-    # In-Reply-To (RFC 5322 section 3.6.4) is 1*msg-id, exactly like References,
-    # and each id may be wrapped in CFWS. Parse it with the same multi-id
-    # extractor rather than treating the whole header as one opaque Message-ID,
-    # so a reply that names several parents -- or a single id trailed by a
-    # comment -- still threads onto an existing ancestor instead of splitting off.
-    in_reply_to_ids = extract_reference_ids(email_data.get("in_reply_to"))
-    references = extract_reference_ids(email_data.get("references"))
+    # In-Reply-To and References are 1*msg-id. Keep conflicting parent claims
+    # as evidence without assigning this message to either existing conversation.
+    in_reply_to_ids, incomplete_reply = _bounded_reference_ids(
+        email_data.get("in_reply_to")
+    )
+    references, incomplete_references = _bounded_reference_ids(
+        email_data.get("references")
+    )
+    if (
+        incomplete_reply
+        or incomplete_references
+        or len(in_reply_to_ids) > 1
+        or (in_reply_to_ids and references and references[-1] != in_reply_to_ids[0])
+    ):
+        return normalize_message_id(email_data.get("message_id")) or uuid.uuid4().hex
 
     existing_candidates = []
     # Optimization: Use a set for O(1) membership checks to prevent O(n^2) deduplication of candidates
@@ -220,8 +236,7 @@ def email_thread_evidence(email: Email) -> list[EmailThreadEdge]:
         raw = getattr(email, source)
         if not raw:
             continue
-        ids = extract_reference_ids(raw[:8192]) if len(raw) <= 8192 else []
-        incomplete = not ids or len(ids) > 64 or any(len(value) > 512 for value in ids)
+        ids, incomplete = _bounded_reference_ids(raw)
         for ordinal, target in enumerate([None] if incomplete else ids):
             edges.append(
                 EmailThreadEdge(
