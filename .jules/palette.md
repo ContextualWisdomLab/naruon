@@ -80,3 +80,7 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+
+## 2024-05-25 - Avoid redundant aria-disabled on native disabled buttons
+**Learning:** Using `aria-disabled` alongside the native HTML `disabled` attribute on `<button>` elements is a redundant accessibility anti-pattern. The native `disabled` attribute inherently communicates the unavailable state and manages focus correctly, while `aria-disabled` is typically only needed for custom semantic elements (like `div` acting as a button) that cannot use the native attribute.
+**Action:** When managing disabled states for interactive elements (like buttons), rely solely on the native `disabled` attribute for state management. For async operations (e.g., loading or saving), combine it with `aria-busy="true"` to communicate active updates, but never apply `aria-disabled` simultaneously.
