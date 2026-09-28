@@ -24,6 +24,7 @@ from db.models import (
     ContentSegmentRecord,
     Email,
     KnowledgeGraphEdgeRecord,
+    canonical_message_id_expression,
 )
 from services.archive import extract_backup_async
 from services.batch_embedding_service import (
@@ -50,6 +51,10 @@ from services.project_graph.extractor_registry import (
 )
 from services.threading_service import (
     assign_thread_id,
+    email_thread_evidence,
+    email_owner_lock_key,
+    lock_email_thread_owner,
+    reconcile_email_thread,
     generate_email_fingerprint,
     normalize_message_id,
 )
@@ -219,17 +224,16 @@ async def _find_existing_email(
     message_id: str,
     fingerprint: str,
 ) -> Email | None:
-    message_lookup_values = {message_id, f"<{message_id}>"}
     result = await session.execute(
         select(Email).where(
             *Email.owner_filters(user_id, organization_id),
             or_(
-                Email.message_id.in_(message_lookup_values),
+                canonical_message_id_expression(Email.message_id) == message_id,
                 Email.fingerprint == fingerprint,
             ),
-        )
+        ).order_by(Email.id)
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 async def _owner_email_import_count(
@@ -258,7 +262,7 @@ async def _acquire_owner_import_quota_lock(
         return False
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": email_owner_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -277,7 +281,7 @@ async def _release_owner_import_quota_lock(
 ) -> None:
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": email_owner_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -860,6 +864,7 @@ async def _import_single_eml(
         )
 
     message_id = _message_id_for(parsed, content)
+    await lock_email_thread_owner(session, user_id, organization_id)
     parsed["message_id"] = message_id
     persisted_date = _utc_datetime(parsed.get("date"))
     fingerprint = _email_fingerprint(parsed, persisted_date)
@@ -908,7 +913,11 @@ async def _import_single_eml(
     )
 
     session.add(email_obj)
+    for edge in email_thread_evidence(email_obj):
+        session.add(edge)
     try:
+        await session.flush()
+        await reconcile_email_thread(session, email_obj)
         await session.commit()
     except Exception:
         await session.rollback()

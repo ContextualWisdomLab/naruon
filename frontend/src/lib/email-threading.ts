@@ -9,6 +9,13 @@ export interface ThreadEmailData {
   message_id?: string | null;
   in_reply_to?: string | null;
   references?: string | null;
+  thread_evidence?: Array<{
+    source: "in_reply_to" | "references";
+    ordinal: number;
+    state: "resolved" | "unresolved" | "ambiguous" | "conflicting" | "incomplete" | "detached";
+    target_message_id: string | null;
+    target_email_id: number | null;
+  }>;
 }
 
 export interface ReplyPayload {
@@ -21,7 +28,7 @@ export interface ReplyPayload {
 
 export type ReplyEvidence = {
   source: "In-Reply-To" | "References" | "In-Reply-To, References";
-  state: "found" | "missing" | "conflicting" | "incomplete";
+  state: "found" | "missing" | "outside_thread" | "conflicting" | "ambiguous" | "incomplete" | "detached";
   targetEmailId?: number;
 };
 
@@ -38,6 +45,30 @@ export function getReplyEvidence(
   email: ThreadEmailData,
   threadEmails: ThreadEmailData[],
 ): ReplyEvidence | null {
+  if (email.thread_evidence?.length) {
+    const active = email.thread_evidence.filter((edge) => edge.state !== "detached");
+    const direct = active.filter((edge) => edge.source === "in_reply_to");
+    const candidates = direct.length
+      ? direct
+      : active.filter((edge) => edge.source === "references")
+          .sort((left, right) => right.ordinal - left.ordinal).slice(0, 1);
+    const selected = candidates[0] ?? email.thread_evidence[0];
+    const source = active.some((edge) => edge.source === "in_reply_to")
+      && active.some((edge) => edge.source === "references")
+      ? "In-Reply-To, References"
+      : selected.source === "in_reply_to" ? "In-Reply-To" : "References";
+    if (candidates.length > 1 || candidates.some((edge) => edge.state === "conflicting")) {
+      return { source, state: "conflicting" };
+    }
+    if (candidates.some((edge) => edge.state === "ambiguous")) return { source, state: "ambiguous" };
+    if (selected.state === "detached") return { source, state: "detached" };
+    if (selected.state === "incomplete") return { source, state: "incomplete" };
+    if (selected.state === "unresolved") return { source, state: "missing" };
+    const targetEmailId = selected.target_email_id;
+    return targetEmailId && threadEmails.some((candidate) => candidate.id === targetEmailId)
+      ? { source, state: "found", targetEmailId }
+      : { source, state: "outside_thread" };
+  }
   const replyIds = headerMessageIds(email.in_reply_to);
   const references = headerMessageIds(email.references);
   const hasReply = Boolean(email.in_reply_to?.trim());

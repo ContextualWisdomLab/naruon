@@ -39,6 +39,27 @@ describe("email threading UI helpers", () => {
     expect(getReplyEvidence({ ...reply, references: "<root@example.com>".repeat(65) }, [baseEmail, reply])?.state)
       .toBe("incomplete");
   });
+  it("uses stored relationship state before interpreting the original headers", () => {
+    const reply = {
+      ...baseEmail,
+      id: 2,
+      message_id: "reply@example.com",
+      in_reply_to: "<root@example.com>",
+      thread_evidence: [{
+        source: "in_reply_to" as const,
+        ordinal: 0,
+        state: "detached" as const,
+        target_message_id: "root@example.com",
+        target_email_id: 1,
+      }],
+    };
+    expect(getReplyEvidence(reply, [baseEmail, reply])?.state).toBe("detached");
+    const resolved = { ...reply, thread_evidence: [{ ...reply.thread_evidence[0], state: "resolved" as const }] };
+    expect(getReplyEvidence(resolved, [baseEmail, resolved])?.targetEmailId).toBe(1);
+    expect(getReplyEvidence(resolved, [resolved])?.state).toBe("outside_thread");
+    const ambiguous = { ...reply, thread_evidence: [{ ...reply.thread_evidence[0], state: "ambiguous" as const, target_email_id: null }] };
+    expect(getReplyEvidence(ambiguous, [baseEmail, ambiguous])?.state).toBe("ambiguous");
+  });
   it("builds a reply payload with safe recipient and threading headers", () => {
     expect(buildReplyPayload(baseEmail, "Thanks")).toEqual({
       to: "reply@example.com",

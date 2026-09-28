@@ -93,6 +93,42 @@ async def test_existing_parent_thread_id_wins_over_deterministic_fallback():
 
 
 @pytest.mark.asyncio
+async def test_references_only_prefers_immediate_parent_over_older_root():
+    session = _SequentialSession(
+        [
+            [
+                ("<root@example.com>", "root-thread"),
+                ("<parent@example.com>", "parent-thread"),
+            ]
+        ]
+    )
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": None,
+            "references": "<root@example.com> <parent@example.com>",
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert thread_id == "parent-thread"
+
+    missing_parent = _SequentialSession([[("<root@example.com>", "root-thread")]])
+    thread_id = await assign_thread_id(
+        missing_parent,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": None,
+            "references": "<root@example.com> <parent@example.com>",
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert thread_id == "root-thread"
+
+
+@pytest.mark.asyncio
 async def test_existing_legacy_bracketed_thread_id_is_normalized():
     session = _SequentialSession([[("<root@example.com>", "<root@example.com>")]])
 
@@ -185,10 +221,9 @@ def test_extract_reference_ids_normalizes_folded_whitespace_and_dedupes():
     assert extract_reference_ids(header) == ["a@x.com", "b@x.com"]
 
 
-def test_extract_reference_ids_drops_bracketed_whitespace_only_ids():
-    # "< >" / "<\t>" are bracketed but whitespace-only: they normalize to nothing
-    # and must be dropped, not carried as empty thread candidates.
-    assert extract_reference_ids("< > <a@x.com> <\t>") == ["a@x.com"]
+def test_extract_reference_ids_rejects_partial_bracketed_headers():
+    assert extract_reference_ids("< > <a@x.com> <\t>") == []
+    assert extract_reference_ids("(<fake@x.com> (nested)) <a@x.com>") == ["a@x.com"]
 
 
 def test_extract_reference_ids_falls_back_to_whitespace_split_without_brackets():
@@ -244,10 +279,9 @@ async def test_find_existing_thread_ids_skips_rows_with_blank_thread_or_message_
 
 
 @pytest.mark.asyncio
-async def test_assign_thread_id_uses_a_later_candidate_when_the_first_has_no_thread():
-    # The immediate parent (in_reply_to) is not yet imported, but an older
-    # reference is: the lookup loop must skip the unmatched first candidate and
-    # return the matched later one, not fall through to the deterministic root.
+async def test_assign_thread_id_keeps_conflicting_headers_out_of_existing_threads():
+    # A sole References id that differs from In-Reply-To is insufficient to
+    # prove which of the two existing conversations owns the reply.
     session = _SequentialSession([[("<older@example.com>", "thread-older")]])
 
     thread_id = await assign_thread_id(
@@ -261,7 +295,8 @@ async def test_assign_thread_id_uses_a_later_candidate_when_the_first_has_no_thr
         organization_id="org-acme",
     )
 
-    assert thread_id == "thread-older"
+    assert thread_id == "reply@example.com"
+    assert session.execute_count == 0
 
 
 def test_generate_email_fingerprint_is_deterministic_case_insensitive_and_field_sensitive():
@@ -277,7 +312,10 @@ def test_generate_email_fingerprint_is_deterministic_case_insensitive_and_field_
     # 2. lower-cased + outer-whitespace-stripped components collapse to one key
     assert (
         generate_email_fingerprint(
-            "  QUARTERLY PLAN  ", "Mon, 01 Jun 2026 09:00:00 +0000", "A@X.com", "  b@Y.com "
+            "  QUARTERLY PLAN  ",
+            "Mon, 01 Jun 2026 09:00:00 +0000",
+            "A@X.com",
+            "  b@Y.com ",
         )
         == baseline
     )
@@ -313,12 +351,7 @@ async def test_assign_thread_id_generates_fresh_uuid_when_no_identifiers_present
 
 
 @pytest.mark.asyncio
-async def test_multi_id_in_reply_to_threads_on_any_existing_parent():
-    # RFC 5322 section 3.6.4: In-Reply-To is 1*msg-id, so it may carry more than
-    # one parent id (a reply that joins two messages). Threading must consider
-    # every parent, not treat the whole header as one opaque id -- otherwise a
-    # multi-id In-Reply-To never matches an existing thread and the reply splits
-    # off on its own.
+async def test_multi_id_in_reply_to_does_not_choose_one_existing_parent():
     session = _SequentialSession([[("<older@example.com>", "thread-xyz")]])
 
     thread_id = await assign_thread_id(
@@ -332,11 +365,12 @@ async def test_multi_id_in_reply_to_threads_on_any_existing_parent():
         organization_id="org-acme",
     )
 
-    assert thread_id == "thread-xyz"
+    assert thread_id == "reply@example.com"
+    assert session.execute_count == 0
 
 
 @pytest.mark.asyncio
-async def test_multi_id_in_reply_to_fallback_uses_first_parent_as_root():
+async def test_multi_id_in_reply_to_keeps_its_own_root_when_parents_are_missing():
     session = _SequentialSession([[]])
 
     thread_id = await assign_thread_id(
@@ -350,7 +384,46 @@ async def test_multi_id_in_reply_to_fallback_uses_first_parent_as_root():
         organization_id="org-acme",
     )
 
-    assert thread_id == "first@example.com"
+    assert thread_id == "reply@example.com"
+    assert session.execute_count == 0
+
+
+@pytest.mark.asyncio
+async def test_oversized_reply_header_cannot_assign_a_thread_without_bounded_evidence():
+    session = _SequentialSession([[("<parent@example.com>", "existing-thread")]])
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": "<parent@example.com>" + " " * 8193,
+            "references": None,
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert thread_id == "reply@example.com"
+    assert session.execute_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "header",
+    [
+        "<parent@example.com> <other@example.com",
+        "<parent@example.com> other@example.com",
+        "<parent@example.com> (unfinished comment",
+    ],
+)
+async def test_malformed_reply_header_cannot_choose_a_partial_parent(header):
+    session = _SequentialSession([[('parent@example.com', 'existing-thread')]])
+    thread_id = await assign_thread_id(
+        session,
+        {"message_id": "<reply@example.com>", "in_reply_to": header},
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert thread_id == "reply@example.com"
+    assert session.execute_count == 0
 
 
 @pytest.mark.asyncio

@@ -25,7 +25,10 @@ async def test_imap_import_keeps_reply_headers_as_thread_evidence():
 
     email = await process_fetched_email(session, message, "owner", "org")
 
-    session.add.assert_called_once_with(email)
+    assert session.add.call_args_list[0].args == (email,)
+    assert [call.args[0].target_message_id for call in session.add.call_args_list[1:]] == [
+        "parent@example.com", "root@example.com", "parent@example.com"
+    ]
     assert email.thread_id == "root@example.com"
     assert email.in_reply_to == message["in_reply_to"]
     assert email.references == message["references"]

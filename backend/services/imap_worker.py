@@ -17,7 +17,14 @@ from services.knowledge_extractor import (
     extract_knowledge_from_self_sent,
     is_self_sent_email,
 )
-from services.threading_service import assign_thread_id, generate_email_fingerprint
+from services.threading_service import (
+    assign_thread_id,
+    email_thread_evidence,
+    generate_email_fingerprint,
+    lock_email_thread_owner,
+    normalize_message_id,
+    reconcile_email_thread,
+)
 
 
 async def process_fetched_email(
@@ -28,6 +35,7 @@ async def process_fetched_email(
     owner_addresses: Iterable[str] | None = None,
     is_read: bool = True,
 ):
+    await lock_email_thread_owner(session, user_id, organization_id)
     subject = email_data.get("subject", "")
     date_obj = email_data.get("date")
     if hasattr(date_obj, "isoformat"):
@@ -80,7 +88,7 @@ async def process_fetched_email(
     new_email = Email(
         user_id=user_id,
         organization_id=organization_id or None,
-        message_id=email_data.get("message_id", ""),
+        message_id=normalize_message_id(email_data.get("message_id")) or "",
         thread_id=thread_id,
         fingerprint=fingerprint,
         sender=sender,
@@ -95,8 +103,11 @@ async def process_fetched_email(
     )
 
     session.add(new_email)
+    for edge in email_thread_evidence(new_email):
+        session.add(edge)
+    await session.flush()
+    await reconcile_email_thread(session, new_email)
     if is_self_sent_email(new_email, owner_addresses):
-        await session.flush()
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)
     return new_email
 
@@ -219,7 +230,7 @@ class ImapSyncWorker:
                 config.user_id,
             )
             return 0
-        
+
         logger.info(
             "Connecting to IMAP server %s:%s for user %s",
             imap_server,
