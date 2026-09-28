@@ -1,9 +1,34 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from db.models import TenantConfig
-from services.imap_worker import ImapSyncWorker
+from services.imap_worker import ImapSyncWorker, process_fetched_email
+
+
+@pytest.mark.asyncio
+async def test_imap_import_keeps_reply_headers_as_thread_evidence():
+    session = AsyncMock()
+    session.add = Mock()
+    session.execute.return_value = Mock()
+    session.execute.return_value.scalar_one_or_none.return_value = None
+    session.execute.return_value.all.return_value = []
+    message = {
+        "message_id": "<reply@example.com>",
+        "in_reply_to": "<parent@example.com>",
+        "references": "<root@example.com> <parent@example.com>",
+        "sender": "sender@example.com",
+        "recipients": ["owner@example.com"],
+        "subject": "Re: schedule",
+        "body": "Friday at three works.",
+    }
+
+    email = await process_fetched_email(session, message, "owner", "org")
+
+    session.add.assert_called_once_with(email)
+    assert email.thread_id == "root@example.com"
+    assert email.in_reply_to == message["in_reply_to"]
+    assert email.references == message["references"]
 
 
 @pytest.mark.asyncio
