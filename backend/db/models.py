@@ -823,7 +823,7 @@ class Email(Base):
     )
 
 
-class EmailThreadEdge(Base):
+class EmailThreadEvidenceRecord(Base):
     __tablename__ = "email_thread_evidence"
     __table_args__ = (
         UniqueConstraint(

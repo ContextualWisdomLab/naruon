@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from api.auth import AuthContext
 from api.emails import get_email_thread
-from db.models import Base, Email, EmailThreadEdge
+from db.models import Base, Email, EmailThreadEvidenceRecord
 from services.email_import_service import (
     _acquire_owner_import_quota_lock,
     _import_single_eml,
@@ -33,7 +33,7 @@ async def test_thread_view_resolves_late_parent_without_cross_owner_match():
     engine = create_engine("sqlite:///:memory:")
     try:
         Email.__table__.create(engine)
-        EmailThreadEdge.__table__.create(engine)
+        EmailThreadEvidenceRecord.__table__.create(engine)
         when = datetime.datetime(2026, 9, 28, tzinfo=datetime.timezone.utc)
 
         def message(owner: str, message_id: str, body: str) -> Email:
@@ -110,7 +110,7 @@ async def test_detach_correction_moves_reply_subtree_and_survives_reimport():
     engine = create_engine("sqlite:///:memory:")
     try:
         Email.__table__.create(engine)
-        EmailThreadEdge.__table__.create(engine)
+        EmailThreadEvidenceRecord.__table__.create(engine)
 
         class AsyncAdapter:
             def __init__(self, session: Session):
@@ -183,8 +183,8 @@ async def test_detach_correction_moves_reply_subtree_and_survives_reimport():
             assert reply.thread_id == "reply@example.com"
             assert grandchild.thread_id == "reply@example.com"
             edges = session.scalars(
-                select(EmailThreadEdge).where(
-                    EmailThreadEdge.source_email_id == reply.id
+                select(EmailThreadEvidenceRecord).where(
+                    EmailThreadEvidenceRecord.source_email_id == reply.id
                 )
             ).all()
             assert edges and all(
@@ -200,8 +200,8 @@ async def test_detach_correction_moves_reply_subtree_and_survives_reimport():
             assert reimported.id == reply.id
             assert (
                 session.scalars(
-                    select(EmailThreadEdge).where(
-                        EmailThreadEdge.source_email_id == reply.id
+                    select(EmailThreadEvidenceRecord).where(
+                        EmailThreadEvidenceRecord.source_email_id == reply.id
                     )
                 ).all()
                 == edges
@@ -226,7 +226,7 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
     engine = create_engine("sqlite:///:memory:")
     try:
         Email.__table__.create(engine)
-        EmailThreadEdge.__table__.create(engine)
+        EmailThreadEvidenceRecord.__table__.create(engine)
 
         class AsyncAdapter:
             def __init__(self, session: Session):
@@ -480,7 +480,7 @@ def test_reply_evidence_survives_a_real_local_database_round_trip():
     engine = create_engine("sqlite:///:memory:")
     try:
         Email.__table__.create(engine)
-        EmailThreadEdge.__table__.create(engine)
+        EmailThreadEvidenceRecord.__table__.create(engine)
         with Session(engine) as session:
             email = Email(
                 user_id="owner",
@@ -498,7 +498,7 @@ def test_reply_evidence_survives_a_real_local_database_round_trip():
             session.add_all(email_thread_evidence(email))
             session.commit()
             session.expire_all()
-            stored = session.scalars(select(EmailThreadEdge)).one()
+            stored = session.scalars(select(EmailThreadEvidenceRecord)).one()
             assert stored.source_message_id == "reply@example.com"
             assert stored.target_message_id == "parent@example.com"
             assert stored.user_id == "owner"
@@ -574,10 +574,10 @@ async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped(tmp_
             evidence = (
                 (
                     await session.execute(
-                        select(EmailThreadEdge)
-                        .where(EmailThreadEdge.source_email_id == reply.id)
+                        select(EmailThreadEvidenceRecord)
+                        .where(EmailThreadEvidenceRecord.source_email_id == reply.id)
                         .order_by(
-                            EmailThreadEdge.evidence_source, EmailThreadEdge.ordinal
+                            EmailThreadEvidenceRecord.evidence_source, EmailThreadEvidenceRecord.ordinal
                         )
                     )
                 )
@@ -727,8 +727,8 @@ async def test_reply_evidence_persists_before_parent_and_stays_owner_scoped(tmp_
             file_edges = (
                 (
                     await session.execute(
-                        select(EmailThreadEdge).where(
-                            EmailThreadEdge.source_email_id == file_reply.id,
+                        select(EmailThreadEvidenceRecord).where(
+                            EmailThreadEvidenceRecord.source_email_id == file_reply.id,
                         )
                     )
                 )

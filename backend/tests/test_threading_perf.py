@@ -22,7 +22,9 @@ class _CountingSession:
 @pytest.mark.asyncio
 async def test_assign_thread_id_batches_many_reference_lookups():
     session = _CountingSession()
-    references = " ".join(f"<ref{i}@example.com>" for i in range(100))
+    references = " ".join(
+        [*(f"<ref{i}@example.com>" for i in range(63)), "<parent@example.com>"]
+    )
 
     thread_id = await assign_thread_id(
         session,
@@ -38,3 +40,19 @@ async def test_assign_thread_id_batches_many_reference_lookups():
     assert thread_id == "ref0@example.com"
     assert session.execute_count == 1
     assert "email_records.message_id" in str(session.queries[0]).lower()
+
+
+@pytest.mark.asyncio
+async def test_assign_thread_id_rejects_more_references_than_persisted_evidence_allows():
+    session = _CountingSession()
+    references = " ".join(f"<ref{i}@example.com>" for i in range(100))
+
+    thread_id = await assign_thread_id(
+        session,
+        {"message_id": "<reply@example.com>", "references": references},
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert thread_id == "reply@example.com"
+    assert session.execute_count == 0

@@ -2,7 +2,7 @@ import uuid
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import bindparam, func, select
-from db.models import Email, EmailThreadEdge
+from db.models import Email, EmailThreadEvidenceRecord
 from services.email_parser import EmailData
 
 
@@ -229,7 +229,7 @@ async def assign_thread_id(
     return uuid.uuid4().hex
 
 
-def email_thread_evidence(email: Email) -> list[EmailThreadEdge]:
+def email_thread_evidence(email: Email) -> list[EmailThreadEvidenceRecord]:
     """Keep bounded RFC reply evidence alongside a newly imported email."""
     edges = []
     for source in ("in_reply_to", "references"):
@@ -239,7 +239,7 @@ def email_thread_evidence(email: Email) -> list[EmailThreadEdge]:
         ids, incomplete = _bounded_reference_ids(raw)
         for ordinal, target in enumerate([None] if incomplete else ids):
             edges.append(
-                EmailThreadEdge(
+                EmailThreadEvidenceRecord(
                     source_email=email,
                     user_id=email.user_id,
                     organization_id=email.organization_id,
@@ -253,7 +253,7 @@ def email_thread_evidence(email: Email) -> list[EmailThreadEdge]:
     return edges
 
 
-def _direct_parent_id(edges: list[EmailThreadEdge]) -> str | None:
+def _direct_parent_id(edges: list[EmailThreadEvidenceRecord]) -> str | None:
     if any(edge.incomplete for edge in edges):
         return None
     replies = {
@@ -275,14 +275,14 @@ def _direct_parent_id(edges: list[EmailThreadEdge]) -> str | None:
 
 
 def _thread_children(
-    emails: list[Email], edges: list[EmailThreadEdge], unique_parent_ids: set[str]
+    emails: list[Email], edges: list[EmailThreadEvidenceRecord], unique_parent_ids: set[str]
 ) -> dict[int, list[Email]]:
     by_message_id: dict[str, list[Email]] = defaultdict(list)
     for email in emails:
         message_id = normalize_message_id(email.message_id)
         if message_id:
             by_message_id[message_id].append(email)
-    edges_by_source: dict[int, list[EmailThreadEdge]] = defaultdict(list)
+    edges_by_source: dict[int, list[EmailThreadEvidenceRecord]] = defaultdict(list)
     for edge in edges:
         edges_by_source[edge.source_email_id].append(edge)
     children: dict[int, list[Email]] = defaultdict(list)
@@ -343,11 +343,11 @@ async def reconcile_email_thread(session: AsyncSession, email: Email) -> None:
     ):
         return
     result = await session.execute(
-        select(EmailThreadEdge.source_email_id).where(
-            *EmailThreadEdge.owner_filters(email.user_id, email.organization_id),
-            EmailThreadEdge.target_message_id == message_id,
-            EmailThreadEdge.detached_at.is_(None),
-            EmailThreadEdge.incomplete.is_(False),
+        select(EmailThreadEvidenceRecord.source_email_id).where(
+            *EmailThreadEvidenceRecord.owner_filters(email.user_id, email.organization_id),
+            EmailThreadEvidenceRecord.target_message_id == message_id,
+            EmailThreadEvidenceRecord.detached_at.is_(None),
+            EmailThreadEvidenceRecord.incomplete.is_(False),
         )
     )
     candidate_ids = result.scalars().all()
@@ -373,10 +373,10 @@ async def reconcile_email_thread(session: AsyncSession, email: Email) -> None:
     if email not in emails:
         emails.append(email)
     result = await session.execute(
-        select(EmailThreadEdge).where(
-            *EmailThreadEdge.owner_filters(email.user_id, email.organization_id),
-            EmailThreadEdge.source_email_id.in_([item.id for item in emails]),
-            EmailThreadEdge.detached_at.is_(None),
+        select(EmailThreadEvidenceRecord).where(
+            *EmailThreadEvidenceRecord.owner_filters(email.user_id, email.organization_id),
+            EmailThreadEvidenceRecord.source_email_id.in_([item.id for item in emails]),
+            EmailThreadEvidenceRecord.detached_at.is_(None),
         )
     )
     children = _thread_children(
@@ -422,11 +422,11 @@ async def detach_email_from_thread(
     if source not in emails:
         emails.append(source)
     result = await session.execute(
-        select(EmailThreadEdge)
+        select(EmailThreadEvidenceRecord)
         .where(
-            *EmailThreadEdge.owner_filters(user_id, organization_id),
-            EmailThreadEdge.source_email_id.in_([email.id for email in emails]),
-            EmailThreadEdge.detached_at.is_(None),
+            *EmailThreadEvidenceRecord.owner_filters(user_id, organization_id),
+            EmailThreadEvidenceRecord.source_email_id.in_([email.id for email in emails]),
+            EmailThreadEvidenceRecord.detached_at.is_(None),
         )
         .with_for_update()
     )

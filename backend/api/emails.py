@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
-from db.models import Email, EmailThreadEdge
+from db.models import Email, EmailThreadEvidenceRecord
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -694,15 +694,15 @@ async def get_email_thread(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     edge_result = await db.execute(
-        select(EmailThreadEdge).where(
-            *EmailThreadEdge.owner_filters(
+        select(EmailThreadEvidenceRecord).where(
+            *EmailThreadEvidenceRecord.owner_filters(
                 auth_context.user_id, auth_context.organization_id
             ),
-            EmailThreadEdge.source_email_id.in_([email.id for email in emails]),
+            EmailThreadEvidenceRecord.source_email_id.in_([email.id for email in emails]),
         )
     )
     edges = edge_result.scalars().all()
-    edges_by_email: dict[int, list[EmailThreadEdge]] = defaultdict(list)
+    edges_by_email: dict[int, list[EmailThreadEvidenceRecord]] = defaultdict(list)
     for edge in edges:
         edges_by_email[edge.source_email_id].append(edge)
     conflicting_email_ids = set()

@@ -17,7 +17,7 @@ from pydantic import SecretStr
 from api import emails as emails_api
 from api.auth import get_auth_context as auth_get_auth_context
 from core.config import settings
-from db.models import Email, EmailThreadEdge, LLMProvider
+from db.models import Email, EmailThreadEvidenceRecord, LLMProvider
 from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
@@ -1637,7 +1637,7 @@ async def test_get_email_thread_exposes_persisted_header_evidence(
     client: AsyncClient, db_session, sample_email: Email
 ):
     db_session.thread_edges = [
-        EmailThreadEdge(
+        EmailThreadEvidenceRecord(
             id=31,
             source_email_id=sample_email.id,
             user_id="testuser",
@@ -1671,7 +1671,7 @@ async def test_get_email_thread_marks_conflicting_header_evidence(
     client: AsyncClient, db_session, sample_email: Email
 ):
     db_session.thread_edges = [
-        EmailThreadEdge(
+        EmailThreadEvidenceRecord(
             id=index,
             source_email_id=sample_email.id,
             user_id="testuser",
