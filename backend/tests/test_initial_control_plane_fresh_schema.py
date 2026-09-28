@@ -1,7 +1,10 @@
 import importlib.util
 from pathlib import Path
 
-from sqlalchemy import text
+import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import create_engine, text
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -68,3 +71,37 @@ def test_legacy_schema_preserves_emails_compatibility_index(monkeypatch):
 
     assert any("ix_emails_owner_date" in statement for statement in executed)
     assert any("ix_email_records_owner_date" in statement for statement in executed)
+
+
+@pytest.mark.parametrize(
+    ("table_name", "preexisting_read"),
+    [("email_records", True), ("email_records", False), ("emails", False)],
+)
+def test_read_state_upgrade_preserves_existing_values(table_name, preexisting_read):
+    path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    spec = importlib.util.spec_from_file_location("email_read_state_revision", path)
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        with engine.begin() as connection:
+            read_column = ", is_read BOOLEAN NOT NULL" if preexisting_read else ""
+            connection.exec_driver_sql(
+                f"CREATE TABLE {table_name} (id INTEGER PRIMARY KEY{read_column})"
+            )
+            connection.exec_driver_sql(
+                f"INSERT INTO {table_name} VALUES (1{', 0' if preexisting_read else ''})"
+            )
+            revision.op = Operations(MigrationContext.configure(connection))
+            revision.upgrade()
+            revision.upgrade()
+            assert connection.exec_driver_sql(
+                f"SELECT is_read FROM {table_name} WHERE id = 1"
+            ).scalar_one() == (0 if preexisting_read else 1)
+            revision.downgrade()
+            assert connection.exec_driver_sql(
+                f"SELECT is_read FROM {table_name} WHERE id = 1"
+            ).scalar_one() == (0 if preexisting_read else 1)
+    finally:
+        engine.dispose()
