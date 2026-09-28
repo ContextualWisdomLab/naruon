@@ -376,6 +376,18 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             )
             await adapter.commit()
             assert ambiguous_reply.thread_id == "ambiguous-reply@example.com"
+            malformed_reply = await process_fetched_email(
+                adapter,
+                message("malformed-reply@example.com", "reply@example.com", "")
+                | {
+                    "in_reply_to": "<reply@example.com> <other@example.com",
+                    "references": None,
+                },
+                "owner",
+                "org",
+            )
+            await adapter.commit()
+            assert malformed_reply.thread_id == "malformed-reply@example.com"
 
             conflicting = await process_fetched_email(
                 adapter,
@@ -494,6 +506,13 @@ async def test_late_ancestor_reconciles_previously_split_thread_keys():
             assert {
                 edge.state for edge in conflict_view["thread"][0].thread_evidence
             } == {"conflicting"}
+            malformed_view = await get_email_thread(
+                malformed_reply.thread_id, adapter, auth
+            )
+            assert [
+                (edge.state, edge.target_message_id)
+                for edge in malformed_view["thread"][0].thread_evidence
+            ] == [("incomplete", None)]
             view = await get_email_thread("root@example.com", adapter, auth)
             assert {item.id for item in view["thread"]} == {
                 parent.id,
