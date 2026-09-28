@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,39 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def text_reverser_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    return {"reversed_text": text[::-1]}
+
+
+registry.register(
+    ToolInfo(
+        code="text_reverser",
+        name="텍스트 뒤집기 (Text Reverser)",
+        description="입력된 텍스트를 거꾸로 뒤집습니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    text_reverser_handler,
+)
+
+
+async def character_counter_handler(params: Dict[str, Any]) -> Dict[str, int]:
+    text = params.get("text") or ""
+    return {"length": len(text)}
+
+
+registry.register(
+    ToolInfo(
+        code="character_counter",
+        name="글자수 세기 (Character Counter)",
+        description="입력된 텍스트의 글자수를 반환합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    character_counter_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
