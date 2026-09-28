@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -380,6 +378,23 @@ async def test_execute_tool_handler_error():
     assert data["result"] is None
     assert "Simulated error" in data["message"]
 
+
+@pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_execute_text_reverser():
+    result = await registry.invoke_tool("text_reverser", {"text": "hello"})
+    assert result == {"reversed_text": "olleh"}
+
+    result_empty = await registry.invoke_tool("text_reverser", {"text": ""})
+    assert result_empty == {"reversed_text": ""}
+
+@pytest.mark.asyncio
+async def test_execute_character_counter():
+    result = await registry.invoke_tool("character_counter", {"text": "hello"})
+    assert result == {"length": 5}
+
+    result_empty = await registry.invoke_tool("character_counter", {"text": ""})
+    assert result_empty == {"length": 0}
 
 @pytest.mark.asyncio
 async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(caplog):
