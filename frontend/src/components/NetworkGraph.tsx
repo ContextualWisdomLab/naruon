@@ -285,16 +285,28 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+  // ⚡ Bolt: Use bounded for...of loop instead of Array.from(map.values()).slice() to prevent O(N) memory allocation
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
+    const topEdges: Edge[] = [];
+    for (const edge of edgeMap.values()) {
+      if (topEdges.length >= 5) break;
+      topEdges.push(edge);
+    }
+    return topEdges.map((edge, index) => ({
       edge,
       id: String(edge.id),
       label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
     }));
   }, [edgeMap, nodeMap]);
 
+  // ⚡ Bolt: Use bounded for...of loop instead of Array.from(map.values()).slice() to prevent O(N) memory allocation
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
+    const nodes: Node[] = [];
+    for (const node of nodeInstanceMap.values()) {
+      if (nodes.length >= 8) break;
+      nodes.push(node);
+    }
+    return nodes.map((node) => ({
       id: String(node.id),
       label: `노드: ${String(node.label ?? node.id)}`,
       node,
