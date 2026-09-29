@@ -7,7 +7,7 @@ import type { MailFolder } from '@/components/EmailList';
 import { EmailDetail } from '@/components/EmailDetail';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import dynamic from 'next/dynamic';
-import { CalendarDays, CheckCircle2, Inbox, Network, Send, Settings, Sparkles } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Inbox, Loader2, Network, Send, Settings, Sparkles } from 'lucide-react';
 import { useTasks, type TaskItem } from '@/hooks/useTasks';
 import { apiClient } from '@/lib/api-client';
 import { setMobileWorkspaceView, useMobileWorkspaceView } from '@/lib/mobile-workspace';
@@ -372,8 +372,9 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
                     disabled={loading || pendingReplyCount === 0 || replySlaStatus === 'loading'}
                     aria-busy={loading || replySlaStatus === 'loading'}
                     onClick={() => void handleReplySlaEscalation()}
-                    className="text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
+                    {replySlaStatus === 'loading' && <Loader2 className="size-3 animate-spin" aria-hidden="true" />}
                     {replySlaStatus === 'loading' ? '확인 중' : '팔로업 작업 생성'}
                   </button>
                 </div>

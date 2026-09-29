@@ -8,6 +8,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("lucide-react", () => ({
+  Loader2: () => <svg aria-hidden="true" />,
   AlertCircle: () => <svg aria-hidden="true" />,
   CalendarDays: () => <svg aria-hidden="true" />,
   CheckCircle2: () => <svg aria-hidden="true" />,

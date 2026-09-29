@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("lucide-react", () => ({
+  Loader2: () => <svg aria-hidden="true" />,
   Plus: () => <svg aria-hidden="true" />,
   Search: () => <svg aria-hidden="true" />,
   Filter: () => <svg aria-hidden="true" />,
