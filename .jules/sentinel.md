@@ -138,7 +138,3 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
-## 2026-09-28 - Update sharp version via pnpm overrides
-**Vulnerability:** The `sharp` package in `frontend/package.json` was out of date (v0.35.0), containing high-severity vulnerabilities (GHSA-rgj7-g3m4-5g8c).
-**Learning:** `pnpm update` might not always bump the versions of indirect dependencies.
-**Prevention:** To forcefully update transitive dependencies or heavily-constrained direct dependencies in `pnpm`, use the `overrides` and `resolutions` fields in `package.json` to explicitly pin the required, safe version.
