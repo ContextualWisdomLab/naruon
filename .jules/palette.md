@@ -80,6 +80,3 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
-## 2026-09-28 - Add explicit loading spinners to TasksLayout async buttons
-**Learning:** Action buttons in task layouts (like "팔로업 작업 생성" or "실행 요청") that trigger asynchronous backend intents need explicit loading feedback. Without it, users may click multiple times or wonder if the system is frozen, even if the button is disabled.
-**Action:** Always include a visual loading spinner (`Loader2 animate-spin`) and dynamic text (e.g., "생성 중") to provide immediate, unambiguous feedback for async operations in task lists.
