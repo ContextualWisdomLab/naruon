@@ -770,6 +770,26 @@ registry.register(
 
 
 
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    try:
+        parsed = json.loads(text)
+        return {"formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False)}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 읽기 쉽게 들여쓰기하여 포맷팅합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    json_formatter_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """

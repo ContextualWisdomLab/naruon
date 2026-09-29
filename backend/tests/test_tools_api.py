@@ -1211,3 +1211,36 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_execute_json_formatter():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": '{"a": 1, "b": {"c": 2}}'
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  }\n}" in data["result"]["formatted_json"]
+
+def test_execute_json_formatter_invalid():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": '{"a": 1, "b": {"c": 2}'
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid JSON string" in data["message"]
