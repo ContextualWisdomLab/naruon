@@ -331,3 +331,14 @@ The canonical repair belongs to #1795: add a persistent, immutable, non-sequenti
 | Hosted admission | Current checks/reviews must be re-read after each head transition | Queued/pending/stale is never PASS |
 
 The exact acceptance comments are [#1795 comment 5903769667](https://github.com/ContextualWisdomLab/naruon/pull/1795#issuecomment-5903769667) and [#1793 comment 5903769507](https://github.com/ContextualWisdomLab/naruon/pull/1793#issuecomment-5903769507). No local runnable Naruon dependency environment is present in this execution workspace, so no behavior test was executed and no RED or GREEN claim is made.
+
+
+### NetworkGraph current-head design assurance — 2026-09-30
+
+- Surface owner: PR #1827, current repaired head `2b974f91e567a95f1c32eeb796c07d1c0f4dc2aa` (Draft / Proposed).
+- Preserved product truth: the canvas remains a presentation projection. The existing structured node and relationship controls/text are the exact-value alternative and must stay contract-tested; the graphical view must not become the only representation.
+- RED contract: `fe121af2b189c73e5d99b972b1e33ae0bd89c7c9` requires the loading spinner and zoom/fit icons to remain decorative and requires an explicit reduced-motion class.
+- Repair: `2b974f91e567a95f1c32eeb796c07d1c0f4dc2aa` adds `motion-reduce:animate-none` without changing zoom/fit or domain projection behavior.
+- Evidence limit: no runnable checkout or dependency installation was available in this execution environment; RED/GREEN execution is not claimed. Hosted exact-head CI and independent review remain mandatory.
+- Merge gate: FAIL until real-browser pointer, touch, keyboard and AT interaction covers selection, zoom, fit, resize, persistence/reload where applicable, unmount/listener/ResizeObserver cleanup, desktop/intermediate/mobile screenshots, loading/empty/error/offline/permission/read-only/stale/conflict/retry/busy states, representative large-graph main-thread and p95 evidence, and ko/en/ja/zh/vi/es/de/fr translation from the versioned screen-resource authority.
+- The hard-coded Korean loading/status/control strings remain a P1 localization delivery gap. Do not replace domain identifiers or graph truth with localized presentation DTO state.
