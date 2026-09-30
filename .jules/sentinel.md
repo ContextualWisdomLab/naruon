@@ -138,3 +138,8 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
+
+## 2026-09-29 - [Fix URL-encoded path traversal in zip extraction]
+**Vulnerability:** Path traversal payload (e.g. `%2e%2e/file`) within zip archives bypassed validation checks since `Path.name` parsing operates before URL-decoding, but the payload could be decoded downstream, or directly result in traversal during extraction depending on usage.
+**Learning:** URL decoding must be performed to strictly validate that the input path contains no traversal elements, but the *original* input string should be used for forming the final extracted path to avoid corrupting legitimate filenames (e.g. `File%20Name.txt`). Also, unbounded `urllib.parse.unquote` loops can lead to DoS, so they must be bounded.
+**Prevention:** Strictly validate `urllib.parse.unquote()` decoded paths for traversals with a bounded loop, but always use the original filename string (after normalizing slashes) when constructing the destination `Path`.
