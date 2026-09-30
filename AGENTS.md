@@ -27,6 +27,10 @@ in this repo.
 - A local `trivy` scan with a stale DB misses findings: run
   `trivy --download-db-only` first, and scan the **merge ref**, not just the PR
   head.
+- Repo-wide dependency findings belong in a dedicated `develop`-root security
+  owner PR. Do not mix lock repair into an unrelated product/UI PR or add dummy
+  source comments merely to retrigger a scanner; stack affected PRs on the
+  verified owner repair instead.
 - The org `code_scanning` ruleset is intentionally **CodeQL-only** (multiple
   code-scanning tools can't converge on one PR ref). Gating is enforced by the
   Security Scan **job result**, not by that rule — do **not** add Trivy,
