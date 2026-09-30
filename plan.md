@@ -1,21 +1,21 @@
-1. **Add `Loader2` icon from `lucide-react` to `frontend/src/components/SecurityLayout.tsx`:**
-   - Modify `frontend/src/components/SecurityLayout.tsx` to import `Loader2` from `lucide-react`.
+# NetworkGraph constant-time lookup plan
 
-2. **Add loading spinner to "권한 저장" (Save Permission) button in `frontend/src/components/SecurityLayout.tsx`:**
-   - Currently, it relies only on text changes (`권한 저장 중` vs `권한 저장`) and an icon (`CheckCircle2` / `XCircle`).
-   - Replace the icon with a `Loader2` spinner when `permissionSaving` is true, keeping the check/x icons for the non-loading states.
-   - Use `animate-spin` on the `Loader2` icon.
+1. Pre-compute `edgeMap` and `nodeInstanceMap` with `useMemo`, and keep the existing `nodeMap` as the authoritative node-label lookup for rendered selections.
+   - `selectEdge` uses `edgeMap.get(String(edgeId))`.
+   - `selectNode` uses `nodeMap.get(String(nodeId))` with the node identifier as the no-entry fallback.
+   - `selectGraphNode` uses `nodeMap.get(String(node.id))` with the node identifier as the no-entry fallback.
+   - `handleRelationshipOptionChange` uses `edgeMap.get(value)`.
+   - `handleNodeOptionChange` uses `nodeInstanceMap.get(value)`.
+   - Selection handlers must not fall back to `Array.prototype.find()` or `findNodeLabel()` scans.
+   - `edgeMap` and `nodeInstanceMap` are first-wins, matching `nodeMap` and the previous `.find()` path. Last-wins `new Map(items.map(...))` construction is rejected.
 
-3. **Verify the modification in `SecurityLayout.tsx`:**
-   - Read the file `frontend/src/components/SecurityLayout.tsx` to ensure the modifications were applied correctly.
+2. Verify the exact branch head from `frontend/` with these commands:
 
-4. **Verify changes by running tests & linters:**
-   - Run `cd frontend && pnpm run test`
-   - Run `cd frontend && pnpm run lint`
+   ```bash
+   pnpm test -- src/components/NetworkGraph.test.tsx src/components/NetworkGraph.map-lookup.test.ts
+   pnpm exec eslint src/components/NetworkGraph.tsx src/components/NetworkGraph.test.tsx src/components/NetworkGraph.map-lookup.test.ts
+   pnpm typecheck
+   pnpm build
+   ```
 
-5. **Complete pre-commit steps:**
-   - Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.
-
-6. **Submit PR:**
-   - PR title: `🎨 Palette: [UX improvement] add loading spinner to security layout permission save button`
-   - PR Description with 💡 What, 🎯 Why, 📸 Before/After, and ♿ Accessibility in Korean.
+3. Keep the pull request open until the unchanged exact head has terminal-success required checks, all addressed review threads are resolved, and protected-branch review requirements are satisfied without bypass.
