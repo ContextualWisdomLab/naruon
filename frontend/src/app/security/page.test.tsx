@@ -17,6 +17,7 @@ vi.mock("lucide-react", () => ({
   Share2: () => <svg aria-hidden="true" />,
   ShieldCheck: () => <svg aria-hidden="true" />,
   XCircle: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
 }));
 
 import SecurityPage from "./page";
