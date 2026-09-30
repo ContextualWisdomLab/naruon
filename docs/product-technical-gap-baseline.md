@@ -1,10 +1,25 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.2
-**Observed on:** 2026-08-26 (Asia/Seoul)
-**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
+**Baseline version:** 1.3
+**Observed on:** 2026-09-30 (Asia/Seoul)
+**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Exact-head Security Scan RCA refresh (2026-09-30):** PRs #1824
+(`23a4a883…`), #1825 (`c2206af6…`), and #1827 (`fc52acb0…`) inherit the
+same repo-wide dependency findings from protected `develop@042b0c70…`.
+Security Scan runs `36559236390`, `36662347179`, and `36658025933` identify
+vulnerable AnyIO, Next.js, and Sharp locks; #1827 additionally exposes PyJWT
+and oauthlib findings. PR #1825 contains a partial dependency repair mixed
+with UI work and a dummy scanner-trigger comment, so it is evidence to
+preserve rather than the canonical security owner. The dedicated
+`fix/security-dependency-floor-20260930` owner branch pins the reviewed fixed
+versions across source manifests and generated locks, upgrades Starlette to
+the AnyIO-compatible `1.7.0` plus its HTTPX2 TestClient path, and adds an
+executable cross-lock contract. All affected PRs remain Draft until the owner repair is
+current-head green and normally integrated; no predecessor result is accepted
+as successor evidence. Full RCA: [dependency Security Scan owner repair](doctoring/2026-09-30-dependency-security-scan-rca.md).
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
