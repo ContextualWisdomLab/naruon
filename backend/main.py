@@ -244,4 +244,4 @@ app.include_router(auth_session_router, dependencies=PRIVATE_API_DEPENDENCIES)
 @app.get("/")
 def read_root() -> dict[str, str]:
     return {"status": "ok", "message": "AI Email Client API"}
-# another dummy comment to trigger Strix scan
+# yet another dummy comment to trigger Strix scan
