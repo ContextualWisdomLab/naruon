@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network';
+import { Loader2, Maximize, ZoomIn } from 'lucide-react';
 
 interface Node {
   id: number | string;
@@ -350,7 +351,12 @@ export default function NetworkGraph() {
   };
 
   if (loading) {
-    return <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center text-sm text-muted-foreground sm:min-h-[420px]">관계 맥락을 불러오는 중입니다...</div>;
+    return (
+      <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:min-h-[420px]">
+        <Loader2 className="size-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        관계 맥락을 불러오는 중입니다...
+      </div>
+    );
   }
 
   if (error) {
@@ -417,15 +423,17 @@ export default function NetworkGraph() {
           <button
             type="button"
             onClick={handleZoomGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
+            <ZoomIn className="size-3.5" aria-hidden="true" />
             그래프 확대
           </button>
           <button
             type="button"
             onClick={handleFitGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
+            <Maximize className="size-3.5" aria-hidden="true" />
             전체 그래프 맞춤
           </button>
         </div>
