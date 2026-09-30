@@ -94,7 +94,21 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         read_repo_text("requirements-strix-ci-hashes.txt")
     )
     frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(
+        read_repo_text("frontend/pnpm-workspace.yaml")
+    )
     frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    for package_name, expected_version in {
+        "starlette": "1.7.0",
+        "httpx2": "2.13.1",
+        "pyjwt": "2.14.0",
+        "anyio": "4.15.1",
+        "oauthlib": "4.0.0",
+    }.items():
+        assert backend_pins[package_name] == expected_version
+        exact_pin = f"{package_name}=={expected_version}"
+        assert exact_pin in backend_records
 
     assert backend_pins["cryptography"] == "50.0.0"
     assert backend_pins["protobuf"] == "7.35.1"
@@ -121,9 +135,20 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         root_importer, "devDependencies", "postcss"
     )
     jsdom_resolution = importer_resolution(root_importer, "devDependencies", "jsdom")
+    next_resolution = importer_resolution(root_importer, "dependencies", "next")
+    eslint_next_resolution = importer_resolution(
+        root_importer, "devDependencies", "eslint-config-next"
+    )
     assert postcss_resolution == {"specifier": "8.5.24", "version": "8.5.24"}
     assert jsdom_resolution == {"specifier": "^30.0.1", "version": "30.0.1"}
+    assert next_resolution["specifier"] == "16.3.6"
+    assert next_resolution["version"].split("(", 1)[0] == "16.3.6"
+    assert eslint_next_resolution["specifier"] == "16.3.6"
+    assert eslint_next_resolution["version"].split("(", 1)[0] == "16.3.6"
 
+    assert frontend_package["dependencies"]["next"] == "16.3.6"
+    assert frontend_package["devDependencies"]["eslint-config-next"] == "16.3.6"
+    assert frontend_workspace["overrides"]["sharp"] == "0.35.4"
     assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
     assert frontend_package["overrides"]["postcss"] == "8.5.24"
