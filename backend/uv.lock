@@ -59,15 +59,15 @@ wheels = [
 
 [[package]]
 name = "anyio"
-version = "4.6.2"
+version = "4.14.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "idna" },
-    { name = "sniffio" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f0/be/7dee9e9d755e896c81cf210b37a727995da6e31b459c1182ad4937c08490/anyio-4.6.2.tar.gz", hash = "sha256:f72a7bb3dd0752b3bd8b17a844a019d7fbf6ae218c588f4f9ba1b2f600b12347", size = 171302, upload-time = "2024-10-13T22:20:33.537Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/72/5562aabb8dd7181e8e860622a38bea08d17842b99ecd4c91f84ac95251b0/anyio-4.14.1.tar.gz", hash = "sha256:8d648a3544c1a700e3ff78615cd679e4c5c3f149904287e73687b2596963629e", size = 254831, upload-time = "2026-06-24T20:56:06.017Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/dc/a27d58194ddcbeb295500cc6bf233d4dfb34a95a10ca5dbe4ff8454399e4/anyio-4.6.2-py3-none-any.whl", hash = "sha256:6caec6b1391f6f6d7b2ef2258d2902d36753149f67478f7df4be8e54d03a8f54", size = 89766, upload-time = "2024-10-13T22:20:31.877Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/7b/90df4a0a816d98d6ea26f559d87836d494a2cf1fcf063be67df50a7bcc30/anyio-4.14.1-py3-none-any.whl", hash = "sha256:4e5533c5b8ff0a24f5d7a176cbe6877129cd183893f66b537f8f227d10527d72", size = 124875, upload-time = "2026-06-24T20:56:04.413Z" },
 ]
 
 [[package]]
@@ -983,7 +983,6 @@ dependencies = [
     { name = "aioimaplib" },
     { name = "aiosmtplib" },
     { name = "alembic" },
-    { name = "anyio" },
     { name = "asyncpg" },
     { name = "cryptography" },
     { name = "defusedxml" },
@@ -996,7 +995,6 @@ dependencies = [
     { name = "httpx" },
     { name = "icalendar" },
     { name = "langchain-text-splitters" },
-    { name = "oauthlib" },
     { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp" },
@@ -1031,7 +1029,6 @@ requires-dist = [
     { name = "aioimaplib", specifier = "==2.0.1" },
     { name = "aiosmtplib", specifier = "==5.1.2" },
     { name = "alembic", specifier = "==1.18.5" },
-    { name = "anyio", specifier = ">=4.6.2" },
     { name = "asyncpg", specifier = "==0.31.0" },
     { name = "cryptography", specifier = "==50.0.0" },
     { name = "defusedxml", specifier = "==0.7.1" },
@@ -1044,7 +1041,6 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "icalendar", specifier = "==7.2.0" },
     { name = "langchain-text-splitters", specifier = "==1.1.2" },
-    { name = "oauthlib", specifier = ">=3.2.2" },
     { name = "openai", specifier = "==2.45.0" },
     { name = "opentelemetry-api", specifier = "==1.43.0" },
     { name = "opentelemetry-exporter-otlp", specifier = "==1.43.0" },
@@ -1076,11 +1072,11 @@ dev = [
 
 [[package]]
 name = "oauthlib"
-version = "3.2.2"
+version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6d/fa/fbf4001037904031639e6bfbfc02badfc7e12f137a8afa254df6c4c8a670/oauthlib-3.2.2.tar.gz", hash = "sha256:9859c40929662bec5d64f34d01c99e093149682a3f38915dc0655d5a633dd918", size = 177352, upload-time = "2022-10-17T20:04:27.471Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/5f/19930f824ffeb0ad4372da4812c50edbd1434f678c90c2733e1188edfc63/oauthlib-3.3.1.tar.gz", hash = "sha256:0f0f8aa759826a193cf66c12ea1af1637f87b9b4622d46e866952bb022e538c9", size = 185918, upload-time = "2025-06-19T22:48:08.269Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/80/cab10959dc1faead58dc8384a781dfbf93cb4d33d50988f7a69f1b7c9bbe/oauthlib-3.2.2-py3-none-any.whl", hash = "sha256:8139f29aac13e25d502680e9e19963e83f16838d48a0d71c287fe40e7067fbca", size = 151688, upload-time = "2022-10-17T20:04:24.037Z" },
+    { url = "https://files.pythonhosted.org/packages/be/9c/92789c596b8df838baa98fa71844d84283302f7604ed565dafe5a6b5041a/oauthlib-3.3.1-py3-none-any.whl", hash = "sha256:88119c938d2b8fb88561af5f6ee0eec8cc8d552b7bb1f712743136eb7523b7a1", size = 160065, upload-time = "2025-06-19T22:48:06.508Z" },
 ]
 
 [[package]]
