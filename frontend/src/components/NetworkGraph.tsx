@@ -285,20 +285,39 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+
+  // ⚡ Bolt: Optimize large array allocations by replacing Array.from().slice().map() with an early-exit loop
+  // 🎯 Why: Array.from(map.values()) allocates an O(N) array for all entries just to take the first 5 elements. This early-exit loop achieves O(1) time and memory overhead.
   const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
-      edge,
-      id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
+    const options = [];
+    let index = 0;
+    for (const edge of edgeMap.values()) {
+      options.push({
+        edge,
+        id: String(edge.id),
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
+      });
+      index++;
+      if (index >= 5) break;
+    }
+    return options;
   }, [edgeMap, nodeMap]);
 
+  // ⚡ Bolt: Optimize large array allocations by replacing Array.from().slice().map() with an early-exit loop
+  // 🎯 Why: Avoid O(N) array allocation when extracting bounded lists.
   const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
-      id: String(node.id),
-      label: `노드: ${String(node.label ?? node.id)}`,
-      node,
-    }));
+    const options = [];
+    let index = 0;
+    for (const node of nodeInstanceMap.values()) {
+      options.push({
+        id: String(node.id),
+        label: `노드: ${String(node.label ?? node.id)}`,
+        node,
+      });
+      index++;
+      if (index >= 8) break;
+    }
+    return options;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
