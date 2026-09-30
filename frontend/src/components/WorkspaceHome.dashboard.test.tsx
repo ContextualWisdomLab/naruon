@@ -29,6 +29,7 @@ vi.mock("next/dynamic", () => ({
 }));
 
 vi.mock("lucide-react", () => ({
+  Loader2: () => <svg aria-hidden="true" />,
   CalendarDays: () => <svg aria-hidden="true" />,
   CheckCircle2: () => <svg aria-hidden="true" />,
   Inbox: () => <svg aria-hidden="true" />,
