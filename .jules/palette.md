@@ -83,3 +83,6 @@
 ## 2024-11-20 - [Add loading spinners and icons for intuitive controls]
 **Learning:** Explicit visual cues (spinners for loading, identifiable icons for toolbars) significantly improve perceived performance and interaction clarity when data takes time to load.
 **Action:** Always wrap data-fetching empty states with a spinner and complement graph manipulation buttons with recognized icons (Zoom, Fit).
+## 2026-06-21 - Mocking new Lucide icons in tests
+**Learning:** Adding a new icon from `lucide-react` (like `Loader2`) to a component without updating the corresponding test file's `vi.mock("lucide-react", ...)` block causes Vitest to throw a "No export is defined on the lucide-react mock" error.
+**Action:** When adding new `lucide-react` icons, always grep for `vi.mock("lucide-react"` in the `frontend/src/` directory to find and update the relevant test files.

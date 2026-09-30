@@ -25,6 +25,8 @@ vi.mock("lucide-react", () => ({
   Loader2: () => <svg aria-hidden="true" />,
   Mail: () => <svg aria-hidden="true" />,
   Network: () => <svg aria-hidden="true" />,
+  Maximize: () => <svg aria-hidden="true" />,
+  ZoomIn: () => <svg aria-hidden="true" />,
   Search: () => <svg aria-hidden="true" />,
   Sparkles: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
