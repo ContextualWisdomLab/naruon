@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,34 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_execute_pii_masker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Email: user@example.com. Phone: 010-1234-5678, 1588-1588. RRN: 900101-1234567, 990101-5234567."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+
+    masked_text = data["result"]["masked_text"]
+    assert "[MASKED_EMAIL]" in masked_text
+    assert "[MASKED_PHONE]" in masked_text
+    assert "[MASKED_RRN]" in masked_text
+    assert "user@example.com" not in masked_text
+    assert "010-1234-5678" not in masked_text
+    assert "1588-1588" not in masked_text
+    assert "900101-1234567" not in masked_text
+    assert "990101-5234567" not in masked_text
+
+    counts = data["result"]["masked_counts"]
+    assert counts["email"] == 1
+    assert counts["phone"] == 2
+    assert counts["rrn"] == 2
