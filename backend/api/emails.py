@@ -777,3 +777,5 @@ async def send_email_endpoint(
         raise HTTPException(
             status_code=500, detail="An internal error occurred while sending the email"
         )
+
+# dummy comment for strix scan scope
