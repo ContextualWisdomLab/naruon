@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,52 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def pii_masker_handler(params: Dict[str, Any]) -> Any:
+    """Mask supported PII formats without depending on Unicode word boundaries."""
+    text = params.get("text", "")
+
+    # 이메일 마스킹
+    text, emails_count = re.subn(
+        r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9])",
+        "[MASKED_EMAIL]",
+        text,
+    )
+
+    # 주민등록번호 마스킹 (외국인 포함 1~8)
+    text, rrn_count = re.subn(
+        r"(?<!\d)\d{6}-?[1-8]\d{6}(?!\d)",
+        "[MASKED_RRN]",
+        text,
+    )
+
+    # 전화번호 마스킹
+    text, phone_count = re.subn(
+        r"(?<!\d)(?:\d{2,4}-\d{3,4}-\d{4}|\d{4}-\d{4}|0(?:1[016789]|2|[3-6][1-5])\d{7,8})(?!\d)",
+        "[MASKED_PHONE]",
+        text,
+    )
+
+    return {
+        "masked_text": text,
+        "masked_counts": {
+            "email": emails_count,
+            "rrn": rrn_count,
+            "phone": phone_count,
+        },
+    }
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스킹 (PII Masker)",
+        description="텍스트에서 이메일, 주민등록번호, 전화번호를 찾아 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
