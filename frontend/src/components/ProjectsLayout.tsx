@@ -320,7 +320,7 @@ export function ProjectsLayout() {
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [lastConfirmedCandidateUid, setLastConfirmedCandidateUid] = useState<string | null>(null);
-  const [correctionSubmitting, setCorrectionSubmitting] = useState(false);
+  const [correctionSubmitting, setCorrectionSubmitting] = useState<string | null>(null);
   const [correctionError, setCorrectionError] = useState<string | null>(null);
   const [lastCorrection, setLastCorrection] = useState<ProjectCorrectionResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -507,8 +507,8 @@ export function ProjectsLayout() {
   }
 
   async function handleMarkEvidenceReviewed() {
-    if (!activeSemanticCandidate || !selectedTraceObject || correctionSubmitting) return;
-    setCorrectionSubmitting(true);
+    if (!activeSemanticCandidate || !selectedTraceObject || correctionSubmitting !== null) return;
+    setCorrectionSubmitting(selectedTraceObject.object_uid);
     setCorrectionError(null);
     const projectUid = activeSemanticCandidate.project_uid;
     const objectUid = selectedTraceObject.object_uid;
@@ -560,7 +560,7 @@ export function ProjectsLayout() {
     } catch {
       setCorrectionError('문단 근거 검토 결과를 저장하지 못했습니다.');
     } finally {
-      setCorrectionSubmitting(false);
+      setCorrectionSubmitting(null);
     }
   }
 
@@ -968,12 +968,12 @@ export function ProjectsLayout() {
                             <button
                               type="button"
                               onClick={handleMarkEvidenceReviewed}
-                              disabled={correctionSubmitting || evidenceLoading}
-                              aria-busy={correctionSubmitting || evidenceLoading}
+                              disabled={correctionSubmitting !== null || evidenceLoading}
+                              aria-busy={(correctionSubmitting === selectedTraceObject.object_uid) || evidenceLoading}
                               className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
                             >
-                              {correctionSubmitting && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
-                              {correctionSubmitting ? '검토 저장 중' : '문단 근거 검토 저장'}
+                              {(correctionSubmitting === selectedTraceObject.object_uid) && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+                              {(correctionSubmitting === selectedTraceObject.object_uid) ? '검토 저장 중' : '문단 근거 검토 저장'}
                             </button>
                             {currentCorrection ? (
                               <p className="mt-2 text-xs font-semibold text-emerald-700">
