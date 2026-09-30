@@ -597,7 +597,7 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
           className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           {permissionSaving ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           ) : permissionDraft === 'allow_writeback' ? (
             <CheckCircle2 className="size-4" aria-hidden="true" />
           ) : (
