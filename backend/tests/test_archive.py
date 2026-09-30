@@ -168,3 +168,30 @@ async def test_extract_backup_async_calls_to_thread(tmp_path, monkeypatch):
     assert called is True
     assert passed_args == (archive_module.extract_backup, zip_path, out_dir)
     assert result == [tmp_path / "dummy.txt"]
+
+def test_extract_backup_rejects_url_encoded_path_traversal(tmp_path):
+    zip_path = tmp_path / "encoded.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.writestr("%2e%2e/encoded.eml", b"Subject: Encoded Email")
+
+    with pytest.raises(InvalidArchiveError, match="Unsafe archive path"):
+        archive_module.extract_backup(zip_path, tmp_path / "output")
+
+def test_extract_backup_rejects_doubly_url_encoded_path_traversal(tmp_path):
+    zip_path = tmp_path / "doubly_encoded.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.writestr("%252e%252e/doubly_encoded.eml", b"Subject: Doubly Encoded Email")
+
+    with pytest.raises(InvalidArchiveError, match="Unsafe archive path"):
+        archive_module.extract_backup(zip_path, tmp_path / "output")
+
+def test_extract_backup_preserves_legitimate_encoded_characters(tmp_path):
+    zip_path = tmp_path / "legitimate.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.writestr("Save_100%20.txt", b"Content")
+
+    out_dir = tmp_path / "output"
+    extracted_files = archive_module.extract_backup(zip_path, out_dir)
+
+    assert len(extracted_files) == 1
+    assert extracted_files[0].name == "Save_100%20.txt"

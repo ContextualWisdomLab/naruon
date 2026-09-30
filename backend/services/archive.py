@@ -1,4 +1,5 @@
 import asyncio
+import urllib.parse
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
@@ -19,7 +20,14 @@ def _is_zipinfo_symlink(info: ZipInfo) -> bool:
 
 
 def _resolve_safe_archive_member(output_dir: Path, info: ZipInfo) -> Path:
-    normalized_name = info.filename.replace("\\", "/")
+    decoded_name = info.filename
+    for _ in range(10):
+        next_name = urllib.parse.unquote(decoded_name)
+        if next_name == decoded_name:
+            break
+        decoded_name = next_name
+
+    normalized_name = decoded_name.replace("\\", "/")
     if (
         not normalized_name
         or normalized_name.startswith("/")
@@ -33,7 +41,12 @@ def _resolve_safe_archive_member(output_dir: Path, info: ZipInfo) -> Path:
     if parts and parts[0].endswith(":"):
         raise InvalidArchiveError("Unsafe archive path")
 
-    target_path = output_dir.joinpath(*parts).resolve(strict=False)
+    # Use the original info.filename to preserve encoded characters in the written filename,
+    # but strictly validate using the fully decoded parts.
+    original_normalized = info.filename.replace("\\", "/")
+    target_path = output_dir.joinpath(*original_normalized.split("/")).resolve(
+        strict=False
+    )
     try:
         target_path.relative_to(output_dir)
     except ValueError as exc:
