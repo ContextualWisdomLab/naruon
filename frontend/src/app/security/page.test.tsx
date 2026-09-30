@@ -17,7 +17,7 @@ vi.mock("lucide-react", () => ({
   Share2: () => <svg aria-hidden="true" />,
   ShieldCheck: () => <svg aria-hidden="true" />,
   XCircle: () => <svg aria-hidden="true" />,
-  Loader2: () => <svg aria-hidden="true" />,
+  Loader2: (props: React.SVGProps<SVGSVGElement>) => <svg data-testid="permission-save-spinner" {...props} />,
 }));
 
 import SecurityPage from "./page";
@@ -264,6 +264,66 @@ describe("SecurityPage", () => {
       decision: "deny_region_export",
       resource_type: "data_export",
     });
+  });
+
+  it("renders the permission save spinner only while the request is pending", async () => {
+    let resolvePermissionSave: ((response: ReturnType<typeof jsonResponse>) => void) | undefined;
+    const pendingPermissionSave = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+      resolvePermissionSave = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/security/access-surface") {
+        return jsonResponse(securitySurface);
+      }
+      if (String(input) === "/api/security/permission-change-intent") {
+        return pendingPermissionSave;
+      }
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    ({ container, root } = await renderSecurityPage());
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("권한 저장"),
+    );
+    expect(saveButton).toBeDefined();
+    expect(saveButton?.querySelector('[data-testid="permission-save-spinner"]')).toBeNull();
+
+    await act(async () => {
+      saveButton!.click();
+      await Promise.resolve();
+    });
+
+    const spinner = saveButton?.querySelector('[data-testid="permission-save-spinner"]');
+    expect(saveButton?.disabled).toBe(true);
+    expect(saveButton?.getAttribute("aria-busy")).toBe("true");
+    expect(saveButton?.textContent).toContain("권한 저장 중");
+    expect(spinner).not.toBeNull();
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+    expect(spinner?.getAttribute("class")).toContain("motion-reduce:animate-none");
+
+    await act(async () => {
+      resolvePermissionSave?.(jsonResponse({
+        decision: "allow_writeback",
+        resource_type: "webdav_repository",
+        allowed: true,
+        reason: "allowed",
+        evidence_label: "policy_engine_evidence",
+        audit_event: "security.permission_change_intent",
+        provider_write_executed: false,
+        denial_result: "approval_required_before_external_write",
+        observed_at: "2026-05-28T04:05:00Z",
+      }));
+      await pendingPermissionSave;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(saveButton?.disabled).toBe(false);
+    expect(saveButton?.getAttribute("aria-busy")).toBe("false");
+    expect(saveButton?.textContent).toContain("권한 저장");
+    expect(saveButton?.querySelector('[data-testid="permission-save-spinner"]')).toBeNull();
   });
 
   it("renders audit sharing and policy tabs without inert placeholders", async () => {
