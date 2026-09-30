@@ -353,7 +353,7 @@ export default function NetworkGraph() {
   if (loading) {
     return (
       <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:min-h-[420px]">
-        <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+        <Loader2 className="size-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
         관계 맥락을 불러오는 중입니다...
       </div>
     );
