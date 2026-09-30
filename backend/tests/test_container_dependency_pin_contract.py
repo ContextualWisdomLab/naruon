@@ -169,3 +169,15 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "undici@8.9.0",
     ):
         assert exact_lock_entry in package_records
+
+
+def test_optional_agent_lock_does_not_redeclare_core_packages() -> None:
+    """Keep optional Noema dependencies installable beside the core lock."""
+    backend_pins = exact_requirement_pins(
+        read_repo_text("backend/requirements-hashes.txt")
+    )
+    agent_pins = exact_requirement_pins(
+        read_repo_text("backend/requirements-agent.txt")
+    )
+
+    assert set(agent_pins).isdisjoint(backend_pins)
