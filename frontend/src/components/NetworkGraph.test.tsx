@@ -89,6 +89,20 @@ describe("NetworkGraph", () => {
     vi.clearAllMocks();
   });
 
+  it("keeps the loading spinner decorative and respects reduced motion", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+
+    await renderGraph();
+
+    const status = getMountedContainer().querySelector('[role="status"][aria-live="polite"]');
+    const spinner = status?.querySelector('svg[aria-hidden="true"]');
+
+    expect(status?.textContent).toContain("관계 맥락을 불러오는 중입니다");
+    expect(spinner).toBeInstanceOf(SVGElement);
+    expect(spinner?.getAttribute("class")).toContain("animate-spin");
+    expect(spinner?.getAttribute("class")).toContain("motion-reduce:animate-none");
+  });
+
   it("announces an empty graph as a polite status region", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
@@ -266,6 +280,8 @@ describe("NetworkGraph", () => {
     expect(relationshipButton).toBeInstanceOf(HTMLButtonElement);
     expect(zoomButton).toBeInstanceOf(HTMLButtonElement);
     expect(fitButton).toBeInstanceOf(HTMLButtonElement);
+    expect(zoomButton?.querySelector('svg[aria-hidden="true"]')).toBeInstanceOf(SVGElement);
+    expect(fitButton?.querySelector('svg[aria-hidden="true"]')).toBeInstanceOf(SVGElement);
 
     await act(async () => {
       relationshipButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
