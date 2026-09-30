@@ -19,7 +19,14 @@ versions across source manifests and generated locks, upgrades Starlette to
 the AnyIO-compatible `1.7.0` plus its HTTPX2 TestClient path, and adds an
 executable cross-lock contract. All affected PRs remain Draft until the owner repair is
 current-head green and normally integrated; no predecessor result is accepted
-as successor evidence. Full RCA: [dependency Security Scan owner repair](doctoring/2026-09-30-dependency-security-scan-rca.md).
+as successor evidence. Owner PR #1828's first hosted Application CI run
+`36668747540` also found that the optional Noema hash lock duplicated stale
+HTTPX2/HTTPCore2 2.5.0 pins against the core lock's 2.13.1 pins. The optional
+lock now excludes every core-owned package, an executable disjointness contract
+prevents recurrence, and a fresh Python 3.14 hash-enforced combined install
+passes. Consumer PR #1818 must integrate the repaired owner head through
+ordinary non-force history before its new Checks can be considered. Full RCA:
+[dependency Security Scan owner repair](doctoring/2026-09-30-dependency-security-scan-rca.md).
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after

@@ -46,6 +46,15 @@ owner unresolved. The repair therefore upgrades Starlette to 1.7.0, where the
 alias is removed, and installs its official HTTPX2 2.13.1 TestClient backend as
 a development dependency. A direct `PYTHONWARNINGS=error` import now succeeds.
 
+The first hosted Application CI run on owner PR #1828 then exposed a separate
+lock-ownership defect. Exact-head run `36668747540`, backend job
+`109738989019`, installed the required core and optional Noema hash locks in
+one resolver invocation and failed because `requirements-agent.txt` still
+redeclared HTTPX2 and HTTPCore2 at 2.5.0 while the core lock required 2.13.1.
+The optional lock now contains only optional-package pins; every shared package
+is supplied by the core lock. This makes one file authoritative for each pin
+instead of merely aligning duplicate values that could drift again.
+
 No advisory is ignored, no scanner threshold is weakened, and no elapsed-time
 or queued state is treated as success. Consumer PRs must integrate the verified
 owner commit through ordinary non-force history and receive fresh exact-head
@@ -59,7 +68,15 @@ regeneration, the focused contract passes with:
 
 `cd backend && uv run --frozen pytest tests/test_container_dependency_pin_contract.py -q`
 
-Local verification records 1,806 backend tests passed with 33 explicitly
+For the hosted resolver regression, the new
+`test_optional_agent_lock_does_not_redeclare_core_packages` contract first
+failed with the duplicated `httpx2==2.5.0` and `httpcore2==2.5.0` pins. After
+removing shared packages from the optional lock, a fresh Python 3.14 virtual
+environment completed the same hash-enforced combined install used by CI:
+
+`python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt -r backend/requirements-agent.txt`
+
+Local verification records 1,808 backend tests passed with 32 explicitly
 skipped under fatal warnings, 437 frontend tests passed, Python and pnpm
 production audits reported no known vulnerabilities, and the frontend lint,
 typecheck, and production build passed. The runner injects a SOCKS proxy that
