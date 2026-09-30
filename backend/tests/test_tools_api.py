@@ -1271,3 +1271,35 @@ def test_execute_pii_masker_masks_identifiers_next_to_korean_text():
         "rrn": 1,
         "phone": 1,
     }
+
+
+def test_execute_pii_masker_masks_compact_identifiers_next_to_korean_text():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": (
+                        "주민번호9001011234567입니다. "
+                        "휴대전화01012345678로 연락하세요. "
+                        "지역전화0212345678도 사용합니다."
+                    )
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["masked_text"] == (
+        "주민번호[MASKED_RRN]입니다. "
+        "휴대전화[MASKED_PHONE]로 연락하세요. "
+        "지역전화[MASKED_PHONE]도 사용합니다."
+    )
+    assert data["result"]["masked_counts"] == {
+        "email": 0,
+        "rrn": 1,
+        "phone": 2,
+    }
+

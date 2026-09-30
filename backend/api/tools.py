@@ -784,14 +784,14 @@ async def pii_masker_handler(params: Dict[str, Any]) -> Any:
 
     # 주민등록번호 마스킹 (외국인 포함 1~8)
     text, rrn_count = re.subn(
-        r"(?<!\d)\d{6}-[1-8]\d{6}(?!\d)",
+        r"(?<!\d)\d{6}-?[1-8]\d{6}(?!\d)",
         "[MASKED_RRN]",
         text,
     )
 
     # 전화번호 마스킹
     text, phone_count = re.subn(
-        r"(?<!\d)(?:\d{2,4}-\d{3,4}-\d{4}|\d{4}-\d{4})(?!\d)",
+        r"(?<!\d)(?:\d{2,4}-\d{3,4}-\d{4}|\d{4}-\d{4}|0(?:1[016789]|2|[3-6][1-5])\d{7,8})(?!\d)",
         "[MASKED_PHONE]",
         text,
     )
