@@ -121,6 +121,8 @@ def test_local_request_target_preserves_safe_path_and_query() -> None:
         "/api/../auth/session",
         "/api/%2e%2e/auth/session",
         "/api/%2E%2E/auth/session",
+        "/api/%252E%252E/auth/session",
+        "/api/%252e%252e%252fauth",
         "/api/%2fadmin",
         "/api/%2Fadmin",
         "/api/%5cadmin",
@@ -150,3 +152,9 @@ def test_local_request_target_rejects_invalid_percent_encoding(path: str) -> Non
 def test_local_request_target_normalizes_malformed_parser_errors() -> None:
     with pytest.raises(LocalHTTPValidationError, match="local API path"):
         validate_local_request_target("//[::1")
+
+
+def test_local_request_target_rejects_deeply_nested_encoding() -> None:
+    path = "/api/%25252525252525252525252E"
+    with pytest.raises(LocalHTTPValidationError, match="too deeply nested"):
+        validate_local_request_target(path)
