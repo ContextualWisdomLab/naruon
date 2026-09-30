@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Security Scan의 repo-wide Trivy 실패를 공통 `develop` 원인으로 수선했습니다. PyJWT `2.14.0`, AnyIO `4.15.1`, oauthlib `4.0.0`, Next.js/`eslint-config-next` `16.3.6`, Sharp `0.35.4`를 manifest·uv/pip hash lock·pnpm lock에 함께 고정하고, AnyIO 4.15의 deprecated alias를 제거한 Starlette `1.7.0`과 공식 TestClient 경로인 HTTPX2 `2.13.1`도 검증했습니다. optional Noema hash lock이 core lock의 HTTPX2/HTTPCore2를 구버전으로 중복 선언해 결합 설치를 깨뜨리던 후속 결함도 제거하고 두 lock의 package ownership이 겹치지 않는 실행 가능한 회귀 계약을 추가했습니다. 제품/UI PR에서 더미 주석으로 스캔을 재실행하거나 공통 잠금 수선을 섞는 대신 전용 owner PR을 사용합니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
