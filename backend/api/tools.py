@@ -772,22 +772,29 @@ registry.register(
 
 
 async def pii_masker_handler(params: Dict[str, Any]) -> Any:
+    """Mask supported PII formats without depending on Unicode word boundaries."""
     text = params.get("text", "")
 
     # 이메일 마스킹
-    email_pattern = r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"
-    emails_count = len(re.findall(email_pattern, text))
-    text = re.sub(email_pattern, "[MASKED_EMAIL]", text)
+    text, emails_count = re.subn(
+        r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9])",
+        "[MASKED_EMAIL]",
+        text,
+    )
 
     # 주민등록번호 마스킹 (외국인 포함 1~8)
-    rrn_pattern = r"\b\d{6}-[1-8]\d{6}\b"
-    rrn_count = len(re.findall(rrn_pattern, text))
-    text = re.sub(rrn_pattern, "[MASKED_RRN]", text)
+    text, rrn_count = re.subn(
+        r"(?<!\d)\d{6}-[1-8]\d{6}(?!\d)",
+        "[MASKED_RRN]",
+        text,
+    )
 
     # 전화번호 마스킹
-    phone_pattern = r"\b(?:\d{2,4}-\d{3,4}-\d{4}|\d{4}-\d{4})\b"
-    phone_count = len(re.findall(phone_pattern, text))
-    text = re.sub(phone_pattern, "[MASKED_PHONE]", text)
+    text, phone_count = re.subn(
+        r"(?<!\d)(?:\d{2,4}-\d{3,4}-\d{4}|\d{4}-\d{4})(?!\d)",
+        "[MASKED_PHONE]",
+        text,
+    )
 
     return {
         "masked_text": text,
