@@ -1,7 +1,7 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 3.00  
-**Observed on:** 2026-09-25 (Asia/Seoul)  
+**Baseline version:** 3.01  
+**Observed on:** 2026-09-30 (Asia/Seoul)  
 **Protected product authority:** `develop@042b0c70531b229af3acbd0421a2f23098d848b3` / tree `8fde14381aaa430eeaaf61151dab6f6800127cd3`  
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)  
@@ -310,3 +310,24 @@ Pytest exited before collection because the execution image lacks `starlette`. R
 | Hosted admission | #1795 runs `36292823728–36292823914`; #1793 runs `36292881961–36292882126` | All queued/pending; independent current-head approval absent |
 
 Both PRs remain **Draft / Proposed / Merge HOLD**. The cancelled predecessor runs on `81e46c1d…` and `8ee25886…` do not transfer to the new exact heads, and queued/pending runs are not passing evidence.
+
+
+### Attachment public-identity and current-head correction — 2026-09-30
+
+Fresh GitHub evidence supersedes the 2026-09-27 head snapshot. Canonical fact owner [#1795](https://github.com/ContextualWisdomLab/naruon/pull/1795) is Draft/Proposed at exact `9a76d092df022fa68a6cb4e5ea72bc68febe5c9e`. Consumer [#1793](https://github.com/ContextualWisdomLab/naruon/pull/1793) is Draft/Proposed at exact `662b74337b0b625620d9f0e42dd942995ec37245`; it is 29 commits ahead / 0 behind the current owner head. Both were restored from premature Ready state without closing or rewriting history.
+
+Current source exposes a new P1 boundary defect. `db.models.Attachment.id` is the sequential integer database primary key, but `backend/api/emails.py` serializes it as `ThreadAttachmentResponse.attachment_id` and `AttachmentFactItem.attachment_id`. #1793 also places that integer in `/api/emails/attachments/{attachment_id}/segments` URLs and uses it as browser state and fact-join identity. Owner scoping prevents cross-tenant reads but does not make a sequential database key an acceptable public identifier.
+
+The canonical repair belongs to #1795: add a persistent, immutable, non-sequential public attachment identifier with a unique/indexed migration and collision-safe backfill; keep integer PK/FK values internal; remove the integer from public DTO serialization; and look up owner/workspace-scoped resources by the public identifier. Real PostgreSQL RED→GREEN must prove duplicate filenames receive distinct identifiers, an identifier survives reload, existing rows backfill uniquely, cross-owner/workspace lookup fails closed, and source citation ownership cannot transfer. #1793 may consume the contract only through ordinary ancestry after owner GREEN.
+
+| Acceptance surface | Current exact-head evidence | Gate |
+|---|---|---|
+| Public identity | Sequential `Attachment.id` appears in JSON, URL and browser state | **FAIL** |
+| Domain ownership | Email owner filters and citation checks exist | Partial PASS; public identity still FAIL |
+| Persistence / migration | No public-UID column, backfill or uniqueness contract | **FAIL** |
+| Consumer integration | #1793 descends from #1795 | Ancestry PASS; contract consumption blocked on owner GREEN |
+| Localization | Component strings remain hard-coded Korean | ko/en/ja/zh/vi/es/de/fr **FAIL** |
+| Browser evidence | Earlier synthetic-API Playwright receipt belongs to predecessor head; current head records focused component checks only | Real API/current-head browser, AT, touch and recovery **FAIL/PENDING** |
+| Hosted admission | Current checks/reviews must be re-read after each head transition | Queued/pending/stale is never PASS |
+
+The exact acceptance comments are [#1795 comment 5903769667](https://github.com/ContextualWisdomLab/naruon/pull/1795#issuecomment-5903769667) and [#1793 comment 5903769507](https://github.com/ContextualWisdomLab/naruon/pull/1793#issuecomment-5903769507). No local runnable Naruon dependency environment is present in this execution workspace, so no behavior test was executed and no RED or GREEN claim is made.
