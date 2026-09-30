@@ -1240,3 +1240,34 @@ def test_execute_pii_masker():
     assert counts["email"] == 1
     assert counts["phone"] == 2
     assert counts["rrn"] == 2
+
+
+def test_execute_pii_masker_masks_identifiers_next_to_korean_text():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": (
+                        "이메일 user@example.com으로 연락하고 "
+                        "전화 010-1234-5678입니다. "
+                        "주민등록번호 900101-1234567입니다."
+                    )
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["masked_text"] == (
+        "이메일 [MASKED_EMAIL]으로 연락하고 "
+        "전화 [MASKED_PHONE]입니다. "
+        "주민등록번호 [MASKED_RRN]입니다."
+    )
+    assert data["result"]["masked_counts"] == {
+        "email": 1,
+        "rrn": 1,
+        "phone": 1,
+    }
