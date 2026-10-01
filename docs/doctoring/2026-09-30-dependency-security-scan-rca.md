@@ -46,6 +46,15 @@ were regenerated from those manifests without unrelated package movement.
 This is not a leaf fix for #1833: that PR preserves the graph-optimization
 delta and consumes the owner branch through ordinary merge history.
 
+The refreshed owner Application CI run `36805472113`, backend job
+`110188721153`, and consumer run `36805642399`, backend job `110189254190`,
+then reproduced one identical test-only failure. The pinned transport test
+returned `{"keys":[]}`; PyJWT 2.15 correctly rejected that empty set while
+populating its cache. Production already fails closed on unusable JWKS, so the
+repair preserves that behavior and replaces only the transport fixture with a
+parseable anonymous RS256 public JWK. The focused transport/dependency cases
+pass, and the warning-fatal backend suite remains 1,808 passed with 32 skips.
+
 The first full warning-fatal backend run exposed a second-order compatibility
 failure: Starlette 1.3.1 evaluates the `anyio.abc.BlockingPortal` alias at
 TestClient import time, while AnyIO 4.15.1 deprecates that alias. Downgrading
