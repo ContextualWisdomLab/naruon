@@ -102,9 +102,10 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     for package_name, expected_version in {
         "starlette": "1.7.0",
         "httpx2": "2.13.1",
-        "pyjwt": "2.14.0",
+        "pyjwt": "2.15.0",
         "anyio": "4.15.1",
         "oauthlib": "4.0.0",
+        "urllib3": "2.8.0",
     }.items():
         assert backend_pins[package_name] == expected_version
         exact_pin = f"{package_name}=={expected_version}"
