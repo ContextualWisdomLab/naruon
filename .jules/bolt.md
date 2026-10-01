@@ -5,7 +5,7 @@
 **Action:** Whenever iterating pre-sorted array lists from the database to group them into unique threads or items, leverage Python's dictionary insertion order preservation guarantees instead of explicitly appending arrays and sorting them. The first item encountered sets the insertion order, and if the parent array is already sorted descending, the resulting grouped entries are mathematically guaranteed to be correctly ordered.
 ## 2026-07-11 - O(N) Array Mapping Blocked Main Thread in Kanban Board
 **Learning:** When long arrays (like tasks sorted into Kanban columns) are mapped inline directly in the React return function, unrelated parent state changes (e.g., search or filter input) trigger full recalculation of the list and React VDOM reconciliation. This blocks the main thread during simple inputs.
-**Action:** Use `useMemo` to wrap expensive multi-column mapping operations that render lists of components, using specific dependencies, preventing rendering bottlenecks when other unrelated state variables are updated.
+**Action:** Use `useMemo` to wrap expensive multi-column mapping operations that render lists of components, using specific dependencies, preventing rendering bottlenecks when other unrelated state updates.
 
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Replaced O(N) Array Operations with Early Break Loops in useMemo
+
+**Learning:** Extracting limits of lists within `useMemo` using `.map().filter().slice(0, 5)` or `Array.from(map.values()).slice(0, 5).map()` allocates intermediate arrays of length O(N) before filtering or slicing them. This can cause unnecessary O(N) intermediate array allocations, memory overhead, and longer execution time when the target dataset is large.
+**Action:** Replace inline array transformations involving slicing with a simple `for...of` loop that breaks early when the result reaches the desired limit. This avoids O(N) intermediate allocations; filtering loops remain O(N) in the worst case when too few records qualify.

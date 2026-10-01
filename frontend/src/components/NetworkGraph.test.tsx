@@ -236,6 +236,40 @@ describe("NetworkGraph", () => {
     expect(mountedContainer.textContent).not.toContain("nodes and");
   });
 
+  it("limits graph summaries after filtering empty labels", async () => {
+    const nodes = Array.from({ length: 10 }, (_, index) => ({
+      id: `node-${index + 1}`,
+      label: index < 2 ? "" : `표시 노드 ${index + 1}`,
+    }));
+    const edges = Array.from({ length: 7 }, (_, index) => ({
+      id: `edge-${index + 1}`,
+      from: `node-${index + 1}`,
+      to: `node-${index + 2}`,
+    }));
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse({ nodes, edges })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderGraph();
+    await flushAsyncWork();
+
+    const mountedContainer = getMountedContainer();
+    const relationshipOptions = mountedContainer.querySelectorAll(
+      'select[aria-label="관계 선택"] option',
+    );
+    const nodeOptions = mountedContainer.querySelectorAll(
+      'select[aria-label="노드 선택"] option',
+    );
+
+    expect(relationshipOptions).toHaveLength(6);
+    expect(nodeOptions).toHaveLength(9);
+    expect(mountedContainer.textContent).toContain(
+      "관련 노드: 표시 노드 3, 표시 노드 4, 표시 노드 5, 표시 노드 6, 표시 노드 7",
+    );
+    expect(mountedContainer.textContent).not.toContain(
+      "관련 노드: 표시 노드 3, 표시 노드 4, 표시 노드 5, 표시 노드 6, 표시 노드 7, 표시 노드 8",
+    );
+  });
+
   it("exposes accessible relationship detail and zoom controls for the graph", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
