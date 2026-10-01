@@ -2737,6 +2737,7 @@
 
 ## [Unreleased]
 ### Added
+- `backend/api/tools.py` 내에 개인정보 마스킹(주민등록번호, 전화번호, 이메일)을 지원하는 `personal_info_masker` 도구를 새로 기획하고 구현했습니다. 이에 대해 100% 테스트 커버리지를 보장하는 단위 테스트를 추가했습니다.
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
   - `action_item_extractor_handler`: 실행 항목 및 마감일 추출
