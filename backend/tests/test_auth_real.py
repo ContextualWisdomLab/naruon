@@ -887,7 +887,7 @@ def test_oidc_jwks_client_fetches_from_validated_pinned_address(monkeypatch):
         status = 200
 
         def read(self, size: int) -> bytes:
-            return b'{"keys":[{"kty":"RSA","kid":"test-key","use":"sig","alg":"RS256","n":"u1SU1Lfvlhmcg6FsTo0f_5o4nK82P6k4iY7fP6c9z0qJ4_aN0q7F7p6R1c9n4W6u4e7Y4V7s4e7a6r7g9j8b8A4m4m4x4z4v4c4v4b4n4m4x4z4v4c4v4b4n4m4x4z4v4c4v4b4n4m4x4z4v4c4v4b4n","e":"AQAB"}]}'
+            return b'{"keys":[]}'
 
     class FakeConnection:
         def __init__(
@@ -930,7 +930,7 @@ def test_oidc_jwks_client_fetches_from_validated_pinned_address(monkeypatch):
         )
     )
 
-    assert "keys" in client.fetch_data()
+    assert client.fetch_data() == {"keys": []}
     assert calls == [
         {
             "address": "93.184.216.34",

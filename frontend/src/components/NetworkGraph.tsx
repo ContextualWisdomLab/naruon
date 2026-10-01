@@ -277,45 +277,44 @@ export default function NetworkGraph() {
     }
   }, [nodes, edges, nodeMap, edgeMap]);
 
+  // Optimization: use bounded for...of loops instead of .map().filter().slice() to prevent O(N) array allocation overhead on large graphs
   const nodeLabels = useMemo(() => {
-    const result = [];
+    const labels: string[] = [];
     for (const node of nodes) {
+      if (labels.length >= 5) break;
       const label = String(node.label ?? node.id);
-      if (label) {
-        result.push(label);
-        if (result.length === 5) break;
-      }
+      if (label) labels.push(label);
     }
-    return result;
+    return labels;
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    const result = [];
+    const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
-      result.push({
+      if (options.length >= 5) break;
+      options.push({
         edge,
         id: String(edge.id),
         label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
       });
       index++;
-      if (result.length === 5) break;
     }
-    return result;
+    return options;
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    const result = [];
+    const options = [];
     for (const node of nodeInstanceMap.values()) {
-      result.push({
+      if (options.length >= 8) break;
+      options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
-      if (result.length === 8) break;
     }
-    return result;
+    return options;
   }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
