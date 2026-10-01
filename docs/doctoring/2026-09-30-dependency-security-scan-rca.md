@@ -16,6 +16,7 @@ This RCA covers the repo-wide dependency findings inherited by Draft PRs
 | #1824 `23a4a883…` | `36559236390` / `109375871091` | AnyIO CVE-2026-63374, CVE-2026-63349, CVE-2026-64847; Next.js CVE-2026-75604 and GHSA-2xp9-vwfh-vxw4; Sharp GHSA-rgj7-g3m4-5g8c |
 | #1825 `c2206af6…` | `36662347179` / `109719692285` | Next.js CVE-2026-75604 and GHSA-2xp9-vwfh-vxw4; Sharp GHSA-rgj7-g3m4-5g8c |
 | #1827 `fc52acb0…` | `36658025933` / `109706499334` | the #1824 set plus PyJWT CVE-2026-101917 and CVE-2026-102265–102274, and oauthlib CVE-2026-49264/CVE-2026-49265 |
+| #1833 `940e9166…` | `36804726949` / dependency-review `110186442561`, Trivy `110186442634` | PyJWT 2.14.0 GHSA-42vr-xj54-vc7v / CVE-2026-101918; urllib3 2.7.0 CVE-2026-97687, CVE-2026-97688, and CVE-2026-97689 |
 
 The different finding sets are caused by partial dependency edits on stale PR
 heads, not three independent product defects. All three branches share the same
@@ -37,6 +38,13 @@ The dedicated owner change exact-pins PyJWT 2.14.0, AnyIO 4.15.1, oauthlib
 the uv lock, Python hash lock, and pnpm lock from those manifests. The existing
 container dependency contract now verifies every source pin and resolved lock,
 so a future partial update fails before the hosted scanner.
+
+The 2026-10-01 advisory refresh advances the same owner boundary to PyJWT
+2.15.0 and urllib3 2.8.0. Both are direct source constraints in
+`backend/pyproject.toml` and `backend/requirements.txt`; the uv and hash locks
+were regenerated from those manifests without unrelated package movement.
+This is not a leaf fix for #1833: that PR preserves the graph-optimization
+delta and consumes the owner branch through ordinary merge history.
 
 The first full warning-fatal backend run exposed a second-order compatibility
 failure: Starlette 1.3.1 evaluates the `anyio.abc.BlockingPortal` alias at
@@ -76,6 +84,12 @@ environment completed the same hash-enforced combined install used by CI:
 
 `python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt -r backend/requirements-agent.txt`
 
+For the 2026-10-01 refresh, the same manifest/lock contract was first changed
+to require PyJWT 2.15.0 and urllib3 2.8.0 and failed against the old 2.14.0
+source pin. After source and lock regeneration it passes both contract cases;
+the changed lock diff contains only those two package versions, their hashes,
+and the new explicit urllib3 source ownership.
+
 Local verification records 1,808 backend tests passed with 32 explicitly
 skipped under fatal warnings, 437 frontend tests passed, Python and pnpm
 production audits reported no known vulnerabilities, and the frontend lint,
@@ -91,5 +105,7 @@ terminal successful before promotion from Proposed.
 - Agronholm, A. (2026, July 7). *AnyIO process-pool workers can block indefinitely on undrained stderr*. GitHub Security Advisory. https://github.com/agronholm/anyio/security/advisories/GHSA-5p39-cfhj-2xmp
 - Fuller, L. (2026, August 27). *Vulnerabilities in libheif: CVE-2026-84383 and GHSA-2jg2-4ch7-h545*. GitHub Security Advisory. https://github.com/lovell/sharp/security/advisories/GHSA-rgj7-g3m4-5g8c
 - PyJWT maintainers. (2026, September 11). *PyJWKClient follows redirects when fetching JWKS*. GitHub Security Advisory. https://github.com/jpadilla/pyjwt/security/advisories/GHSA-9v7f-9g4p-ffgj
+- PyJWT maintainers. (2026, September 23). *Unauthenticated RecursionError denial of service in pre-verification payload parsing*. GitHub Security Advisory. https://github.com/advisories/GHSA-42vr-xj54-vc7v
+- Python Software Foundation. (2026, September 15). *urllib3 2.8.0*. PyPI. https://pypi.org/project/urllib3/2.8.0/
 - Starlette maintainers. (2026, September 23). *Release 1.7.0*. PyPI. https://pypi.org/project/starlette/1.7.0/
 - Vercel. (2026, September 22). *Next.js security update for a critical upstream issue*. https://nextjs.org/blog/nextjs-security-update-september-22-2026

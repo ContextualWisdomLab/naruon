@@ -6,6 +6,18 @@
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
+**Exact-head Security Scan advisory refresh (2026-10-01):** Consumer PR #1833
+at `940e9166650e81d68802180bef9c242c8f53471c` ordinary-merged the previous
+#1828 owner head, but Security Scan run `36804726949` then found a newly
+published residual set: dependency-review job `110186442561` reported PyJWT
+2.14.0 / GHSA-42vr-xj54-vc7v, while Trivy job `110186442634` reported the same
+PyJWT issue plus urllib3 2.7.0 CVE-2026-97687/97688/97689. The canonical owner
+therefore advances PyJWT to 2.15.0 and urllib3 to 2.8.0 across both source
+manifests and both generated locks, with a RED-to-GREEN parity contract.
+Consumer PRs remain Draft until they ordinary-merge the refreshed owner and
+their own exact-head hosted Checks are terminal; CodeQL skipped/queued states
+remain non-authoritative.
+
 **Exact-head Security Scan RCA refresh (2026-09-30):** PRs #1824
 (`23a4a883…`), #1825 (`c2206af6…`), and #1827 (`fc52acb0…`) inherit the
 same repo-wide dependency findings from protected `develop@042b0c70…`.
