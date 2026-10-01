@@ -26,3 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2026-10-01 - Avoid O(N) Array Mapping Before Slice
+**Learning:** Chaining `.map().slice()` or `Array.from(map.values()).slice().map()` forces an O(N) iteration over the entire collection before throwing away most of the work. For arrays of 10,000+ items, this creates a measurable performance bottleneck (over 100x slower) compared to iterating and breaking early.
+**Action:** Use a `for...of` loop with a `break` condition (e.g., `if (results.length >= 5) break;`) when taking a small slice of mapped items from a potentially large array or iterable, making the operation O(1).

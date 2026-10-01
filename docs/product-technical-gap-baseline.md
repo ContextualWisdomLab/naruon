@@ -1,10 +1,52 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.2
-**Observed on:** 2026-08-26 (Asia/Seoul)
-**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
+**Baseline version:** 1.3
+**Observed on:** 2026-09-30 (Asia/Seoul)
+**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@042b0c70531b229af3acbd0421a2f23098d848b3`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
+
+**Exact-head Security Scan advisory refresh (2026-10-01):** Consumer PR #1833
+at `940e9166650e81d68802180bef9c242c8f53471c` ordinary-merged the previous
+#1828 owner head, but Security Scan run `36804726949` then found a newly
+published residual set: dependency-review job `110186442561` reported PyJWT
+2.14.0 / GHSA-42vr-xj54-vc7v, while Trivy job `110186442634` reported the same
+PyJWT issue plus urllib3 2.7.0 CVE-2026-97687/97688/97689. The canonical owner
+therefore advances PyJWT to 2.15.0 and urllib3 to 2.8.0 across both source
+manifests and both generated locks, with a RED-to-GREEN parity contract.
+Consumer PRs remain Draft until they ordinary-merge the refreshed owner and
+their own exact-head hosted Checks are terminal; CodeQL skipped/queued states
+remain non-authoritative.
+
+**Application CI follow-up (2026-10-01):** Owner run `36805472113` / backend
+job `110188721153` and consumer run `36805642399` / backend job
+`110189254190` both reached 1,807 passing tests before the same transport
+fixture failed. PyJWT 2.15 now validates cached JWKS and rejects the fixture's
+empty `keys` array. The owner repair keeps empty production JWKS fail-closed
+and uses a parseable anonymous RS256 public key only in the unit-test response;
+the full warning-fatal backend suite returns to 1,808 passed, 32 skipped.
+
+**Exact-head Security Scan RCA refresh (2026-09-30):** PRs #1824
+(`23a4a883…`), #1825 (`c2206af6…`), and #1827 (`fc52acb0…`) inherit the
+same repo-wide dependency findings from protected `develop@042b0c70…`.
+Security Scan runs `36559236390`, `36662347179`, and `36658025933` identify
+vulnerable AnyIO, Next.js, and Sharp locks; #1827 additionally exposes PyJWT
+and oauthlib findings. PR #1825 contains a partial dependency repair mixed
+with UI work and a dummy scanner-trigger comment, so it is evidence to
+preserve rather than the canonical security owner. The dedicated
+`fix/security-dependency-floor-20260930` owner branch pins the reviewed fixed
+versions across source manifests and generated locks, upgrades Starlette to
+the AnyIO-compatible `1.7.0` plus its HTTPX2 TestClient path, and adds an
+executable cross-lock contract. All affected PRs remain Draft until the owner repair is
+current-head green and normally integrated; no predecessor result is accepted
+as successor evidence. Owner PR #1828's first hosted Application CI run
+`36668747540` also found that the optional Noema hash lock duplicated stale
+HTTPX2/HTTPCore2 2.5.0 pins against the core lock's 2.13.1 pins. The optional
+lock now excludes every core-owned package, an executable disjointness contract
+prevents recurrence, and a fresh Python 3.14 hash-enforced combined install
+passes. Consumer PR #1818 must integrate the repaired owner head through
+ordinary non-force history before its new Checks can be considered. Full RCA:
+[dependency Security Scan owner repair](doctoring/2026-09-30-dependency-security-scan-rca.md).
 
 **Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
