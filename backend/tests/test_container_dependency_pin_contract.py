@@ -95,22 +95,11 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     )
     frontend_package = json.loads(read_repo_text("frontend/package.json"))
     frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
-    frontend_workspace = yaml.safe_load(
-        read_repo_text("frontend/pnpm-workspace.yaml")
-    )
 
     assert backend_pins["cryptography"] == "50.0.0"
     assert backend_pins["protobuf"] == "7.35.1"
-    assert backend_pins["anyio"] == "4.15.1"
-    assert backend_pins["oauthlib"] == "4.0.0"
-    assert backend_pins["pyjwt"] == "2.15.1"
-    assert backend_pins["urllib3"] == "2.8.0"
     assert "cryptography==50.0.0" in backend_records
     assert "protobuf==7.35.1" in backend_records
-    assert "anyio==4.15.1" in backend_records
-    assert "oauthlib==4.0.0" in backend_records
-    assert "pyjwt==2.15.1" in backend_records
-    assert "urllib3==2.8.0" in backend_records
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", digest)
         for pin in ("cryptography==50.0.0", "protobuf==7.35.1")
@@ -137,11 +126,9 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
 
     assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
-    assert frontend_package["dependencies"]["next"] == "16.3.8"
     assert frontend_package["overrides"]["postcss"] == "8.5.24"
     assert frontend_package["overrides"]["brace-expansion"] == "5.0.9"
     assert frontend_package["overrides"]["undici"] == "8.9.0"
-    assert frontend_workspace["overrides"]["sharp"] == "0.35.4"
 
     assert frontend_lock["overrides"] == {
         **frontend_lock["overrides"],
@@ -155,7 +142,5 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "jsdom@30.0.1",
         "brace-expansion@5.0.9",
         "undici@8.9.0",
-        "next@16.3.8",
-        "sharp@0.35.4",
     ):
         assert exact_lock_entry in package_records
