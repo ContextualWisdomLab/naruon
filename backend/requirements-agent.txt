@@ -24,8 +24,9 @@ genai-prices==0.0.71 \
 griffelib==2.1.0 \
     --hash=sha256:cc7b3d2d2865ad0b909fcc38086e3f554b5ea7acbaa7bbb7ecaa3f5dfb7d9f00
     # via pydantic-ai-slim
-httpcore2==2.5.0 \
-    --hash=sha256:5ce35188de461d31e8d000bfb8ef8bf22c6c16587a211e5571deaa5e9bdf842a
+httpcore2==2.10.0 \
+    --hash=sha256:13c0cc3d1919d4f28457f60cd2c2abe04113a8af184ccf1142811beba936f9dc \
+    --hash=sha256:7df06cfb34070cae4f7c89be69dc1095eca138e9704ceffb98d25c1912ab6f01
     # via httpx2
 httpx2==2.5.0 \
     --hash=sha256:3d2d4d9cf4b61f1a1f46a95947cfdb47e80cb56a2f91c6256ac8f58e4891df41
