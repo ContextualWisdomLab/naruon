@@ -189,7 +189,7 @@ pgvector==0.5.0
     # via naruon-backend
 pluggy==1.6.0
     # via pytest
-prometheus-client==0.25.0
+prometheus-client==0.26.0
     # via prometheus-fastapi-instrumentator
 prometheus-fastapi-instrumentator==7.1.0
     # via naruon-backend
