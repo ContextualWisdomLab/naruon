@@ -882,12 +882,32 @@ def test_oidc_jwks_client_fetches_from_validated_pinned_address(monkeypatch):
     from core.url_validation import ValidatedHTTPSURLHost
 
     calls: list[dict[str, object]] = []
+    expected_jwk_set = {
+        "keys": [
+            {
+                "alg": "RS256",
+                "e": "AQAB",
+                "key_ops": ["verify"],
+                "kid": "transport-test-key",
+                "kty": "RSA",
+                "n": (
+                    "7QzG8XWfv1IAagrWTfhLTE81aeoTPtflDQ5_y6HfH0la6T_tNTEKUhe2z69qAou3"
+                    "nFV26Eo9lbeXOoBZba7JtN01sSWkLVWZpoVs-rf5427S4poX7InNYlfw7iyGegPf9"
+                    "irtZNtLCzRTctiS-sDX4QCyyKSAAXQWRtpHifFPDptXpUCmaYFyBfopBQzxfeLsf43"
+                    "BZVfwfoG71Ff7xon4dwNoagkGMzPdxWk_mzOoUTzVTIbdGQkzveHD7mQWwOnWS36m"
+                    "YSWpEalXNBrKxqQ6sDUChMeVTZqGT_fWMbsOEUFtRMwFbesNb9JT0zZQDT0qD611b"
+                    "AXRRd4b9rB3r58EEw"
+                ),
+                "use": "sig",
+            }
+        ]
+    }
 
     class FakeResponse:
         status = 200
 
         def read(self, size: int) -> bytes:
-            return b'{"keys":[]}'
+            return json.dumps(expected_jwk_set).encode("utf-8")
 
     class FakeConnection:
         def __init__(
@@ -930,7 +950,7 @@ def test_oidc_jwks_client_fetches_from_validated_pinned_address(monkeypatch):
         )
     )
 
-    assert client.fetch_data() == {"keys": []}
+    assert client.fetch_data() == expected_jwk_set
     assert calls == [
         {
             "address": "93.184.216.34",

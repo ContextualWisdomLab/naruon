@@ -18,6 +18,14 @@ Consumer PRs remain Draft until they ordinary-merge the refreshed owner and
 their own exact-head hosted Checks are terminal; CodeQL skipped/queued states
 remain non-authoritative.
 
+**Application CI follow-up (2026-10-01):** Owner run `36805472113` / backend
+job `110188721153` and consumer run `36805642399` / backend job
+`110189254190` both reached 1,807 passing tests before the same transport
+fixture failed. PyJWT 2.15 now validates cached JWKS and rejects the fixture's
+empty `keys` array. The owner repair keeps empty production JWKS fail-closed
+and uses a parseable anonymous RS256 public key only in the unit-test response;
+the full warning-fatal backend suite returns to 1,808 passed, 32 skipped.
+
 **Exact-head Security Scan RCA refresh (2026-09-30):** PRs #1824
 (`23a4a883…`), #1825 (`c2206af6…`), and #1827 (`fc52acb0…`) inherit the
 same repo-wide dependency findings from protected `develop@042b0c70…`.
