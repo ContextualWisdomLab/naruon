@@ -35,9 +35,12 @@ dependencies = [
   "setuptools==83.0.0",
   "wheel==0.47.0",
   "websockets==16.1",
-  "PyJWT==2.13.0",
+  "pyjwt>=2.8.0",
   "icalendar==7.2.0",
   "defusedxml==0.7.1",
+  "anyio>=3.7.1",
+  "oauthlib>=3.2.2",
+  "urllib3>=1.26.18",
 ]
 
 [dependency-groups]
