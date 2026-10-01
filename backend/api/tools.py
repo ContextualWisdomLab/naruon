@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,6 +755,38 @@ registry.register(
 )
 
 
+async def personal_info_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+
+    # RRN: 6 digits + optional hyphen + 1-8 followed by 6 digits
+    text = re.sub(r"(?<!\d)(\d{6})-?([1-8]\d{6})(?!\d)", r"\1-*******", text)
+
+    # Representative phone: 4 digits starting with 1 (e.g. 1588, 1644, etc.) + optional hyphen + 4 digits
+    text = re.sub(r"(?<!\d)(1[5-8]\d{2})-?(\d{4})(?!\d)", r"\1-****", text)
+
+    # Regular phone: 0XX(X) + optional hyphen + 3,4 digits + optional hyphen + 4 digits
+    # Adjusting for 01012345678 turning into 010-****-****
+    text = re.sub(r"(?<!\d)(0\d{1,3})-?(\d{3,4})-?(\d{4})(?!\d)", r"\1-****-****", text)
+
+    # Email: non-word boundary matching to avoid \b matching Korean
+    email_pattern = r"(?<![a-zA-Z0-9_.+-])[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+(?![a-zA-Z0-9_.+-])"
+    text = re.sub(email_pattern, "***@***.***", text)
+
+    return {"masked_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="personal_info_masker",
+        name="개인정보 마스킹 (Personal Info Masker)",
+        description="텍스트에 포함된 주민등록번호, 전화번호, 이메일 등의 개인정보를 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    personal_info_masker_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
@@ -767,7 +801,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])

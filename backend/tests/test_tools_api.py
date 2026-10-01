@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,33 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_personal_info_masker_tool_success():
+    tool = registry.get("personal_info_masker")
+    assert tool is not None
+
+    # Test RRN
+    result = await registry.invoke_tool(
+        "personal_info_masker", {"text": "주민번호 900101-1234567 입니다."}
+    )
+    assert result["masked_text"] == "주민번호 900101-******* 입니다."
+
+    # Test Representative Phone
+    result = await registry.invoke_tool(
+        "personal_info_masker", {"text": "대표번호 1588-1588 전화주세요."}
+    )
+    assert result["masked_text"] == "대표번호 1588-**** 전화주세요."
+
+    # Test Regular Phone
+    result = await registry.invoke_tool(
+        "personal_info_masker", {"text": "제 폰번호는 010-1234-5678입니다."}
+    )
+    assert result["masked_text"] == "제 폰번호는 010-****-****입니다."
+
+    # Test Email
+    result = await registry.invoke_tool(
+        "personal_info_masker", {"text": "이메일 user@example.com입니다."}
+    )
+    assert result["masked_text"] == "이메일 ***@***.***입니다."
