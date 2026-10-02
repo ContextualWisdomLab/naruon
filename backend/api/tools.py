@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,75 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    text = params.get("text") or ""
+    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
+    unique_urls = list(dict.fromkeys(urls))
+    return {"urls": unique_urls, "count": len(unique_urls)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트에서 URL(웹 주소)을 추출합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+
+def _mask_rrn(match: re.Match) -> str:
+    return f"{match.group(1)}{match.group(2)}*******"
+
+
+def _mask_phone_rep(match: re.Match) -> str:
+    return f"{match.group(1)}{match.group(2)}****"
+
+
+def _mask_phone_std(match: re.Match) -> str:
+    return f"{match.group(1)}{match.group(2)}****{match.group(4)}****"
+
+
+def _mask_email(match: re.Match) -> str:
+    return f"{match.group(1)}***{match.group(2)}"
+
+
+async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+
+    # 1. RRN
+    rrn_pattern = re.compile(r"(?<!\d)(\d{6})(-?)([1-8]\d{6})(?!\d)")
+    text = rrn_pattern.sub(_mask_rrn, text)
+
+    # 2. Email
+    email_pattern = re.compile(
+        r"(?<![a-zA-Z0-9_.+-])([a-zA-Z0-9_.+-]{1,2})[a-zA-Z0-9_.+-]*(@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)(?![a-zA-Z0-9_.+-])"
+    )
+    text = email_pattern.sub(_mask_email, text)
+
+    # 3. Phone numbers
+    rep_pattern = re.compile(r"(?<!\d)(15\d{2}|16\d{2}|18\d{2})(-?)(\d{4})(?!\d)")
+    text = rep_pattern.sub(_mask_phone_rep, text)
+
+    std_pattern = re.compile(r"(?<!\d)(0\d{1,3})(-?)(\d{3,4})(-?)(\d{4})(?!\d)")
+    text = std_pattern.sub(_mask_phone_std, text)
+
+    return {"masked_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스커 (PII Masker)",
+        description="텍스트 내의 이메일, 전화번호, 주민등록번호 등을 마스킹합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])

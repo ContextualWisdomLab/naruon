@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,56 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_url_extractor_tool():
+    from api.tools import url_extractor_handler
+
+    result = await url_extractor_handler(
+        {"text": "Visit https://example.com and www.test.com"}
+    )
+    assert len(result["urls"]) == 2
+    assert "https://example.com" in result["urls"]
+    assert "www.test.com" in result["urls"]
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_tool():
+    from api.tools import pii_masker_handler
+
+    result = await pii_masker_handler(
+        {
+            "text": "My email is test.user@example.com. Phone: 010-1234-5678, RRN: 900101-1234567."
+        }
+    )
+    masked = result["masked_text"]
+    assert "te***@example.com" in masked
+    assert "010-****-****" in masked
+    assert "900101-*******" in masked
+
+
+@pytest.mark.asyncio
+async def test_url_extractor_empty_input():
+    from api.tools import url_extractor_handler
+
+    result = await url_extractor_handler({})
+    assert result["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_empty_input():
+    from api.tools import pii_masker_handler
+
+    result = await pii_masker_handler({})
+    assert result["masked_text"] == ""
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_rep_phone():
+    from api.tools import pii_masker_handler
+
+    result = await pii_masker_handler({"text": "Contact us at 1588-1588 or 1644-1234."})
+    masked = result["masked_text"]
+    assert "1588-****" in masked
+    assert "1644-****" in masked
