@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Replaced O(N) Chained Array Methods with O(1) Capped Loops
+
+**Learning:** In React components, using chained array methods like `.map(...).filter(...).slice(0, N)` or `Array.from(map.values()).slice(0, N).map(...)` incurs massive unnecessary object allocations and `O(N)` processing costs relative to the total array size, even if only a few items are needed. Capping the iteration directly makes the operation `O(1)`.
+**Action:** Replace `O(N)` chained array methods with an `O(1)` `for...of` loop containing an early `break` condition (e.g., `if (results.length >= N) break;`) when iterating over large arrays or Maps where only a limited subset of items is needed.
