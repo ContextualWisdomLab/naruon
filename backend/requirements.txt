@@ -10,7 +10,7 @@ annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
     # via pydantic
-anyio==4.8.0
+anyio==4.14.2
     # via
     #   httpx
     #   langsmith
@@ -124,7 +124,7 @@ mako==1.3.12
     # via alembic
 markupsafe==3.0.3
     # via mako
-oauthlib==3.2.2
+oauthlib==4.0.0
     # via
     #   naruon-backend
     #   requests-oauthlib
@@ -223,7 +223,7 @@ pydantic-settings==2.14.2
     # via naruon-backend
 pygments==2.20.0
     # via pytest
-pyjwt==2.10.1
+pyjwt==2.14.0
     # via naruon-backend
 pyparsing==3.3.2
     # via httplib2
@@ -261,7 +261,6 @@ six==1.17.0
     # via python-dateutil
 sniffio==1.3.1
     # via
-    #   anyio
     #   langsmith
     #   openai
 sqlalchemy==2.0.51
@@ -310,7 +309,7 @@ tzdata==2026.2
     # via icalendar
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.3.0
+urllib3==2.8.0
     # via
     #   naruon-backend
     #   requests
