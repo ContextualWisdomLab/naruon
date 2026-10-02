@@ -1055,7 +1055,7 @@ requires-dist = [
     { name = "prometheus-fastapi-instrumentator", specifier = "==8.0.2" },
     { name = "protobuf", specifier = "==7.35.1" },
     { name = "pydantic-settings", specifier = "==2.14.2" },
-    { name = "pyjwt", specifier = "==2.14.0" },
+    { name = "pyjwt", specifier = ">=2.14.0" },
     { name = "python-multipart", specifier = "==0.0.32" },
     { name = "rankweave", specifier = "==0.1.0" },
     { name = "setuptools", specifier = "==83.0.0" },
