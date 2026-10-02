@@ -617,8 +617,10 @@ export function SearchLayout() {
           {error}
         </div>
       ) : filteredResults.length === 0 ? (
-        <div className="p-5 text-sm font-semibold text-muted-foreground">
-          맥락 검색 결과가 없습니다.
+        <div role="status" aria-live="polite" className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+          <Search className="mb-3 size-8 opacity-50" aria-hidden="true" />
+          <p className="text-sm font-bold text-foreground">맥락 검색 결과가 없습니다.</p>
+          <p className="mt-1 text-xs">다른 키워드로 검색하거나 필터를 변경해보세요.</p>
         </div>
       ) : (
         filteredResults.map((result) => (
