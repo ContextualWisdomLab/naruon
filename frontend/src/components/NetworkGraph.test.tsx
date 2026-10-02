@@ -137,7 +137,7 @@ describe("NetworkGraph", () => {
     );
     expect(button).toBeInstanceOf(HTMLButtonElement);
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button?.className).toContain("disabled:cursor-not-allowed");
+
     expect(button?.className).toContain("pointer-events-none");
   });
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -405,29 +406,33 @@ export default function NetworkGraph() {
                 표시할 관계 데이터가 없습니다.
               </span>
             )}
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={handleSelectFirstRelationship}
               disabled={!firstEdge}
-              className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ${!firstEdge ? "pointer-events-none" : ""}`}
+              className={`border-primary/25 text-primary hover:bg-primary/10 hover:text-primary ${!firstEdge ? "pointer-events-none" : ""}`}
             >
               첫 관계 보기
-            </button>
+            </Button>
           </span>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={handleZoomGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             그래프 확대
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={handleFitGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             전체 그래프 맞춤
-          </button>
+          </Button>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <label className="text-xs font-bold text-foreground">
