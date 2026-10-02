@@ -7,7 +7,7 @@ settings:
 overrides:
   brace-expansion: 5.0.9
   postcss: 8.5.24
-  sharp: 0.35.5
+  sharp: 0.35.0
   undici: 8.9.0
 
 pnpmfileChecksum: sha256-RXPq3MmEdRb3xD3rhbER9kciz9nBr/i0J/uMUjql5t0=
@@ -5368,7 +5368,7 @@ snapshots:
       '@next/swc-win32-arm64-msvc': 16.2.12
       '@next/swc-win32-x64-msvc': 16.2.12
       '@playwright/test': 1.62.0
-      sharp: 0.35.5
+      sharp: 0.35.0
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
