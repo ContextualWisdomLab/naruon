@@ -771,9 +771,18 @@ registry.register(
 )
 
 
+_RRN_PATTERN = re.compile(r"(?<!\d)(\d{6})(-?)([1-8]\d{6})(?!\d)")
+_EMAIL_PATTERN = re.compile(
+    r"(?<![a-zA-Z0-9_.+-])([a-zA-Z0-9_.+-]{1,2})[a-zA-Z0-9_.+-]*(@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)(?![a-zA-Z0-9_.+-])"
+)
+_PHONE_REP_PATTERN = re.compile(r"(?<!\d)(15\d{2}|16\d{2}|18\d{2})(-?)(\d{4})(?!\d)")
+_PHONE_STD_PATTERN = re.compile(r"(?<!\d)(0\d{1,3})(-?)(\d{3,4})(-?)(\d{4})(?!\d)")
+_URL_PATTERN = re.compile(r'https?://[^\s<>"]+|www\.[^\s<>"]+')
+
+
 async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
     text = params.get("text") or ""
-    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
+    urls = _URL_PATTERN.findall(text)
     unique_urls = list(dict.fromkeys(urls))
     return {"urls": unique_urls, "count": len(unique_urls)}
 
@@ -808,24 +817,10 @@ def _mask_email(match: re.Match) -> str:
 
 async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text") or ""
-
-    # 1. RRN
-    rrn_pattern = re.compile(r"(?<!\d)(\d{6})(-?)([1-8]\d{6})(?!\d)")
-    text = rrn_pattern.sub(_mask_rrn, text)
-
-    # 2. Email
-    email_pattern = re.compile(
-        r"(?<![a-zA-Z0-9_.+-])([a-zA-Z0-9_.+-]{1,2})[a-zA-Z0-9_.+-]*(@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)(?![a-zA-Z0-9_.+-])"
-    )
-    text = email_pattern.sub(_mask_email, text)
-
-    # 3. Phone numbers
-    rep_pattern = re.compile(r"(?<!\d)(15\d{2}|16\d{2}|18\d{2})(-?)(\d{4})(?!\d)")
-    text = rep_pattern.sub(_mask_phone_rep, text)
-
-    std_pattern = re.compile(r"(?<!\d)(0\d{1,3})(-?)(\d{3,4})(-?)(\d{4})(?!\d)")
-    text = std_pattern.sub(_mask_phone_std, text)
-
+    text = _RRN_PATTERN.sub(_mask_rrn, text)
+    text = _EMAIL_PATTERN.sub(_mask_email, text)
+    text = _PHONE_REP_PATTERN.sub(_mask_phone_rep, text)
+    text = _PHONE_STD_PATTERN.sub(_mask_phone_std, text)
     return {"masked_text": text}
 
 

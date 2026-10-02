@@ -1219,8 +1219,7 @@ async def test_url_extractor_tool():
         {"text": "Visit https://example.com and www.test.com"}
     )
     assert len(result["urls"]) == 2
-    assert "https://example.com" in result["urls"]
-    assert "www.test.com" in result["urls"]
+    assert set(result["urls"]) == {"https://example.com", "www.test.com"}
 
 
 @pytest.mark.asyncio
