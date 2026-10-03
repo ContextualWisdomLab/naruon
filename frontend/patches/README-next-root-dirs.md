@@ -56,9 +56,15 @@ wildcards, 1024/1025-character dot-prefixed paths, and 16/17 alternatives test
 the exact candidate boundaries; ordinary valid positives accompany negatives.
 The full-length candidate control uses repeated `./` to avoid Darwin's physical
 path limit; it is not an original-supplier long-path compatibility assertion.
-These scripts are explicit checks, not assumed CI wiring; package.json stays
-unchanged so the integration owner can compose the checks later.
+The normal `pnpm test` command now invokes the external-chain, root, review and
+Playwright-family contracts before Vitest using fail-fast `&&` chaining. The
+review script always checks the candidate; an original installed supplier is
+optional and enables additional differential diagnostics. `pnpm test:dependencies`
+runs the same dependency contracts without the application suite.
 
-This removes the external lock/installed braces chain only. Embedded braces
-implementations in Vite and Playwright remain outside this change; a clean pnpm
-audit is not proof that those bundled implementations are repaired.
+The scoped adapter removes the external lock/installed braces chain. The separate
+exact Playwright 1.63.0 family upgrade removes its old embedded braces/glob-watcher
+implementation, verified through installed artifact inventory and a real internal
+watcher seam. Those checks do not establish public CLI watch-mode acceptance.
+Vite 8.1.4 still embeds braces; its residual remediation remains open. A clean pnpm
+audit assesses package metadata and is not proof of complete bundled-source safety.

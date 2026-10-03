@@ -19,7 +19,7 @@ Registry availability and compatibility were verified with pnpm `11.5.3` and
 Node `24.19.0`. In particular undici `8.10.2` requires Node `>=22.19.0`; do not
 interpret this proposal as proof of compatibility with older Node releases.
 
-## Audit scope and unresolved security finding
+## Historical dependency-only audit and unresolved finding
 
 On October 3, 2026, OSV API batch queries accounted for all **580** package
 records in each baseline and candidate lock, including development and optional
@@ -85,7 +85,28 @@ artifact drift. Independent baseline/candidate OSV queries remain separate
 current audit evidence. Unsupported child-authored web retrieval receipts are
 excluded from acceptance; source links alone are not tool retrieval receipts.
 
-No commit, push, publication, review, merge, container verification, live browser
-journey, or production-provider execution is claimed. Adoption belongs to the
-existing PR owner after independent review, with remaining warnings/advisory
-blockers and hosted gates explicitly resolved rather than waived.
+The preceding sections preserve the earlier dependency-only snapshot and failed
+evidence. They do not describe the later graph or its publication state.
+
+## Subsequent reviewed external-chain and Playwright removal
+
+The canonical owner subsequently published `396a18fc54dd83bd9d79a6bc6bf3f1af38ba31b8`
+after independent whole-PR source review. Its scoped tinyglobby replacement and
+exact Next-plugin patch remove the external braces chain; its exact Playwright
+1.63.0 family upgrade removes the old embedded implementation. Permanent tests
+reject unsupported brace grammar and propagate non-ENOENT filesystem errors,
+including the two reproduced findings from the initial adapter review.
+
+Actual clean committed-head frozen install, dependency regressions, 437 frontend
+JUnit cases, lint, typecheck, production build and unfiltered pnpm audit all
+passed; the audit reported zero advisories. Vite 8.1.4 still embeds braces.
+Package-audit success is not complete bundled-source clearance, and diagnostic
+watch settings are not removal. Windows compatibility is not established.
+
+The later E2E harness changes repair HttpOnly cookie fixture/header observation,
+explicit server-session owner/org controls, and stale selectors without modifying
+application authorization. Mocked UI and real unrouted browser transport checks
+are distinct from real signed-backend/database/provider acceptance. Failed live
+suite admission due to absent signing configuration remains failed evidence, not
+a full E2E pass. Required current-head hosted checks, counted approval, protected
+merge and released usability remain outstanding; no gate is waived.
