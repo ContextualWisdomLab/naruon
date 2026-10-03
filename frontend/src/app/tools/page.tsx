@@ -299,6 +299,7 @@ export default function ToolsPage() {
                     type="button"
                     onClick={() => handleExecute(tool.code)}
                     disabled={executing[tool.code] || tool.is_active === false}
+                    aria-busy={executing[tool.code]}
                     data-tool-execute={tool.code}
                     className="w-full font-black"
                   >
