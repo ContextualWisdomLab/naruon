@@ -125,30 +125,32 @@ describe("ToolsPage", () => {
   it("executes a tool and shows the result", async () => {
     let executeCalled = false;
     let executeBody: unknown;
+    let resolveExecution: ((response: Response) => void) | undefined;
+    const executionResponse = new Promise<Response>((resolve) => {
+      resolveExecution = resolve;
+    });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url, init) => {
+      vi.fn((url, init) => {
         if (url.includes("/api/tools") && !url.includes("execute")) {
-          return jsonResponse([
-            {
-              code: "test_tool",
-              name: "테스트 도구",
-              description: "설명",
-              category: "카테고리",
-              parameters: { thread_id: "string", limit: "number" },
-            },
-          ]);
+          return Promise.resolve(
+            jsonResponse([
+              {
+                code: "test_tool",
+                name: "테스트 도구",
+                description: "설명",
+                category: "카테고리",
+                parameters: { thread_id: "string", limit: "number" },
+              },
+            ]),
+          );
         }
         if (url.includes("/api/tools/test_tool/execute")) {
           executeCalled = true;
           executeBody = JSON.parse(String(init?.body));
-          return jsonResponse({
-            status: "success",
-            result: "Execution OK",
-            message: "Success message"
-          });
+          return executionResponse;
         }
-        return jsonResponse({});
+        return Promise.resolve(jsonResponse({}));
       }),
     );
 
@@ -167,10 +169,24 @@ describe("ToolsPage", () => {
     act(() => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    await flushAsyncWork();
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(executeCalled).toBe(true);
     expect(executeBody).toEqual({ parameters: { thread_id: "test_value", limit: 0 } });
+    expect(button?.getAttribute("aria-busy")).toBe("true");
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+
+    resolveExecution?.(jsonResponse({
+      status: "success",
+      result: "Execution OK",
+      message: "Success message",
+    }));
+    await flushAsyncWork();
+
+    expect(button?.getAttribute("aria-busy")).toBe("false");
+    expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(container.textContent).toContain("성공");
     expect(container.textContent).toContain("Success message");
   });

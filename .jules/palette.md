@@ -80,3 +80,6 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+## 2024-06-26 - Add aria-busy to Tool Execution Buttons
+**Learning:** Dynamic "execute tool" action buttons that utilize `disabled={executing[code]}` and spinners for loading feedback also need `aria-busy` to explicitly inform screen readers of the in-progress state, especially for variable asynchronous durations.
+**Action:** Ensure `aria-busy` is added along with `disabled` states and visible spinners for map/loop generated asynchronous action buttons.
