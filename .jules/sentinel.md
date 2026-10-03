@@ -138,3 +138,8 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
+
+## 2026-08-10 - [Prevent SSRF via Local/Internal Domains in DAV Providers]
+**Vulnerability:** The CardDAV and WebDAV clients checked that parsed hostnames resolved to global IP addresses to prevent SSRF. However, if a DNS resolver maps internal domains (like `.internal` or `.local`) to public IPs or they bypass IP resolution locally, the logic might fail or be subjected to DNS rebinding. Also, `localhost` check was missing in one place or incomplete.
+**Learning:** Checking for global IP after DNS resolution is good, but explicitly rejecting known internal/local TLDs before resolution is a crucial defense-in-depth measure against SSRF bypasses via internal domains.
+**Prevention:** Explicitly block `localhost`, `.localhost`, `internal`, `.internal`, and `.local` domains before attempting DNS resolution in `carddav_client.py` and `local_dav_adapters.py`.
