@@ -523,9 +523,7 @@ def test_dav_adapter_rejects_invalid_source_url_boundaries(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_carddav_adapter_puts_vcard_with_if_match():
-    fake_client = FakeDavClient(
-        FakeDavResponse(201, headers={"ETag": "etag-vcard"})
-    )
+    fake_client = FakeDavClient(FakeDavResponse(201, headers={"ETag": "etag-vcard"}))
     adapters = LocalDavAdapters(
         [
             LocalDavSourceConfig(
@@ -586,3 +584,25 @@ async def test_carddav_adapter_rejects_protocol_mismatch():
     assert result["status"] == "error"
     assert result["error_code"] == "source_not_configured"
     assert fake_client.requests == []
+
+
+def test_validate_global_source_host_blocks_internal_domains():
+    import pytest
+    from runner.local_dav_adapters import LocalDavAdapters
+
+    adapters = LocalDavAdapters([])
+
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        adapters._validate_global_source_host("localhost", 443)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        adapters._validate_global_source_host("test.localhost", 443)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        adapters._validate_global_source_host("internal", 443)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        adapters._validate_global_source_host("test.internal", 443)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        adapters._validate_global_source_host("test.local", 443)  # noqa: SLF001

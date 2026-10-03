@@ -209,6 +209,14 @@ class LocalDavAdapters:
         )
 
     def _validate_global_source_host(self, hostname: str, port: int) -> None:
+        if (
+            hostname == "localhost"
+            or hostname.endswith(".localhost")
+            or hostname == "internal"
+            or hostname.endswith(".internal")
+            or hostname.endswith(".local")
+        ):
+            raise ValueError("invalid_source_url")
         try:
             ipaddress.ip_address(hostname)
         except ValueError:

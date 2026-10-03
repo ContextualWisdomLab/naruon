@@ -56,7 +56,13 @@ def _validate_global_address(address: str) -> None:
 
 def _resolved_global_addresses(hostname: str, port: int) -> list[str]:
     """Resolve a hostname once and require every address to be global."""
-    if hostname == "localhost" or hostname.endswith(".localhost"):
+    if (
+        hostname == "localhost"
+        or hostname.endswith(".localhost")
+        or hostname == "internal"
+        or hostname.endswith(".internal")
+        or hostname.endswith(".local")
+    ):
         raise ValueError("invalid_carddav_url")
     try:
         ipaddress.ip_address(hostname)
@@ -165,17 +171,14 @@ def _safe_vcard_path(raw_path: Any) -> str | None:
         or "#" in decoded_path
         or decoded_path.startswith("//")
         or any(
-            ord(character) < 32 or ord(character) == 127
-            for character in decoded_path
+            ord(character) < 32 or ord(character) == 127 for character in decoded_path
         )
     ):
         return None
     segments = [segment for segment in decoded_path.split("/") if segment]
     if not segments or any(segment in {".", ".."} for segment in segments):
         return None
-    return "/".join(
-        quote(segment, safe="@:$&'()*+,;=-._~") for segment in segments
-    )
+    return "/".join(quote(segment, safe="@:$&'()*+,;=-._~") for segment in segments)
 
 
 def _default_http_client() -> httpx.AsyncClient:
