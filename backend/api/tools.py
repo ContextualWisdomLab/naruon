@@ -772,9 +772,13 @@ registry.register(
 
 
 _RRN_PATTERN = re.compile(
-    r"(?<!\d)(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))-?([1-8]\d{6})(?!\d)"
+    r"(?<!\d)(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))-?([1-8]\d{6})(?!\d)",
+    re.ASCII,
 )
-_PHONE_PATTERN = re.compile(r"(?<!\d)(0\d{1,3}-?\d{3,4}-?\d{4}|1\d{3}-?\d{4})(?!\d)")
+_PHONE_PATTERN = re.compile(
+    r"(?<!\d)(0\d{1,3}-?\d{3,4}-?\d{4}|1\d{3}-?\d{4})(?!\d)",
+    re.ASCII,
+)
 
 
 async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
