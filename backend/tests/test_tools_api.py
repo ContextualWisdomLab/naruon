@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,44 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_handler_success():
+    from api.tools import pii_masker_handler
+
+    # RRN and Phone number examples
+    res1 = await pii_masker_handler(
+        {"text": "내 주민번호는 900101-1234567이고 폰은 010-1234-5678입니다."}
+    )
+    assert (
+        res1["masked_text"]
+        == "내 주민번호는 900101-*******이고 폰은 ***-****-****입니다."
+    )
+
+    res2 = await pii_masker_handler({"text": "외국인 990101-5234567입니다."})
+    assert res2["masked_text"] == "외국인 990101-*******입니다."
+
+    res3 = await pii_masker_handler({"text": "0505-123-4567"})
+    assert res3["masked_text"] == "****-***-****"
+
+    res4 = await pii_masker_handler({"text": "1588-1588"})
+    assert res4["masked_text"] == "****-****"
+
+    res5 = await pii_masker_handler({"text": "01012345678"})
+    assert res5["masked_text"] == "***********"
+
+    res6 = await pii_masker_handler({"text": "12345"})  # Invalid phone, not matched
+    assert res6["masked_text"] == "12345"
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_handler_none():
+    from api.tools import pii_masker_handler
+
+    # None handling
+    res = await pii_masker_handler({"text": None})
+    assert res["masked_text"] == ""
+
+    res2 = await pii_masker_handler({})
+    assert res2["masked_text"] == ""
