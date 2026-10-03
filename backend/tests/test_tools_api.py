@@ -1239,6 +1239,16 @@ async def test_pii_masker_handler_success():
     res6 = await pii_masker_handler({"text": "12345"})  # Invalid phone, not matched
     assert res6["masked_text"] == "12345"
 
+    boundary_cases = {
+        "９900101-1234567": "９900101-*******",
+        "900101-1234567９": "900101-*******９",
+        "９010-1234-5678": "９***-****-****",
+        "010-1234-5678９": "***-****-****９",
+    }
+    for text, expected in boundary_cases.items():
+        result = await pii_masker_handler({"text": text})
+        assert result["masked_text"] == expected
+
 
 @pytest.mark.asyncio
 async def test_pii_masker_handler_none():
