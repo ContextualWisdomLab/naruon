@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Replaced O(N) Array Operations with Early-Break Iterator Loops in React useMemo
+
+**Learning:** In React components like `NetworkGraph`, computing derived arrays for select menus directly with `Array.from(map.values()).slice(0, N).map(...)` allocates an entire new array containing potentially thousands of elements, only to throw most of them away when `.slice` is called. For example, grabbing the first 5 edges created an O(N) memory allocation and traversal where N could be thousands, causing noticeable main-thread jank when the graph re-renders.
+**Action:** When extracting a small subset of items from a large Map or Set in React `useMemo` hooks, avoid `Array.from()`. Instead, use `for...of` loops and break early once the desired number of elements (e.g. 5) is reached. This turns an O(N) memory and time operation into an O(1) operation.

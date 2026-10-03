@@ -55,6 +55,7 @@ async def get_network_graph(
     result = await db.execute(
         select(Email.sender, Email.recipients)
         .where(Email.user_id == target_user_id, organization_filter)
+        .where(Email.sender.isnot(None), Email.recipients.isnot(None))
         .limit(limit)
     )
     rows = result.fetchall()
@@ -87,10 +88,15 @@ async def get_network_graph(
                             edge_key = (sender_email, rec_email)
                             edges_dict[edge_key] = edges_get(edge_key, 0) + 1
 
-    nodes = [Node(id=email, label=email) for email in nodes_set]
-    edges = [
-        Edge(source=src, target=tgt, weight=weight)
-        for (src, tgt), weight in edges_dict.items()
-    ]
+    # Bolt optimization: Fast-path creation of nodes and edges without redundant looping if empty
+    nodes = [Node(id=email, label=email) for email in nodes_set] if nodes_set else []
+    edges = (
+        [
+            Edge(source=src, target=tgt, weight=weight)
+            for (src, tgt), weight in edges_dict.items()
+        ]
+        if edges_dict
+        else []
+    )
 
     return GraphResponse(nodes=nodes, edges=edges)
