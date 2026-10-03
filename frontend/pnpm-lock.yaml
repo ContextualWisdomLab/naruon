@@ -17,6 +17,7 @@ pnpmfileChecksum: sha256-RXPq3MmEdRb3xD3rhbER9kciz9nBr/i0J/uMUjql5t0=
 patchedDependencies:
   '@next/eslint-plugin-next@16.3.6': d39c1cbd18afc3d61e774ac878007ebb3837f175d30e4ab3e594b0f891adc280
   minimatch@3.1.5: 5f38b9c5382c1163b0389810f5e4e867519096f3c11a6df0a51d7cafbdfa93e2
+  vite@8.1.4: fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32
 
 importers:
 
@@ -103,7 +104,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@26.1.2)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.1.4(@types/node@26.1.2)(jiti@2.7.0))
+        version: 4.1.11(@types/node@26.1.2)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0))
 
 packages:
 
@@ -3807,7 +3808,7 @@ snapshots:
       obug: 2.1.3
       std-env: 4.2.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.11(@types/node@26.1.2)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.1.4(@types/node@26.1.2)(jiti@2.7.0))
+      vitest: 4.1.11(@types/node@26.1.2)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0))
 
   '@vitest/expect@4.1.11':
     dependencies:
@@ -3818,13 +3819,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.11(vite@8.1.4(@types/node@26.1.2)(jiti@2.7.0))':
+  '@vitest/mocker@4.1.11(vite@8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.1.4(@types/node@26.1.2)(jiti@2.7.0)
+      vite: 8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0)
 
   '@vitest/pretty-format@4.1.11':
     dependencies:
@@ -5558,7 +5559,7 @@ snapshots:
       '@egjs/hammerjs': 2.0.17
       component-emitter: 2.0.0
 
-  vite@8.1.4(@types/node@26.1.2)(jiti@2.7.0):
+  vite@8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -5570,10 +5571,10 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
 
-  vitest@4.1.11(@types/node@26.1.2)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.1.4(@types/node@26.1.2)(jiti@2.7.0)):
+  vitest@4.1.11(@types/node@26.1.2)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@8.1.4(@types/node@26.1.2)(jiti@2.7.0))
+      '@vitest/mocker': 4.1.11(vite@8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
@@ -5590,7 +5591,7 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.4(@types/node@26.1.2)(jiti@2.7.0)
+      vite: 8.1.4(patch_hash=fa79ac3060e961d3664e37dbb98ae499ed28400248ea6f5417d1b474255a6b32)(@types/node@26.1.2)(jiti@2.7.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 26.1.2

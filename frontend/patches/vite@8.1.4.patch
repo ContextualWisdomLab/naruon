@@ -1,0 +1,31 @@
+--- a/dist/node/chunks/node.js
++++ b/dist/node/chunks/node.js
+@@ -7802,1 +7802,2 @@
+-		const stringify = (node, parent = {}) => {
++		const stringify = (node, parent = {}, depth = 0) => {
++			if (depth > 65) throw new SyntaxError("ERR_VITE_BRACES_DEPTH: AST depth exceeds 65");
+@@ -7811,1 +7812,1 @@
+-			if (node.nodes) for (const child of node.nodes) output += stringify(child);
++			if (node.nodes) for (const child of node.nodes) output += stringify(child, {}, depth + 1);
+@@ -8201,1 +8202,2 @@
+-		const walk = (node, parent = {}) => {
++		const walk = (node, parent = {}, depth = 0) => {
++			if (depth > 65) throw new SyntaxError("ERR_VITE_BRACES_DEPTH: AST depth exceeds 65");
+@@ -8224,1 +8226,1 @@
+-			if (node.nodes) for (const child of node.nodes) output += walk(child, node);
++			if (node.nodes) for (const child of node.nodes) output += walk(child, node, depth + 1);
+@@ -8252,1 +8254,2 @@
+-		const walk = (node, parent = {}) => {
++		const walk = (node, parent = {}, depth = 0) => {
++			if (depth > 65) throw new SyntaxError("ERR_VITE_BRACES_DEPTH: AST depth exceeds 65");
+@@ -8299,1 +8302,1 @@
+-				if (child.nodes) walk(child, node);
++				if (child.nodes) walk(child, node, depth + 1);
+@@ -8461,1 +8464,2 @@
+-			if (value === CHAR_LEFT_PARENTHESES) {
++			if (value === CHAR_LEFT_PARENTHESES) {
++				if (stack.length > 64) throw new SyntaxError("ERR_VITE_BRACES_DEPTH: nesting exceeds 64");
+@@ -8516,1 +8520,2 @@
+-			if (value === CHAR_LEFT_CURLY_BRACE) {
++			if (value === CHAR_LEFT_CURLY_BRACE) {
++				if (stack.length > 64) throw new SyntaxError("ERR_VITE_BRACES_DEPTH: nesting exceeds 64");
