@@ -480,6 +480,10 @@ in this repo.
 - Icon-only workspace controls must carry localized `aria-label` text matching
   the visible app language; do not rely on the SVG icon alone for Calendar,
   Tasks, drawer, modal, or toolbar actions.
+- React component tests must wrap state-changing input events and asynchronous
+  source-registry loading in awaited `act()` before assertions or cleanup. A
+  passing Vitest/JUnit assertion count does not clear `not wrapped in act`
+  warnings; retain a runtime console-warning assertion without suppressing logs.
 - Execution steps resulting in `Timeout`, `Fatal`, `Warn`, or `Denied` outputs are considered hard failures. Tests must run without these warnings to be considered passing.
 - Strix success artifacts must also be scanned for `Timeout`, `Fatal`, `Warn`,
   or `Denied` output before accepting clean evidence. Filter only narrowly known

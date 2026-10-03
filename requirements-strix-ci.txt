@@ -3,3 +3,9 @@ google-cloud-aiplatform==1.160.0
 cryptography==50.0.0
 protobuf==6.33.6
 python-multipart==0.0.32
+
+# Explicit patched scanner transitive pins; retain these during lock regeneration.
+aiohttp==3.14.3
+PyJWT==2.15.0
+urllib3==2.8.0
+litellm==1.89.7

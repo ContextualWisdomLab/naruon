@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => <a href={href} {...props}>{children}</a>,
@@ -67,6 +67,10 @@ describe("CalendarPage", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
+  beforeEach(() => {
+    vi.spyOn(console, "error");
+  });
+
   afterEach(() => {
     if (root) act(() => root?.unmount());
     root = null;
@@ -74,17 +78,24 @@ describe("CalendarPage", () => {
     container = null;
     localStorage.clear();
     vi.unstubAllGlobals();
+    const diagnostics = vi.mocked(console.error);
+    const actWarnings = diagnostics.mock.calls.filter((args) =>
+      args.some((value) => String(value).includes("not wrapped in act")),
+    );
+    diagnostics.mockRestore();
+    expect(actWarnings).toEqual([]);
   });
 
-  it("renders monthly weekly detail coordination candidate and CalDAV writeback workspaces", () => {
+  it("renders monthly weekly detail coordination candidate and CalDAV writeback workspaces", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
 
-    act(() => {
+    await act(async () => {
       root?.render(<CalendarPage />);
     });
+    await flushAsyncWork();
 
     expect(container.textContent).toContain("새 일정");
     expect(container.textContent).toContain("고객 원본 일정 반영 의도");

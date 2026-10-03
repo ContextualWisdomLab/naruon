@@ -13,6 +13,7 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -153,23 +154,69 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
     assert frontend_package["overrides"]["postcss"] == "8.5.24"
-    assert frontend_package["overrides"]["brace-expansion"] == "5.0.9"
-    assert frontend_package["overrides"]["undici"] == "8.9.0"
+    assert frontend_package["overrides"]["brace-expansion"] == "5.0.12"
+    assert frontend_package["overrides"]["undici"] == "8.10.2"
 
     assert frontend_lock["overrides"] == {
         **frontend_lock["overrides"],
         "postcss": "8.5.24",
-        "brace-expansion": "5.0.9",
-        "undici": "8.9.0",
+        "brace-expansion": "5.0.12",
+        "undici": "8.10.2",
     }
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
         "postcss@8.5.24",
         "jsdom@30.0.1",
-        "brace-expansion@5.0.9",
-        "undici@8.9.0",
+        "brace-expansion@5.0.12",
+        "undici@8.10.2",
     ):
         assert exact_lock_entry in package_records
+
+
+@pytest.mark.parametrize(
+    ("package_name", "expected_version", "direct"),
+    [
+        ("vitest", "4.1.11", True),
+        ("@vitest/coverage-v8", "4.1.11", True),
+        ("@vitest/mocker", "4.1.11", False),
+        ("brace-expansion", "5.0.12", False),
+        ("js-yaml", "4.3.2", False),
+        ("undici", "8.10.2", False),
+    ],
+)
+def test_frontend_residual_security_floors_cover_resolved_graph(
+    package_name: str, expected_version: str, direct: bool
+) -> None:
+    """Reject stale manifests, overrides and any vulnerable lock graph copy."""
+    package = json.loads(read_repo_text("frontend/package.json"))
+    workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+    if direct:
+        assert package["devDependencies"][package_name] == expected_version
+        resolution = importer_resolution(lock["importers"]["."], "devDependencies", package_name)
+        assert resolution["specifier"] == expected_version
+        assert resolution["version"].split("(", 1)[0] == expected_version
+    elif package_name != "@vitest/mocker":
+        for section in ("overrides", "resolutions"):
+            assert package[section].get(package_name) == expected_version
+        assert workspace["overrides"][package_name] == expected_version
+        assert lock["overrides"][package_name] == expected_version
+
+    for section in ("packages", "snapshots"):
+        versions = {
+            key.removeprefix(f"{package_name}@").split("(", 1)[0]
+            for key in lock[section]
+            if key.startswith(f"{package_name}@")
+        }
+        assert versions == {expected_version}, (package_name, section, versions)
+    resolutions = [
+        dependencies[package_name]
+        for snapshot in lock["snapshots"].values()
+        for group in ("dependencies", "optionalDependencies")
+        if package_name in (dependencies := snapshot.get(group, {}))
+    ]
+    assert resolutions, f"security pin must be reachable in the resolved graph: {package_name}"
+    assert all(value.split("(", 1)[0] == expected_version for value in resolutions)
 
 
 def test_optional_agent_lock_does_not_redeclare_core_packages() -> None:
