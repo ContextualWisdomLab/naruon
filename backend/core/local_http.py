@@ -113,6 +113,10 @@ def validate_local_request_target(
         decoded_segment = raw_segment
         try:
             for _ in range(100):
+                if _INVALID_PERCENT_ESCAPE.search(decoded_segment):
+                    raise LocalHTTPValidationError(
+                        "local request path contains invalid percent encoding"
+                    )
                 next_segment = unquote(decoded_segment, errors="strict")
                 if next_segment == decoded_segment:
                     break

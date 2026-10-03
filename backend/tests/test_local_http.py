@@ -143,6 +143,8 @@ def test_local_request_target_rejects_raw_and_encoded_traversal(path: str) -> No
         "/api/%2",
         "/api/%GG",
         "/api/%FF",
+        "/api/%252",
+        "/api/%25GG",
     ],
 )
 def test_local_request_target_rejects_invalid_percent_encoding(path: str) -> None:
