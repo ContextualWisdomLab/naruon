@@ -806,12 +806,12 @@ async function fulfillJson(route: Route, body: unknown) {
   });
 }
 
-export async function mockDashboardApi(page: Page, onApiRequest?: (path: string, request: Request) => void) {
+export async function mockDashboardApi(page: Page, onApiRequest?: (path: string, request: Request) => void | Promise<void>) {
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
-    onApiRequest?.(path, request);
+    await onApiRequest?.(path, request);
 
     if (request.method() === 'OPTIONS') {
       await route.fulfill({
@@ -1103,6 +1103,20 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
           owner_user_id: 'alice',
           organization_id: 'org-acme',
         },
+        {
+          folder_uid: 'webdav_folder_other_owner',
+          project_name: 'Other Owner Project',
+          webdav_path: '/Projects/Other_Owner',
+          owner_user_id: 'mallory',
+          organization_id: 'org-acme',
+        },
+        {
+          folder_uid: 'webdav_folder_other_org',
+          project_name: 'Other Organization Project',
+          webdav_path: '/Projects/Other_Organization',
+          owner_user_id: 'alice',
+          organization_id: 'org-other',
+        },
       ]);
       return;
     }
@@ -1325,4 +1339,19 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
 
     await route.fulfill({ status: 404, headers: CORS_HEADERS, body: 'Not mocked' });
   });
+}
+
+// Synthetic mock-API sessions are browser-managed, like the production HttpOnly cookie.
+// They are not valid backend credentials and do not establish live authentication.
+export async function setMockSessionCookie(page: Page, token: string, baseURL: string | undefined) {
+  if (!baseURL) throw new Error('A configured same-origin baseURL is required for mock sessions');
+  const origin = new URL(baseURL).origin;
+  await page.context().addCookies([{
+    name: 'naruon_session',
+    value: token,
+    url: origin,
+    httpOnly: true,
+    secure: origin.startsWith('https://'),
+    sameSite: 'Lax',
+  }]);
 }

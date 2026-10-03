@@ -13,6 +13,7 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -94,7 +95,22 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         read_repo_text("requirements-strix-ci-hashes.txt")
     )
     frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(
+        read_repo_text("frontend/pnpm-workspace.yaml")
+    )
     frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    for package_name, expected_version in {
+        "starlette": "1.7.0",
+        "httpx2": "2.13.1",
+        "pyjwt": "2.15.0",
+        "anyio": "4.15.1",
+        "oauthlib": "4.0.0",
+        "urllib3": "2.8.0",
+    }.items():
+        assert backend_pins[package_name] == expected_version
+        exact_pin = f"{package_name}=={expected_version}"
+        assert exact_pin in backend_records
 
     assert backend_pins["cryptography"] == "50.0.0"
     assert backend_pins["protobuf"] == "7.35.1"
@@ -121,26 +137,95 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         root_importer, "devDependencies", "postcss"
     )
     jsdom_resolution = importer_resolution(root_importer, "devDependencies", "jsdom")
+    next_resolution = importer_resolution(root_importer, "dependencies", "next")
+    eslint_next_resolution = importer_resolution(
+        root_importer, "devDependencies", "eslint-config-next"
+    )
     assert postcss_resolution == {"specifier": "8.5.24", "version": "8.5.24"}
     assert jsdom_resolution == {"specifier": "^30.0.1", "version": "30.0.1"}
+    assert next_resolution["specifier"] == "16.3.6"
+    assert next_resolution["version"].split("(", 1)[0] == "16.3.6"
+    assert eslint_next_resolution["specifier"] == "16.3.6"
+    assert eslint_next_resolution["version"].split("(", 1)[0] == "16.3.6"
 
+    assert frontend_package["dependencies"]["next"] == "16.3.6"
+    assert frontend_package["devDependencies"]["eslint-config-next"] == "16.3.6"
+    assert frontend_workspace["overrides"]["sharp"] == "0.35.4"
     assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
     assert frontend_package["overrides"]["postcss"] == "8.5.24"
-    assert frontend_package["overrides"]["brace-expansion"] == "5.0.9"
-    assert frontend_package["overrides"]["undici"] == "8.9.0"
+    assert frontend_package["overrides"]["brace-expansion"] == "5.0.12"
+    assert frontend_package["overrides"]["undici"] == "8.10.2"
 
     assert frontend_lock["overrides"] == {
         **frontend_lock["overrides"],
         "postcss": "8.5.24",
-        "brace-expansion": "5.0.9",
-        "undici": "8.9.0",
+        "brace-expansion": "5.0.12",
+        "undici": "8.10.2",
     }
     package_records = frontend_lock["packages"]
     for exact_lock_entry in (
         "postcss@8.5.24",
         "jsdom@30.0.1",
-        "brace-expansion@5.0.9",
-        "undici@8.9.0",
+        "brace-expansion@5.0.12",
+        "undici@8.10.2",
     ):
         assert exact_lock_entry in package_records
+
+
+@pytest.mark.parametrize(
+    ("package_name", "expected_version", "direct"),
+    [
+        ("vitest", "4.1.11", True),
+        ("@vitest/coverage-v8", "4.1.11", True),
+        ("@vitest/mocker", "4.1.11", False),
+        ("brace-expansion", "5.0.12", False),
+        ("js-yaml", "4.3.2", False),
+        ("undici", "8.10.2", False),
+    ],
+)
+def test_frontend_residual_security_floors_cover_resolved_graph(
+    package_name: str, expected_version: str, direct: bool
+) -> None:
+    """Reject stale manifests, overrides and any vulnerable lock graph copy."""
+    package = json.loads(read_repo_text("frontend/package.json"))
+    workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+    if direct:
+        assert package["devDependencies"][package_name] == expected_version
+        resolution = importer_resolution(lock["importers"]["."], "devDependencies", package_name)
+        assert resolution["specifier"] == expected_version
+        assert resolution["version"].split("(", 1)[0] == expected_version
+    elif package_name != "@vitest/mocker":
+        for section in ("overrides", "resolutions"):
+            assert package[section].get(package_name) == expected_version
+        assert workspace["overrides"][package_name] == expected_version
+        assert lock["overrides"][package_name] == expected_version
+
+    for section in ("packages", "snapshots"):
+        versions = {
+            key.removeprefix(f"{package_name}@").split("(", 1)[0]
+            for key in lock[section]
+            if key.startswith(f"{package_name}@")
+        }
+        assert versions == {expected_version}, (package_name, section, versions)
+    resolutions = [
+        dependencies[package_name]
+        for snapshot in lock["snapshots"].values()
+        for group in ("dependencies", "optionalDependencies")
+        if package_name in (dependencies := snapshot.get(group, {}))
+    ]
+    assert resolutions, f"security pin must be reachable in the resolved graph: {package_name}"
+    assert all(value.split("(", 1)[0] == expected_version for value in resolutions)
+
+
+def test_optional_agent_lock_does_not_redeclare_core_packages() -> None:
+    """Keep optional Noema dependencies installable beside the core lock."""
+    backend_pins = exact_requirement_pins(
+        read_repo_text("backend/requirements-hashes.txt")
+    )
+    agent_pins = exact_requirement_pins(
+        read_repo_text("backend/requirements-agent.txt")
+    )
+
+    assert set(agent_pins).isdisjoint(backend_pins)

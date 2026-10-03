@@ -1,7 +1,7 @@
 import { expect, test, type APIResponse } from '@playwright/test';
 import crypto from 'node:crypto';
 
-import { mockDashboardApi } from './helpers';
+import { mockDashboardApi, setMockSessionCookie } from './helpers';
 
 const publicIdentityHeaders = [
   'x-user-id',
@@ -69,17 +69,15 @@ async function expectOkResponse(response: APIResponse): Promise<void> {
   }
 }
 
-test('nano test: verify user requested features', async ({ page }) => {
+test('nano test: verify user requested features', async ({ page, baseURL }) => {
   const sessionToken = 'signed.nano.session';
   const providerRequestHeaders: Record<string, string>[] = [];
-  await mockDashboardApi(page, (path, request) => {
+  await mockDashboardApi(page, async (path, request) => {
     if (path === '/api/llm-providers' && request.method() === 'GET') {
-      providerRequestHeaders.push(request.headers());
+      providerRequestHeaders.push(await request.allHeaders());
     }
   });
-  await page.addInitScript((token) => {
-    document.cookie = `naruon_session=${token}; Path=/; SameSite=Lax`;
-  }, sessionToken);
+  await setMockSessionCookie(page, sessionToken, baseURL);
 
   // 1. Check AI Model Settings
   await page.goto('/settings');

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { mockDashboardApi } from './helpers';
+import { mockDashboardApi, setMockSessionCookie } from './helpers';
 
 const publicIdentityHeaders = [
   'x-user-id',
@@ -18,18 +18,16 @@ const viewports = [
 ] as const;
 
 for (const viewport of viewports) {
-  test(`renders source-backed AI Hub with scroll at ${viewport.name}`, async ({ page }, testInfo) => {
+  test(`renders source-backed AI Hub with scroll at ${viewport.name}`, async ({ page, baseURL }, testInfo) => {
     const sessionToken = `signed-ai-hub.${viewport.name}.token`;
     const surfaceRequestHeaders: Record<string, string>[] = [];
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await mockDashboardApi(page, (path, request) => {
+    await mockDashboardApi(page, async (path, request) => {
       if (path === '/api/ai-hub/surface' && request.method() === 'GET') {
-        surfaceRequestHeaders.push(request.headers());
+        surfaceRequestHeaders.push(await request.allHeaders());
       }
     });
-    await page.addInitScript((token) => {
-      document.cookie = `naruon_session=${token}; Path=/; SameSite=Lax`;
-    }, sessionToken);
+    await setMockSessionCookie(page, sessionToken, baseURL);
 
     await page.goto('/ai-hub');
     await expect.poll(() => surfaceRequestHeaders.length).toBeGreaterThan(0);

@@ -27,6 +27,10 @@ in this repo.
 - A local `trivy` scan with a stale DB misses findings: run
   `trivy --download-db-only` first, and scan the **merge ref**, not just the PR
   head.
+- Repo-wide dependency findings belong in a dedicated `develop`-root security
+  owner PR. Do not mix lock repair into an unrelated product/UI PR or add dummy
+  source comments merely to retrigger a scanner; stack affected PRs on the
+  verified owner repair instead.
 - The org `code_scanning` ruleset is intentionally **CodeQL-only** (multiple
   code-scanning tools can't converge on one PR ref). Gating is enforced by the
   Security Scan **job result**, not by that rule — do **not** add Trivy,
@@ -476,6 +480,10 @@ in this repo.
 - Icon-only workspace controls must carry localized `aria-label` text matching
   the visible app language; do not rely on the SVG icon alone for Calendar,
   Tasks, drawer, modal, or toolbar actions.
+- React component tests must wrap state-changing input events and asynchronous
+  source-registry loading in awaited `act()` before assertions or cleanup. A
+  passing Vitest/JUnit assertion count does not clear `not wrapped in act`
+  warnings; retain a runtime console-warning assertion without suppressing logs.
 - Execution steps resulting in `Timeout`, `Fatal`, `Warn`, or `Denied` outputs are considered hard failures. Tests must run without these warnings to be considered passing.
 - Strix success artifacts must also be scanned for `Timeout`, `Fatal`, `Warn`,
   or `Denied` output before accepting clean evidence. Filter only narrowly known

@@ -1,0 +1,86 @@
+diff --git a/dist/utils/get-root-dirs.js b/dist/utils/get-root-dirs.js
+index 47108c943514a1d7e686c5eb18aad00a59963c83..c1fd0309a9d3bd1cf186d2edee22ad1098f5555e 100644
+--- a/dist/utils/get-root-dirs.js
++++ b/dist/utils/get-root-dirs.js
+@@ -9,11 +9,78 @@ Object.defineProperty(exports, "getRootDirs", {
+     }
+ });
+ var _fastglob = require("fast-glob");
++var _path = require("path");
++var _fs = require("fs");
+ /**
+- * Process a Next.js root directory glob.
++ * The scoped fast-glob alias is tinyglobby. Admit a bounded common subset:
++ * literals, stars/questions, and one non-nested list of literal alternatives.
++ * Reject ranges (including padding/steps) and other unverified syntax rather
++ * than silently changing root discovery and the rules that depend on it.
+  */ var processRootDir = function(rootDir) {
+-    return (0, _fastglob.globSync)(rootDir.replace(/\\/g, '/'), {
+-        onlyDirectories: true
++    var pattern = rootDir.replace(/\\/g, '/');
++    var unsupported = function() {
++        throw new Error('Unsupported Next.js rootDir glob: use bounded literals, wildcards, or one literal brace-alternative list');
++    };
++    if (pattern.length > 1024 || /[\[\]()!|]/.test(pattern) || (pattern.match(/[?*]/g) || []).length > 32 || /\*{2}/.test(pattern)) {
++        unsupported();
++    }
++    var braces = pattern.match(/\{[^{}]*\}/g) || [];
++    var plain = pattern.replace(/\{[^{}]*\}/g, '');
++    if (/[{}]/.test(plain) || braces.length > 1) {
++        unsupported();
++    }
++    if (braces.length) {
++        // picomatch treats plus adjacent to brace groups as a quantifier.
++        // Keep literal plus outside braces; reject the unverified combination.
++        if (pattern.includes('+')) unsupported();
++        var alternatives = braces[0].slice(1, -1).split(',');
++        if (alternatives.length < 2 || alternatives.length > 16 || alternatives.some(function(part) {
++            return !part || part.includes('..') || /[?*\/]/.test(part);
++        })) {
++            unsupported();
++        }
++    }
++    // fdir catches synchronous adapter exceptions by default. Preserve the
++    // first non-ENOENT failure and rethrow after leaving that catch boundary.
++    var filesystemError;
++    var matches = (0, _fastglob.globSync)(pattern, {
++        onlyDirectories: true,
++        expandDirectories: false,
++        absolute: _path.isAbsolute(pattern),
++        // fdir does not emit symlink directory entries. Classify symlink dirs
++        // through stat so their lexical paths, not realpaths, remain roots.
++        // Globstars are rejected above: traversal is bounded by pattern depth.
++        fs: {
++            readdirSync: function(dir, options) {
++                try {
++                    return _fs.readdirSync(dir, options).map(function(entry) {
++                    if (!entry.isSymbolicLink()) return entry;
++                    var directory;
++                    try {
++                        directory = _fs.statSync(_path.join(dir, entry.name)).isDirectory();
++                    } catch (error) {
++                        if (error.code === 'ENOENT' || error.code === 'ELOOP') return entry;
++                        throw error;
++                    }
++                    if (!directory) return entry;
++                    return {
++                        name: entry.name,
++                        isDirectory: function() { return true; },
++                        isFile: function() { return false; },
++                        isSymbolicLink: function() { return false; }
++                    };
++                    });
++                } catch (error) {
++                    if (error.code !== 'ENOENT' && !filesystemError) filesystemError = error;
++                    return [];
++                }
++            }
++        }
++    });
++    if (filesystemError) throw filesystemError;
++    return matches.map(function(dir) {
++        // fdir returns directory separators; fast-glob does not (except /).
++        return !(0, _fastglob.isDynamicPattern)(pattern) ? pattern : dir.length > 1 ? dir.replace(/\/$/, '') : dir;
+     });
+ };
+ var getRootDirs = function(context) {
