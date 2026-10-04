@@ -163,9 +163,10 @@ class LocalDavAdapters:
         except UnicodeDecodeError:
             return None
 
+        decoded_path = decoded_path.replace("\\", "/")
+
         if (
             not decoded_path.startswith("/")
-            or "\\" in decoded_path
             or "://" in decoded_path
             or any(
                 ord(character) < 32 or ord(character) == 127
