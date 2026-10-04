@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,37 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    from api.tools import hash_generator_handler
+
+    # Test SHA-256 (default if not provided)
+    result = await hash_generator_handler({"text": "test_string"})
+    assert "hash" in result
+    assert (
+        result["hash"]
+        == "4b641e9a923d1ea57e18fe41dcb543e2c4005c41ff210864a710b0fbb2654c11"
+    )  # SHA-256 of "test_string"
+
+    # Test SHA-256 explicit
+    result = await hash_generator_handler({"text": "hello", "algorithm": "sha256"})
+    assert (
+        result["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )  # SHA-256 of "hello"
+
+    # Test MD5
+    result = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
+    assert result["hash"] == "5d41402abc4b2a76b9719d911017c592"  # MD5 of "hello"
+
+    # Test SHA-1
+    result = await hash_generator_handler({"text": "hello", "algorithm": "SHA1"})
+    assert (
+        result["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+    )  # SHA-1 of "hello"
+
+    # Test invalid algorithm
+    with pytest.raises(ValueError, match="Unsupported algorithm: invalid_alg"):
+        await hash_generator_handler({"text": "hello", "algorithm": "invalid_alg"})
