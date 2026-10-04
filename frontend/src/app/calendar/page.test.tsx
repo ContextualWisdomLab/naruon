@@ -530,4 +530,18 @@ describe("CalendarPage", () => {
     expect(secondSource?.getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).toContain("일정 원본 2");
   });
+
+
+  it("renders new schedule button with correct aria-label", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root?.render(<CalendarPage />);
+    });
+    const button1 = container.querySelector('button[aria-label="새 일정 만들기"]');
+    const button2 = container.querySelector('button[aria-label="새로운 캘린더 추가하기"]');
+    expect(button1).toBeTruthy();
+    expect(button2).toBeTruthy();
+  });
 });
