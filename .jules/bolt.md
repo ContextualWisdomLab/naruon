@@ -26,7 +26,3 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
-
-## 2023-10-27 - [React Render Optimization and Reference Equality]
-**Learning:** Removing `useMemo` from mapping functions in React components because the inner operation is "O(1) and fast" breaks reference equality. Returning a newly allocated array on every render forces downstream React elements to re-render, creating a performance regression that negates the algorithmic optimization.
-**Action:** Always retain `useMemo` when returning newly allocated objects or arrays (even if computed in O(1) time) if those results are used in the React render cycle or as dependencies to other hooks, to ensure referential stability.

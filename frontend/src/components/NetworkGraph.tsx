@@ -277,50 +277,40 @@ export default function NetworkGraph() {
     }
   }, [nodes, edges, nodeMap, edgeMap]);
 
-  // ⚡ Bolt: Use O(1) for...of loop with early break instead of O(N) chained array methods
-  const nodeLabels = useMemo(() => {
-    const labels = [];
-    for (const node of nodes) {
-      const label = String(node.label ?? node.id);
-      if (label) {
-        labels.push(label);
-        if (labels.length >= 5) break;
-      }
+  // ⚡ Bolt: Replace O(N) chained array methods with O(1) for...of loop and early break and remove unnecessary useMemo
+  const nodeLabels = [];
+  for (const node of nodes) {
+    const label = String(node.label ?? node.id);
+    if (label) {
+      nodeLabels.push(label);
+      if (nodeLabels.length >= 5) break;
     }
-    return labels;
-  }, [nodes]);
+  }
 
   const firstEdge = edges[0] ?? null;
+  // ⚡ Bolt: Replace O(N) chained array methods with O(1) for...of loop and early break and remove unnecessary useMemo
+  const relationshipOptions = [];
+  let relIndex = 0;
+  for (const edge of edgeMap.values()) {
+    relationshipOptions.push({
+      edge,
+      id: String(edge.id),
+      label: `관계 ${relIndex + 1}: ${describeEdge(edge, nodeMap)}`,
+    });
+    relIndex++;
+    if (relationshipOptions.length >= 5) break;
+  }
 
-  // ⚡ Bolt: Use O(1) for...of loop with early break instead of O(N) Array.from(map.values())
-  const relationshipOptions = useMemo(() => {
-    const options = [];
-    let relIndex = 0;
-    for (const edge of edgeMap.values()) {
-      options.push({
-        edge,
-        id: String(edge.id),
-        label: `관계 ${relIndex + 1}: ${describeEdge(edge, nodeMap)}`,
-      });
-      relIndex++;
-      if (options.length >= 5) break;
-    }
-    return options;
-  }, [edgeMap, nodeMap]);
-
-  // ⚡ Bolt: Use O(1) for...of loop with early break instead of O(N) Array.from(map.values())
-  const nodeOptions = useMemo(() => {
-    const options = [];
-    for (const node of nodeInstanceMap.values()) {
-      options.push({
-        id: String(node.id),
-        label: `노드: ${String(node.label ?? node.id)}`,
-        node,
-      });
-      if (options.length >= 8) break;
-    }
-    return options;
-  }, [nodeInstanceMap]);
+  // ⚡ Bolt: Replace O(N) chained array methods with O(1) for...of loop and early break and remove unnecessary useMemo
+  const nodeOptions = [];
+  for (const node of nodeInstanceMap.values()) {
+    nodeOptions.push({
+      id: String(node.id),
+      label: `노드: ${String(node.label ?? node.id)}`,
+      node,
+    });
+    if (nodeOptions.length >= 8) break;
+  }
 
   const selectRelationship = (edge: Edge, status: string) => {
     setRelationshipOptionId(String(edge.id));
