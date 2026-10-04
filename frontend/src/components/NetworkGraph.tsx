@@ -277,29 +277,40 @@ export default function NetworkGraph() {
     }
   }, [nodes, edges, nodeMap, edgeMap]);
 
-  const nodeLabels = useMemo(() => {
-    return nodes
-      .map((node) => String(node.label ?? node.id))
-      .filter(Boolean)
-      .slice(0, 5);
-  }, [nodes]);
+  // ⚡ Bolt: Replace O(N) chained array methods with O(1) for...of loop and early break and remove unnecessary useMemo
+  const nodeLabels = [];
+  for (const node of nodes) {
+    const label = String(node.label ?? node.id);
+    if (label) {
+      nodeLabels.push(label);
+      if (nodeLabels.length >= 5) break;
+    }
+  }
 
   const firstEdge = edges[0] ?? null;
-  const relationshipOptions = useMemo(() => {
-    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
+  // ⚡ Bolt: Replace O(N) chained array methods with O(1) for...of loop and early break and remove unnecessary useMemo
+  const relationshipOptions = [];
+  let relIndex = 0;
+  for (const edge of edgeMap.values()) {
+    relationshipOptions.push({
       edge,
       id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
-    }));
-  }, [edgeMap, nodeMap]);
+      label: `관계 ${relIndex + 1}: ${describeEdge(edge, nodeMap)}`,
+    });
+    relIndex++;
+    if (relationshipOptions.length >= 5) break;
+  }
 
-  const nodeOptions = useMemo(() => {
-    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
+  // ⚡ Bolt: Replace O(N) chained array methods with O(1) for...of loop and early break and remove unnecessary useMemo
+  const nodeOptions = [];
+  for (const node of nodeInstanceMap.values()) {
+    nodeOptions.push({
       id: String(node.id),
       label: `노드: ${String(node.label ?? node.id)}`,
       node,
-    }));
-  }, [nodeInstanceMap]);
+    });
+    if (nodeOptions.length >= 8) break;
+  }
 
   const selectRelationship = (edge: Edge, status: string) => {
     setRelationshipOptionId(String(edge.id));
