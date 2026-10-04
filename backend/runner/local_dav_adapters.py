@@ -150,7 +150,7 @@ class LocalDavAdapters:
         ):
             return None
 
-        decoded_path = raw_path
+        decoded_path = raw_path.replace("\\", "/")
         try:
             for _ in range(_MAX_URL_DECODE_ROUNDS):
                 next_path = unquote(decoded_path, errors="strict")
