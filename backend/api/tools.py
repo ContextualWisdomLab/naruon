@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,73 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    # Email
+    email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    text = re.sub(email_pattern, "***@***.***", text)
+
+    # RRN
+    rrn_pattern = r"(?<!\d)(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[1-2]\d|3[0-1]))[- ]?([1-8]\d{6})(?!\d)"
+    text = re.sub(rrn_pattern, r"\g<1>-*******", text)
+
+    # Phone standard
+    phone_pattern_1 = (
+        r"(?<!\d)(02|0[3-9]\d{1,2}|050\d|010)[- ]?(\d{3,4})[- ]?(\d{4})(?!\d)"
+    )
+    text = re.sub(phone_pattern_1, r"\g<1>-****-\g<3>", text)
+
+    # Phone representative
+    phone_pattern_2 = r"(?<!\d)(15\d{2}|16\d{2}|18\d{2})[- ]?(\d{4})(?!\d)"
+    text = re.sub(phone_pattern_2, r"\g<1>-****", text)
+
+    return {"masked_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스킹 (PII Masker)",
+        description="이메일, 주민등록번호, 전화번호 등의 개인정보를 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    algorithm = params.get("algorithm", "sha256").lower()
+    encoded = text.encode("utf-8")
+
+    if algorithm == "md5":
+        h = hashlib.md5(
+            encoded
+        )  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5
+    elif algorithm == "sha1":
+        h = hashlib.sha1(
+            encoded
+        )  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+    elif algorithm == "sha512":
+        h = hashlib.sha512(encoded)
+    else:
+        h = hashlib.sha256(encoded)
+
+    return {"hash": h.hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트를 지정된 해시 알고리즘(md5, sha1, sha256, sha512)으로 해싱합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])

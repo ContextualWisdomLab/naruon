@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1191,6 +1189,76 @@ async def test_keyword_extractor_handler():
 
     empty = await keyword_extractor_handler({"text": "the and 123"})
     assert empty == {"keywords": [], "keyword_count": 0}
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_handler():
+    from api.tools import pii_masker_handler
+
+    # Email
+    res = await pii_masker_handler({"text": "Contact us at admin@example.com."})
+    assert res["masked_text"] == "Contact us at ***@***.***."
+
+    # Phone standard & rep
+    res = await pii_masker_handler({"text": "Call 010-1234-5678 or 1588-1588."})
+    assert res["masked_text"] == "Call 010-****-5678 or 1588-****."
+
+    # Phone without hyphen
+    res = await pii_masker_handler({"text": "Mobile 01012345678"})
+    assert res["masked_text"] == "Mobile 010-****-5678"
+
+    # RRN
+    res = await pii_masker_handler({"text": "My RRN is 900101-1234567."})
+    assert res["masked_text"] == "My RRN is 900101-*******."
+
+    # RRN foreign without hyphen
+    res = await pii_masker_handler({"text": "Foreign 9001015234567"})
+    assert res["masked_text"] == "Foreign 900101-*******"
+
+    # Null handling
+    res = await pii_masker_handler({"text": None})
+    assert res["masked_text"] == ""
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler
+
+    # Default SHA256
+    res = await hash_generator_handler({"text": "test"})
+    assert (
+        res["hash"]
+        == "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    )
+
+    # SHA256 explicit
+    res = await hash_generator_handler({"text": "test", "algorithm": "sha256"})
+    assert (
+        res["hash"]
+        == "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    )
+
+    # MD5
+    res = await hash_generator_handler({"text": "test", "algorithm": "md5"})
+    assert res["hash"] == "098f6bcd4621d373cade4e832627b4f6"
+
+    # SHA1
+    res = await hash_generator_handler({"text": "test", "algorithm": "sha1"})
+    assert res["hash"] == "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"
+
+    # SHA512
+    res = await hash_generator_handler({"text": "test", "algorithm": "sha512"})
+    assert (
+        res["hash"]
+        == "ee26b0dd4af7e749aa1a8ee3c10ae9923f618980772e473f8819a5d4940e0db27ac185f8a0e1d5f84f88bc887fd67b143732c304cc5fa9ad8e6f57f50028a8ff"
+    )
+
+    # Null handling
+    res = await hash_generator_handler({"text": None})
+    assert (
+        res["hash"]
+        == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    )  # hash of empty string
 
 
 def test_execute_analysis_tool_rejects_oversized_text():
