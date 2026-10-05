@@ -589,22 +589,30 @@ export function SettingsLayout() {
     clearInputValue(oauthClientSecretInputRef);
   };
 
+  const [oidcActionStatus, setOidcActionStatus] = useState<{ actionType: 'login' | 'logout' | null }>({ actionType: null });
+
   const handleOidcLogin = async () => {
     setOidcActionError(null);
+    setOidcActionStatus({ actionType: 'login' });
     try {
       await startOidcLogin({ returnTo: window.location.pathname });
     } catch (error) {
       setOidcActionError(error instanceof Error ? error.message : 'OIDC login failed');
+    } finally {
+      setOidcActionStatus({ actionType: null });
     }
   };
 
   const handleOidcLogout = async () => {
     setOidcActionError(null);
+    setOidcActionStatus({ actionType: 'logout' });
     try {
       await clearOidcSession({ postLogoutRedirectUri: window.location.origin });
       setOidcSessionClaims(EMPTY_SESSION_CLAIMS);
     } catch (error) {
       setOidcActionError(error instanceof Error ? error.message : 'OIDC logout failed');
+    } finally {
+      setOidcActionStatus({ actionType: null });
     }
   };
 
@@ -1617,19 +1625,23 @@ export function SettingsLayout() {
                       <button
                         type="button"
                         onClick={handleOidcLogin}
-                        disabled={!oidcBrowserConfig}
+                        disabled={!oidcBrowserConfig || oidcActionStatus.actionType === 'login'}
+                        aria-busy={oidcActionStatus.actionType === 'login'}
                         title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
+                        {oidcActionStatus.actionType === 'login' && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                         OIDC 로그인
                       </button>
                       <button
                         type="button"
                         onClick={handleOidcLogout}
-                        disabled={!oidcSessionClaims.userId}
+                        disabled={!oidcSessionClaims.userId || oidcActionStatus.actionType === 'logout'}
+                        aria-busy={oidcActionStatus.actionType === 'logout'}
                         title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                       >
+                        {oidcActionStatus.actionType === 'logout' && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                         로그아웃
                       </button>
                     </div>

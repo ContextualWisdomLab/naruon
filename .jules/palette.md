@@ -80,3 +80,6 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+## 2026-06-25 - OIDC 인증 액션 버튼의 명확한 로딩 피드백
+**Learning:** OIDC 로그인/로그아웃과 같이 외부 인증 제공자와 통신하는 비동기 작업은 네트워크 상황에 따라 시간이 소요될 수 있습니다. 사용자에게 클릭이 등록되었고 처리 중임을 명확히 알리지 않으면 불안감을 유발하고 중복 클릭을 유발할 수 있습니다.
+**Action:** OIDC 인증 등 외부 서비스와 연동되는 액션 버튼 구현 시, 반드시 `aria-busy={isLoading}` 속성과 함께 `Loader2` 아이콘을 사용한 시각적 스피너 피드백을 제공하고, 비동기 작업 중에는 버튼을 비활성화(`disabled`) 처리하여야 합니다.
