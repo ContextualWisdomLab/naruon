@@ -718,12 +718,12 @@ export function SearchLayout() {
           <div className="mx-auto max-w-5xl space-y-6">
             {answerState.status === "done" && submittedQuery.trim() ? (
               <section
-                aria-label="AI 답변"
+                aria-label="맥락 종합"
                 data-testid="grounded-answer-card"
                 className="rounded-lg border border-primary/30 bg-primary/5 p-5 shadow-sm"
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold text-primary">AI 답변</h3>
+                  <h3 className="text-sm font-bold text-primary">맥락 종합</h3>
                   {answerState.provenance ? (
                     <span className="text-xs text-muted-foreground">
                       {answerState.provenance}
