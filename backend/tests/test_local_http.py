@@ -140,10 +140,22 @@ def test_local_request_target_rejects_raw_and_encoded_traversal(path: str) -> No
         "/api/%2",
         "/api/%GG",
         "/api/%FF",
+        "/api/%252e%252e",
     ],
 )
 def test_local_request_target_rejects_invalid_percent_encoding(path: str) -> None:
-    with pytest.raises(LocalHTTPValidationError, match="percent encoding"):
+    with pytest.raises(LocalHTTPValidationError, match="percent encoding|traversal"):
+        validate_local_request_target(path)
+
+
+def test_local_request_target_rejects_excessively_nested_percent_encoding() -> None:
+    res = "%2e"
+    for _ in range(105):
+        res = res.replace("%", "%25")
+    path = "/api/" + res
+    with pytest.raises(
+        LocalHTTPValidationError, match="excessively nested percent encoding"
+    ):
         validate_local_request_target(path)
 
 
