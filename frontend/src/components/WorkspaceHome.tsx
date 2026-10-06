@@ -619,7 +619,7 @@ function StartupCalendar({ onOpenView }: { onOpenView: (view: WorkspaceStartupVi
         </div>
         {status === 'loading' ? <div role="status" className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground shadow-sm">일정 후보를 불러오는 중입니다.</div> : null}
         {status === 'error' ? <div role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-semibold text-destructive shadow-sm">일정 후보를 불러오지 못했습니다.</div> : null}
-        {status === 'empty' ? <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground shadow-sm">일정 후보가 없습니다.</div> : null}
+        {status === 'empty' ? <div role="status" aria-live="polite" className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground shadow-sm">일정 후보가 없습니다.</div> : null}
         {status === 'success' ? <StartupResultList results={results} /> : null}
       </div>
     </section>

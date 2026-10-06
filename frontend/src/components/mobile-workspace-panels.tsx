@@ -102,7 +102,7 @@ function MobileApiPanel({ copy }: { copy: MobilePanelCopy }) {
           </div>
         ) : null}
         {status === 'empty' ? (
-          <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground shadow-sm">
+          <div role="status" aria-live="polite" className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground shadow-sm">
             {copy.empty}
           </div>
         ) : null}

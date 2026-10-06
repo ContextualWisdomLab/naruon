@@ -254,7 +254,7 @@ export function EmailList({
           ) : error ? (
             <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">{error}</div>
           ) : emails.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-sm text-muted-foreground">
+            <div role="status" aria-live="polite" className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-sm text-muted-foreground">
               <p className="font-bold text-foreground">{folderCopy.emptyTitle}</p>
               <p className="mt-1 text-xs leading-5">{folderCopy.emptyBody}</p>
             </div>
