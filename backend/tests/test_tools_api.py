@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -517,6 +515,65 @@ async def test_text_analyzer_tool_success():
     assert result["char_count"] == 27
     assert result["char_count_no_spaces"] == 21
     assert result["word_count"] == 6
+
+
+@pytest.mark.asyncio
+async def test_text_hasher_tool_success_md5():
+    result = await execute_tool(
+        "text_hasher",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "md5"}),
+    )
+    assert result.status == "success"
+    assert result.result["hash"] == "5d41402abc4b2a76b9719d911017c592"
+    assert result.result["algorithm"] == "md5"
+
+
+@pytest.mark.asyncio
+async def test_text_hasher_tool_success_sha1():
+    result = await execute_tool(
+        "text_hasher",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "sha1"}),
+    )
+    assert result.status == "success"
+    assert result.result["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+    assert result.result["algorithm"] == "sha1"
+
+
+@pytest.mark.asyncio
+async def test_text_hasher_tool_success_sha256():
+    result = await execute_tool(
+        "text_hasher",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "sha256"}),
+    )
+    assert result.status == "success"
+    assert (
+        result.result["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+    assert result.result["algorithm"] == "sha256"
+
+
+@pytest.mark.asyncio
+async def test_text_hasher_tool_success_default_algorithm():
+    result = await execute_tool(
+        "text_hasher",
+        ExecuteRequest(parameters={"text": "hello"}),
+    )
+    assert result.status == "success"
+    assert (
+        result.result["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+    assert result.result["algorithm"] == "sha256"
+
+
+@pytest.mark.asyncio
+async def test_text_hasher_tool_unsupported_algorithm():
+    result = await execute_tool(
+        "text_hasher",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "unsupported"}),
+    )
+    assert result.status == "failed"
 
 
 @pytest.mark.asyncio

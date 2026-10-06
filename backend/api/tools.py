@@ -176,9 +176,11 @@ class ToolRegistry:
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
             if key not in params:
+                if str(descriptor).endswith("?"):
+                    continue
                 raise ValueError("Missing required tool parameter")
             value = params[key]
-            expected_type = _parameter_type_name(descriptor)
+            expected_type = _parameter_type_name(descriptor).rstrip("?")
             if not _parameter_matches_type(value, expected_type):
                 raise ValueError("Invalid tool parameter type")
             validated[key] = value
@@ -706,6 +708,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,6 +757,40 @@ registry.register(
 )
 
 
+async def text_hasher_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    encoded_text = text.encode("utf-8")
+
+    if algorithm == "md5":
+        hashed = hashlib.md5(
+            encoded_text
+        ).hexdigest()  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5
+    elif algorithm == "sha1":
+        hashed = hashlib.sha1(
+            encoded_text
+        ).hexdigest()  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+    elif algorithm == "sha256":
+        hashed = hashlib.sha256(encoded_text).hexdigest()
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    return {"hash": hashed, "algorithm": algorithm}
+
+
+registry.register(
+    ToolInfo(
+        code="text_hasher",
+        name="텍스트 해시 생성기 (Text Hasher)",
+        description="지정된 알고리즘(md5, sha1, sha256)을 사용하여 텍스트의 해시값을 생성합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string?"},
+    ),
+    text_hasher_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
@@ -767,7 +805,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
