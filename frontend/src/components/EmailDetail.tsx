@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Users, Paperclip, Calendar, FileText, Download } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -29,6 +29,9 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  participants?: { name: string; email: string; role: string; avatar?: string }[];
+  attachments?: { id: string; name: string; size: string; type: string }[];
+  meetings?: { id: string; title: string; date: string; time: string; location: string }[];
 };
 interface LlmData {
   summary: string;
@@ -649,10 +652,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         </div>
       </div>
       <Separator />
-      <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
+      <div className="flex flex-1 overflow-hidden">
+        <ScrollArea className="flex-1">
+          <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
-          <DecisionPointCard
+            <DecisionPointCard
             title="맥락 종합"
             icon={<span aria-hidden="true">✦</span>}
             loading={!llmData && !llmError}
@@ -864,6 +868,89 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
           </DecisionPointCard>
         </div>
       </ScrollArea>
+
+        <Separator orientation="vertical" className="hidden lg:block" />
+
+        <div className="hidden w-80 flex-col bg-card lg:flex overflow-y-auto">
+            <div className="flex flex-col gap-8 p-6">
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" /> 관련 인물
+                </h3>
+                <div className="space-y-3">
+                  {(email.participants || [
+                    { name: "김지수", email: "jisu.kim@example.com", role: "발신자", avatar: "지" },
+                    { name: "이민준", email: "minjun.lee@example.com", role: "수신자", avatar: "민" },
+                    { name: "박서연", email: "seoyeon.park@example.com", role: "참조", avatar: "서" },
+                  ]).map((p, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8 border border-primary/10 bg-primary/5 text-primary text-xs">
+                        <AvatarFallback>{p.avatar}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium leading-none">{p.name}</span>
+                        <span className="text-xs text-muted-foreground mt-1">{p.role}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-primary" /> 첨부 파일
+                </h3>
+                <div className="space-y-2">
+                  {(email.attachments || [
+                    { id: "1", name: "Q3_실적보고서.pdf", size: "2.4 MB", type: "pdf" },
+                    { id: "2", name: "프로젝트_일정.xlsx", size: "1.1 MB", type: "xlsx" },
+                  ]).map((file) => (
+                    <div key={file.id} className="flex items-center justify-between p-3 rounded-xl border border-border bg-background/50 hover:bg-background transition-colors cursor-pointer group">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium line-clamp-1">{file.name}</span>
+                          <span className="text-xs text-muted-foreground">{file.size}</span>
+                        </div>
+                      </div>
+                      <Download className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" /> 일정 제안
+                </h3>
+                <div className="space-y-3">
+                  {(email.meetings || [
+                    { id: "1", title: "주간 동기화 미팅", date: "10월 24일 (목)", time: "14:00 - 15:00", location: "회의실 A" },
+                  ]).map((meeting) => (
+                     <div key={meeting.id} className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+                       <div className="font-semibold text-sm text-foreground">{meeting.title}</div>
+                       <div className="text-xs text-muted-foreground space-y-1">
+                         <div>일시: {meeting.date} {meeting.time}</div>
+                         <div>장소: {meeting.location}</div>
+                       </div>
+                       <Button size="sm" variant="outline" className="w-full mt-2 h-8 text-xs border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10">
+                         일정 수락
+                       </Button>
+                     </div>
+                   ))}
+                </div>
+              </div>
+
+            </div>
+        </div>
+      </div>
       <SourceDrawer
         open={sourceDrawerOpen}
         title="맥락 종합 근거"

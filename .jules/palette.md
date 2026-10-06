@@ -80,3 +80,8 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+## 2026-10-06 - EmailDetail: Mocking New Icons
+
+**Learning:** When adding new icons from `lucide-react` (such as `Users`, `Paperclip`, `Calendar`, `Download`, and `FileText`) to a React component, if that component has an associated unit test file where `lucide-react` is mocked globally (e.g., via `vi.mock('lucide-react', () => (...))`), the tests will crash with an "Element type is invalid" error if the new icons are not explicitly added to the mock object.
+
+**Action:** Before committing a feature that introduces new icons from an external library, always use `grep` to check if there are test files mocking that library. If so, update the mock configuration to include the newly used icons.
