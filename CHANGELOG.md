@@ -2757,6 +2757,10 @@
 
 - `backend/tests/test_release_governance.py` 파일의 394번째 줄에서 `yaml.load` 함수 사용 시 발생하는 Bandit B506 오탐지를 억제하기 위해 `# nosec B506` 주석을 추가했습니다. 해당 코드는 `yaml.SafeLoader`를 상속받은 `UniqueKeyLoader`를 사용하므로 실제로는 안전합니다. 이 변경은 보안 취약점 픽스가 아닌, 정적 분석 툴의 오탐지를 처리하기 위한 조치입니다.
 
+### 기능 (Features)
+
+- feat: SHA256 해시 생성기 도구(hash_generator) 추가
+
 ### 문서 (Documentation)
 
 - `yaml.load()`와 관련해 발생한 Bandit B506 항목에 대해 규칙 한정적 오탐지(false-positive) 판정 및 처분 근거(disposition)를 담은 `docs/doctoring/bandit-b506-false-positive-disposition.md` 문서를 추가했습니다. 이는 제품의 실제 취약점 패치가 아니며, PyYAML의 `SafeLoader`를 명시적으로 사용하는 사용자 정의 로더에 대해 오탐지를 억제하는 조건과 롤백 기준을 테스트 증거와 함께 기록한 문서입니다.
