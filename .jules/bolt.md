@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+
+## 2025-02-12 - Avoided chained array methods for early-exit bounded iterations
+**Learning:** Chaining array methods like `Array.from(map.values()).slice().map()` creates unnecessary intermediate array allocations and incurs O(N) overhead, blocking the main thread when deriving limited-size arrays from large data sets in React components.
+**Action:** Use early-exit `for...of` loops that break once the limit is reached to derive small mapped lists from potentially large maps, achieving bounded O(1) performance without transient allocations.
