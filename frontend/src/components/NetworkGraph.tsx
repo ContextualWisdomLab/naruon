@@ -341,7 +341,7 @@ export default function NetworkGraph() {
 
   const handleZoomGraph = () => {
     networkRef.current?.moveTo?.({ scale: 1.15, animation: false });
-    setGraphActionStatus('그래프 확대 완료');
+    setGraphActionStatus('그래프 확장 완료');
   };
 
   const handleFitGraph = () => {
@@ -419,7 +419,7 @@ export default function NetworkGraph() {
             onClick={handleZoomGraph}
             className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            그래프 확대
+            그래프 확장
           </button>
           <button
             type="button"

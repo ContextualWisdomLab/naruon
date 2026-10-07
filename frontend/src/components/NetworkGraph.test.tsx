@@ -260,7 +260,7 @@ describe("NetworkGraph", () => {
     const mountedContainer = getMountedContainer();
     const buttons = Array.from(mountedContainer.querySelectorAll("button"));
     const relationshipButton = buttons.find((button) => button.textContent === "첫 관계 보기");
-    const zoomButton = buttons.find((button) => button.textContent === "그래프 확대");
+    const zoomButton = buttons.find((button) => button.textContent === "그래프 확장");
     const fitButton = buttons.find((button) => button.textContent === "전체 그래프 맞춤");
 
     expect(relationshipButton).toBeInstanceOf(HTMLButtonElement);
@@ -313,7 +313,7 @@ describe("NetworkGraph", () => {
     });
 
     expect(moveToMock).toHaveBeenCalledWith({ scale: 1.15, animation: false });
-    expect(mountedContainer.textContent).toContain("그래프 확대 완료");
+    expect(mountedContainer.textContent).toContain("그래프 확장 완료");
 
     await act(async () => {
       fitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
