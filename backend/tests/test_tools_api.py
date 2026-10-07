@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,49 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert "hash" in result
+    assert result["hash"] == hashlib.sha256(b"hello world").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_none_input_rejected():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": None}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid tool parameter type" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_empty_string():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": ""}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert "hash" in result
+    assert result["hash"] == hashlib.sha256(b"").hexdigest()
