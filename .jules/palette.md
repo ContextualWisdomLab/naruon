@@ -80,3 +80,7 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+
+## 2026-10-07 - EmailList 빈 상태(Empty State) 스크린 리더 접근성 개선
+**Learning:** 메일 목록이나 검색 결과가 비어 있을 때 화면의 시각적인 빈 상태 피드백은 명확하지만, 스크린 리더 사용자는 DOM의 상태 변화를 인지하기 어렵다.
+**Action:** 조건부로 렌더링되는 빈 상태 컨테이너(`<div>`)에 `role="status"` 및 `aria-live="polite"` 속성을 부여하여 UI 상태 변화가 발생할 때 너무 공격적이지 않게(polite) 상태를 스크린 리더에 알리도록 개선한다.
