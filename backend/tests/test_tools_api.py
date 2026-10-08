@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,60 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    req = ExecuteRequest(parameters={"text": "hello", "algorithm": "sha256"})
+    resp = await execute_tool("hash_generator", req)
+    assert resp.status == "success"
+    assert (
+        resp.result["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_none_input():
+    # Parameters might be set to null in the JSON payload, handle None correctly.
+    # While tools API validates missing parameters against dict requirements, some fields
+    # might be provided as explicitly null or handled similarly if validation relaxes.
+    # In either case, the handler itself should handle None properly.
+    from api.tools import registry
+
+    tool_handler = registry._handlers["hash_generator"]
+    result = await tool_handler({"text": None, "algorithm": None})
+    assert (
+        result["hash"]
+        == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    )  # sha256 of empty string
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_md5():
+    req = ExecuteRequest(parameters={"text": "hello", "algorithm": "md5"})
+    resp = await execute_tool("hash_generator", req)
+    assert resp.status == "success"
+    assert resp.result["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_unsupported_algorithm():
+    req = ExecuteRequest(parameters={"text": "hello", "algorithm": "unknown"})
+    resp = await execute_tool("hash_generator", req)
+    assert resp.status == "failed"
+    assert "Unsupported algorithm: unknown" in resp.message
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_sha1():
+    req = ExecuteRequest(parameters={"text": "hello", "algorithm": "sha1"})
+    resp = await execute_tool("hash_generator", req)
+    assert resp.status == "success"
+    assert resp.result["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_sha512():
+    req = ExecuteRequest(parameters={"text": "hello", "algorithm": "sha512"})
+    resp = await execute_tool("hash_generator", req)
+    assert resp.status == "success"
+    assert resp.result["hash"] == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
