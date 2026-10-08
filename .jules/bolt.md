@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Replaced O(N) Array Chaining with O(1) Early-Break Loops
+
+**Learning:** In React components like `NetworkGraph`, mapping and filtering potentially large collections just to extract the first N elements (e.g., `.map().filter().slice(0, 5)`) creates an O(N) iteration bottleneck and unnecessary array allocations.
+**Action:** Replace full-array chained operations with standard `for...of` loops that use an early `break` when the required number of items is collected. This effectively caps the iteration at O(1) regardless of the total collection size.
