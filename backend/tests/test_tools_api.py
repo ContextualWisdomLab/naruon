@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,38 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_execute_pii_masker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "이메일: user@example.com 전화번호: 010-1234-5678 주민번호: 990101-1234567 대표번호: 1588-1588"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert (
+        data["result"]["masked_text"]
+        == "이메일: ***@example.com 전화번호: 010-****-5678 주민번호: 990101-1****** 대표번호: 1588-****"
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_pii_masker_none_input():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": None}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid tool parameter type" in data["message"]
