@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,41 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+
+    # 주민등록번호 마스킹 (13자리, 중간에 하이픈이 있을 수도 없을 수도 있음, 뒷자리 첫번째는 1-8)
+    text = re.sub(r"(\d{6}-?[1-8])\d{6}", r"\g<1>******", text)
+
+    # 전화번호 마스킹 (지역번호/휴대폰번호, 02 또는 03~09, 01, 050 시작)
+    text = re.sub(
+        r"(02|0[3-9]\d|01\d|050\d)-?(\d{3,4})-?(\d{4})", r"\g<1>-****-\g<3>", text
+    )
+
+    # 대표번호 마스킹 (15XX, 16XX, 18XX 시작)
+    text = re.sub(r"(15\d{2}|16\d{2}|18\d{2})-?(\d{4})", r"\g<1>-****", text)
+
+    # 이메일 마스킹 (아이디 부분 마스킹)
+    text = re.sub(
+        r"(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(?![a-zA-Z0-9.-])",
+        r"***@\g<1>",
+        text,
+    )
+
+    return {"masked_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스킹 (PII Masker)",
+        description="텍스트 내의 개인정보(주민등록번호, 전화번호, 이메일 등)를 자동으로 마스킹합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
