@@ -175,7 +175,8 @@ async def dav_handler(
     """
     _ensure_dav_owner_scope(path, auth_context)
     safe_path = repr(path)[1:-1]
-    logger.info("DAV Request: %s /%s", request.method, safe_path)
+    safe_method = repr(request.method)[1:-1]
+    logger.info("DAV Request: %s /%s", safe_method, safe_path)
 
     if request.method == "OPTIONS":
         headers = {
@@ -217,7 +218,7 @@ async def dav_handler(
     logger.warning(
         "DAV %s rejected at /%s: method is not implemented for the "
         "provider-backed DAV gateway",
-        request.method,
+        safe_method,
         safe_path,
     )
     return Response(
