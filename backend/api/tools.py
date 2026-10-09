@@ -424,7 +424,11 @@ def validate_webhook_url_details(url: str) -> ValidatedHTTPSURLHost:
         raise ValueError("Webhook URL must include a host")
 
     hostname = _normalize_host(parsed.hostname)
-    if hostname.endswith(".internal") or hostname.endswith(".local"):
+    if (
+        hostname == "internal"
+        or hostname.endswith(".internal")
+        or hostname.endswith(".local")
+    ):
         raise ValueError("Webhook URL host must not use an internal domain suffix")
     _reject_unsafe_ip_literal("Webhook URL", hostname)
     try:
@@ -706,6 +710,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -767,7 +773,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])

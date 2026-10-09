@@ -138,3 +138,8 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
+
+## 2026-08-11 - Prevent SSRF bypass using internal top-level domains exactly
+**Vulnerability:** The URL validation logic correctly blocked internal domain extensions like `.internal` or `.local` by checking `endswith()`, but failed to block the exact hostname `"internal"`. This could allow attackers to bypass SSRF protections by resolving the top-level domain `"internal"` directly.
+**Learning:** Checking `endswith(".internal")` only catches subdomains of `.internal` or domains ending in `.internal`. It misses the exact match `"internal"` itself.
+**Prevention:** Always explicitly check for exact matches of restricted top-level domains like `"internal"` (e.g., `hostname == "internal"`) alongside suffix checks (`endswith(".internal")`).
