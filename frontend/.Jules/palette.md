@@ -13,7 +13,3 @@
 ## 2026-06-08 - Accessible Tooltips on Disabled Buttons
 **Learning:** Adding a `title` tooltip directly to a natively `disabled` `<button>` does not work well because disabled buttons are removed from the tab order and ignore pointer events on many platforms, making the tooltip inaccessible to both keyboard-only users and screen readers.
 **Action:** When a disabled button needs a tooltip to explain *why* it is disabled, wrap the button in an accessible container (e.g., `span` or `div` with `tabIndex={0}`), expose the explanation through `aria-describedby`, and keep `title` as a pointer fallback. Also, ensure the button uses `pointer-events-none` so the wrapper can properly catch the hover events.
-
-## 2026-06-11 - Accessible Tooltips on Disabled Buttons using tabIndex Conditional
-**Learning:** Adding a `tabIndex={0}` to a disabled button wrapper exposes the wrapper to the tab order, which fixes the tooltip accessibility issue but introduces a "double focus" trap when the button is enabled (since both wrapper and button become focusable).
-**Action:** Always make the wrapper's `tabIndex` conditionally `-1` when the inner button is active, and `0` when disabled, to prevent focus duplication.
