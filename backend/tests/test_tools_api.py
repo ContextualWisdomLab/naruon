@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,46 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_md5():
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello", "algorithm": "md5"}
+    )
+    assert result["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_none_input():
+    # As per memory: never modify global _parameter_matches_type to allow None values.
+    # Handle such cases by asserting the expected validation rejection in the test.
+    with pytest.raises(ValueError, match="Invalid tool parameter type"):
+        await registry.invoke_tool("hash_generator", {"text": None, "algorithm": None})
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_sha1():
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello", "algorithm": "sha1"}
+    )
+    assert result["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_sha256():
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello", "algorithm": "sha256"}
+    )
+    assert (
+        result["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_unsupported():
+    with pytest.raises(ValueError, match="Unsupported hash algorithm: unknown"):
+        await registry.invoke_tool(
+            "hash_generator", {"text": "hello", "algorithm": "unknown"}
+        )

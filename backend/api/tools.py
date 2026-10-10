@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,39 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text") or ""
+    algorithm = params.get("algorithm") or "sha256"
+
+    algorithm = algorithm.lower()
+    if algorithm == "md5":
+        h = hashlib.md5(
+            text.encode("utf-8")
+        )  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5
+    elif algorithm == "sha1":
+        h = hashlib.sha1(
+            text.encode("utf-8")
+        )  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+    else:
+        try:
+            h = hashlib.new(algorithm, text.encode("utf-8"))
+        except ValueError:
+            raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    return {"hash": h.hexdigest(), "algorithm": algorithm}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="문자열 텍스트를 SHA256, MD5 등 다양한 알고리즘으로 해시를 생성합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
