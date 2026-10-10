@@ -1299,17 +1299,22 @@ export function SettingsLayout() {
                         빈 secret 입력은 기존 저장값을 유지합니다. 실제 연결과 외부 쓰기는 서버 검증과 self-hosted connector 정책을 통과한 뒤 별도 실행됩니다.
                       </p>
                     </div>
-                    <button
-                      type="submit"
-                      disabled={accountSaving || !accountReady}
-                      aria-disabled={accountSaving || !accountReady}
-                      aria-busy={accountSaving}
+                    <span
+                      tabIndex={accountSaving || !accountReady ? 0 : -1}
                       title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className={accountSaving || !accountReady ? "cursor-not-allowed" : ""}
                     >
-                      {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-                      {accountSaving ? '저장 중' : '계정 설정 저장'}
-                    </button>
+                      <button
+                        type="submit"
+                        disabled={accountSaving || !accountReady}
+                        aria-disabled={accountSaving || !accountReady}
+                        aria-busy={accountSaving}
+                        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60 ${(accountSaving || !accountReady) ? "pointer-events-none" : ""}`}
+                      >
+                        {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                        {accountSaving ? '저장 중' : '계정 설정 저장'}
+                      </button>
+                    </span>
                   </div>
 
                   <div className="mt-6 grid gap-5">
@@ -1434,18 +1439,23 @@ export function SettingsLayout() {
                         <dd className="mt-1 break-all font-mono text-sm text-foreground">{runnerConfig?.fingerprint ?? '기록 없음'}</dd>
                       </div>
                     </dl>
-                    <button
-                      type="button"
-                      onClick={handleRunnerTokenRotate}
-                      disabled={runnerRotating}
-                      aria-disabled={runnerRotating}
-                      aria-busy={runnerRotating}
+                    <span
+                      tabIndex={runnerRotating ? 0 : -1}
                       title={runnerRotating ? "등록 토큰을 회전 중입니다" : "등록 토큰을 회전합니다"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className={runnerRotating ? "cursor-not-allowed" : ""}
                     >
-                      <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
-                      {runnerRotating ? '회전 중' : '등록 토큰 회전'}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={handleRunnerTokenRotate}
+                        disabled={runnerRotating}
+                        aria-disabled={runnerRotating}
+                        aria-busy={runnerRotating}
+                        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60 ${runnerRotating ? "pointer-events-none" : ""}`}
+                      >
+                        <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
+                        {runnerRotating ? '회전 중' : '등록 토큰 회전'}
+                      </button>
+                    </span>
                   </div>
                   {runnerRotateError ? (
                     <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{runnerRotateError}</p>
@@ -1614,24 +1624,34 @@ export function SettingsLayout() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleOidcLogin}
-                        disabled={!oidcBrowserConfig}
+                      <span
+                        tabIndex={!oidcBrowserConfig ? 0 : -1}
                         title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className={!oidcBrowserConfig ? "cursor-not-allowed" : ""}
                       >
-                        OIDC 로그인
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleOidcLogout}
-                        disabled={!oidcSessionClaims.userId}
+                        <button
+                          type="button"
+                          onClick={handleOidcLogin}
+                          disabled={!oidcBrowserConfig}
+                          className={`rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 ${!oidcBrowserConfig ? "pointer-events-none" : ""}`}
+                        >
+                          OIDC 로그인
+                        </button>
+                      </span>
+                      <span
+                        tabIndex={!oidcSessionClaims.userId ? 0 : -1}
                         title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className={!oidcSessionClaims.userId ? "cursor-not-allowed" : ""}
                       >
-                        로그아웃
-                      </button>
+                        <button
+                          type="button"
+                          onClick={handleOidcLogout}
+                          disabled={!oidcSessionClaims.userId}
+                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:opacity-50 ${!oidcSessionClaims.userId ? "pointer-events-none" : ""}`}
+                        >
+                          로그아웃
+                        </button>
+                      </span>
                     </div>
                   </div>
                   {oidcActionError ? (
