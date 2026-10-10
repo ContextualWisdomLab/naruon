@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2026-10-10 - O(N) array slicing optimized to O(1) in NetworkGraph
+
+**Learning:** When generating derived UI state inside React useMemo hooks, chaining array methods like nodes.map(...).filter(...).slice(0, 5) or Array.from(map.values()).slice(0, 5).map(...) forces O(N) complete iteration of the entire array/map, even if only the first few items are needed. This causes significant, unnecessary CPU spikes when dealing with large graphs.
+**Action:** Replace O(N) chained array methods with O(1) for...of loops and early break statements (e.g. if (results.length >= 5) break;). Keep the optimized logic safely inside the existing useMemo hooks to preserve referential equality.
