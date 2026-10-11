@@ -138,3 +138,8 @@
 **Vulnerability:** The `_safe_filename` function in `backend/services/attachment_parser.py` used `pathlib.Path().name` to strip directory components from attachment filenames, but failed to normalize backslashes beforehand. This allowed attackers to use Windows-style path separators (e.g., `..\..\upload`) to bypass path validation on POSIX systems.
 **Learning:** Checking for traversal sequences using `pathlib.Path().name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes, because POSIX `pathlib` treats backslashes as valid filename characters, not separators.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames using `pathlib.Path().name`.
+
+## 2026-08-08 - [Add autoComplete to Secret Inputs]
+**Vulnerability:** Browsers and password managers aggressively autofill the user's primary login password into secondary service configuration fields (like SMTP/IMAP secrets or API keys) if they are simply marked as `type="password"`. This can lead to accidental credential overwriting or unintended caching of sensitive integration keys in the browser's local form history.
+**Learning:** React/HTML `<input type="password">` elements must be explicitly told not to participate in the browser's global login autofill heuristics when they are used for API keys, SMTP secrets, or third-party OAuth secrets.
+**Prevention:** Always add the `autoComplete="new-password"` or `autoComplete="off"` attribute to secondary configuration fields that are marked as `type="password"`. Use `new-password` as the most reliable directive to prevent standard password manager interference on non-login configuration pages.
