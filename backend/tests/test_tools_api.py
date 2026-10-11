@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,51 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    from api.tools import hash_generator_handler
+
+    # Test md5
+    res = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
+    assert res["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+    # Test sha1
+    res = await hash_generator_handler({"text": "hello", "algorithm": "sha1"})
+    assert res["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+    # Test sha256 (default)
+    res = await hash_generator_handler({"text": "hello"})
+    assert (
+        res["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+    # Test sha256 explicit
+    res = await hash_generator_handler({"text": "hello", "algorithm": "sha256"})
+    assert (
+        res["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_invalid_algorithm():
+    from api.tools import hash_generator_handler
+    import pytest
+
+    with pytest.raises(ValueError, match="Unsupported hash algorithm"):
+        await hash_generator_handler({"text": "hello", "algorithm": "unknown-algo"})
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_none_input():
+    from api.tools import hash_generator_handler
+
+    # Test that None values are handled gracefully (as empty strings/defaults)
+    res = await hash_generator_handler({"text": None, "algorithm": None})
+    import hashlib
+
+    h = hashlib.sha256(b"")
+    assert res["hash"] == h.hexdigest()
