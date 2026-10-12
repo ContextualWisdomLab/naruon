@@ -36,7 +36,6 @@ vi.mock("lucide-react", () => ({
   Send: () => <svg aria-hidden="true" />,
   Settings: () => <svg aria-hidden="true" />,
   Sparkles: () => <svg aria-hidden="true" />,
-  Loader2: () => <svg aria-hidden="true" />,
 }));
 
 import { WorkspaceHome } from "./WorkspaceHome";
