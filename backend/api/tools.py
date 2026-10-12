@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,6 +755,49 @@ registry.register(
 )
 
 
+async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+
+    # RRN
+    rrn_pattern = r"(?<!\d)(\d{6})-?([1-8]\d{6})(?!\d)"
+    text = re.sub(rrn_pattern, r"\1-*******", text)
+
+    # Phone Standard
+    phone_pattern_standard = r"(?<!\d)(0\d{1,3})-?(\d{3,4})-?(\d{4})(?!\d)"
+    text = re.sub(phone_pattern_standard, r"\1-****-\3", text)
+
+    # Phone Representative
+    phone_pattern_rep = r"(?<!\d)(1[5-8]\d{2})-?(\d{4})(?!\d)"
+    text = re.sub(phone_pattern_rep, r"\1-****", text)
+
+    # Email
+    email_pattern = r"(?<![a-zA-Z0-9_.+-])([a-zA-Z0-9_.+-]+)@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)(?![a-zA-Z0-9_.+-])"
+
+    def mask_email_func(match):
+        user = match.group(1)
+        domain = match.group(2)
+        if len(user) <= 2:
+            masked_user = user[0] + "*" * (len(user) - 1) if len(user) > 1 else "*"
+        else:
+            masked_user = user[:2] + "*" * (len(user) - 2)
+        return f"{masked_user}@{domain}"
+
+    text = re.sub(email_pattern, mask_email_func, text)
+    return {"masked_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스킹 (PII Masker)",
+        description="주민등록번호, 전화번호, 이메일 등의 개인정보를 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
@@ -767,7 +812,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])

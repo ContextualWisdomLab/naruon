@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,35 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_tool():
+    from api.tools import pii_masker_handler
+
+    text = "email: test@example.com, another: a@b.com, user@example.com입니다."
+    text += " phone: 01012345678, 0505-123-4567, 1588-1588, 15881588."
+    text += " rrn: 9001011234567, 900101-1234567, 900101-5234567, 900101-8234567."
+
+    result = await pii_masker_handler({"text": text})
+    res = result["masked_text"]
+    assert "te**@example.com" in res
+    assert "us**@example.com" in res
+    assert "0101-****-5678" in res
+    assert "1588-****" in res
+    assert "900101-*******" in res
+    assert "9001011234567" not in res
+    assert "*@b.com" in res
+
+    # test edge cases (like short emails)
+    res_short = await pii_masker_handler({"text": "a@b.com, ab@c.com"})
+    assert "*@b.com" in res_short["masked_text"]
+    assert "a*@c.com" in res_short["masked_text"]
+
+    # Empty text
+    res_empty = await pii_masker_handler({"text": ""})
+    assert res_empty["masked_text"] == ""
+
+    # null text
+    res_null = await pii_masker_handler({})
+    assert res_null["masked_text"] == ""
