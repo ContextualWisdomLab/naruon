@@ -26,3 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2026-10-12 - Replaced O(N) chained array methods with O(1) early break loop
+**Learning:** Chained array methods like `.map().filter().slice()` or `Array.from(map.values()).slice().map()` create an O(N) bottleneck and unnecessary object allocations because the initial iterations process the entire dataset before `slice` is applied. This causes main thread blocking during unrelated state updates in React.
+**Action:** Replace these chained O(N) array manipulations with a simple O(1) `for...of` loop and an early `break` condition (e.g., `if (results.length >= N) break;`). Keep the `useMemo` hook wrapper to maintain referential equality across renders.
