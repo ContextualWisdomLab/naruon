@@ -20,6 +20,7 @@ vi.mock("lucide-react", () => ({
   UserRoundCheck: () => <svg aria-hidden="true" />,
   Plus: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
 }));
 
 import TasksPage from "./page";

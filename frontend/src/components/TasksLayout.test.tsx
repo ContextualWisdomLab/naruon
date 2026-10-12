@@ -12,6 +12,7 @@ vi.mock("lucide-react", () => ({
   Inbox: () => <svg aria-hidden="true" />,
   AlertCircle: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
 }));
 
 import { TasksLayout } from "./TasksLayout";
