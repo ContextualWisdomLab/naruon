@@ -382,10 +382,22 @@ export function ProjectsLayout() {
   const activeProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
   const activeSemanticCandidate = semanticCandidates.find((candidate) => candidate.project_uid === activeProject.id) ?? null;
   const projectTasks = tasks;
-  const openCount = countByStatus(projectTasks, 'open');
-  const inProgressCount = countByStatus(projectTasks, 'in_progress');
-  const blockedCount = countByStatus(projectTasks, 'blocked');
-  const doneCount = countByStatus(projectTasks, 'done');
+  // ⚡ Bolt: Batch task counts in a single O(N) pass and memoize to avoid 4x O(N) recalculations per render
+  const taskCounts = useMemo(() => {
+    return projectTasks.reduce(
+      (acc, task) => {
+        if (task.status in acc) {
+          acc[task.status as keyof typeof acc] += 1;
+        }
+        return acc;
+      },
+      { open: 0, in_progress: 0, blocked: 0, done: 0 }
+    );
+  }, [projectTasks]);
+  const openCount = taskCounts.open;
+  const inProgressCount = taskCounts.in_progress;
+  const blockedCount = taskCounts.blocked;
+  const doneCount = taskCounts.done;
   const sourceTypeCount = new Set(projectTasks.map((task) => task.source_type)).size;
   const projectEvidenceLabel = getProjectEvidenceLabel(activeProject.evidence);
   const projectBoundaryLabel = getProjectBoundaryLabel(activeProject);
