@@ -15,6 +15,10 @@ than the prior standalone context. This source change does not change branch
 protection or waive the previous required context. Any effective required-context
 migration must be independently verified before normal merge admission.
 
+The caller contract resides in `backend/tests/test_dependency_review_caller.py`,
+so Application CI's existing backend pytest discovery includes its trigger,
+permission, concurrency and exact supplier-pin assertions.
+
 Local contract tests and actionlint do not establish runner admission, actual
 Actions execution or independent GitHub App approval. These remain incomplete
 until exact-head remote results are observed. The earlier warning-bearing local

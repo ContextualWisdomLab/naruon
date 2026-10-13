@@ -22,6 +22,10 @@ class DependencyReviewCallerContract(unittest.TestCase):
         pin = re.search(r'dependency-review\.yml@([0-9a-f]{40})', text)
         self.assertIsNotNone(pin)
         self.assertEqual(pin.group(1), REVIEWED_SUPPLIER_SHA)
+        self.assertIn(
+            f'dependency-review.yml@{REVIEWED_SUPPLIER_SHA} '
+            '# v5.0.0 dependency-review-action supplier', text,
+        )
         for expected in (
             'pull_request:', '- develop', '- master', '- "release/**"',
             'workflow_dispatch:', 'contents: read', 'pull-requests: read',
