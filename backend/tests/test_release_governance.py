@@ -405,27 +405,18 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         ".github/workflows/dependency-review.yml"
     )
     assert (
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
-        in dependency_review_workflow
-    )
-    assert "BASE_REF: ${{ github.base_ref || github.ref_name }}" in (
-        dependency_review_workflow
-    )
-    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in (
-        dependency_review_workflow
-    )
-    log_dependency_review_step = dependency_review_workflow.split(
-        "- name: Log dependency review policy", 1
-    )[1].split("- name: Review dependency changes", 1)[0]
-    log_dependency_review_script = log_dependency_review_step.split("run: |", 1)[1]
-    assert "${{ github.base_ref || github.ref_name }}" not in (
-        log_dependency_review_script
-    )
-    assert "${{ github.head_ref || github.ref_name }}" not in (
-        log_dependency_review_script
-    )
-    assert "printf 'Base ref: %s\\n' \"$BASE_REF\"" in log_dependency_review_script
-    assert "printf 'Head ref: %s\\n' \"$HEAD_REF\"" in log_dependency_review_script
+        "uses: ContextualWisdomLab/.github/.github/workflows/"
+        "dependency-review.yml@58d12a9f1b46d611f75cfcf3e6c5a3fe19a55f96"
+    ) in dependency_review_workflow
+    for policy in (
+        "fail_on_severity: moderate",
+        'allow_ghsas: ""',
+        "continue_on_error: false",
+        "comment_summary_in_pr: never",
+    ):
+        assert policy in dependency_review_workflow
+    assert "runs-on:" not in dependency_review_workflow
+    assert "steps:" not in dependency_review_workflow
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
