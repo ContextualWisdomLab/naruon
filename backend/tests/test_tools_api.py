@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,74 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_hash_generator_tool():
+    with TestClient(app) as client:
+        # sha256 default
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha256"}},
+        )
+        assert response.status_code == 200
+        assert (
+            response.json()["result"]["hash"]
+            == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+
+        # md5
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "md5"}},
+        )
+        assert response.status_code == 200
+        assert response.json()["result"]["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+        # sha1
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha1"}},
+        )
+        assert response.status_code == 200
+        assert (
+            response.json()["result"]["hash"]
+            == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+        )
+
+        # sha512
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha512"}},
+        )
+        assert response.status_code == 200
+        assert (
+            response.json()["result"]["hash"]
+            == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+        )
+
+        # invalid algorithm
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "invalid_alg"}},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "failed"
+
+
+def test_hash_generator_tool_none_input():
+    with TestClient(app) as client:
+        # Pydantic/tools will reject null string parameter because _validate_parameters is strict.
+        # So we assert it fails validation, avoiding changing global validation rules.
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": None, "algorithm": "sha256"}},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "failed"
+        assert "Invalid tool parameter type" in response.json()["message"]
