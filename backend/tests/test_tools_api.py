@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,48 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "md5"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["algorithm"] == "md5"
+    assert data["result"]["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_none_input():
+    from api.tools import hash_generator_handler
+
+    result = await hash_generator_handler({"text": None, "algorithm": None})
+    assert result["algorithm"] == "sha256"
+    assert (
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        == result["hash"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_sha1_and_sha512():
+    from api.tools import hash_generator_handler
+
+    result_sha1 = await hash_generator_handler({"text": "hello", "algorithm": "sha1"})
+    assert result_sha1["algorithm"] == "sha1"
+    assert result_sha1["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+    result_sha512 = await hash_generator_handler(
+        {"text": "hello", "algorithm": "sha512"}
+    )
+    assert result_sha512["algorithm"] == "sha512"
+    assert (
+        result_sha512["hash"]
+        == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+    )

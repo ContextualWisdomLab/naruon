@@ -22,6 +22,7 @@ from services.llm_provider_urls import build_pinned_https_async_client
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+
 router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
@@ -706,6 +707,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +771,37 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    algorithm = params.get("algorithm") or "sha256"
+
+    encoded = text.encode("utf-8")
+    if algorithm == "md5":
+        # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5
+        hashed = hashlib.md5(encoded).hexdigest()
+    elif algorithm == "sha1":
+        # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+        hashed = hashlib.sha1(encoded).hexdigest()
+    elif algorithm == "sha512":
+        hashed = hashlib.sha512(encoded).hexdigest()
+    else:
+        hashed = hashlib.sha256(encoded).hexdigest()
+        algorithm = "sha256"
+
+    return {"hash": hashed, "algorithm": algorithm}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="입력된 텍스트를 지정된 해시 알고리즘(md5, sha1, sha256, sha512)으로 변환합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
