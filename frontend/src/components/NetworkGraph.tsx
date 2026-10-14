@@ -278,10 +278,17 @@ export default function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    return nodes
-      .map((node) => String(node.label ?? node.id))
-      .filter(Boolean)
-      .slice(0, 5);
+    // ⚡ Bolt Optimization: Changed O(N) map/filter/slice chain to O(1) loop with early break
+    // Prevents full array traversal and intermediate allocations for potentially large node graphs
+    const labels: string[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const label = String(nodes[i].label ?? nodes[i].id);
+      if (label) {
+        labels.push(label);
+        if (labels.length >= 5) break;
+      }
+    }
+    return labels;
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
