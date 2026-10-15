@@ -291,7 +291,7 @@ export default function NetworkGraph() {
   const firstEdge = edges[0] ?? null;
   // ⚡ Bolt: Replace O(N) Array.from().slice().map() with O(1) iterator + early break
   const relationshipOptions = useMemo(() => {
-    const options = [];
+    const options: Array<{ edge: Edge; id: string; label: string }> = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
       if (index >= 5) break;
@@ -307,7 +307,7 @@ export default function NetworkGraph() {
 
   // ⚡ Bolt: Replace O(N) Array.from().slice().map() with O(1) iterator + early break
   const nodeOptions = useMemo(() => {
-    const options = [];
+    const options: Array<{ id: string; label: string; node: Node }> = [];
     for (const node of nodeInstanceMap.values()) {
       if (options.length >= 8) break;
       options.push({
