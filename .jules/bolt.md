@@ -26,3 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2024-10-24 - NetworkGraph Dropdowns Performance
+**Learning:** When displaying a limited subset of items (e.g. 5 options) from a potentially very large map or array, chaining operations like `Array.from(map.values()).slice(0, 5).map(...)` creates an O(N) intermediate array before slicing. This can block the main thread if the source map contains thousands of edges/nodes, which is common in graph views.
+**Action:** Use an O(1) early-exit loop (e.g., `for (const item of collection)` with a `break` condition) to avoid allocating intermediate arrays and scanning the entire data structure.
