@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,75 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_md5():
+    tool = registry.get("hash_generator")
+    assert tool is not None
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello world", "algorithm": "md5"}
+    )
+    assert result["hash"] == hashlib.md5(b"hello world").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_sha1():
+    tool = registry.get("hash_generator")
+    assert tool is not None
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello world", "algorithm": "sha1"}
+    )
+    assert result["hash"] == hashlib.sha1(b"hello world").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_sha256():
+    tool = registry.get("hash_generator")
+    assert tool is not None
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello world", "algorithm": "sha256"}
+    )
+    assert result["hash"] == hashlib.sha256(b"hello world").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_sha512():
+    tool = registry.get("hash_generator")
+    assert tool is not None
+    result = await registry.invoke_tool(
+        "hash_generator", {"text": "hello world", "algorithm": "sha512"}
+    )
+    assert result["hash"] == hashlib.sha512(b"hello world").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_none_input():
+    tool = registry.get("hash_generator")
+    assert tool is not None
+    # None is rejected by the strict type validation
+    with pytest.raises(ValueError, match="Invalid tool parameter type"):
+        await registry.invoke_tool(
+            "hash_generator", {"text": None, "algorithm": None}
+        )
+
+    # We test the handler directly to cover the "if algorithm is None" lines
+    from api.tools import hash_generator_handler
+
+    # Text None
+    result = await hash_generator_handler({"text": None, "algorithm": "md5"})
+    assert result["hash"] == hashlib.md5(b"").hexdigest()
+
+    # Algorithm None
+    result = await hash_generator_handler({"text": "hello", "algorithm": None})
+    assert result["hash"] == hashlib.sha256(b"hello").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_unsupported_algorithm():
+    tool = registry.get("hash_generator")
+    assert tool is not None
+    with pytest.raises(ValueError, match="Unsupported algorithm: unknown"):
+        await registry.invoke_tool(
+            "hash_generator", {"text": "hello world", "algorithm": "unknown"}
+        )
