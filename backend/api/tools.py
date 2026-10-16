@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,6 +755,56 @@ registry.register(
 )
 
 
+async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    if not text:
+        return {"masked_text": text}
+
+    # 주민등록번호 (내/외국인 포함, 하이픈 선택)
+    rrn_pattern = r"(?<!\d)(\d{2}[01]\d[0-3]\d)-?([1-8]\d{6})(?!\d)"
+    text = re.sub(rrn_pattern, r"\1-*******", text)
+
+    # 전국대표번호 (15xx, 16xx, 18xx)
+    rep_pattern = r"(?<!\d)(1[568]\d{2})-?(\d{4})(?!\d)"
+    text = re.sub(rep_pattern, r"\1-****", text)
+
+    # 050x 안심번호 등
+    prefix_pattern = r"(?<!\d)(050\d)-?(\d{3,4})-?(\d{4})(?!\d)"
+
+    def prefix_repl(m):
+        mid = "*" * len(m.group(2))
+        return f"{m.group(1)}-{mid}-{m.group(3)}"
+
+    text = re.sub(prefix_pattern, prefix_repl, text)
+
+    # 일반 전화/휴대폰
+    standard_pattern = r"(?<!\d)(0[1-9][0-9]?)-?([1-9]\d{2,3})-?(\d{4})(?!\d)"
+
+    def std_repl(m):
+        mid = "*" * len(m.group(2))
+        return f"{m.group(1)}-{mid}-{m.group(3)}"
+
+    text = re.sub(standard_pattern, std_repl, text)
+
+    # 이메일
+    email_pattern = r"(?<![a-zA-Z0-9_.+-])([a-zA-Z0-9_.+-]{1,2})[a-zA-Z0-9_.+-]*(@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)(?![a-zA-Z0-9_.+-])"
+    text = re.sub(email_pattern, r"\1***\2", text)
+
+    return {"masked_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스킹 (PII Masker)",
+        description="텍스트 내의 이메일, 전화번호, 주민등록번호 등 민감한 개인정보를 자동으로 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
@@ -767,7 +819,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])

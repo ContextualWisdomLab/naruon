@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,36 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_pii_masker_tool():
+    from api.tools import pii_masker_handler
+
+    # RRN test
+    result = await pii_masker_handler(
+        {"text": "내 번호는 900101-1234567이고 외국인은 900101-5234567입니다."}
+    )
+    assert (
+        result["masked_text"]
+        == "내 번호는 900101-*******이고 외국인은 900101-*******입니다."
+    )
+
+    # Phone test
+    result = await pii_masker_handler(
+        {"text": "연락처는 010-1234-5678, 02-123-4567, 1588-1588, 0505-123-4567."}
+    )
+    assert (
+        result["masked_text"]
+        == "연락처는 010-****-5678, 02-***-4567, 1588-****, 0505-***-4567."
+    )
+
+    # Unhyphenated phone and RRN test
+    result = await pii_masker_handler({"text": "01012345678 혹은 9001011234567"})
+    assert result["masked_text"] == "010-****-5678 혹은 900101-*******"
+
+    # Email test
+    result = await pii_masker_handler(
+        {"text": "이메일은 abcdef@example.com 혹은 ab@test.co.kr"}
+    )
+    assert result["masked_text"] == "이메일은 ab***@example.com 혹은 ab***@test.co.kr"
