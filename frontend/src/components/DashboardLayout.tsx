@@ -61,7 +61,7 @@ const primaryNavItems = [
 const startupViewItems = [
   { label: '홈', view: 'dashboard' as const, description: '오늘의 실행 맥락 종합' },
   { label: '메일', view: 'email' as const, description: '받은편지함 작업공간' },
-  { label: '일정', view: 'calendar' as const, description: '캘린더 연결 먼저 보기' },
+  { label: '일정', view: 'calendar' as const, description: '일정 연결 먼저 보기' },
 ];
 
 const mobileWorkspaceMenuItems = [

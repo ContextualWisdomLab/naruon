@@ -70,7 +70,7 @@ describe("TasksPage", () => {
     expect(container.textContent).toContain("실제 티켓 큐");
     expect(container.textContent).toContain("연결된 티켓 없음");
     expect(container.textContent).toContain("메일 상세에서 실행 항목을 만들면 원본 연결 티켓으로 표시됩니다.");
-    expect(container.querySelector('a[href="/mail"]')?.textContent).toContain("메일에서 작업 생성");
+    expect(container.querySelector('a[href="/mail"]')?.textContent).toContain("메일에서 실행 항목 생성");
   });
 
   it("loads source-linked tickets from the signed task API without exposing raw source ids", async () => {
@@ -274,7 +274,7 @@ describe("TasksPage", () => {
     await flushAsyncWork();
 
     const escalationButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="보낸 메일 미답변 팔로업 작업 생성"]',
+      'button[aria-label="보낸 메일 미답변 팔로업 실행 항목 생성"]',
     );
     expect(escalationButton).not.toBeNull();
     await act(async () => {

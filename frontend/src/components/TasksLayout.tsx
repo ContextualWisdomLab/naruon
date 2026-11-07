@@ -255,7 +255,7 @@ export function TasksLayout() {
       setTicketActionStatus(`${result.created}개 미답변 팔로업 작업을 생성했습니다. ${result.evaluated}개 대기 메일을 ${result.policy.overdue_hours}시간 기준으로 확인했습니다.`);
     } catch {
       setReplySlaStatus('error');
-      setTicketActionStatus('미답변 팔로업 작업 생성에 실패했습니다.');
+      setTicketActionStatus('미답변 팔로업 실행 항목 생성에 실패했습니다.');
     }
   };
 
@@ -473,7 +473,7 @@ export function TasksLayout() {
             </select>
           </label>
           <a href="/mail" className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90">
-            <Plus className="size-4" /> 메일에서 작업 생성
+            <Plus className="size-4" /> 메일에서 실행 항목 생성
           </a>
         </div>
       </header>
@@ -516,14 +516,14 @@ export function TasksLayout() {
               </div>
               <button
                 type="button"
-                aria-label="보낸 메일 미답변 팔로업 작업 생성"
+                aria-label="보낸 메일 미답변 팔로업 실행 항목 생성"
                 disabled={replySlaStatus === 'loading'}
                 aria-busy={replySlaStatus === 'loading'}
                 onClick={() => void handleReplySlaEscalation()}
                 className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
               >
                 <Plus className="size-3.5" />
-                {replySlaStatus === 'loading' ? '확인 중' : '팔로업 작업 생성'}
+                {replySlaStatus === 'loading' ? '확인 중' : '팔로업 실행 항목 생성'}
               </button>
             </div>
             {replySlaStatus === 'ready' ? (
@@ -533,7 +533,7 @@ export function TasksLayout() {
             ) : null}
             {replySlaStatus === 'error' ? (
               <p role="status" className="mt-3 text-xs font-semibold text-red-700">
-                미답변 팔로업 작업 생성을 완료하지 못했습니다.
+                미답변 팔로업 실행 항목 생성을 완료하지 못했습니다.
               </p>
             ) : null}
           </section>

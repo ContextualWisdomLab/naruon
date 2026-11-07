@@ -27,7 +27,7 @@ import { CalendarWritebackSection } from './calendar/CalendarWritebackSection';
 
 
 
-const CALENDAR_VIEW_MODES = ['월간 캘린더', '주간 캘린더', '일정 상세', '회의 조율', '일정 후보'] as const;
+const CALENDAR_VIEW_MODES = ['월간 일정', '주간 일정', '일정 상세', '회의 조율', '일정 후보'] as const;
 type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
 
 function calendarViewTabId(mode: CalendarViewMode) {
@@ -35,7 +35,7 @@ function calendarViewTabId(mode: CalendarViewMode) {
 }
 
 export function CalendarLayout() {
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('월간 캘린더');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('월간 일정');
   const [writebackStatus, setWritebackStatus] = useState<WritebackStatus>('idle');
   const [writebackResult, setWritebackResult] = useState<CalendarWritebackIntentResponse | null>(null);
   const [writebackSources, setWritebackSources] = useState<CalendarWritebackSource[]>([]);
@@ -222,8 +222,8 @@ export function CalendarLayout() {
           />
 
           <div id="calendar-view-panel" role="tabpanel" aria-labelledby={calendarViewTabId(viewMode)}>
-            {viewMode === '월간 캘린더' && <CalendarMonthView visibleMonthEvents={visibleMonthEvents} />}
-            {viewMode === '주간 캘린더' && <CalendarWeekView visibleWeekEvents={visibleWeekEvents} />}
+            {viewMode === '월간 일정' && <CalendarMonthView visibleMonthEvents={visibleMonthEvents} />}
+            {viewMode === '주간 일정' && <CalendarWeekView visibleWeekEvents={visibleWeekEvents} />}
             {viewMode === '일정 상세' && <CalendarDetailView selectedDetailEvent={selectedDetailEvent} />}
             {viewMode === '회의 조율' && (
               <CalendarCoordinationView

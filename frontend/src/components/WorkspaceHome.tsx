@@ -368,13 +368,13 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
                   <a href="/mail?folder=sent" className="inline-flex text-xs font-semibold text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">보낸 메일 보기</a>
                   <button
                     type="button"
-                    aria-label="홈에서 보낸 메일 미답변 팔로업 작업 생성"
+                    aria-label="홈에서 보낸 메일 미답변 팔로업 실행 항목 생성"
                     disabled={loading || pendingReplyCount === 0 || replySlaStatus === 'loading'}
                     aria-busy={loading || replySlaStatus === 'loading'}
                     onClick={() => void handleReplySlaEscalation()}
                     className="text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    {replySlaStatus === 'loading' ? '확인 중' : '팔로업 작업 생성'}
+                    {replySlaStatus === 'loading' ? '확인 중' : '팔로업 실행 항목 생성'}
                   </button>
                 </div>
                 {replySlaMessage ? (
