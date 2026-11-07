@@ -40,7 +40,7 @@ export function CalendarWritebackSection({
           <p className="text-xs font-black text-primary">고객 원본 일정</p>
           <h2 className="mt-1 text-lg font-black text-foreground">고객 원본 일정 반영 의도</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Naruon은 캘린더 서버가 아니라 고객 원본 계정에 반영할 의도를 기록합니다.
+            Naruon은 일정 서버가 아니라 고객 원본 계정에 반영할 의도를 기록합니다.
             실제 외부 쓰기는 원본 기능, 출처 근거, 충돌 토큰, 감사 기록을 통과해야 합니다.
           </p>
         </div>

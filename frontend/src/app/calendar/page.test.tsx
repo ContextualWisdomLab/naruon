@@ -109,7 +109,7 @@ describe("CalendarPage", () => {
     const tablist = container.querySelector<HTMLElement>('[role="tablist"][aria-label="일정 보기 방식"]');
     expect(tablist).not.toBeNull();
     const tabs = Array.from(tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["월간 캘린더", "주간 캘린더", "일정 상세", "회의 조율", "일정 후보"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["월간 일정", "주간 일정", "일정 상세", "회의 조율", "일정 후보"]);
 
     const monthlyTab = tabs[0];
     expect(monthlyTab?.getAttribute("aria-selected")).toBe("true");
@@ -128,7 +128,7 @@ describe("CalendarPage", () => {
     await flushAsyncWork();
 
     const weeklyTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-      .find((tab) => tab.textContent === "주간 캘린더");
+      .find((tab) => tab.textContent === "주간 일정");
     expect(weeklyTab?.getAttribute("aria-selected")).toBe("true");
     expect(weeklyTab?.tabIndex).toBe(0);
     expect(container.querySelector<HTMLElement>('#calendar-view-panel[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(weeklyTab?.id);
@@ -147,7 +147,7 @@ describe("CalendarPage", () => {
 
     expect(container.textContent).toContain("제품 리뷰");
     const productCalendarToggle = container.querySelector<HTMLInputElement>(
-      'input[aria-label="제품 개발팀 캘린더 표시 토글"]',
+      'input[aria-label="제품 개발팀 일정 표시 토글"]',
     );
     expect(productCalendarToggle).not.toBeNull();
     expect(productCalendarToggle?.checked).toBe(true);

@@ -247,13 +247,13 @@ describe("WorkspaceHome Today dashboard", () => {
     await waitForCondition(() => container?.textContent?.includes("벤더 계약 답변 요청") ?? false);
 
     const escalationButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="홈에서 보낸 메일 미답변 팔로업 작업 생성"]',
+      'button[aria-label="홈에서 보낸 메일 미답변 팔로업 실행 항목 생성"]',
     );
     expect(escalationButton).not.toBeNull();
     await act(async () => {
       escalationButton?.click();
     });
-    await waitForCondition(() => container?.textContent?.includes("1개 팔로업 작업 생성") ?? false);
+    await waitForCondition(() => container?.textContent?.includes("1개 팔로업 실행 항목 생성") ?? false);
 
     const escalationCall = fetchCalls.find((call) => call.url.endsWith("/api/tasks/reply-sla-escalations"));
     expect(escalationCall).toBeDefined();
@@ -265,7 +265,7 @@ describe("WorkspaceHome Today dashboard", () => {
     for (const headerName of publicIdentityHeaders) {
       expect(Object.keys(headers).some((key) => key.toLowerCase() === headerName)).toBe(false);
     }
-    expect(container.textContent).toContain("1개 팔로업 작업 생성, 2개 답변 대기 확인");
+    expect(container.textContent).toContain("1개 팔로업 실행 항목 생성, 2개 답변 대기 확인");
   });
 
   it("routes Today dashboard task calendar and quick actions to implemented workspaces", async () => {

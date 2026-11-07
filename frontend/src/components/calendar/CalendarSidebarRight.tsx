@@ -26,7 +26,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
           <div className={`size-4 rounded-full ${selectedDetailEvent?.dotClassName ?? 'bg-muted'}`}></div>
           <h2 className="text-xl font-bold">{selectedDetailEvent ? `${selectedDetailEvent.title} (Naruon 2.0)` : '표시 중인 일정 없음'}</h2>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">{selectedDetailEvent?.description ?? '왼쪽 캘린더 목록에서 하나 이상의 캘린더를 표시하세요.'}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{selectedDetailEvent?.description ?? '왼쪽 일정 목록에서 하나 이상의 일정을 표시하세요.'}</p>
       </div>
 
       <div className="mt-6 space-y-5">

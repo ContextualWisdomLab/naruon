@@ -468,7 +468,7 @@ const settingsDetailSurfaces: Partial<Record<SettingsTab, {
     copy: '메일 회신 추적, 일정 충돌, writeback conflict, connector health 이벤트를 사용자별 채널 정책으로 정리합니다.',
     items: [
       { title: '답변 추적', detail: '보낸 메일 답변 기한이 지나면 홈 대기 작업과 알림 큐에 같은 사건으로 표시합니다.', status: '메일 연동' },
-      { title: '일정 충돌', detail: 'CalDAV writeback 후보가 충돌하거나 ETag가 맞지 않으면 재확인 알림을 생성합니다.', status: '캘린더' },
+      { title: '일정 충돌', detail: 'CalDAV writeback 후보가 충돌하거나 ETag가 맞지 않으면 재확인 알림을 생성합니다.', status: '일정' },
       { title: 'Connector health', detail: 'self-hosted connector heartbeat, sync lag, provider throttling을 운영 알림으로 묶습니다.', status: '운영' },
     ],
   },
@@ -476,8 +476,8 @@ const settingsDetailSurfaces: Partial<Record<SettingsTab, {
     heading: '자동화 규칙',
     copy: '메일, 일정, 실행 항목, 프로젝트 상태를 source-linked rule로 연결하되 provider write는 명시적 intent로 남깁니다.',
     items: [
-      { title: '메일에서 작업 생성', detail: '실행 항목을 ticket task로 만들고 원본 message/thread provenance를 유지합니다.', status: 'source-linked' },
-      { title: '캘린더 writeback', detail: 'AI가 정리한 일정은 source capability와 owner policy를 확인한 뒤 원천 계정에 반영합니다.', status: 'intent-first' },
+      { title: '메일에서 실행 항목 생성', detail: '실행 항목을 ticket task로 만들고 원본 message/thread provenance를 유지합니다.', status: 'source-linked' },
+      { title: '일정 writeback', detail: 'AI가 정리한 일정은 source capability와 owner policy를 확인한 뒤 원천 계정에 반영합니다.', status: 'intent-first' },
       { title: '지식 정리', detail: '내가 나에게 보낸 메일은 개인 지식 후보로 분류하고 연결 프로젝트를 제안합니다.', status: 'knowledge' },
     ],
   },
@@ -1173,7 +1173,7 @@ export function SettingsLayout() {
               <div className="space-y-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-bold text-xl">메일 및 캘린더 커넥터</h2>
+                    <h2 className="font-bold text-xl">메일 및 일정 커넥터</h2>
                     <p className="text-sm text-muted-foreground mt-1">
                       회원이 지정한 SMTP/IMAP/POP3/OAuth provider를 사용합니다. Naruon은 메일함 용량이나 SMTP/IMAP 서버를 제공하지 않습니다.
                     </p>

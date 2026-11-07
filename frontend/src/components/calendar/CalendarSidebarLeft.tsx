@@ -16,7 +16,7 @@ export function CalendarSidebarLeft({ calendarVisibility, toggleCalendarVisibili
 
       <div className="mt-8">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xs font-bold text-muted-foreground">캘린더 목록</h2>
+          <h2 className="text-xs font-bold text-muted-foreground">일정 목록</h2>
         </div>
         <ul className="space-y-3">
           {calendarDefinitions.map((cal) => (
@@ -27,7 +27,7 @@ export function CalendarSidebarLeft({ calendarVisibility, toggleCalendarVisibili
                   checked={calendarVisibility[cal.id] ?? false}
                   onChange={() => toggleCalendarVisibility(cal.id)}
                   className="size-4 cursor-pointer rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  aria-label={`${cal.name} 캘린더 표시 토글`}
+                  aria-label={`${cal.name} 일정 표시 토글`}
                 />
                 <span className={`size-3 rounded-full ${cal.colorClass}`} aria-hidden="true" />
                 <span className="font-medium text-foreground transition-colors group-hover:text-primary">{cal.name}</span>
@@ -36,7 +36,7 @@ export function CalendarSidebarLeft({ calendarVisibility, toggleCalendarVisibili
           ))}
         </ul>
         <Button type="button" variant="ghost" className="mt-4 w-full justify-start text-primary hover:text-primary">
-          <Plus className="size-4" aria-hidden="true" /> 캘린더 추가
+          <Plus className="size-4" aria-hidden="true" /> 일정 추가
         </Button>
       </div>
     </aside>

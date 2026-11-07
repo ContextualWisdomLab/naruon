@@ -84,10 +84,10 @@ export function useTasks(
         { overdue_hours: 48 },
       );
       setReplySlaStatus('ready');
-      setReplySlaMessage(`${result.created}개 팔로업 작업 생성, ${result.evaluated}개 답변 대기 확인`);
+      setReplySlaMessage(`${result.created}개 팔로업 실행 항목 생성, ${result.evaluated}개 답변 대기 확인`);
     } catch {
       setReplySlaStatus('error');
-      setReplySlaMessage('미답변 팔로업 작업 생성 실패');
+      setReplySlaMessage('미답변 팔로업 실행 항목 생성 실패');
     }
   }, []);
 
