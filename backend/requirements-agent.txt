@@ -14,29 +14,35 @@
 # ``OpenAIModel`` in 2.x) and constructs the model via ``OpenAIProvider``.
 # Version 2.8.0 is the newest 2.x release compatible with the core
 # requirements-hashes.txt pin of openai==2.44.0; 2.9.0 requires openai>=2.45.0.
-pydantic-ai-slim[openai]==2.9.0 \
-    --hash=sha256:11b812833eb75cfcc31c86b6e2db75e28cade6bb746844e28a40eb51b04a09d3 \
-    --hash=sha256:560a860cb67cf7732b16fb40e1d9205d75c02934e75e41db7ccb104ebc9ea266
+pydantic-ai-slim[openai]==2.66.0 \
+    --hash=sha256:78968fa75086ddae9039bdaa3939e9510f15a40d5f1f58fb3ded04386f9292f2 \
+    --hash=sha256:c47bbd0abe6f51e5400308a53b4f7e3409a582b1459140c381e3d4701a205608
     # via -r backend/requirements-agent.txt
-genai-prices==0.0.71 \
-    --hash=sha256:1d13111563af2b1ce43ccfacf77b7ac3216ad704c644408a56e11b181fe0d128
+genai-prices==0.2.1 \
+    --hash=sha256:b438753161537f2e2a5c937887721467dd5a24297a52ae77f946f541ce22c3a0 \
+    --hash=sha256:d3c19682e63ae3827e7d166fc92c0f69943f446aa58725f38090301ca1cae36d
     # via pydantic-ai-slim
-griffelib==2.1.0 \
-    --hash=sha256:cc7b3d2d2865ad0b909fcc38086e3f554b5ea7acbaa7bbb7ecaa3f5dfb7d9f00
+griffelib==2.4.1 \
+    --hash=sha256:40c028dd2e623f464423f0e11e3c553158f1cf4f1368239a370534d73e1407ff \
+    --hash=sha256:76bc562f936ad1ce198d2cf6d0731bd5c92a7d934b69ef828ef22ee0ffdb62ce
     # via pydantic-ai-slim
-httpcore2==2.5.0 \
-    --hash=sha256:5ce35188de461d31e8d000bfb8ef8bf22c6c16587a211e5571deaa5e9bdf842a
+httpcore2==2.16.0 \
+    --hash=sha256:5c4358319f2602d984ad93182c9fee5160f22e9da7babdda870a5e7c4e2dc34f \
+    --hash=sha256:c72cd0413563b17e1cd8354677dff887466f8ec2551679759e93126534428643
     # via httpx2
-httpx2==2.5.0 \
-    --hash=sha256:3d2d4d9cf4b61f1a1f46a95947cfdb47e80cb56a2f91c6256ac8f58e4891df41
+httpx2==2.16.0 \
+    --hash=sha256:0d54c98128e8f2ff7fbbde0fca8c359e5f032edeaaaac443cdb7f31f685bcd7f \
+    --hash=sha256:fd2c5d7909e8d86fe92d53020c310ca0e4e431b838c207c5754b9bbf0308d49a
     # via genai-prices
-logfire-api==4.37.0 \
-    --hash=sha256:1d756f8ba23aa56d438e0ba2c0f529a00fcac975b8785c561b058267f9465088
+logfire-api==5.4.0 \
+    --hash=sha256:00297901da03e350bcf4ebe3d829f3617ebbe62b000e5d53d3c485223c258204 \
+    --hash=sha256:328b3fae6eaced55875339cf58521ebf13a9117bdb8be40f717f056aa62c43d3
     # via pydantic-graph
-pydantic-graph==2.9.0 \
-    --hash=sha256:0ee8ad7b69d628037f3194d506b6c7099e416f25e477f9590da110cdaf48c649 \
-    --hash=sha256:a6d146cfd97b086e4334afc6717b2d078a3f102631cfe05e421fda2ca5a7046f
+pydantic-graph==2.66.0 \
+    --hash=sha256:5b2a0aafc569c00fdb36879b1e80bed06ed5926979e2c1d44533222f208fd2ec \
+    --hash=sha256:af31fd3ad5f3446556a270b14e1a43b12996f4bb52a0511f58f739dbacadb3f9
     # via pydantic-ai-slim
-truststore==0.10.4 \
-    --hash=sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981
+truststore==0.10.5 \
+    --hash=sha256:30d36967ccaded5cbb38d602c433f53600036c79d502f4533a49b60a03bbefcd \
+    --hash=sha256:9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c
     # via httpcore2, httpx2
