@@ -25,7 +25,7 @@ EXPOSE 8000
 CMD ["python", "scripts/start_backend.py", "--host", "0.0.0.0", "--port", "8000"]
 
 # Stage 2: Build Frontend
-FROM node:26-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503 AS frontend-builder
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS frontend-builder
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV PNPM_VERSION=11.5.3
